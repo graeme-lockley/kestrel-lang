@@ -36,6 +36,7 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
   const errors: string[] = [];
   const subst = new Map<number, InternalType>();
   const env = new Map<string, InternalType>();
+  let inAsyncContext = false; // Track if we're in an async function
 
   function apply(t: InternalType): InternalType {
     return applySubst(t, subst);
@@ -50,6 +51,38 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
       }
     }
     return free;
+  }
+
+  /** Check if a match is exhaustive for a given type */
+  function checkExhaustive(scrutineeType: InternalType, cases: import('../ast/nodes.js').Case[], expr: unknown): void {
+    const coveredCtors = new Set<string>();
+    let hasCatchAll = false;
+
+    for (const c of cases) {
+      if (c.pattern.kind === 'WildcardPattern' || c.pattern.kind === 'VarPattern') {
+        hasCatchAll = true;
+      } else if (c.pattern.kind === 'ConstructorPattern') {
+        coveredCtors.add(c.pattern.name);
+      } else if (c.pattern.kind === 'ListPattern') {
+        if (c.pattern.elements.length === 0) {
+          coveredCtors.add('Nil');
+        } else {
+          coveredCtors.add('Cons');
+        }
+      } else if (c.pattern.kind === 'ConsPattern') {
+        coveredCtors.add('Cons');
+      }
+    }
+
+    // Check if it's a known ADT (for now, just List)
+    const appType = apply(scrutineeType);
+    if (appType.kind === 'app' && appType.name === 'List') {
+      const required = new Set(['Nil', 'Cons']);
+      const missing = [...required].filter(c => !coveredCtors.has(c));
+      if (missing.length > 0 && !hasCatchAll) {
+        errors.push(`Non-exhaustive match: missing constructors: ${missing.join(', ')}`);
+      }
+    }
   }
 
   function inferExpr(expr: Expr): InternalType {
@@ -187,13 +220,128 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         setInferredType(expr, result);
         return result;
       }
-      case 'ConsExpr':
+      case 'MatchExpr': {
+        const scrutT = inferExpr(expr.scrutinee);
+        checkExhaustive(scrutT, expr.cases, expr);
+
+        // Type check all cases and unify their result types
+        if (expr.cases.length === 0) {
+          result = freshVar();
+        } else {
+          // Infer type of first case body
+          const firstCase = expr.cases[0]!;
+          if (firstCase.pattern.kind === 'VarPattern') {
+            env.set(firstCase.pattern.name, scrutT);
+          }
+          const firstT = inferExpr(firstCase.body);
+          if (firstCase.pattern.kind === 'VarPattern') {
+            env.delete(firstCase.pattern.name);
+          }
+
+          // Check remaining cases unify with first
+          for (let i = 1; i < expr.cases.length; i++) {
+            const c = expr.cases[i]!;
+            if (c.pattern.kind === 'VarPattern') {
+              env.set(c.pattern.name, scrutT);
+            }
+            const caseT = inferExpr(c.body);
+            if (c.pattern.kind === 'VarPattern') {
+              env.delete(c.pattern.name);
+            }
+            unify(firstT, caseT, subst);
+          }
+          result = apply(firstT);
+        }
+        setInferredType(expr, result);
+        return result;
+      }
+      case 'AwaitExpr': {
+        if (!inAsyncContext) {
+          throw new TypeCheckError('await can only be used in async functions', expr);
+        }
+        const taskT = inferExpr(expr.value);
+        const applied = apply(taskT);
+        // Expect Task<T>
+        if (applied.kind === 'app' && applied.name === 'Task' && applied.args.length === 1) {
+          result = apply(applied.args[0]!);
+        } else {
+          throw new TypeCheckError('await expects Task<T> type', expr);
+        }
+        setInferredType(expr, result);
+        return result;
+      }
+      case 'ThrowExpr': {
+        // For now, accept any type for throw (should be exception type)
+        inferExpr(expr.value);
+        // Throw has bottom type (never returns)
+        result = freshVar();
+        setInferredType(expr, result);
+        return result;
+      }
+      case 'TryExpr': {
+        const blockT = inferExpr(expr.body);
+        // Type check catch cases similar to match
+        for (const c of expr.cases) {
+          if (c.pattern.kind === 'VarPattern') {
+            env.set(c.pattern.name, freshVar()); // Exception type
+          }
+          const caseT = inferExpr(c.body);
+          if (c.pattern.kind === 'VarPattern') {
+            env.delete(c.pattern.name);
+          }
+          unify(blockT, caseT, subst);
+        }
+        result = apply(blockT);
+        setInferredType(expr, result);
+        return result;
+      }
+      case 'ListExpr': {
+        // List literal: all elements must have same type
+        if (expr.elements.length === 0) {
+          // Empty list has type List<α> for fresh α
+          const elemT = freshVar();
+          result = { kind: 'app', name: 'List', args: [elemT] };
+        } else {
+          // Infer first element type
+          const firstElem = expr.elements[0];
+          if (typeof firstElem === 'object' && 'spread' in firstElem) {
+            // Spread element
+            result = freshVar();
+          } else {
+            const firstT = inferExpr(firstElem as Expr);
+            // Unify all other elements with first
+            for (let i = 1; i < expr.elements.length; i++) {
+              const elem = expr.elements[i];
+              if (!(typeof elem === 'object' && 'spread' in elem)) {
+                const elemT = inferExpr(elem as Expr);
+                unify(firstT, elemT, subst);
+              }
+            }
+            result = { kind: 'app', name: 'List', args: [apply(firstT)] };
+          }
+        }
+        setInferredType(expr, result);
+        return result;
+      }
+      case 'ConsExpr': {
+        // head :: tail where tail is List<T> and head is T
+        const headT = inferExpr(expr.head);
+        const tailT = inferExpr(expr.tail);
+        const applied = apply(tailT);
+        if (applied.kind === 'app' && applied.name === 'List' && applied.args.length === 1) {
+          unify(headT, applied.args[0]!, subst);
+          result = applied;
+        } else {
+          // Try to unify with List<α>
+          const elemT = freshVar();
+          unify(tailT, { kind: 'app', name: 'List', args: [elemT] }, subst);
+          unify(headT, elemT, subst);
+          result = apply({ kind: 'app', name: 'List', args: [elemT] });
+        }
+        setInferredType(expr, result);
+        return result;
+      }
       case 'PipeExpr':
-      case 'MatchExpr':
-      case 'TryExpr':
-      case 'ThrowExpr':
-      case 'AwaitExpr':
-      case 'ListExpr':
         result = freshVar();
         setInferredType(expr, result);
         return result;
@@ -209,6 +357,15 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
       if (node.kind === 'FunDecl') {
         const paramTs = node.params.map((p) => p.type ? astTypeToInternal(p.type) : freshVar());
         const returnT = astTypeToInternal(node.returnType);
+
+        // Check if async function: return type must be Task<T>
+        if (node.async) {
+          const rt = apply(returnT);
+          if (!(rt.kind === 'app' && rt.name === 'Task')) {
+            errors.push(`Async function ${node.name} must return Task<T>`);
+          }
+        }
+
         // Pre-bind function name for recursion (will be generalized after body check)
         const fnVar = freshVar();
         env.set(node.name, fnVar);
@@ -216,8 +373,17 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         for (let i = 0; i < node.params.length; i++) {
           env.set(node.params[i]!.name, paramTs[i]!);
         }
+
+        // Set async context if this is an async function
+        const wasAsync: boolean = inAsyncContext;
+        if (node.async) inAsyncContext = true;
+
         const bodyT = inferExpr(node.body);
         unify(bodyT, returnT, subst);
+
+        // Restore async context
+        inAsyncContext = wasAsync;
+
         const fnType = { kind: 'arrow' as const, params: paramTs, return: returnT };
         unify(fnVar, fnType, subst);
         // Clean up parameter bindings
