@@ -278,12 +278,22 @@ function emitExpr(
       break;
     }
     case 'CallExpr': {
-      if (expr.callee.kind === 'IdentExpr' && funNameToId != null) {
-        const fnId = funNameToId.get(expr.callee.name);
-        if (fnId !== undefined) {
+      if (expr.callee.kind === 'IdentExpr') {
+        // Check for builtin primitive: print
+        if (expr.callee.name === 'print') {
           for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
-          emitCall(fnId, expr.args.length);
+          emitCall(0, expr.args.length); // fn_id 0 = print primitive
           break;
+        }
+
+        // Check for user-defined function
+        if (funNameToId != null) {
+          const fnId = funNameToId.get(expr.callee.name);
+          if (fnId !== undefined) {
+            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+            emitCall(fnId, expr.args.length);
+            break;
+          }
         }
       }
       emitLoadConst(addConstant({ tag: ConstTag.Unit }));
@@ -452,8 +462,9 @@ export function codegen(program: Program): CodegenResult {
 
   const funDecls = program.body.filter((n): n is FunDecl => n.kind === 'FunDecl');
   const funNameToId = new Map<string, number>();
+  // Function IDs start from 1 (ID 0 is reserved for print primitive)
   for (let i = 0; i < funDecls.length; i++) {
-    funNameToId.set(funDecls[i]!.name, i);
+    funNameToId.set(funDecls[i]!.name, i + 1);
     stringIndex(funDecls[i]!.name); // ensure name is in string table
   }
 

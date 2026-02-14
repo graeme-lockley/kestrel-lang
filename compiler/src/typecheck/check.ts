@@ -38,6 +38,15 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
   const env = new Map<string, InternalType>();
   let inAsyncContext = false; // Track if we're in an async function
 
+  // Add builtin primitives to environment
+  // print: forall a. a -> Unit
+  const printTypeVar = freshVar();
+  env.set('print', generalize({
+    kind: 'arrow',
+    params: [printTypeVar],
+    return: { kind: 'prim', name: 'Unit' }
+  }, new Set()));
+
   function apply(t: InternalType): InternalType {
     return applySubst(t, subst);
   }

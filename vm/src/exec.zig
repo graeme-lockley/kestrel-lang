@@ -2,6 +2,7 @@
 const std = @import("std");
 const Value = @import("value.zig").Value;
 const GC = @import("gc.zig").GC;
+const primitives = @import("primitives.zig");
 
 fn binopInt(stack: *[4096]Value, sp: *usize, op: *const fn (i64, i64) i64) void {
     if (sp.* >= 2) {
@@ -146,6 +147,22 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                 const fn_id = std.mem.readInt(u32, code[pc..][0..4], .little);
                 const arity = std.mem.readInt(u32, code[pc + 4 ..][0..4], .little);
                 pc += 8;
+
+                // Check for primitive function (fn_id 0 = print)
+                if (fn_id == 0) {
+                    // Primitive: print (arity 1)
+                    if (sp >= 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        primitives.print(arg);
+                        // Push unit as result
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                    }
+                    continue;
+                }
+
+                // Regular function call
                 if (frame_sp >= max_frames or fn_id >= functions.len) continue;
                 const entry = functions[fn_id];
                 if (sp < arity) continue;
