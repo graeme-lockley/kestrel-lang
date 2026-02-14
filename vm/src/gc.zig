@@ -5,6 +5,7 @@ const Value = @import("value.zig").Value;
 // Heap object kinds (must match exec.zig)
 pub const RECORD_KIND: u8 = 1;
 pub const ADT_KIND: u8 = 2;
+pub const TASK_KIND: u8 = 3;
 
 // Heap object layout:
 // Common: kind(1) + mark(1) + pad(2) + type_data(4) = 8 bytes header
@@ -106,6 +107,15 @@ pub const GC = struct {
                         break;
                     }
                     current = node.next;
+                }
+            },
+            TASK_KIND => {
+                // Tasks: kind(1) + mark(1) + status(1) + pad(1) + unused(4) + result(8)
+                // Mark the result value if it's a pointer
+                const result_ptr = @as(*const Value, @alignCast(@ptrCast(base + 8)));
+                const result = result_ptr.*;
+                if (result.tag == .ptr) {
+                    self.mark(Value.ptrTo(result));
                 }
             },
             else => {

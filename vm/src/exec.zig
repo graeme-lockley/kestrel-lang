@@ -72,9 +72,11 @@ const RET: u8 = 0x11;
 const THROW: u8 = 0x1A;
 const TRY: u8 = 0x1B;
 const END_TRY: u8 = 0x1C;
+const AWAIT: u8 = 0x1D;
 
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
+const TASK_KIND: u8 = 3;
 const max_frames = 32;
 const max_locals = 128;
 const max_handlers = 32;
@@ -331,6 +333,47 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                 // Pop exception handler (try block completed normally)
                 if (handler_sp > 0) {
                     handler_sp -= 1;
+                }
+            },
+            AWAIT => {
+                // Pop task from stack
+                if (sp == 0) continue;
+                const task_val = stack[sp - 1];
+                sp -= 1;
+
+                // Check if it's a PTR to a TASK object
+                if (task_val.tag != .ptr) {
+                    // Not a task: push unit and continue
+                    stack[sp] = Value.unit();
+                    sp += 1;
+                    continue;
+                }
+
+                const addr = Value.ptrTo(task_val);
+                const base = @as([*]const u8, @ptrFromInt(addr));
+                const kind = base[0];
+
+                if (kind != TASK_KIND) {
+                    // Not a task: push unit
+                    stack[sp] = Value.unit();
+                    sp += 1;
+                    continue;
+                }
+
+                // Task layout: kind(1) + mark(1) + status(1) + pad(1) + unused(4) + result(8)
+                // status: 0 = pending, 1 = completed
+                const status = base[2];
+
+                if (status == 1) {
+                    // Task completed: push result
+                    const result_ptr = @as(*const Value, @alignCast(@ptrCast(base + 8)));
+                    stack[sp] = result_ptr.*;
+                    sp += 1;
+                } else {
+                    // Task pending: for now, just push unit (no actual suspension)
+                    // A full implementation would suspend the frame here
+                    stack[sp] = Value.unit();
+                    sp += 1;
                 }
             },
             RET => {

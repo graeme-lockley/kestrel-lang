@@ -39,6 +39,7 @@ import {
   emitThrow,
   emitTry,
   emitEndTry,
+  emitAwait,
 } from '../bytecode/instructions.js';
 
 export interface FunctionEntry {
@@ -408,6 +409,13 @@ function emitExpr(
       // End: patch jump
       const endPos = codeOffset();
       patchI32(jumpPos + 1, endPos - jumpPos);
+      break;
+    }
+    case 'AwaitExpr': {
+      // Evaluate task expression and await it
+      emitExpr(expr.value, env, funNameToId, shapes, adts);
+      emitAwait();
+      // AWAIT leaves the result on stack
       break;
     }
     default:
