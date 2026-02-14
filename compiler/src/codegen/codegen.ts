@@ -350,14 +350,11 @@ function emitExpr(
       emitStoreLocal(scrutineeSlot);
 
       // Determine if this is an ADT match (Nil/Cons patterns) or wildcard match
-      // TODO: MATCH instruction implementation has a bug - causes match to not return value
-      // Wildcard matching works correctly. Need to debug MATCH instruction usage.
-      const hasAdtPatterns = false; // Disabled until bug is fixed
-      // const hasAdtPatterns = expr.cases.some(
-      //   c => c.pattern.kind === 'ConstructorPattern' ||
-      //       c.pattern.kind === 'ConsPattern' ||
-      //       c.pattern.kind === 'ListPattern'
-      // );
+      const hasAdtPatterns = expr.cases.some(
+        c => c.pattern.kind === 'ConstructorPattern' ||
+            c.pattern.kind === 'ConsPattern' ||
+            c.pattern.kind === 'ListPattern'
+      );
 
       if (hasAdtPatterns) {
         // Use MATCH instruction for ADT dispatch
@@ -436,7 +433,8 @@ function emitExpr(
         // Patch end jumps first to get end position
         const endPos = codeOffset();
         for (const jumpPos of endJumps) {
-          patchI32(jumpPos + 1, endPos - jumpPos);
+          // Offset is relative to position after the JUMP instruction (jumpPos + 5)
+          patchI32(jumpPos + 1, endPos - (jumpPos + 5));
         }
 
         // Patch jump table - use end position as default for uncovered cases
