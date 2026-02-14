@@ -1,6 +1,7 @@
 // Execution loop (spec 04). Stack, locals, LOAD_CONST, STORE_LOCAL, RET, arithmetic, branches.
 const std = @import("std");
 const Value = @import("value.zig").Value;
+const GC = @import("gc.zig").GC;
 
 fn binopInt(stack: *[4096]Value, sp: *usize, op: *const fn (i64, i64) i64) void {
     if (sp.* >= 2) {
@@ -102,7 +103,16 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
     var handlers: [max_handlers]ExceptionHandler = undefined;
     var handler_sp: usize = 0;
 
+    // Initialize GC
+    var gc = GC.init(allocator);
+    defer gc.deinit();
+
     while (pc < code.len) {
+        // Periodic GC check
+        if (gc.bytes_allocated >= gc.next_gc) {
+            gc.collect(stack[0..sp], locals[0..max_locals]);
+        }
+
         const op = code[pc];
         pc += 1;
         switch (op) {
@@ -179,9 +189,10 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                 pc += 4;
                 if (shape_id >= shapes.len or sp < shapes[shape_id].field_count) continue;
                 const n = shapes[shape_id].field_count;
-                const rec = allocator.alignedAlloc(u8, @enumFromInt(3), 8 + n * 8) catch continue; // 2^3 = 8
+                const rec = gc.allocObject(8 + n * 8) catch continue;
                 @memset(rec, 0);
                 rec[0] = RECORD_KIND;
+                rec[1] = 0; // mark bit
                 std.mem.writeInt(u32, rec[4..8], n, .little);
                 const fields_ptr = @as([*]Value, @alignCast(@ptrCast(rec.ptr + 8)));
                 var i: usize = 0;
@@ -230,10 +241,11 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                 pc += 12;
                 _ = adt_id; // Not used for now, ADT info in module (future)
                 if (sp < arity) continue;
-                // Allocate ADT: kind(1) + pad(3) + ctor_tag(4) + arity * 8 bytes
-                const adt = allocator.alignedAlloc(u8, @enumFromInt(3), 8 + arity * 8) catch continue;
+                // Allocate ADT: kind(1) + mark(1) + pad(2) + ctor_tag(4) + arity * 8 bytes
+                const adt = gc.allocObject(8 + arity * 8) catch continue;
                 @memset(adt, 0);
                 adt[0] = ADT_KIND;
+                adt[1] = 0; // mark bit
                 std.mem.writeInt(u32, adt[4..8], ctor, .little);
                 const fields_ptr = @as([*]Value, @alignCast(@ptrCast(adt.ptr + 8)));
                 var i: usize = 0;
