@@ -148,10 +148,10 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                 const arity = std.mem.readInt(u32, code[pc + 4 ..][0..4], .little);
                 pc += 8;
 
-                // Check for primitive function (fn_id 0 = print)
-                if (fn_id == 0) {
-                    // Primitive: print (arity 1)
-                    if (sp >= 1) {
+                // Check for primitive functions (0xFFFFFF00 range)
+                if (fn_id >= 0xFFFFFF00) {
+                    if (fn_id == 0xFFFFFF00 and sp >= 1) {
+                        // Primitive: print
                         const arg = stack[sp - 1];
                         sp -= 1;
                         primitives.print(arg);

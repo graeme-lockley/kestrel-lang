@@ -282,7 +282,7 @@ function emitExpr(
         // Check for builtin primitive: print
         if (expr.callee.name === 'print') {
           for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
-          emitCall(0, expr.args.length); // fn_id 0 = print primitive
+          emitCall(0xFFFFFF00, expr.args.length); // Special ID for print primitive
           break;
         }
 
@@ -463,8 +463,9 @@ export function codegen(program: Program): CodegenResult {
   const funDecls = program.body.filter((n): n is FunDecl => n.kind === 'FunDecl');
   const funNameToId = new Map<string, number>();
   // Function IDs start from 1 (ID 0 is reserved for print primitive)
+  // But function table entries start from index 0
   for (let i = 0; i < funDecls.length; i++) {
-    funNameToId.set(funDecls[i]!.name, i + 1);
+    funNameToId.set(funDecls[i]!.name, i);
     stringIndex(funDecls[i]!.name); // ensure name is in string table
   }
 
