@@ -68,11 +68,21 @@ const ALLOC_RECORD: u8 = 0x16;
 const GET_FIELD: u8 = 0x17;
 const SET_FIELD: u8 = 0x18;
 const RET: u8 = 0x11;
+const THROW: u8 = 0x1A;
+const TRY: u8 = 0x1B;
+const END_TRY: u8 = 0x1C;
 
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
 const max_frames = 32;
 const max_locals = 128;
+const max_handlers = 32;
+
+const ExceptionHandler = struct {
+    handler_pc: usize,
+    stack_sp: usize,
+    frame_depth: usize,
+};
 
 pub fn run(allocator: std.mem.Allocator, module: anytype) void {
     const code = module.code;
@@ -87,6 +97,10 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
     var saved_locals: [max_frames][max_locals]Value = undefined;
     var frame_sp: usize = 0;
     var pc: usize = 0;
+
+    // Exception handler stack
+    var handlers: [max_handlers]ExceptionHandler = undefined;
+    var handler_sp: usize = 0;
 
     while (pc < code.len) {
         const op = code[pc];
@@ -261,6 +275,51 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                 const offset_pos = pc + ctor_tag * 4;
                 const offset = std.mem.readInt(i32, code[offset_pos..][0..4], .little);
                 pc = @as(usize, @intCast(@as(isize, @intCast(match_start)) + offset));
+            },
+            THROW => {
+                // Pop exception value
+                if (sp == 0) return;
+                const exception = stack[sp - 1];
+                sp -= 1;
+
+                // Unwind to nearest exception handler
+                if (handler_sp == 0) {
+                    // No handler: terminate execution
+                    return;
+                }
+
+                // Pop handler and restore state
+                handler_sp -= 1;
+                const handler = handlers[handler_sp];
+                pc = handler.handler_pc;
+                sp = handler.stack_sp;
+                // Push exception value for catch block
+                stack[sp] = exception;
+                sp += 1;
+            },
+            TRY => {
+                // Read handler offset
+                const handler_offset = std.mem.readInt(i32, code[pc..][0..4], .little);
+                pc += 4;
+                if (handler_sp >= max_handlers) continue;
+
+                // Calculate handler address (relative to TRY instruction start)
+                const try_start = pc - 5; // TRY opcode is at pc-5 (1 byte + 4 bytes offset)
+                const handler_addr = @as(usize, @intCast(@as(isize, @intCast(try_start)) + handler_offset));
+
+                // Push exception handler
+                handlers[handler_sp] = ExceptionHandler{
+                    .handler_pc = handler_addr,
+                    .stack_sp = sp,
+                    .frame_depth = frame_sp,
+                };
+                handler_sp += 1;
+            },
+            END_TRY => {
+                // Pop exception handler (try block completed normally)
+                if (handler_sp > 0) {
+                    handler_sp -= 1;
+                }
             },
             RET => {
                 if (sp == 0) return;

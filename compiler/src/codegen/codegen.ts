@@ -36,6 +36,9 @@ import {
   emitJumpIfFalse,
   emitConstruct,
   emitMatch,
+  emitThrow,
+  emitTry,
+  emitEndTry,
 } from '../bytecode/instructions.js';
 
 export interface FunctionEntry {
@@ -349,6 +352,62 @@ function emitExpr(
       } else {
         emitLoadConst(addConstant({ tag: ConstTag.Unit }));
       }
+      break;
+    }
+    case 'ThrowExpr': {
+      // Evaluate exception value and throw
+      emitExpr(expr.value, env, funNameToId, shapes, adts);
+      emitThrow();
+      // Push unit (unreachable but keeps stack consistent)
+      emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+      break;
+    }
+    case 'TryExpr': {
+      // try { block } catch (e) { cases }
+      // Emit: TRY handler_offset, block, END_TRY, JUMP end, handler: cases, end:
+      const tryPos = codeOffset();
+      emitTry(0); // Placeholder offset, will be patched
+
+      // Emit try block
+      emitExpr(expr.body, env, funNameToId, shapes, adts);
+      emitEndTry();
+
+      // Jump over catch handler
+      const jumpPos = codeOffset();
+      emitJump(0); // Placeholder, will be patched
+
+      // Handler starts here
+      const handlerPos = codeOffset();
+      // Patch TRY instruction with handler offset (relative to TRY start)
+      patchI32(tryPos + 1, handlerPos - tryPos);
+
+      // Exception value is on stack, bind to catch variable
+      const excSlot = env.size;
+      env.set(expr.catchVar, excSlot);
+      emitStoreLocal(excSlot);
+
+      // Emit catch cases (similar to match)
+      const firstCase = expr.cases[0];
+      if (firstCase) {
+        if (firstCase.pattern.kind === 'VarPattern') {
+          const slot = env.size;
+          env.set(firstCase.pattern.name, slot);
+          emitLoadLocal(excSlot); // Load exception
+          emitStoreLocal(slot);
+          emitExpr(firstCase.body, env, funNameToId, shapes, adts);
+          env.delete(firstCase.pattern.name);
+        } else {
+          emitExpr(firstCase.body, env, funNameToId, shapes, adts);
+        }
+      } else {
+        emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+      }
+
+      env.delete(expr.catchVar);
+
+      // End: patch jump
+      const endPos = codeOffset();
+      patchI32(jumpPos + 1, endPos - jumpPos);
       break;
     }
     default:
