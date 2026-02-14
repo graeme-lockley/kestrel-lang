@@ -78,6 +78,7 @@ const AWAIT: u8 = 0x1D;
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
 const TASK_KIND: u8 = 3;
+const STRING_KIND: u8 = 4;
 const max_frames = 32;
 const max_locals = 128;
 const max_handlers = 32;

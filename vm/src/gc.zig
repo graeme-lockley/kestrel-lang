@@ -6,6 +6,7 @@ const Value = @import("value.zig").Value;
 pub const RECORD_KIND: u8 = 1;
 pub const ADT_KIND: u8 = 2;
 pub const TASK_KIND: u8 = 3;
+pub const STRING_KIND: u8 = 4;
 
 // Heap object layout:
 // Common: kind(1) + mark(1) + pad(2) + type_data(4) = 8 bytes header
@@ -118,8 +119,12 @@ pub const GC = struct {
                     self.mark(Value.ptrTo(result));
                 }
             },
+            STRING_KIND => {
+                // Strings: kind(1) + mark(1) + pad(2) + len(4) + UTF-8 bytes
+                // No pointers to trace
+            },
             else => {
-                // Other kinds (FLOAT, STRING, etc.) have no pointers to trace
+                // Other kinds (FLOAT, etc.) have no pointers to trace
             },
         }
     }

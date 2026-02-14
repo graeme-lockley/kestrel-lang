@@ -20,6 +20,21 @@ pub fn print(val: Value) void {
             const len = std.unicode.utf8Encode(c, &cbuf) catch 1;
             break :blk std.fmt.allocPrint(allocator, "{s}\n", .{cbuf[0..len]}) catch return;
         },
+        .ptr => blk: {
+            const addr = Value.ptrTo(val);
+            if (addr == 0) break :blk std.fmt.allocPrint(allocator, "()\n", .{}) catch return;
+
+            const base = @as([*]const u8, @ptrFromInt(addr));
+            const kind = base[0];
+
+            if (kind == 4) { // STRING_KIND
+                const len = std.mem.readInt(u32, base[4..8], .little);
+                const str_data = base[8..8+len];
+                break :blk std.fmt.allocPrint(allocator, "{s}\n", .{str_data}) catch return;
+            }
+
+            break :blk std.fmt.allocPrint(allocator, "<value>\n", .{}) catch return;
+        },
         else => std.fmt.allocPrint(allocator, "<value>\n", .{}) catch return,
     };
 

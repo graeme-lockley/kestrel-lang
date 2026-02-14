@@ -13,11 +13,16 @@ pub const ShapeEntry = struct {
     field_count: u32,
 };
 
+pub const StringEntry = struct {
+    data: []const u8,
+};
+
 pub const Module = struct {
     code: []const u8,
     constants: []const Value,
     functions: []const FnEntry,
     shapes: []const ShapeEntry,
+    strings: []const StringEntry,
 };
 
 fn align4(n: usize) usize {
@@ -42,6 +47,27 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
         std.mem.readInt(u32, data[28..32], .little),
         std.mem.readInt(u32, data[32..36], .little),
     };
+
+    // Load string table (section 0)
+    const s0_start = section_offsets[0];
+    const s0_end = if (data.len > section_offsets[1]) section_offsets[1] else data.len;
+    var strings: []const StringEntry = &[_]StringEntry{};
+    if (s0_start + 4 <= s0_end) {
+        const str_count = std.mem.readInt(u32, data[s0_start..][0..4], .little);
+        const str_list = try allocator.alloc(StringEntry, str_count);
+        errdefer allocator.free(str_list);
+        var o: usize = s0_start + 4;
+        for (str_list) |*entry| {
+            o = align4(o);
+            if (o + 4 > s0_end) return error.InvalidKbc;
+            const len = std.mem.readInt(u32, data[o..][0..4], .little);
+            o += 4;
+            if (o + len > s0_end) return error.InvalidKbc;
+            entry.data = data[o..o+len];
+            o += len;
+        }
+        strings = str_list;
+    }
 
     const code_start = section_offsets[3];
     const code_end = if (data.len > section_offsets[4]) section_offsets[4] else data.len;
@@ -81,7 +107,26 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
                     out.* = Value.char(std.mem.readInt(u32, data[o..][0..4], .little));
                     entry_size = 8;
                 },
-                6 => { entry_size = 8; out.* = Value.unit(); },
+                6 => {
+                    // String constant - create STRING_KIND heap object
+                    if (o + 4 > data.len) return error.InvalidKbc;
+                    const str_idx = std.mem.readInt(u32, data[o..][0..4], .little);
+                    if (str_idx >= strings.len) return error.InvalidKbc;
+
+                    const str_data = strings[str_idx].data;
+                    const obj_size = 8 + str_data.len; // kind(1) + mark(1) + pad(2) + len(4) + data
+                    const obj = try allocator.alignedAlloc(u8, @enumFromInt(3), obj_size);
+
+                    obj[0] = 4; // STRING_KIND
+                    obj[1] = 0; // mark byte
+                    obj[2] = 0; // pad
+                    obj[3] = 0; // pad
+                    std.mem.writeInt(u32, obj[4..8], @as(u32, @intCast(str_data.len)), .little);
+                    @memcpy(obj[8..8+str_data.len], str_data);
+
+                    out.* = Value.ptr(@intFromPtr(obj.ptr));
+                    entry_size = 8;
+                },
                 else => out.* = Value.unit(),
             }
             o = align4(entry_start + entry_size);
@@ -129,6 +174,7 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
         .constants = constants,
         .functions = functions,
         .shapes = shapes,
+        .strings = strings,
     };
 }
 
