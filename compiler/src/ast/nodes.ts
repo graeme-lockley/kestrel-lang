@@ -1,0 +1,338 @@
+/**
+ * AST node types (spec 01 §3). All nodes have kind and optional span.
+ */
+import type { Span } from '../lexer/types.js';
+
+export interface NodeBase {
+  span?: Span;
+}
+
+export interface Program extends NodeBase {
+  kind: 'Program';
+  imports: ImportDecl[];
+  body: (TopLevelDecl | TopLevelStmt)[];
+}
+
+export type ImportDecl = NamedImport | NamespaceImport | SideEffectImport;
+
+export interface NamedImport extends NodeBase {
+  kind: 'NamedImport';
+  spec: string;
+  specs: { external: string; local: string }[];
+}
+
+export interface NamespaceImport extends NodeBase {
+  kind: 'NamespaceImport';
+  spec: string;
+  name: string;
+}
+
+export interface SideEffectImport extends NodeBase {
+  kind: 'SideEffectImport';
+  spec: string;
+}
+
+export type TopLevelDecl = FunDecl | TypeDecl | ExceptionDecl | ExportDecl;
+
+export interface ExportDecl extends NodeBase {
+  kind: 'ExportDecl';
+  inner: TopLevelDecl | ExportStar | ExportNamed;
+}
+
+export interface ExportStar extends NodeBase {
+  kind: 'ExportStar';
+  spec: string;
+}
+
+export interface ExportNamed extends NodeBase {
+  kind: 'ExportNamed';
+  spec: string;
+  specs: { external: string; local: string }[];
+}
+
+export interface FunDecl extends NodeBase {
+  kind: 'FunDecl';
+  async: boolean;
+  name: string;
+  params: Param[];
+  returnType: Type;
+  body: Expr;
+}
+
+export interface Param extends NodeBase {
+  kind: 'Param';
+  name: string;
+  type?: Type;
+}
+
+export interface TypeDecl extends NodeBase {
+  kind: 'TypeDecl';
+  name: string;
+  type: Type;
+}
+
+export interface ExceptionDecl extends NodeBase {
+  kind: 'ExceptionDecl';
+  name: string;
+  fields?: TypeField[];
+}
+
+export interface TypeField extends NodeBase {
+  kind: 'TypeField';
+  name: string;
+  mut: boolean;
+  type: Type;
+}
+
+export type Type =
+  | IdentType
+  | PrimType
+  | ArrowType
+  | RecordType
+  | RowVarType
+  | AppType
+  | UnionType
+  | InterType
+  | TupleType;
+
+export interface IdentType extends NodeBase {
+  kind: 'IdentType';
+  name: string;
+}
+
+export interface PrimType extends NodeBase {
+  kind: 'PrimType';
+  name: 'Int' | 'Float' | 'Bool' | 'String' | 'Unit' | 'Char' | 'Rune';
+}
+
+export interface ArrowType extends NodeBase {
+  kind: 'ArrowType';
+  params: Type[];
+  return: Type;
+}
+
+export interface RecordType extends NodeBase {
+  kind: 'RecordType';
+  fields: TypeField[];
+}
+
+export interface RowVarType extends NodeBase {
+  kind: 'RowVarType';
+  name: string;
+}
+
+export interface AppType extends NodeBase {
+  kind: 'AppType';
+  name: string;
+  args: Type[];
+}
+
+export interface UnionType extends NodeBase {
+  kind: 'UnionType';
+  left: Type;
+  right: Type;
+}
+
+export interface InterType extends NodeBase {
+  kind: 'InterType';
+  left: Type;
+  right: Type;
+}
+
+export interface TupleType extends NodeBase {
+  kind: 'TupleType';
+  elements: Type[];
+}
+
+export type TopLevelStmt = ValStmt | VarStmt | AssignStmt;
+
+export interface ValStmt extends NodeBase {
+  kind: 'ValStmt';
+  name: string;
+  value: Expr;
+}
+
+export interface VarStmt extends NodeBase {
+  kind: 'VarStmt';
+  name: string;
+  value: Expr;
+}
+
+export interface AssignStmt extends NodeBase {
+  kind: 'AssignStmt';
+  target: Expr;
+  value: Expr;
+}
+
+export type Expr =
+  | IfExpr
+  | MatchExpr
+  | TryExpr
+  | LambdaExpr
+  | PipeExpr
+  | LiteralExpr
+  | IdentExpr
+  | CallExpr
+  | FieldExpr
+  | ListExpr
+  | RecordExpr
+  | ThrowExpr
+  | AwaitExpr
+  | BinaryExpr
+  | ConsExpr
+  | TupleExpr
+  | BlockExpr;
+
+export interface IfExpr extends NodeBase {
+  kind: 'IfExpr';
+  cond: Expr;
+  then: Expr;
+  else: Expr;
+}
+
+export interface MatchExpr extends NodeBase {
+  kind: 'MatchExpr';
+  scrutinee: Expr;
+  cases: Case[];
+}
+
+export interface Case extends NodeBase {
+  kind: 'Case';
+  pattern: Pattern;
+  body: Expr;
+}
+
+export interface TryExpr extends NodeBase {
+  kind: 'TryExpr';
+  body: BlockExpr;
+  catchVar: string;
+  cases: Case[];
+}
+
+export interface LambdaExpr extends NodeBase {
+  kind: 'LambdaExpr';
+  params: Param[];
+  body: Expr;
+}
+
+export interface PipeExpr extends NodeBase {
+  kind: 'PipeExpr';
+  left: Expr;
+  op: '|>' | '<|';
+  right: Expr;
+}
+
+export interface LiteralExpr extends NodeBase {
+  kind: 'LiteralExpr';
+  literal: 'int' | 'float' | 'string' | 'char' | 'true' | 'false' | 'unit';
+  value: string;
+}
+
+export interface IdentExpr extends NodeBase {
+  kind: 'IdentExpr';
+  name: string;
+}
+
+export interface CallExpr extends NodeBase {
+  kind: 'CallExpr';
+  callee: Expr;
+  args: Expr[];
+}
+
+export interface FieldExpr extends NodeBase {
+  kind: 'FieldExpr';
+  object: Expr;
+  field: string;
+}
+
+export interface ListExpr extends NodeBase {
+  kind: 'ListExpr';
+  elements: (Expr | { spread: true; expr: Expr })[];
+}
+
+export interface RecordExpr extends NodeBase {
+  kind: 'RecordExpr';
+  spread?: Expr;
+  fields: { name: string; mut?: boolean; value: Expr }[];
+}
+
+export interface ThrowExpr extends NodeBase {
+  kind: 'ThrowExpr';
+  value: Expr;
+}
+
+export interface AwaitExpr extends NodeBase {
+  kind: 'AwaitExpr';
+  value: Expr;
+}
+
+export interface BinaryExpr extends NodeBase {
+  kind: 'BinaryExpr';
+  op: string;
+  left: Expr;
+  right: Expr;
+}
+
+export interface ConsExpr extends NodeBase {
+  kind: 'ConsExpr';
+  head: Expr;
+  tail: Expr;
+}
+
+export interface TupleExpr extends NodeBase {
+  kind: 'TupleExpr';
+  elements: Expr[];
+}
+
+export interface BlockExpr extends NodeBase {
+  kind: 'BlockExpr';
+  stmts: (ValStmt | VarStmt | AssignStmt)[];
+  result: Expr;
+}
+
+export type Pattern =
+  | WildcardPattern
+  | VarPattern
+  | LiteralPattern
+  | ConstructorPattern
+  | ListPattern
+  | ConsPattern
+  | TuplePattern;
+
+export interface WildcardPattern extends NodeBase {
+  kind: 'WildcardPattern';
+}
+
+export interface VarPattern extends NodeBase {
+  kind: 'VarPattern';
+  name: string;
+}
+
+export interface LiteralPattern extends NodeBase {
+  kind: 'LiteralPattern';
+  literal: 'int' | 'string' | 'true' | 'false';
+  value: string;
+}
+
+export interface ConstructorPattern extends NodeBase {
+  kind: 'ConstructorPattern';
+  name: string;
+  fields?: { name: string; pattern?: Pattern }[];
+}
+
+export interface ListPattern extends NodeBase {
+  kind: 'ListPattern';
+  elements: Pattern[];
+  rest?: string;
+}
+
+export interface ConsPattern extends NodeBase {
+  kind: 'ConsPattern';
+  head: Pattern;
+  tail: Pattern;
+}
+
+export interface TuplePattern extends NodeBase {
+  kind: 'TuplePattern';
+  elements: Pattern[];
+}

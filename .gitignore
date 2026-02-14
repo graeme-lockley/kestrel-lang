@@ -1,0 +1,16 @@
+# Build artifacts
+out/
+compiler/dist/
+compiler/node_modules/
+vm/zig-out/
+vm/.zig-cache/
+*.kbc
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
