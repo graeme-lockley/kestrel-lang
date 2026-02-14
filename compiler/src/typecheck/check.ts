@@ -233,30 +233,40 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         const scrutT = inferExpr(expr.scrutinee);
         checkExhaustive(scrutT, expr.cases, expr);
 
+        // Helper to bind pattern variables
+        function bindPattern(pattern: import('../ast/nodes.js').Pattern, patternType: InternalType): string[] {
+          const bound: string[] = [];
+          if (pattern.kind === 'VarPattern') {
+            env.set(pattern.name, patternType);
+            bound.push(pattern.name);
+          } else if (pattern.kind === 'ConsPattern') {
+            // For head :: tail, scrutinee must be List<T>
+            const applied = apply(patternType);
+            if (applied.kind === 'app' && applied.name === 'List' && applied.args.length === 1) {
+              const elemType = applied.args[0]!;
+              bound.push(...bindPattern(pattern.head, elemType));
+              bound.push(...bindPattern(pattern.tail, patternType)); // tail is also List<T>
+            }
+          }
+          return bound;
+        }
+
         // Type check all cases and unify their result types
         if (expr.cases.length === 0) {
           result = freshVar();
         } else {
           // Infer type of first case body
           const firstCase = expr.cases[0]!;
-          if (firstCase.pattern.kind === 'VarPattern') {
-            env.set(firstCase.pattern.name, scrutT);
-          }
+          const boundVars = bindPattern(firstCase.pattern, scrutT);
           const firstT = inferExpr(firstCase.body);
-          if (firstCase.pattern.kind === 'VarPattern') {
-            env.delete(firstCase.pattern.name);
-          }
+          boundVars.forEach(v => env.delete(v));
 
           // Check remaining cases unify with first
           for (let i = 1; i < expr.cases.length; i++) {
             const c = expr.cases[i]!;
-            if (c.pattern.kind === 'VarPattern') {
-              env.set(c.pattern.name, scrutT);
-            }
+            const caseVars = bindPattern(c.pattern, scrutT);
             const caseT = inferExpr(c.body);
-            if (c.pattern.kind === 'VarPattern') {
-              env.delete(c.pattern.name);
-            }
+            caseVars.forEach(v => env.delete(v));
             unify(firstT, caseT, subst);
           }
           result = apply(firstT);

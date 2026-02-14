@@ -151,7 +151,9 @@ pub const GC = struct {
             if (mark_byte == 0) {
                 // Unmarked: free this object
                 const size = node.size;
-                const mem: []u8 = base[0..size];
+                // Create aligned slice matching the allocation alignment (8 bytes = 2^3)
+                const aligned_base = @as([*]align(8) u8, @alignCast(base));
+                const mem: []align(8) u8 = aligned_base[0..size];
                 self.allocator.free(mem);
                 self.bytes_allocated -= size;
 
@@ -187,7 +189,9 @@ pub const GC = struct {
         while (current) |node| {
             const base = @as([*]u8, @ptrFromInt(node.addr));
             const size = node.size;
-            const mem: []u8 = base[0..size];
+            // Create aligned slice matching the allocation alignment (8 bytes = 2^3)
+            const aligned_base = @as([*]align(8) u8, @alignCast(base));
+            const mem: []align(8) u8 = aligned_base[0..size];
             self.allocator.free(mem);
 
             const next = node.next;

@@ -709,6 +709,19 @@ class Parser {
   }
 
   private parsePattern(): Pattern {
+    let pattern = this.parsePatternPrimary();
+
+    // Check for cons pattern (::)
+    if (this.at('op', '::')) {
+      this.advance();
+      const tail = this.parsePattern();
+      return { kind: 'ConsPattern', head: pattern, tail };
+    }
+
+    return pattern;
+  }
+
+  private parsePatternPrimary(): Pattern {
     if (this.at('ident') && this.current().value === '_') {
       this.advance();
       return { kind: 'WildcardPattern' };

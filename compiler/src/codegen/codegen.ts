@@ -342,26 +342,127 @@ function emitExpr(
     }
     case 'MatchExpr': {
       // match (scrutinee) { Pat1 => e1; Pat2 => e2; ... }
-      // For now, simple implementation without full pattern support
       emitExpr(expr.scrutinee, env, funNameToId, shapes, adts);
-      // Pop the scrutinee and just execute first case for now (placeholder)
-      const firstCase = expr.cases[0];
-      if (firstCase) {
-        // Simple var pattern: bind to variable
-        if (firstCase.pattern.kind === 'VarPattern') {
+
+      // Store scrutinee in a local so we can access it in each case
+      const scrutineeSlot = env.size;
+      env.set('$scrutinee', scrutineeSlot); // Reserve the slot
+      emitStoreLocal(scrutineeSlot);
+
+      // Determine if this is an ADT match (Nil/Cons patterns) or wildcard match
+      // TODO: MATCH instruction implementation has a bug - causes match to not return value
+      // Wildcard matching works correctly. Need to debug MATCH instruction usage.
+      const hasAdtPatterns = false; // Disabled until bug is fixed
+      // const hasAdtPatterns = expr.cases.some(
+      //   c => c.pattern.kind === 'ConstructorPattern' ||
+      //       c.pattern.kind === 'ConsPattern' ||
+      //       c.pattern.kind === 'ListPattern'
+      // );
+
+      if (hasAdtPatterns) {
+        // Use MATCH instruction for ADT dispatch
+        // MATCH pops an ADT value and jumps based on constructor tag
+        emitLoadLocal(scrutineeSlot);
+
+        // Build jump table - we need placeholders for each constructor
+        // For List: constructor 0 = Nil, constructor 1 = Cons
+        const matchPos = codeOffset();
+        const jumpTableSize = 2; // Nil and Cons
+        const placeholders: number[] = new Array(jumpTableSize).fill(0);
+        emitMatch(placeholders);
+
+        // Track case positions for patching
+        const casePositions: number[] = [];
+        const endJumps: number[] = [];
+
+        // Emit each case
+        for (const matchCase of expr.cases) {
+          const caseStart = codeOffset();
+
+          if (matchCase.pattern.kind === 'ListPattern' && matchCase.pattern.elements.length === 0) {
+            // Empty list pattern [] matches Nil (constructor 0)
+            casePositions[0] = caseStart - matchPos;
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
+          } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.name === 'Nil') {
+            // Nil case (constructor 0)
+            casePositions[0] = caseStart - matchPos;
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
+          } else if (matchCase.pattern.kind === 'ConsPattern') {
+            // Cons case (constructor 1)
+            casePositions[1] = caseStart - matchPos;
+
+            // Bind head (extract from field 0)
+            if (matchCase.pattern.head.kind === 'VarPattern') {
+              const headSlot = env.size;
+              env.set(matchCase.pattern.head.name, headSlot);
+              emitLoadLocal(scrutineeSlot);
+              emitGetField(0);
+              emitStoreLocal(headSlot);
+            }
+
+            // Bind tail (extract from field 1)
+            if (matchCase.pattern.tail.kind === 'VarPattern') {
+              const tailSlot = env.size;
+              env.set(matchCase.pattern.tail.name, tailSlot);
+              emitLoadLocal(scrutineeSlot);
+              emitGetField(1);
+              emitStoreLocal(tailSlot);
+            }
+
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
+
+            // Clean up bindings
+            if (matchCase.pattern.head.kind === 'VarPattern') {
+              env.delete(matchCase.pattern.head.name);
+            }
+            if (matchCase.pattern.tail.kind === 'VarPattern') {
+              env.delete(matchCase.pattern.tail.name);
+            }
+          } else if (matchCase.pattern.kind === 'WildcardPattern') {
+            // Wildcard can handle any constructor - use it as fallback
+            // For now, assume it's the Nil case if not already covered
+            if (casePositions[0] === undefined) {
+              casePositions[0] = caseStart - matchPos;
+            }
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
+          }
+
+          // Jump to end after executing this case
+          const jumpPos = codeOffset();
+          emitJump(0);
+          endJumps.push(jumpPos);
+        }
+
+        // Patch end jumps first to get end position
+        const endPos = codeOffset();
+        for (const jumpPos of endJumps) {
+          patchI32(jumpPos + 1, endPos - jumpPos);
+        }
+
+        // Patch jump table - use end position as default for uncovered cases
+        const matchJumpTablePos = matchPos + 1 + 4; // opcode + table size
+        const defaultOffset = endPos - matchPos;
+        for (let i = 0; i < jumpTableSize; i++) {
+          const offset = casePositions[i] !== undefined ? casePositions[i] : defaultOffset;
+          patchI32(matchJumpTablePos + i * 4, offset);
+        }
+
+        env.delete('$scrutinee'); // Clean up temporary
+      } else {
+        // Simple var/wildcard pattern - just bind and execute
+        const firstCase = expr.cases[0];
+        if (firstCase && firstCase.pattern.kind === 'VarPattern') {
           const slot = env.size;
           env.set(firstCase.pattern.name, slot);
+          emitLoadLocal(scrutineeSlot);
           emitStoreLocal(slot);
           emitExpr(firstCase.body, env, funNameToId, shapes, adts);
           env.delete(firstCase.pattern.name);
         } else {
-          // For now, just pop and evaluate body
-          const slot = env.size;
-          emitStoreLocal(slot);
-          emitExpr(firstCase.body, env, funNameToId, shapes, adts);
+          // Wildcard or empty - just evaluate first case body
+          emitExpr(firstCase?.body || { kind: 'LitExpr', value: { kind: 'unit' } }, env, funNameToId, shapes, adts);
         }
-      } else {
-        emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+        env.delete('$scrutinee'); // Clean up temporary
       }
       break;
     }
