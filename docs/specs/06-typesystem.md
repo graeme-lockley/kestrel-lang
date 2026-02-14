@@ -1,0 +1,204 @@
+# 06 – Type System Specification
+
+Version: 1.0
+
+---
+
+Kestrel’s type system provides Hindley–Milner inference, structural records with row polymorphism, and union/intersection types. This document specifies the type language and typing rules.
+
+---
+
+## 1. Types (Grammar)
+
+```
+Type ::=
+    Int
+  | Float
+  | Bool
+  | String
+  | Unit
+  | Char
+  | Rune
+  | "Array" "<" Type ">"
+  | "Task" "<" Type ">"
+  | "Option" "<" Type ">"
+  | "Result" "<" Type "," Type ">"
+  | "List" "<" Type ">"
+  | Type "*" Type
+  | "(" TypeList ")" "->" Type
+  | "{" FieldList "}"
+  | "{" "...R" "}"
+  | Type "|" Type
+  | Type "&" Type
+  | IDENT
+```
+
+- **Product:** `Type "*" Type` (e.g. pair).
+- **Function:** `(TypeList) -> Type`.
+- **Record:** `{ FieldList }`; see §2 for row syntax. A field may be **mutable:** `ident : mut Type`. Values of that record type may have the field updated by assignment (e.g. `r.age := 42`) on any binding (val or var). Fields without `mut` are immutable.
+- **Row variable:** `{ ...R }` binds `R` in the signature.
+- **Union / intersection:** `A | B`, `A & B`. Precedence: `&` binds tighter than `|`.
+- **Built-in generics:** `Array<T>` and `Task<T>` are part of the runtime; each takes one type argument. `Array<T>` denotes a mutable sequence of values of type `T`. `Task<T>` denotes an asynchronous computation that yields a value of type `T` (see async/await in the language spec).
+- **Library types:** `Option<T>`, `Result<T,E>`, and `List<T>` are provided by the standard library (see [02-stdlib.md](02-stdlib.md)). `Option<T>`: optional value; `Result<T,E>`: success `T` or error `E`; `List<T>`: immutable list with special syntax `[a, b, ...c]` and `::` (expression and pattern). In the bytecode type table (03 §6.3), `Result<T,E>` is encoded as **ADT** (tag 8) with the Result adt_index and two type arguments; there is no dedicated Result type tag.
+- **IDENT:** Named types (e.g. type aliases, ADTs) from the current scope. **FieldList** is defined in 01 §3.6 (TypeFieldList): `ident : [mut] Type` comma-separated; use the same for record types in 06. **Char** and **Rune** denote the same type (one Unicode code point); both names are valid in types and have the same runtime representation (05).
+
+### 1.1 Structural types (summary)
+
+Kestrel supports the following **structural types** (in addition to built-in primitives and generics):
+
+| Kind         | Syntax / form              | Description |
+|--------------|----------------------------|-------------|
+| **Tuple**    | `A * B`, `(A, B, C)`       | Product type; fixed-length sequence of types (grammar: `AppType` with `*`). |
+| **Record**   | `{ x: T, y: U }`           | Structural record with named fields; row polymorphism (`...R`, `...,`) for extension. |
+| **Function** | `(T1, T2) -> R`            | Function type; argument list and return type. |
+| **ADT**      | `IDENT` (e.g. `Option`, `List`) | Algebraic data type; user-defined via `type` with constructors (UPPER_IDENT); pattern-matched. |
+| **Union**    | `A | B`                    | Value has type A or B; `is` narrows (01: keyword `is`). |
+| **Intersection** | `A & B`                | Value satisfies both A and B; used in narrowing. |
+
+---
+
+## 2. Row Polymorphism
+
+### Row syntax
+
+```
+{ a: Int, ...R }
+```
+
+- `{ ..., }`: anonymous row remainder (universally quantified).
+- `{ ...R }`: binds row variable `R` within the type signature.
+- Rows are universally quantified at function boundaries.
+
+### Spread and extension
+
+Record expression form:
+
+```
+{ ...r, x = v }
+```
+
+**Typing:**
+
+- If `r` already has field `x`: types must unify; result row is the same as `r`’s row.
+- If `r` does not have `x`: result row is `r`’s row extended with `x`.
+- If `x` is present in `r` with a different type than `v`, or typing otherwise conflicts → **compile error**.
+
+---
+
+## 3. Hindley–Milner Inference
+
+- **Generalisation:** Types are generalised (closed over with universal quantification over type and row variables) at **let-bound** and **function** definitions: at each `val x = e` and `fun f(...) = e`, the inferred type of `e` (or the function body) is generalised so that `x` and `f` are polymorphic. Top-level and block-level `val` and `fun` both generalise; parameters are not generalised (they are monomorphic in the function body unless introduced by a nested let).
+- **Instantiation:** At each use of a polymorphic value, its type is instantiated to fresh type variables before unification with the expected type.
+- **Unification:** Standard unification algorithm for types, extended with row unification below. Unification may **fail** (e.g. Int vs Bool); the compiler reports a type error and the offending types. The algorithm must include an **occurs check**: when unifying a type variable α with a type S, if α occurs in S then unification fails (prevents infinite types, e.g. α = List<α>).
+
+### Row unification
+
+```
+unify({ a:T1 | R1 }, { a:T2 | R2 })
+  => unify(T1, T2)
+  => unify(R1, R2)
+```
+
+(Here `|` is the row “cons” in the type grammar, not the union type.)
+
+---
+
+## 4. Unions and Intersections
+
+- **Union:** `A | B` – value has type `A` or type `B`.
+- **Intersection:** `A & B` – value satisfies both `A` and `B`.
+- **Conformance:** `is` checks structural conformance (e.g. shape of record, tag of ADT).
+
+### Narrowing
+
+```
+if (x is T) { ... }
+```
+
+Inside the branch, the type of `x` is narrowed to:
+
+```
+original_type & T
+```
+
+So `x` is treated as both its original type and `T` in that block. The grammar for `e is T` (if present in the language) is in 01; the type system requires that `T` is a type that can narrow the type of `e` (e.g. record shape, ADT constructor, or structural subtype).
+
+---
+
+## 5. Match Exhaustiveness
+
+**Match** expressions (01 §3.2: `match (e) { case1 => e1 ; ... }`) must be **exhaustive** with respect to the type of `e`. The type system enforces:
+
+- If `e` has type an **ADT** (e.g. Option, List, or a user ADT), every **constructor** of that ADT must be covered by at least one case (constructor pattern or list pattern for List), or a **catch-all** pattern (`_` or a variable) must appear that covers the remainder. If a constructor is missing and there is no catch-all → **type error**.
+- If `e` has a **union** type `A | B`, each branch of the union must be covered (e.g. by constructor patterns for each ADT in the union, or by `_`).
+- The type of the whole match expression is the **unification** (or least upper bound) of the types of all case right-hand sides; if they do not unify, it is a type error.
+
+Exhaustiveness is decidable for finite ADTs and union types; the compiler must check it so that no runtime tag is left unhandled (04 MATCH, 05 ADT).
+
+---
+
+## 6. Async and Await
+
+- **Async functions (01 §5):** A function declared with `async` must have a return type of the form **Task<T>**. The body is type-checked in an **async context**.
+- **Async context:** The body of an `async fun` is an async context. Only in an async context may **await** be used.
+- **Await:** The expression `await e` is well-typed only if (1) **e** has type **Task<A>** for some type **A**, and (2) the expression appears in an **async context**. The type of `await e` is **A**. Use of `await` outside an async context (e.g. in a non-async function or at top level) is a **type or context error** (01 §5).
+- **Task<T>** is a built-in type (01 §3.6, 02); its values are created by calling async functions or by runtime primitives. The type system does not distinguish “suspended” vs “completed” tasks; both have type Task<T>.
+
+---
+
+## 7. Exceptions
+
+- **Exception types (01 §4):** Exceptions are declared with `export exception Name { ... }` and are represented as **ADTs** with one constructor (03 §10, 05). The type of an exception value is that ADT (e.g. `FileNotFound`).
+- **Throw:** The expression `throw e` is well-typed only if **e** has an **exception type** (an ADT that is declared as an exception in the current module or an imported one). The type of `throw e` can be taken as **bottom** (no return) or a special type so that it unifies with any expected type in the surrounding context.
+- **Try/catch:** `try block catch (x) { cases }` — the **block** has some type **T**; the **catch** binds **x** to the thrown value (type is the union of possible exception types that might be thrown, or a generic exception type). Each **case** is a pattern (including exception constructor patterns) and a right-hand side; the types of all case right-hand sides must unify with **T** (the type of the try block), and that is the type of the whole try expression. Exhaustiveness of catch cases is not required (01 §4). If no case matches the thrown value, the exception is **rethrown** (01); the type system does not require the catch to be exhaustive.
+
+---
+
+## 8. Expression Typing (Summary)
+
+The following table summarises the main typing constraints so that implementors can ensure all language constructs (01) are covered. Inference proceeds by generating constraints and solving them with unification (and row unification).
+
+| Construct | Constraint / rule |
+|-----------|-------------------|
+| **Literals** (Int, Float, Bool, Unit, Char, String) | Fixed types: Int, Float, Bool, Unit, Char, String. |
+| **Tuple** `(e1, e2)` | e1 : T1, e2 : T2 ⇒ type is T1 * T2. |
+| **Record** `{ x = e, ... }` | Row typing; see §2. Spread: if `...r` then r’s row extended or unified with new fields. |
+| **List** `[e1, ...]`, `[]` | Elements unify to T ⇒ type is List<T>. Empty list has type List<α> for fresh α. |
+| **Cons** `e1 :: e2` | e2 : List<T>, e1 : T ⇒ type is List<T>. |
+| **Application** `f(e1,...,en)` | f : (T1,...,Tn) -> R, ei : Ti ⇒ type is R. |
+| **Field access** `e.x` | e : { x: T, ... } ⇒ type is T. |
+| **If/else** `if (e1) e2 else e3` | e1 : Bool; e2 : T, e3 : T (or T2, T3 unify to a common type) ⇒ type is T. |
+| **Match** `match (e) { cases }` | e : S; each case pattern is typed against S (pattern produces bindings; constructor/list patterns constrain S); case RHSs unify to T; exhaustiveness (§5) ⇒ type is T. |
+| **Lambda** `(p1,...,pn) => e` | Parameter types from annotation or inference; e : R ⇒ type is (T1,...,Tn) -> R. |
+| **Throw** `throw e` | e : exception type (§7) ⇒ type is bottom (or compatible with context). |
+| **Await** `await e` | e : Task<A>, in async context (§6) ⇒ type is A. |
+| **Narrowing** `if (x is T) { ... }` | In then-branch, x has type original & T (§4). |
+
+Additional constraints: **SET_FIELD** (04) applies only to records with a **mut** field at that slot; the type system must ensure that assignment to a field is only for `mut` fields (01 §3.6). **Assignment** `x := e` (01): the type of `e` must unify with the type of `x` (which must be a `var` or a mutable field). **Binary operators:** Arithmetic (+, -, *, /, %, **): both operands must have the same numeric type (**Int** or **Float**); result has that type (01 §2.6, §2.7). Comparison (==, !=, <, >, <=, >=): both operands have the same type; result is **Bool**. Logical (&, |): both operands **Bool**; result **Bool**. The compiler emits typed bytecode (03 type table, 04) so the VM (05) receives values of the expected shapes.
+
+---
+
+## 9. Relation to Other Specs
+
+| Spec | Relation |
+|------|----------|
+| **01** | Type grammar (01 §3.6), expressions, match exhaustiveness, async/await context, exceptions, mut fields. All types and constructs in 01 must have typing rules in this document. |
+| **02** | Option, Result, List, Value, Task are library/built-in types; their constructors and signatures constrain inference. |
+| **03** | Inferred types are serialised into the bytecode type table (03 §6.2–6.3). The type encoding supports Arrow, Record (shape_index), ADT, Option, List, TypeVar, and primitives; union/intersection may be erased or encoded for debugging. |
+| **04** | Type-checked programs satisfy the ISA: e.g. ADD gets Int; CONSTRUCT gets correct adt_id, ctor, arity; CALL gets correct arity and function type. The type system does not define bytecode; it ensures source-level correctness so the compiler can emit valid 04. |
+| **05** | Runtime values (tagged vs heap) correspond to types: Int, Bool, Unit, Char inline; Float, String, RECORD, ADT, TASK heap. Type safety at compile time implies the VM (05) will not see invalid operand types. |
+
+---
+
+## 10. Implementor Checklist
+
+An implementation of the type system should provide at least the following:
+
+1. **Type grammar and AST** — Parse types per 01 §3.6; build an internal representation (AST or equivalent) that supports all forms in §1, including row variables and union/intersection.
+2. **Unification** — Implement standard unification with an **occurs check** (§3); extend with **row unification** for records (§3). On failure, report a type error and the two types that could not be unified.
+3. **Generalisation and instantiation** — At each `val` and `fun`, generalise the inferred type (quantify type and row variables that are not free in the environment). At each use, instantiate with fresh variables before unifying.
+4. **Constraint generation** — For every expression form in 01, generate typing constraints as in §8 (and §2 for records). Solve constraints by unification; infer types for let-bound and function definitions.
+5. **Pattern typing** — For match and catch cases, type each pattern against the scrutinee type: constructor patterns require the scrutinee to be that ADT (or union containing it) and bind payload types; variable patterns bind the scrutinee type; literal patterns require the scrutinee to unify with the literal type. Ensure exhaustiveness per §5.
+6. **Async context and exceptions** — Track whether the current scope is inside an `async fun`; reject `await` outside async context (§6). For `throw e`, require `e` to have an exception type (§7). For try/catch, type the block and unify catch case RHSs with the block type.
+7. **Operators and assignment** — Enforce operand and result types for arithmetic, comparison, and logical operators (§8); ensure assignment and SET_FIELD only apply to mutable targets.
+8. **Output** — Emit inferred types into the bytecode type table (03 §6.2–6.3) so that the VM and tooling can use them. Union/intersection may be erased to a concrete type or encoded as the implementation sees fit for 03.
