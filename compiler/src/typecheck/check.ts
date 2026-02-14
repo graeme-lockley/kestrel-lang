@@ -204,6 +204,7 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
           const ft = inferExpr(f.value);
           fields.push({ name: f.name, mut: f.mut ?? false, type: ft });
         }
+        // Create a closed record (no row variable) since we know all fields
         result = apply({ kind: 'record', fields });
         setInferredType(expr, result);
         return result;
@@ -211,6 +212,7 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
       case 'FieldExpr': {
         const objT = inferExpr(expr.object);
         const applied = apply(objT);
+
         if (applied.kind === 'tuple') {
           const i = parseInt(expr.field, 10);
           if (!(i >= 0 && i < applied.elements.length)) {
@@ -220,11 +222,38 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
           setInferredType(expr, result);
           return result;
         }
+
+        // For record field access with row polymorphism
+        if (applied.kind === 'var') {
+          // If the object type is a variable, constrain it to be a record with this field
+          const fieldType = freshVar();
+          const rowVar = freshVar();
+          const recordType: InternalType = {
+            kind: 'record',
+            fields: [{ name: expr.field, mut: false, type: fieldType }],
+            row: rowVar
+          };
+          try {
+            unify(applied, recordType, subst);
+          } catch (e) {
+            if (e instanceof UnifyError) {
+              throw new TypeCheckError(`Cannot access field '${expr.field}' on non-record type`, expr);
+            }
+            throw e;
+          }
+          result = apply(fieldType);
+          setInferredType(expr, result);
+          return result;
+        }
+
         if (applied.kind !== 'record') {
           throw new TypeCheckError(`Expected record or tuple type, got ${applied.kind}`, expr);
         }
+
         const field = applied.fields.find((f) => f.name === expr.field);
-        if (field == null) throw new TypeCheckError(`Unknown field: ${expr.field}`, expr);
+        if (field == null) {
+          throw new TypeCheckError(`Unknown field: ${expr.field}`, expr);
+        }
         result = apply(field.type);
         setInferredType(expr, result);
         return result;

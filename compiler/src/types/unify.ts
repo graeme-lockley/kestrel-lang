@@ -154,5 +154,69 @@ export function unify(left: InternalType, right: InternalType, subst: Map<number
     return;
   }
 
+  if (l.kind === 'record' && r.kind === 'record') {
+    // Row polymorphism: unify records field by field
+    // Algorithm:
+    // 1. Find common fields and unify their types
+    // 2. Handle remaining fields via row variables
+
+    const lFields = new Map(l.fields.map(f => [f.name, f]));
+    const rFields = new Map(r.fields.map(f => [f.name, f]));
+
+    // Unify common fields
+    for (const [name, lField] of lFields) {
+      const rField = rFields.get(name);
+      if (rField) {
+        // Common field - must have same mutability
+        if (lField.mut !== rField.mut) {
+          throw new UnifyError(left, right, `Field '${name}' mutability mismatch`);
+        }
+        // Unify field types
+        unify(lField.type, rField.type, subst);
+      }
+    }
+
+    // Handle extra fields via row variables
+    const lOnly = l.fields.filter(f => !rFields.has(f.name));
+    const rOnly = r.fields.filter(f => !lFields.has(f.name));
+
+    // If l has extra fields, they must be absorbed by r's row variable
+    if (lOnly.length > 0) {
+      if (!r.row) {
+        throw new UnifyError(left, right, `Record missing fields: ${lOnly.map(f => f.name).join(', ')}`);
+      }
+      // Unify r's row with a record containing l's extra fields
+      const lExtra: InternalType = { kind: 'record', fields: lOnly, row: l.row };
+      unify(r.row, lExtra, subst);
+      return;
+    }
+
+    // If r has extra fields, they must be absorbed by l's row variable
+    if (rOnly.length > 0) {
+      if (!l.row) {
+        throw new UnifyError(left, right, `Record missing fields: ${rOnly.map(f => f.name).join(', ')}`);
+      }
+      // Unify l's row with a record containing r's extra fields
+      const rExtra: InternalType = { kind: 'record', fields: rOnly, row: r.row };
+      unify(l.row, rExtra, subst);
+      return;
+    }
+
+    // Both have same fields, unify row variables if present
+    if (l.row && r.row) {
+      unify(l.row, r.row, subst);
+    } else if (l.row && !r.row) {
+      // l's row must be empty (closed record)
+      const emptyRow: InternalType = { kind: 'record', fields: [] };
+      unify(l.row, emptyRow, subst);
+    } else if (!l.row && r.row) {
+      // r's row must be empty (closed record)
+      const emptyRow: InternalType = { kind: 'record', fields: [] };
+      unify(r.row, emptyRow, subst);
+    }
+    // else both closed records with same fields - success
+    return;
+  }
+
   throw new UnifyError(left, right);
 }
