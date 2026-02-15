@@ -165,9 +165,9 @@ kestrel/
 
 ### 2.5 Deliverables
 
-- [ ] Type checker passes all unit tests (unification, inference, exhaustiveness, async, exceptions).
-- [ ] All typecheck valid conformance tests pass; invalid tests fail with asserted messages.
-- [ ] Parser + typechecker together: integration tests that parse then typecheck multi-declaration programs.
+- [x] Type checker passes all unit tests (unification, inference, exhaustiveness, async, exceptions).
+- [x] All typecheck valid conformance tests pass; invalid tests fail with asserted messages.
+- [x] Parser + typechecker together: integration tests that parse then typecheck multi-declaration programs.
 
 ---
 

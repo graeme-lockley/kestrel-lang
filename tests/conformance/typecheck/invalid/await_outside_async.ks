@@ -1,5 +1,4 @@
-// await outside async context should fail
-fun bad(): Int = {
-  val task = someAsyncFn()
-  await task
-}
+// EXPECT: Task
+// await outside async context: async fun body must be Task<T>; top-level await would also error
+async fun getTask(): Task<Int> = 1
+val x = await getTask()

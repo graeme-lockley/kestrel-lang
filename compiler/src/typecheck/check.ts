@@ -4,7 +4,7 @@
 import type { Program, Expr, TopLevelDecl, TopLevelStmt } from '../ast/nodes.js';
 import type { InternalType } from '../types/internal.js';
 import { freshVar, prim, tInt, tFloat, tBool, tString, tUnit, resetVarId, freeVars, generalize, instantiate } from '../types/internal.js';
-import { astTypeToInternal } from '../types/from-ast.js';
+import { astTypeToInternal, astTypeToInternalWithScope } from '../types/from-ast.js';
 import { unify, applySubst, UnifyError } from '../types/unify.js';
 
 const TypedExpr = Symbol('inferredType');
@@ -419,8 +419,11 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
   try {
     for (const node of program.body) {
       if (node.kind === 'FunDecl') {
-        const paramTs = node.params.map((p) => p.type ? astTypeToInternal(p.type) : freshVar());
-        const returnT = astTypeToInternal(node.returnType);
+        const sigScope = new Map<string, InternalType>();
+        const paramTs = node.params.map((p) =>
+          p.type ? astTypeToInternalWithScope(p.type, sigScope) : freshVar()
+        );
+        const returnT = astTypeToInternalWithScope(node.returnType, sigScope);
 
         // Check if async function: return type must be Task<T>
         if (node.async) {
@@ -443,6 +446,27 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         if (node.async) inAsyncContext = true;
 
         const bodyT = inferExpr(node.body);
+        // If body type is a type variable that appears in the return type of a parameter
+        // (e.g. S in f: T -> S), the declared return type must be that variable, not a different type.
+        const paramReturnVarIds = new Set<number>();
+        for (const p of paramTs) {
+          const pa = apply(p);
+          if (pa.kind === 'arrow') {
+            for (const v of freeVars(pa.return)) paramReturnVarIds.add(v);
+          }
+        }
+        const bodyApplied = apply(bodyT);
+        const returnApplied = apply(returnT);
+        // Reject when body type is a type var from a parameter's return type (e.g. S in f: T -> S)
+        // but the declared return type is not that same variable (e.g. Int, or a different var like T).
+        if (bodyApplied.kind === 'var' && paramReturnVarIds.has(bodyApplied.id)) {
+          if (returnApplied.kind !== 'var' || returnApplied.id !== bodyApplied.id) {
+            throw new TypeCheckError(
+              `Return type must be the same as the body type (from parameter types), not ${typeStr(returnT)}`,
+              node
+            );
+          }
+        }
         unify(bodyT, returnT, subst);
 
         // Restore async context
@@ -454,7 +478,10 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         for (let i = 0; i < node.params.length; i++) {
           env.delete(node.params[i]!.name);
         }
-        // Generalize function type
+        // Generalize: quantify type vars that are not free in the rest of the environment.
+        // Temporarily remove current function so its type vars (e.g. β in (β)->β) are not
+        // considered "in env" and get correctly quantified for polymorphism.
+        env.delete(node.name);
         const appliedFnType = apply(fnType);
         const scheme = generalize(appliedFnType, envFreeVars());
         env.set(node.name, scheme);

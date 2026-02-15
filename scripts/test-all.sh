@@ -9,7 +9,8 @@ echo "== Compiler tests =="
 cd compiler && npm test && cd ..
 
 echo "== VM tests =="
-cd vm && zig build test 2>&1 && cd .. || exit 1
+# --verbose prints the test run command so there is visible output when tests pass
+cd vm && zig build test --verbose 2>&1 && cd .. || exit 1
 echo "VM tests passed."
 
 echo "== E2E =="
