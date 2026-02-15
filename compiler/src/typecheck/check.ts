@@ -62,6 +62,49 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     params: [printTypeVar],
     return: { kind: 'prim', name: 'Unit' }
   }, new Set()));
+  env.set('exit', generalize({
+    kind: 'arrow',
+    params: [tInt],
+    return: { kind: 'prim', name: 'Unit' },
+  }, new Set()));
+
+  // Built-in ADT constructors (Option, Result, Value) so they type-check without import
+  const optT = freshVar();
+  env.set('None', generalize({ kind: 'app', name: 'Option', args: [optT] }, new Set()));
+  const someT = freshVar();
+  env.set('Some', generalize({
+    kind: 'arrow',
+    params: [someT],
+    return: { kind: 'app', name: 'Option', args: [someT] },
+  }, new Set()));
+  const resT = freshVar();
+  const resE = freshVar();
+  env.set('Ok', generalize({
+    kind: 'arrow',
+    params: [resT],
+    return: { kind: 'app', name: 'Result', args: [resT, resE] },
+  }, new Set()));
+  env.set('Err', generalize({
+    kind: 'arrow',
+    params: [resE],
+    return: { kind: 'app', name: 'Result', args: [resT, resE] },
+  }, new Set()));
+  const valueType = { kind: 'app' as const, name: 'Value', args: [] as InternalType[] };
+  env.set('Null', generalize(valueType, new Set()));
+  env.set('Bool', generalize({ kind: 'arrow', params: [tBool], return: valueType }, new Set()));
+  env.set('Int', generalize({ kind: 'arrow', params: [tInt], return: valueType }, new Set()));
+  env.set('Float', generalize({ kind: 'arrow', params: [tFloat], return: valueType }, new Set()));
+  env.set('String', generalize({ kind: 'arrow', params: [tString], return: valueType }, new Set()));
+  env.set('Array', generalize({
+    kind: 'arrow',
+    params: [{ kind: 'app', name: 'List', args: [valueType] }],
+    return: valueType,
+  }, new Set()));
+  env.set('Object', generalize({
+    kind: 'arrow',
+    params: [{ kind: 'app', name: 'List', args: [{ kind: 'tuple', elements: [tString, valueType] }] }],
+    return: valueType,
+  }, new Set()));
 
   function apply(t: InternalType): InternalType {
     return applySubst(t, subst);
@@ -99,10 +142,16 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       }
     }
 
-    // Check if it's a known ADT (for now, just List)
     const appType = apply(scrutineeType);
-    if (appType.kind === 'app' && appType.name === 'List') {
-      const required = new Set(['Nil', 'Cons']);
+    if (appType.kind !== 'app') return;
+    const requiredSets: Record<string, Set<string>> = {
+      List: new Set(['Nil', 'Cons']),
+      Option: new Set(['None', 'Some']),
+      Result: new Set(['Err', 'Ok']),
+      Value: new Set(['Null', 'Bool', 'Int', 'Float', 'String', 'Array', 'Object']),
+    };
+    const required = requiredSets[appType.name];
+    if (required) {
       const missing = [...required].filter(c => !coveredCtors.has(c));
       if (missing.length > 0 && !hasCatchAll) {
         errors.push(`Non-exhaustive match: missing constructors: ${missing.join(', ')}`);
@@ -311,12 +360,30 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             env.set(pattern.name, patternType);
             bound.push(pattern.name);
           } else if (pattern.kind === 'ConsPattern') {
-            // For head :: tail, scrutinee must be List<T>
             const applied = apply(patternType);
             if (applied.kind === 'app' && applied.name === 'List' && applied.args.length === 1) {
               const elemType = applied.args[0]!;
               bound.push(...bindPattern(pattern.head, elemType));
-              bound.push(...bindPattern(pattern.tail, patternType)); // tail is also List<T>
+              bound.push(...bindPattern(pattern.tail, patternType));
+            }
+          } else if (pattern.kind === 'ConstructorPattern' && pattern.fields?.length) {
+            const applied = apply(patternType);
+            if (applied.kind === 'app' && applied.name === 'Option' && applied.args.length === 1) {
+              const payloadT = applied.args[0]!;
+              for (const field of pattern.fields) {
+                if (field.pattern) bound.push(...bindPattern(field.pattern, payloadT));
+              }
+            } else if (applied.kind === 'app' && applied.name === 'Result' && applied.args.length === 2) {
+              const t = applied.args[0]!;
+              const e = applied.args[1]!;
+              const payloadT = pattern.name === 'Ok' ? t : e;
+              for (const field of pattern.fields) {
+                if (field.pattern) bound.push(...bindPattern(field.pattern, payloadT));
+              }
+            } else if (applied.kind === 'app' && applied.name === 'Value') {
+              for (const field of pattern.fields) {
+                if (field.pattern) bound.push(...bindPattern(field.pattern, freshVar()));
+              }
             }
           }
           return bound;

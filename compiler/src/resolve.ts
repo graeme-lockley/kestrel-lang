@@ -6,7 +6,10 @@ import { resolve as pathResolve, dirname, join } from 'path';
 import { existsSync } from 'fs';
 
 /** Stdlib module names from spec 02 / 07. */
-const STDLIB_NAMES = ['kestrel:string', 'kestrel:stack', 'kestrel:http', 'kestrel:json', 'kestrel:fs'] as const;
+const STDLIB_NAMES = [
+  'kestrel:string', 'kestrel:stack', 'kestrel:http', 'kestrel:json', 'kestrel:fs',
+  'kestrel:option', 'kestrel:result', 'kestrel:list', 'kestrel:value', 'kestrel:test',
+] as const;
 
 /** Map stdlib specifier to path segment (e.g. kestrel:string -> kestrel/string.ks). */
 function stdlibSpecToPath(spec: string): string | null {

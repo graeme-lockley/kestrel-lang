@@ -45,6 +45,14 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Build steps:** (1) `cd compiler && npm run build`; (2) `cd vm && zig build -Doptimize=ReleaseSafe`. Compiler output is `compiler/dist/`; VM output is `vm/zig-out/bin/kestrel`.
 - **Optional script:** When `script[.ks]` is given, compiles it to the corresponding `.kbc` in the same directory.
 
+### 2.4 test
+
+**Usage:** `kestrel test`
+
+- **Effect:** Runs the Kestrel-native unit test suite. Discovers `.ks` files under `tests/unit/`, compiles each (with stdlib resolution so that `kestrel:test`, `kestrel:option`, etc. resolve), runs the VM on the compiled bytecode, and reports pass/fail per file.
+- **Output:** For each test file, prints a line with PASS (green) or FAIL (red). At the end, prints a summary line: “Tests: X passed, Y failed, Z total” with colour (green for passed count, red for failed count when Y &gt; 0).
+- **Exit code:** 0 if all tests passed; 1 if any test failed or did not compile.
+
 ---
 
 ## 3. Implementation Responsibilities

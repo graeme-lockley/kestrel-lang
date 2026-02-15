@@ -65,6 +65,77 @@ export interface AdtEntry {
   constructors: ConstructorEntry[];
 }
 
+/** Built-in ADT indices (List=0, Option=1, Result=2, Value=3). */
+export const ADT_LIST = 0;
+export const ADT_OPTION = 1;
+export const ADT_RESULT = 2;
+export const ADT_VALUE = 3;
+
+/** Resolve built-in constructor to (adtId, ctorIndex, arity). 0-ary: None, Null. */
+function getBuiltinConstructor(
+  name: string,
+  argCount: number
+): { adtId: number; ctor: number; arity: number } | null {
+  switch (name) {
+    case 'None':
+      return argCount === 0 ? { adtId: ADT_OPTION, ctor: 0, arity: 0 } : null;
+    case 'Some':
+      return argCount === 1 ? { adtId: ADT_OPTION, ctor: 1, arity: 1 } : null;
+    case 'Err':
+      return argCount === 1 ? { adtId: ADT_RESULT, ctor: 0, arity: 1 } : null;
+    case 'Ok':
+      return argCount === 1 ? { adtId: ADT_RESULT, ctor: 1, arity: 1 } : null;
+    case 'Null':
+      return argCount === 0 ? { adtId: ADT_VALUE, ctor: 0, arity: 0 } : null;
+    case 'Bool':
+      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 1, arity: 1 } : null;
+    case 'Int':
+      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 2, arity: 1 } : null;
+    case 'Float':
+      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 3, arity: 1 } : null;
+    case 'String':
+      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 4, arity: 1 } : null;
+    case 'Array':
+      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 5, arity: 1 } : null;
+    case 'Object':
+      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 6, arity: 1 } : null;
+    default:
+      return null;
+  }
+}
+
+/** Match config: constructor name -> (tag index, field count for payload). */
+interface MatchConfig {
+  size: number;
+  ctorToTag: Record<string, number>;
+  ctorArity: Record<string, number>;
+}
+
+function getMatchConfig(scrutineeType: { kind: string; name?: string } | undefined): MatchConfig | null {
+  if (scrutineeType?.kind !== 'app' && scrutineeType?.kind !== 'prim') return null;
+  const name = scrutineeType.name;
+  if (name === 'List') {
+    return { size: 2, ctorToTag: { Nil: 0, Cons: 1 }, ctorArity: { Nil: 0, Cons: 2 } };
+  }
+  if (name === 'Option') {
+    return { size: 2, ctorToTag: { None: 0, Some: 1 }, ctorArity: { None: 0, Some: 1 } };
+  }
+  if (name === 'Result') {
+    return { size: 2, ctorToTag: { Err: 0, Ok: 1 }, ctorArity: { Err: 1, Ok: 1 } };
+  }
+  if (name === 'Value') {
+    return {
+      size: 7,
+      ctorToTag: { Null: 0, Bool: 1, Int: 2, Float: 3, String: 4, Array: 5, Object: 6 },
+      ctorArity: { Null: 0, Bool: 1, Int: 1, Float: 1, String: 1, Array: 1, Object: 1 },
+    };
+  }
+  if (name === 'Bool') {
+    return { size: 2, ctorToTag: { False: 0, True: 1 }, ctorArity: { False: 0, True: 0 } };
+  }
+  return null;
+}
+
 export interface CodegenResult {
   stringTable: string[];
   constantPool: ConstantEntry[];
@@ -152,6 +223,14 @@ function makeEmitExpr(
       break;
     }
     case 'IdentExpr': {
+      // 0-ary built-in constructors: None, Null
+      if (adts != null) {
+        const builtin = getBuiltinConstructor(expr.name, 0);
+        if (builtin != null) {
+          emitConstruct(builtin.adtId, builtin.ctor, builtin.arity);
+          break;
+        }
+      }
       const slot = env.get(expr.name);
       if (slot === undefined) throw new Error(`Codegen: unknown variable ${expr.name}`);
       emitLoadLocal(slot);
@@ -329,6 +408,21 @@ function makeEmitExpr(
           emitCall(0xFFFFFF01, expr.args.length);
           break;
         }
+        if (expr.callee.name === 'exit' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF02, 1);
+          break;
+        }
+
+        // Built-in ADT constructors: Some(x), Ok(x), Err(e), Null(), Bool(x), Int(x), etc.
+        if (adts != null) {
+          const builtin = getBuiltinConstructor(expr.callee.name, expr.args.length);
+          if (builtin != null) {
+            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+            emitConstruct(builtin.adtId, builtin.ctor, builtin.arity);
+            break;
+          }
+        }
 
         // Check for user-defined function
         if (funNameToId != null) {
@@ -388,118 +482,114 @@ function makeEmitExpr(
       // match (scrutinee) { Pat1 => e1; Pat2 => e2; ... }
       emitExpr(expr.scrutinee, env, funNameToId, shapes, adts);
 
-      // Store scrutinee in a local so we can access it in each case
       const scrutineeSlot = env.size;
-      env.set('$scrutinee', scrutineeSlot); // Reserve the slot
+      env.set('$scrutinee', scrutineeSlot);
       emitStoreLocal(scrutineeSlot);
 
-      // Determine if this is an ADT match (Nil/Cons patterns) or wildcard match
+      const scrutineeType = getInferredType(expr.scrutinee);
       const hasAdtPatterns = expr.cases.some(
         c => c.pattern.kind === 'ConstructorPattern' ||
             c.pattern.kind === 'ConsPattern' ||
             c.pattern.kind === 'ListPattern'
       );
 
-      if (hasAdtPatterns) {
-        // Use MATCH instruction for ADT dispatch
-        // MATCH pops an ADT value and jumps based on constructor tag
-        emitLoadLocal(scrutineeSlot);
+      let config = getMatchConfig(scrutineeType ?? undefined);
+      if (hasAdtPatterns && !config && expr.cases.some(c => c.pattern.kind === 'ListPattern' || c.pattern.kind === 'ConsPattern' || (c.pattern.kind === 'ConstructorPattern' && c.pattern.name === 'Nil'))) {
+        config = getMatchConfig({ kind: 'app', name: 'List' });
+      }
 
-        // Build jump table - we need placeholders for each constructor
-        // For List: constructor 0 = Nil, constructor 1 = Cons
+      if (hasAdtPatterns && config) {
+        emitLoadLocal(scrutineeSlot);
         const matchPos = codeOffset();
-        const jumpTableSize = 2; // Nil and Cons
+        const jumpTableSize = config.size;
         const placeholders: number[] = new Array(jumpTableSize).fill(0);
         emitMatch(placeholders);
 
-        // Track case positions for patching
         const casePositions: number[] = [];
         const endJumps: number[] = [];
 
-        // Emit each case
         for (const matchCase of expr.cases) {
           const caseStart = codeOffset();
+          let tag: number | undefined;
 
           if (matchCase.pattern.kind === 'ListPattern' && matchCase.pattern.elements.length === 0) {
-            // Empty list pattern [] matches Nil (constructor 0)
-            casePositions[0] = caseStart - matchPos;
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
-          } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.name === 'Nil') {
-            // Nil case (constructor 0)
-            casePositions[0] = caseStart - matchPos;
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
-          } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.name === 'False') {
-            // False case (constructor 0)
-            casePositions[0] = caseStart - matchPos;
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
-          } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.name === 'True') {
-            // True case (constructor 1)
-            casePositions[1] = caseStart - matchPos;
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
+            tag = config.ctorToTag['Nil'];
+          } else if (matchCase.pattern.kind === 'ConstructorPattern') {
+            tag = config.ctorToTag[matchCase.pattern.name];
           } else if (matchCase.pattern.kind === 'ConsPattern') {
-            // Cons case (constructor 1)
-            casePositions[1] = caseStart - matchPos;
+            tag = config.ctorToTag['Cons'];
+          }
 
-            // Bind head (extract from field 0)
-            if (matchCase.pattern.head.kind === 'VarPattern') {
-              const headSlot = env.size;
-              env.set(matchCase.pattern.head.name, headSlot);
-              emitLoadLocal(scrutineeSlot);
-              emitGetField(0);
-              emitStoreLocal(headSlot);
-            }
+          if (tag !== undefined) {
+            casePositions[tag] = caseStart - matchPos;
 
-            // Bind tail (extract from field 1)
-            if (matchCase.pattern.tail.kind === 'VarPattern') {
-              const tailSlot = env.size;
-              env.set(matchCase.pattern.tail.name, tailSlot);
-              emitLoadLocal(scrutineeSlot);
-              emitGetField(1);
-              emitStoreLocal(tailSlot);
+            // Bind payload fields for ConsPattern (head, tail) or ConstructorPattern (Some(x), Ok(v), etc.)
+            const ctorName = Object.keys(config.ctorToTag).find(k => config.ctorToTag[k] === tag);
+            const arity = ctorName != null ? (config.ctorArity[ctorName] ?? 0) : 0;
+            if (matchCase.pattern.kind === 'ConsPattern' && arity === 2) {
+              if (matchCase.pattern.head.kind === 'VarPattern') {
+                const headSlot = env.size;
+                env.set(matchCase.pattern.head.name, headSlot);
+                emitLoadLocal(scrutineeSlot);
+                emitGetField(0);
+                emitStoreLocal(headSlot);
+              }
+              if (matchCase.pattern.tail.kind === 'VarPattern') {
+                const tailSlot = env.size;
+                env.set(matchCase.pattern.tail.name, tailSlot);
+                emitLoadLocal(scrutineeSlot);
+                emitGetField(1);
+                emitStoreLocal(tailSlot);
+              }
+            } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.fields?.length) {
+              const fieldCount = config.ctorArity[matchCase.pattern.name] ?? 0;
+              for (let f = 0; f < fieldCount && f < matchCase.pattern.fields.length; f++) {
+                const field = matchCase.pattern.fields[f];
+                const pat = field?.pattern ?? (matchCase.pattern as { fields?: { pattern?: { kind: string; name?: string } }[] }).fields?.[f]?.pattern;
+                if (pat?.kind === 'VarPattern' && pat.name != null) {
+                  const slot = env.size;
+                  env.set(pat.name, slot);
+                  emitLoadLocal(scrutineeSlot);
+                  emitGetField(f);
+                  emitStoreLocal(slot);
+                }
+              }
             }
 
             emitExpr(matchCase.body, env, funNameToId, shapes, adts);
 
-            // Clean up bindings
-            if (matchCase.pattern.head.kind === 'VarPattern') {
-              env.delete(matchCase.pattern.head.name);
-            }
-            if (matchCase.pattern.tail.kind === 'VarPattern') {
-              env.delete(matchCase.pattern.tail.name);
+            if (matchCase.pattern.kind === 'ConsPattern') {
+              if (matchCase.pattern.head.kind === 'VarPattern') env.delete(matchCase.pattern.head.name);
+              if (matchCase.pattern.tail.kind === 'VarPattern') env.delete(matchCase.pattern.tail.name);
+            } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.fields?.length) {
+              const fieldCount = config.ctorArity[matchCase.pattern.name] ?? 0;
+              for (let f = 0; f < fieldCount && f < matchCase.pattern.fields.length; f++) {
+                const pat = matchCase.pattern.fields[f]?.pattern;
+                if (pat?.kind === 'VarPattern' && pat.name != null) env.delete(pat.name);
+              }
             }
           } else if (matchCase.pattern.kind === 'WildcardPattern') {
-            // Wildcard can handle any constructor - use it as fallback
-            // For now, assume it's the Nil case if not already covered
-            if (casePositions[0] === undefined) {
-              casePositions[0] = caseStart - matchPos;
-            }
+            const firstUncovered = [...Array(jumpTableSize).keys()].find(i => casePositions[i] === undefined);
+            if (firstUncovered !== undefined) casePositions[firstUncovered] = caseStart - matchPos;
             emitExpr(matchCase.body, env, funNameToId, shapes, adts);
           }
 
-          // Jump to end after executing this case
           const jumpPos = codeOffset();
           emitJump(0);
           endJumps.push(jumpPos);
         }
 
-        // Patch end jumps first to get end position
         const endPos = codeOffset();
         for (const jumpPos of endJumps) {
-          // Offset is relative to position after the JUMP instruction (jumpPos + 5)
           patchI32(jumpPos + 1, endPos - (jumpPos + 5));
         }
-
-        // Patch jump table - use end position as default for uncovered cases
-        const matchJumpTablePos = matchPos + 1 + 4; // opcode + table size
+        const matchJumpTablePos = matchPos + 1 + 4;
         const defaultOffset = endPos - matchPos;
         for (let i = 0; i < jumpTableSize; i++) {
-          const offset = casePositions[i] !== undefined ? casePositions[i] : defaultOffset;
-          patchI32(matchJumpTablePos + i * 4, offset);
+          patchI32(matchJumpTablePos + i * 4, casePositions[i] !== undefined ? casePositions[i]! : defaultOffset);
         }
-
-        env.delete('$scrutinee'); // Clean up temporary
+        env.delete('$scrutinee');
       } else {
-        // Simple var/wildcard pattern - just bind and execute
         const firstCase = expr.cases[0];
         if (firstCase && firstCase.pattern.kind === 'VarPattern') {
           const slot = env.size;
@@ -509,10 +599,9 @@ function makeEmitExpr(
           emitExpr(firstCase.body, env, funNameToId, shapes, adts);
           env.delete(firstCase.pattern.name);
         } else {
-          // Wildcard or empty - just evaluate first case body
           emitExpr(firstCase?.body || { kind: 'LitExpr', value: { kind: 'unit' } }, env, funNameToId, shapes, adts);
         }
-        env.delete('$scrutinee'); // Clean up temporary
+        env.delete('$scrutinee');
       }
       break;
     }
@@ -600,14 +689,42 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   codeStart();
   const shapes: ShapeEntry[] = [];
 
-  // Initialize ADT table with built-in List ADT (always at index 0)
-  const adts: AdtEntry[] = [{
-    nameIndex: stringIndex('List'),
-    constructors: [
-      { nameIndex: stringIndex('Nil'), payloadTypeIndex: 0xFFFFFFFF },
-      { nameIndex: stringIndex('Cons'), payloadTypeIndex: 0xFFFFFFFF }, // Simplified: payload type not used yet
-    ],
-  }];
+  // Initialize ADT table: List(0), Option(1), Result(2), Value(3) per spec 02
+  const adts: AdtEntry[] = [
+    {
+      nameIndex: stringIndex('List'),
+      constructors: [
+        { nameIndex: stringIndex('Nil'), payloadTypeIndex: 0xFFFFFFFF },
+        { nameIndex: stringIndex('Cons'), payloadTypeIndex: 0xFFFFFFFF },
+      ],
+    },
+    {
+      nameIndex: stringIndex('Option'),
+      constructors: [
+        { nameIndex: stringIndex('None'), payloadTypeIndex: 0xFFFFFFFF },
+        { nameIndex: stringIndex('Some'), payloadTypeIndex: 0xFFFFFFFF },
+      ],
+    },
+    {
+      nameIndex: stringIndex('Result'),
+      constructors: [
+        { nameIndex: stringIndex('Err'), payloadTypeIndex: 0xFFFFFFFF },
+        { nameIndex: stringIndex('Ok'), payloadTypeIndex: 0xFFFFFFFF },
+      ],
+    },
+    {
+      nameIndex: stringIndex('Value'),
+      constructors: [
+        { nameIndex: stringIndex('Null'), payloadTypeIndex: 0xFFFFFFFF },
+        { nameIndex: stringIndex('Bool'), payloadTypeIndex: 0xFFFFFFFF },
+        { nameIndex: stringIndex('Int'), payloadTypeIndex: 0xFFFFFFFF },
+        { nameIndex: stringIndex('Float'), payloadTypeIndex: 0xFFFFFFFF },
+        { nameIndex: stringIndex('String'), payloadTypeIndex: 0xFFFFFFFF },
+        { nameIndex: stringIndex('Array'), payloadTypeIndex: 0xFFFFFFFF },
+        { nameIndex: stringIndex('Object'), payloadTypeIndex: 0xFFFFFFFF },
+      ],
+    },
+  ];
 
   const seenSpecs = new Set<string>();
   const importSpecifierIndices: number[] = [];

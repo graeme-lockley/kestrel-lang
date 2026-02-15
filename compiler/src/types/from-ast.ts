@@ -18,6 +18,7 @@ export function astTypeToInternalWithScope(
     case 'PrimType':
       return prim(ast.name as PrimName);
     case 'IdentType': {
+      if (ast.name === 'Value') return { kind: 'app', name: 'Value', args: [] };
       let t = scope.get(ast.name);
       if (t == null) {
         t = freshVar();
@@ -68,6 +69,7 @@ export function astTypeToInternal(ast: Type): InternalType {
     case 'PrimType':
       return prim(ast.name as PrimName);
     case 'IdentType':
+      if (ast.name === 'Value') return { kind: 'app', name: 'Value', args: [] };
       return freshVar();
     case 'ArrowType':
       return {

@@ -307,10 +307,11 @@ class Parser {
     }
     if (base.kind === 'IdentType' && this.at('op', '<')) {
       this.advance();
-      const args: Type[] = [];
-      do {
+      const args: Type[] = [this.parseType()];
+      while (this.at('comma')) {
+        this.advance();
         args.push(this.parseType());
-      } while (this.at('comma') && this.advance());
+      }
       this.expect('op', '>');
       return { kind: 'AppType', name: base.name, args };
     }
@@ -357,6 +358,10 @@ class Parser {
     if (this.at('op', '<')) {
       this.advance();
       const args: Type[] = [this.parseType()];
+      while (this.at('comma')) {
+        this.advance();
+        args.push(this.parseType());
+      }
       this.expect('op', '>');
       return { kind: 'AppType', name, args };
     }

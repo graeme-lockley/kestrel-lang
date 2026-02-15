@@ -11,11 +11,18 @@ COMPILER_CLI="$COMPILER/dist/cli.js"
 DISASM="$COMPILER/dist/disasm.js"
 KBC_CACHE="${KESTREL_CACHE:-$HOME/.kestrel/kbc}"
 
+# ANSI colours for test output
+GREEN='\033[32m'
+RED='\033[31m'
+DIM='\033[2m'
+RESET='\033[0m'
+
 usage() {
   echo "Usage: kestrel <command> [options]" >&2
   echo "  run   <script[.ks]> [args...]  Compile if needed, then execute via VM" >&2
   echo "  dis   <script[.ks]>            Compile if needed, then disassemble bytecode" >&2
   echo "  build [script.ks]              Build compiler and VM; optionally compile script" >&2
+  echo "  test                            Run Kestrel unit tests (tests/unit/*.ks)" >&2
   exit 1
 }
 
@@ -149,10 +156,52 @@ cmd_dis() {
   exec node "$DISASM" "$kbc"
 }
 
+cmd_test() {
+  ensure_tools
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
+    build_compiler_vm
+  fi
+  local unit_dir="$ROOT/tests/unit"
+  local out_dir="$ROOT/out/test"
+  mkdir -p "$out_dir"
+  local passed=0 failed=0
+  local files=("$unit_dir"/*.ks)
+  if [ ! -f "${files[0]:-}" ]; then
+    echo -e "${DIM}No unit tests (add .ks files to tests/unit/)${RESET}"
+    return 0
+  fi
+  for ks in "${files[@]}"; do
+    [ -f "$ks" ] || continue
+    local name=$(basename "$ks" .ks)
+    local kbc="$out_dir/${name}.kbc"
+    if ! (cd "$ROOT" && node "$COMPILER_CLI" "$ks" -o "$kbc") 2>/dev/null; then
+      echo -e "  ${RED}FAIL${RESET} $name.ks (compile error)"
+      failed=$((failed + 1))
+      continue
+    fi
+    if "$VM_BIN" "$kbc" >/dev/null 2>&1; then
+      echo -e "  ${GREEN}PASS${RESET} $name.ks"
+      passed=$((passed + 1))
+    else
+      echo -e "  ${RED}FAIL${RESET} $name.ks"
+      failed=$((failed + 1))
+    fi
+  done
+  local total=$((passed + failed))
+  echo ""
+  if [ "$failed" -eq 0 ]; then
+    echo -e "Tests: ${GREEN}$passed passed${RESET}, $total total"
+  else
+    echo -e "Tests: ${GREEN}$passed passed${RESET}, ${RED}$failed failed${RESET}, $total total"
+  fi
+  [ "$failed" -eq 0 ] || exit 1
+}
+
 # Main
 case "${1:-}" in
   run)   shift; cmd_run "$@" ;;
   dis)   shift; cmd_dis "$@" ;;
   build) shift; cmd_build "$@" ;;
+  test)  shift; cmd_test "$@" ;;
   *)     usage ;;
 esac

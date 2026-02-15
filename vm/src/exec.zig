@@ -150,17 +150,27 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                 pc += 8;
 
                 // Check for primitive functions (0xFFFFFF00 range)
-                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF01 and sp >= arity and arity >= 1) {
-                    const args = stack[sp - arity .. sp];
-                    if (fn_id == 0xFFFFFF00) {
-                        primitives.printN(args, false); // print: no trailing newline
-                    } else {
-                        primitives.printN(args, true); // println: trailing newline
+                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF02 and sp >= arity) {
+                    if (fn_id == 0xFFFFFF00 and arity >= 1) {
+                        const args = stack[sp - arity .. sp];
+                        primitives.printN(args, false);
+                        sp -= arity;
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF01 and arity >= 1) {
+                        const args = stack[sp - arity .. sp];
+                        primitives.printN(args, true);
+                        sp -= arity;
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF02 and arity == 1) {
+                        const code_val = stack[sp - 1];
+                        sp -= 1;
+                        const exit_code = Value.intTo(code_val);
+                        std.process.exit(@intCast(exit_code));
                     }
-                    sp -= arity;
-                    stack[sp] = Value.unit();
-                    sp += 1;
-                    continue;
                 }
 
                 // Regular function call
