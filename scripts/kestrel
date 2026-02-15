@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# Kestrel CLI: kestrel <command> [options]
+# Commands: run, dis, build
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+COMPILER="$ROOT/compiler"
+VM="$ROOT/vm"
+VM_BIN="$VM/zig-out/bin/kestrel"
+COMPILER_CLI="$COMPILER/dist/cli.js"
+DISASM="$COMPILER/dist/disasm.js"
+KBC_CACHE="${KESTREL_CACHE:-$HOME/.kestrel/kbc}"
+
+usage() {
+  echo "Usage: kestrel <command> [options]" >&2
+  echo "  run   <script[.ks]> [args...]  Compile if needed, then execute via VM" >&2
+  echo "  dis   <script[.ks]>            Compile if needed, then disassemble bytecode" >&2
+  echo "  build [script.ks]              Build compiler and VM; optionally compile script" >&2
+  exit 1
+}
+
+ensure_tools() {
+  if ! command -v node &>/dev/null; then
+    echo "kestrel: node not found" >&2
+    exit 1
+  fi
+  if ! command -v zig &>/dev/null; then
+    echo "kestrel: zig not found" >&2
+    exit 1
+  fi
+}
+
+build_compiler_vm() {
+  cd "$COMPILER" && npm run build >/dev/null 2>&1 && cd "$ROOT" || {
+    echo "kestrel: compiler build failed" >&2
+    exit 1
+  }
+  cd "$VM" && zig build -Doptimize=ReleaseSafe >/dev/null 2>&1 && cd "$ROOT" || {
+    echo "kestrel: VM build failed" >&2
+    exit 1
+  }
+}
+
+resolve_script() {
+  local arg="$1"
+  if [ -f "$arg" ]; then
+    echo "$arg"
+    return
+  fi
+  if [[ "$arg" == *.ks ]]; then
+    echo "" && return
+  fi
+  if [ -f "${arg}.ks" ]; then
+    echo "${arg}.ks"
+    return
+  fi
+  echo ""
+}
+
+# Given absolute path to .ks, return path to .kbc in cache (~/.kestrel/kbc/...)
+# Strategy: mirror absolute path under KBC_CACHE for easy location (e.g. /Users/me/proj/foo.ks -> ~/.kestrel/kbc/Users/me/proj/foo.kbc)
+kbc_path_for() {
+  local ks="$1"
+  local abs_ks abs_dir abs_base
+  abs_ks=$(cd "$(dirname "$ks")" && pwd)/$(basename "$ks")
+  abs_dir=$(dirname "$abs_ks")
+  abs_base=$(basename "$abs_ks" .ks)
+  echo "${KBC_CACHE}${abs_dir}/${abs_base}.kbc"
+}
+
+needs_compile() {
+  local ks="$1" kbc="$2"
+  [ ! -f "$kbc" ] && return 0
+  [ "$ks" -nt "$kbc" ] 2>/dev/null && return 0
+  return 1
+}
+
+do_compile() {
+  local ks="$1" kbc="$2"
+  if ! node "$COMPILER_CLI" "$ks" -o "$kbc" 2>/dev/null; then
+    echo "kestrel: compile failed for $ks" >&2
+    exit 1
+  fi
+}
+
+cmd_build() {
+  ensure_tools
+  build_compiler_vm
+  if [ -n "${1:-}" ]; then
+    local resolved kbc
+    resolved=$(resolve_script "$1")
+    if [ -n "$resolved" ]; then
+      kbc=$(kbc_path_for "$resolved")
+      mkdir -p "$(dirname "$kbc")"
+      do_compile "$resolved" "$kbc"
+      echo "Built $kbc"
+    else
+      echo "kestrel: script not found: $1" >&2
+      exit 1
+    fi
+  fi
+}
+
+cmd_run() {
+  if [ -z "${1:-}" ]; then
+    usage
+  fi
+  ensure_tools
+  # Ensure compiler and VM exist
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
+    build_compiler_vm
+  fi
+  local resolved
+  resolved=$(resolve_script "$1")
+  if [ -z "$resolved" ]; then
+    echo "kestrel: script not found: $1" >&2
+    exit 1
+  fi
+  shift
+  local kbc
+  kbc=$(kbc_path_for "$resolved")
+  if needs_compile "$resolved" "$kbc"; then
+    mkdir -p "$(dirname "$kbc")"
+    do_compile "$resolved" "$kbc"
+  fi
+  exec "$VM_BIN" "$kbc" "$@"
+}
+
+cmd_dis() {
+  if [ -z "${1:-}" ]; then
+    usage
+  fi
+  ensure_tools
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$DISASM" ]; then
+    build_compiler_vm
+  fi
+  local resolved
+  resolved=$(resolve_script "$1")
+  if [ -z "$resolved" ]; then
+    echo "kestrel: script not found: $1" >&2
+    exit 1
+  fi
+  local kbc
+  kbc=$(kbc_path_for "$resolved")
+  if needs_compile "$resolved" "$kbc"; then
+    mkdir -p "$(dirname "$kbc")"
+    do_compile "$resolved" "$kbc"
+  fi
+  exec node "$DISASM" "$kbc"
+}
+
+# Main
+case "${1:-}" in
+  run)   shift; cmd_run "$@" ;;
+  dis)   shift; cmd_dis "$@" ;;
+  build) shift; cmd_build "$@" ;;
+  *)     usage ;;
+esac
