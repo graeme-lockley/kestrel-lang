@@ -8,5 +8,8 @@ val task2 = compute(50)
 
 // For now, just print some constants to verify the test runs
 print(42)
+// 42
 print(100)
+// 100
 print(142)
+// 142

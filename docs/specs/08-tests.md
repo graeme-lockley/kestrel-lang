@@ -82,13 +82,15 @@ tests/
       valid/
       invalid/
     runtime/       # .ks files run by VM; compare stdout/stderr/exit
-  golden/
+  e2e/
+    scenarios/     # .ks files; expected stdout in-file as // under each print
+  golden/          # optional: separate expected files if not in-source
     source/        # .ks files
     expected/      # .stdout, .stderr, .exit (or one combined .golden per test)
   fixtures/        # Shared .ks modules used by tests
 ```
 
-Each golden test is a pair: one source file (and its dependencies) and one or more expected output files. Naming convention: `test_name.ks` with `test_name.stdout`, `test_name.stderr`, `test_name.exit`, or a single `test_name.golden` containing all of them.
+Expected output may be stored either in separate golden files (`expected/<name>.stdout`, etc.) or **in-file**: in the Kestrel implementation, E2E scenarios keep expected stdout in the same file as the test by placing a comment line (e.g. `// <expected value>`) immediately after each `print(...)`; the runner collects those lines and compares them to actual stdout so that each scenario and its expected output live in one file.
 
 ### 3.3 Running Golden Tests
 

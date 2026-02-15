@@ -6,5 +6,8 @@ val r2 = safeDivide(10, 0)
 val r3 = safeDivide(15, 3)
 
 print(r1)
+// 5
 print(r2)
+// 0
 print(r3)
+// 5

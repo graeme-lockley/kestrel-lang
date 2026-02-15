@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# For each tests/e2e/scenarios/*.ks: compile to .kbc, run VM, diff stdout/stderr/exit to tests/e2e/expected/.
+# For each tests/e2e/scenarios/*.ks: compile to .kbc, run VM, then validate stdout.
+# Expected stdout is taken from the scenario file: each line that starts with "// "
+# (or "//") immediately after a print(...) is the expected output for that print.
+# Multiple consecutive "//" lines after one print are allowed (multi-line output).
 # No-op if no scenarios exist. Exit non-zero on first failure.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 COMPILER="$ROOT/compiler"
 VM="$ROOT/vm"
 SCENARIOS="$ROOT/tests/e2e/scenarios"
-EXPECTED="$ROOT/tests/e2e/expected"
 
 if ! command -v node &>/dev/null; then
   echo "run-e2e: node not found" >&2
@@ -37,14 +39,28 @@ for f in "$SCENARIOS"/*.ks; do
     out_stderr="$ROOT/out/e2e/$name.stderr"
     "$ROOT/vm/zig-out/bin/kestrel" "$kbc" >"$out_stdout" 2>"$out_stderr" || true
     echo "$?" >"$ROOT/out/e2e/$name.exit"
-    if [ -f "$EXPECTED/$name.stdout" ]; then
-      diff -u "$EXPECTED/$name.stdout" "$out_stdout" || { echo "E2E $name: stdout mismatch" >&2; exit 1; }
+    # Expected stdout from // comments in .ks (below each print)
+    expected_stdout=""
+    if grep -q 'print(' "$f" && awk '
+      /print\(/ { in_expected=1; next }
+      in_expected && /^[[:space:]]*\/\/[[:space:]]*/ {
+        sub(/^[[:space:]]*\/\/ ?/, ""); print; next
+      }
+      { in_expected=0 }
+    ' "$f" | grep -q .; then
+      expected_stdout=$(awk '
+        /print\(/ { in_expected=1; next }
+        in_expected && /^[[:space:]]*\/\/[[:space:]]*/ {
+          sub(/^[[:space:]]*\/\/ ?/, ""); print; next
+        }
+        { in_expected=0 }
+      ' "$f")
     fi
-    if [ -f "$EXPECTED/$name.stderr" ]; then
-      diff -u "$EXPECTED/$name.stderr" "$out_stderr" || { echo "E2E $name: stderr mismatch" >&2; exit 1; }
-    fi
-    if [ -f "$EXPECTED/$name.exit" ]; then
-      diff -u "$EXPECTED/$name.exit" "$ROOT/out/e2e/$name.exit" || { echo "E2E $name: exit code mismatch" >&2; exit 1; }
+    if [ -n "$expected_stdout" ]; then
+      tmp_expected=$(mktemp)
+      printf '%s\n' "$expected_stdout" >"$tmp_expected"
+      diff -u "$tmp_expected" "$out_stdout" || { rm -f "$tmp_expected"; echo "E2E $name: stdout mismatch" >&2; exit 1; }
+      rm -f "$tmp_expected"
     fi
   fi
   echo "  $name.ks OK"

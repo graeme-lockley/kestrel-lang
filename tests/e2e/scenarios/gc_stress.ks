@@ -11,14 +11,15 @@ fun sumList(xs: List<Int>): Int = match (xs) {
 val list1 = makeList(20)
 val sum1 = sumList(list1)
 print(sum1)
-
+// 210
 val list2 = makeList(15)
 val sum2 = sumList(list2)
 print(sum2)
-
+// 120
 val list3 = makeList(10)
 val sum3 = sumList(list3)
 print(sum3)
+// 55
 
 // Create many small allocations
 val small1 = makeList(5)
@@ -28,3 +29,4 @@ val small4 = makeList(5)
 
 val finalSum = sumList(small1) + sumList(small2) + sumList(small3) + sumList(small4)
 print(finalSum)
+// 60

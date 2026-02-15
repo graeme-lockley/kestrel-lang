@@ -9,5 +9,8 @@ val result2 = safeDivide(10, 0)
 val result3 = safeDivide(20, 4)
 
 print(result1)
+// 5
 print(result2)
+// 0
 print(result3)
+// 5

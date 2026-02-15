@@ -47,8 +47,7 @@ kestrel/
       integration/
   tests/                   # Cross-cutting E2E and conformance
     e2e/
-      scenarios/            # .ks files
-      expected/             # .stdout, .stderr, .exit or .golden
+      scenarios/            # .ks files; expected stdout in-file as // under each print
     conformance/
       parse/valid/
       parse/invalid/
@@ -94,8 +93,8 @@ kestrel/
 - **Runner:** `scripts/run-e2e.sh` (or Node script `scripts/run-e2e.mjs`):
   1. For each `tests/e2e/scenarios/*.ks`: run compiler to produce `.kbc`.
   2. Run VM with that `.kbc` (stdin optional, configurable).
-  3. Capture stdout, stderr, exit code.
-  4. Compare to `tests/e2e/expected/<name>.stdout`, `.stderr`, `.exit` (or one `.golden`).
+  3. Capture stdout (and optionally stderr, exit code).
+  4. Compare stdout to expected output taken from the scenario file: each line starting with `//` (or `// `) immediately after a `print(...)` is the expected line for that print; multiple consecutive `//` lines after one print allow multi-line expected output. There is no separate `expected/` directory.
 - **Integration with “test all”:** `scripts/test-all.sh` runs: `cd compiler && npm test`, `cd vm && zig build test`, then `./scripts/run-e2e.sh`. Exit non-zero if any step fails. Each layer can be run on its own: `cd compiler && npm test`, `cd vm && zig build test`, or `./scripts/run-e2e.sh`.
 - **Early E2E:** First E2E tests can be added as soon as the compiler can emit a trivial .kbc and the VM can load and run it (e.g. single RET). Scenarios and expected output grow as features land.
 

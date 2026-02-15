@@ -12,12 +12,18 @@ fun head(xs: List<Int>): Int = match (xs) {
 }
 
 print(head(empty))
+// 0
 print(head(one))
+// 1
 print(head(two))
+// 1
 print(head(three))
+// 1
 print(head(five))
+// 1
 
 // Test that lists can be constructed and used
 val list1 = [10, 20, 30]
 val h1 = head(list1)
 print(h1)
+// 10
