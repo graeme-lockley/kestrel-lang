@@ -31,12 +31,25 @@ export class TypeCheckError extends Error {
   }
 }
 
-export function typecheck(program: Program): { ok: true } | { ok: false; errors: string[] } {
+export interface TypecheckOptions {
+  /** Import bindings (localName -> type) to add to scope before typechecking. */
+  importBindings?: Map<string, InternalType>;
+  /** If true, return the export set (FunDecl names -> types) on success. */
+  captureExports?: boolean;
+}
+
+export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports?: Map<string, InternalType> } | { ok: false; errors: string[] } {
   resetVarId();
   const errors: string[] = [];
   const subst = new Map<number, InternalType>();
   const env = new Map<string, InternalType>();
   let inAsyncContext = false; // Track if we're in an async function
+
+  // Add import bindings first (so they can be used in the module)
+  const importBindings = options?.importBindings;
+  if (importBindings) {
+    for (const [name, t] of importBindings) env.set(name, t);
+  }
 
   // Add builtin primitives to environment (variadic: ≥1 arg, Unit)
   // print / println: typechecked at call site as (T1, T2, ...) -> Unit with args.length >= 1
@@ -559,6 +572,16 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
     }
     resolveNode(program);
 
+    if (options?.captureExports) {
+      const exports = new Map<string, InternalType>();
+      for (const node of program.body) {
+        if (node.kind === 'FunDecl') {
+          const t = env.get(node.name);
+          if (t != null) exports.set(node.name, apply(t));
+        }
+      }
+      return { ok: true, exports };
+    }
     return { ok: true };
   } catch (e) {
     if (e instanceof UnifyError) {

@@ -573,8 +573,13 @@ function emitExpr(
   }
 }
 
+export interface CodegenOptions {
+  /** Map of imported function names to their indices in the (possibly merged) function table. */
+  importedFuncIds?: Map<string, number>;
+}
+
 /** Generate bytecode for program. */
-export function codegen(program: Program): CodegenResult {
+export function codegen(program: Program, options?: CodegenOptions): CodegenResult {
   stringTable.length = 0;
   constantPool.length = 0;
   codeStart();
@@ -601,8 +606,11 @@ export function codegen(program: Program): CodegenResult {
 
   const funDecls = program.body.filter((n): n is FunDecl => n.kind === 'FunDecl');
   const funNameToId = new Map<string, number>();
-  // Function IDs start from 1 (IDs 0xFFFFFF00, 0xFFFFFF01 are print/println primitives)
-  // But function table entries start from index 0
+  // Add imported function IDs first (for cross-module calls)
+  if (options?.importedFuncIds) {
+    for (const [name, id] of options.importedFuncIds) funNameToId.set(name, id);
+  }
+  // Function IDs: 0xFFFFFF00/01 = print/println; 0..n-1 = our functions
   for (let i = 0; i < funDecls.length; i++) {
     funNameToId.set(funDecls[i]!.name, i);
     stringIndex(funDecls[i]!.name); // ensure name is in string table

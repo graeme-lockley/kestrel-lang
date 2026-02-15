@@ -203,7 +203,7 @@ export function writeKbc(
   const section0Len = sizeStringTable(stringTable);
   const section1Len = sizeConstantPool(constantPool);
   const section2Len = sizeSection2(functionTable, importSpecifierIndices);
-  const section3Len = code.length;
+  const section3Len = align4(code.length); // Code section padded per spec 03 §1 (4-byte alignment)
   const section4Len = 8;  // debug: file_count=0, entry_count=0
   const section5Len = sizeSection5(shapes);
   const section6Len = sizeSection6(adts);
