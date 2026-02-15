@@ -1,27 +1,33 @@
 // Test logical not operator
 
-// Basic logical not
-val a = !True
-val b = !False
-val _ = print(a)
-// true
-val _ = print(b)
+val t = True
+val f = False
+
+print(!True)
+// false
+print(!t)
 // false
 
+print(!False)
+// true
+print(!f)
+// true
+
 // Double negation
-val c = !!True
-val _ = print(c)
+print(!!True)
+// true
+print(!!t)
 // true
 
 // Not with comparisons
 val d = !(5 > 3)
-val _ = print(d)
-// true
-val e = !(10 == 20)
-val _ = print(e)
+print(d)
 // false
+val e = !(10 == 20)
+print(e)
+// true
 
 // Not in conditional
 val result = if (!False) 100 else 200
-val _ = print(result)
-// 200
+print(result)
+// 100

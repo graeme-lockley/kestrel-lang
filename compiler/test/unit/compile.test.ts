@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { compile } from '../../src/index.js';
+import { compile, tokenize, parse } from '../../src/index.js';
 import { codegen } from '../../src/codegen/codegen.js';
+import { ConstTag } from '../../src/bytecode/constants.js';
 
 describe('compile', () => {
   it('returns ok: true and AST for valid program', () => {
@@ -99,6 +100,23 @@ describe('compile', () => {
       const { code, shapes } = codegen(result.ast);
       expect(shapes.length).toBeGreaterThanOrEqual(1);
       expect(code.length).toBeGreaterThan(10);
+    }
+  });
+
+  it('emits correct bytecode for logical NOT (!True and !False)', () => {
+    // Per ISA 04: !x compiles to (x == False). Constant-folding !True->False, !False->True is allowed.
+    const r1 = compile('val a = !True');
+    expect(r1.ok).toBe(true);
+    const r2 = compile('val b = !False');
+    expect(r2.ok).toBe(true);
+    if (r1.ok && r2.ok) {
+      const out1 = codegen(r1.ast);
+      const out2 = codegen(r2.ast);
+      // !True must yield False
+      expect(out1.constantPool.some((c) => c.tag === ConstTag.False)).toBe(true);
+      // !False must yield True
+      expect(out2.constantPool.some((c) => c.tag === ConstTag.True)).toBe(true);
+      expect(Array.from(out1.code).some((b) => b === 0x01)).toBe(true); // LOAD_CONST present
     }
   });
 

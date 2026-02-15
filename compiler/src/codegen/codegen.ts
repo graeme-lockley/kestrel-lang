@@ -209,10 +209,15 @@ function emitExpr(
         // Unary plus: just emit operand
         emitExpr(expr.operand, env, funNameToId, shapes, adts);
       } else if (expr.op === '!') {
-        // Logical not: compare with false
-        emitExpr(expr.operand, env, funNameToId, shapes, adts);
-        emitLoadConst(addConstant({ tag: ConstTag.False }));
-        emitEq();
+        // Logical not: constant-fold !True -> False, !False -> True; else (x == False)
+        const op = expr.operand;
+        if (op.kind === 'LiteralExpr' && (op.literal === 'true' || op.literal === 'false')) {
+          emitLoadConst(addConstant({ tag: op.literal === 'true' ? ConstTag.False : ConstTag.True }));
+        } else {
+          emitExpr(expr.operand, env, funNameToId, shapes, adts);
+          emitLoadConst(addConstant({ tag: ConstTag.False }));
+          emitEq();
+        }
       } else {
         throw new Error(`Codegen: unsupported unary op ${expr.op}`);
       }

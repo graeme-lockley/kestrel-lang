@@ -18,9 +18,9 @@ val _ = print(c)
 // Unary with boolean logic
 val flag = !(3 > 5) & (2 < 4)
 val _ = print(flag)
-// false
+// true
 
 // Complex expression
 val result = if (!(False | False)) -100 else -200
 val _ = print(result)
-// -200
+// -100

@@ -201,7 +201,7 @@ export function tokenize(source: string): Token[] {
       }
     }
     const single = peek();
-    const singleOps = '+-*/%|&<=>';
+    const singleOps = '+-*/%|&<=>!';
     if (singleOps.includes(single)) {
       take();
       return { kind: 'op', value: single, span: span(start, i, l, c) };
