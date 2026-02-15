@@ -1,0 +1,22 @@
+// Test logical not operator
+
+// Basic logical not
+val a = !True
+val b = !False
+val _ = print(a)
+val _ = print(b)
+
+// Double negation
+val c = !!True
+val _ = print(c)
+
+// Not with comparisons
+val d = !(5 > 3)
+val _ = print(d)
+
+val e = !(10 == 20)
+val _ = print(e)
+
+// Not in conditional
+val result = if (!False) 100 else 200
+val _ = print(result)

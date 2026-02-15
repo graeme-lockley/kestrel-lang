@@ -480,12 +480,22 @@ class Parser {
   }
 
   private parsePowExpr(): Expr {
-    const left = this.parsePrimary();
+    const left = this.parseUnary();
     if (this.at('op', '**')) {
       this.advance();
       return { kind: 'BinaryExpr', op: '**', left, right: this.parsePowExpr() };
     }
     return left;
+  }
+
+  private parseUnary(): Expr {
+    if (this.at('op', '-') || this.at('op', '+') || this.at('op', '!')) {
+      const op = this.current().value!;
+      this.advance();
+      const operand = this.parseUnary();
+      return { kind: 'UnaryExpr', op, operand };
+    }
+    return this.parsePrimary();
   }
 
   private parsePrimary(): Expr {
@@ -771,8 +781,17 @@ class Parser {
       const name = this.advance().value!;
       return { kind: 'VarPattern', name };
     }
-    if (this.at('int') || this.at('string') || this.at('true') || this.at('false')) {
-      const literal = this.current().kind === 'int' ? 'int' : this.current().kind === 'string' ? 'string' : this.current().kind === 'true' ? 'true' : 'false';
+    // Treat True/False as constructor patterns for boolean ADT
+    if (this.at('true')) {
+      this.advance();
+      return { kind: 'ConstructorPattern', name: 'True' };
+    }
+    if (this.at('false')) {
+      this.advance();
+      return { kind: 'ConstructorPattern', name: 'False' };
+    }
+    if (this.at('int') || this.at('string')) {
+      const literal = this.current().kind === 'int' ? 'int' : 'string';
       const value = this.advance().value!;
       return { kind: 'LiteralPattern', literal, value };
     }

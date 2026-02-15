@@ -286,6 +286,21 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                 }
                 const val = stack[sp - 1];
                 sp -= 1;
+
+                // Handle boolean matching: True = tag 1, False = tag 0
+                if (val.tag == .bool) {
+                    const ctor_tag: u32 = if (val.payload != 0) 1 else 0;
+                    if (ctor_tag >= count) {
+                        pc += count * 4;
+                        continue;
+                    }
+                    const match_start = pc - 5;
+                    const offset_pos = pc + ctor_tag * 4;
+                    const offset = std.mem.readInt(i32, code[offset_pos..][0..4], .little);
+                    pc = @as(usize, @intCast(@as(isize, @intCast(match_start)) + offset));
+                    continue;
+                }
+
                 if (val.tag != .ptr) {
                     pc += count * 4;
                     continue;

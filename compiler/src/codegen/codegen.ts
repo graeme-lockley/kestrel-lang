@@ -199,6 +199,25 @@ function emitExpr(
       }
       break;
     }
+    case 'UnaryExpr': {
+      if (expr.op === '-') {
+        // Unary minus: 0 - operand
+        emitLoadConst(addConstant({ tag: ConstTag.Int, value: 0 }));
+        emitExpr(expr.operand, env, funNameToId, shapes, adts);
+        emitSub();
+      } else if (expr.op === '+') {
+        // Unary plus: just emit operand
+        emitExpr(expr.operand, env, funNameToId, shapes, adts);
+      } else if (expr.op === '!') {
+        // Logical not: compare with false
+        emitExpr(expr.operand, env, funNameToId, shapes, adts);
+        emitLoadConst(addConstant({ tag: ConstTag.False }));
+        emitEq();
+      } else {
+        throw new Error(`Codegen: unsupported unary op ${expr.op}`);
+      }
+      break;
+    }
     case 'IfExpr': {
       emitExpr(expr.cond, env, funNameToId, shapes, adts);
       const jumpIfFalsePos = codeOffset();
@@ -386,6 +405,14 @@ function emitExpr(
           } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.name === 'Nil') {
             // Nil case (constructor 0)
             casePositions[0] = caseStart - matchPos;
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
+          } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.name === 'False') {
+            // False case (constructor 0)
+            casePositions[0] = caseStart - matchPos;
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
+          } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.name === 'True') {
+            // True case (constructor 1)
+            casePositions[1] = caseStart - matchPos;
             emitExpr(matchCase.body, env, funNameToId, shapes, adts);
           } else if (matchCase.pattern.kind === 'ConsPattern') {
             // Cons case (constructor 1)

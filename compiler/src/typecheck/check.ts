@@ -148,6 +148,20 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         setInferredType(expr, result);
         return result;
       }
+      case 'UnaryExpr': {
+        const operandType = inferExpr(expr.operand);
+        if (expr.op === '-' || expr.op === '+') {
+          unify(operandType, tInt, subst);
+          result = tInt;
+        } else if (expr.op === '!') {
+          unify(operandType, tBool, subst);
+          result = tBool;
+        } else {
+          result = freshVar();
+        }
+        setInferredType(expr, result);
+        return result;
+      }
       case 'CallExpr': {
         const calleeT = inferExpr(expr.callee);
         const argTs = expr.args.map(inferExpr);
@@ -492,6 +506,7 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         }
         if (n2.kind === 'IfExpr') { resolveNode(n2.cond); resolveNode(n2.then); resolveNode(n2.else); }
         if (n2.kind === 'BinaryExpr') { resolveNode(n2.left); resolveNode(n2.right); }
+        if (n2.kind === 'UnaryExpr') { resolveNode(n2.operand); }
         if (n2.kind === 'CallExpr') { resolveNode(n2.callee); (n2.args as unknown[]).forEach(resolveNode); }
         if (n2.kind === 'RecordExpr') (n2.fields as { value: unknown }[]).forEach((f) => resolveNode(f.value));
         if (n2.kind === 'TupleExpr') (n2.elements as unknown[]).forEach(resolveNode);

@@ -184,6 +184,7 @@ export type Expr =
   | ThrowExpr
   | AwaitExpr
   | BinaryExpr
+  | UnaryExpr
   | ConsExpr
   | TupleExpr
   | BlockExpr;
@@ -276,6 +277,12 @@ export interface BinaryExpr extends NodeBase {
   op: string;
   left: Expr;
   right: Expr;
+}
+
+export interface UnaryExpr extends NodeBase {
+  kind: 'UnaryExpr';
+  op: string;
+  operand: Expr;
 }
 
 export interface ConsExpr extends NodeBase {
