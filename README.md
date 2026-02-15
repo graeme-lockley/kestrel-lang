@@ -36,12 +36,29 @@ val result = fibonacci(10)
 val _ = print(result)
 ```
 
-Compile and run:
+Run (compiles if needed, then executes):
 ```bash
-node compiler/dist/cli.js hello.ks -o hello.kbc
-./vm/zig-out/bin/kestrel hello.kbc
+./kestrel run hello.ks
 # Output: 55
 ```
+
+Or compile and run manually:
+```bash
+./kestrel build hello.ks
+./vm/zig-out/bin/kestrel hello.kbc
+```
+
+### CLI Commands
+
+The `kestrel` CLI (spec [09-tools](docs/specs/09-tools.md)) provides:
+
+| Command | Description |
+|---------|-------------|
+| `./kestrel run <script.ks> [args...]` | Compile if needed, execute via VM |
+| `./kestrel dis <script.ks>` | Compile if needed, disassemble bytecode to mnemonics |
+| `./kestrel build [script.ks]` | Build compiler and VM; optionally compile script |
+
+Compiled `.kbc` files are cached under `~/.kestrel/kbc/` (mirrors source path). Override with `KESTREL_CACHE`.
 
 ---
 
@@ -149,6 +166,7 @@ More examples in `tests/e2e/scenarios/`
 
 ```
 kestrel/
+├── kestrel            # CLI entry point (delegates to scripts/kestrel)
 ├── compiler/          # TypeScript compiler
 │   ├── src/
 │   │   ├── lexer/    # Tokenization
@@ -170,7 +188,10 @@ kestrel/
 │   ├── e2e/         # End-to-end scenarios
 │   └── conformance/ # Type system tests
 ├── docs/            # Specifications
+│   └── specs/       # 01-language, 02-stdlib, 03-bytecode, … 09-tools
 └── scripts/         # Build & test scripts
+    ├── kestrel      # CLI implementation (run, dis, build)
+    └── run-e2e.sh   # E2E test runner
 ```
 
 ---
@@ -198,6 +219,7 @@ kestrel/
 - [ ] kestrel:http
 
 ### Phase 4: Tooling 📋
+- [x] **kestrel CLI** — `run`, `dis`, `build` (see [specs/09-tools.md](docs/specs/09-tools.md))
 - [ ] Better error messages
 - [ ] Debugger support
 - [ ] Language server protocol
@@ -209,10 +231,11 @@ kestrel/
 
 ### Specifications
 
-Comprehensive language specifications are in `docs/`:
+Comprehensive specifications are in `docs/` and `docs/specs/`:
 
 - **`Kestrel_v1_Language_Specification.md`** — Complete language reference
 - **`IMPLEMENTATION_PLAN.md`** — Implementation strategy and progress
+- **`docs/specs/`** — Language, bytecode, runtime, and tooling specs (01–09)
 
 The specifications define:
 - Language syntax and semantics
@@ -221,6 +244,7 @@ The specifications define:
 - Instruction set architecture
 - Runtime value model
 - Standard library contracts
+- **CLI and developer tools** — See [specs/09-tools.md](docs/specs/09-tools.md) for the `kestrel` command reference
 
 ---
 

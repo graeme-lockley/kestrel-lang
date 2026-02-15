@@ -126,3 +126,4 @@ When behaviour is intentionally changed, goldens must be updated (e.g. `UPDATE_G
 - [05-runtime-model.md](05-runtime-model.md) – Runtime and GC behaviour
 - [06-typesystem.md](06-typesystem.md) – Type-checker tests
 - [07-modules.md](07-modules.md) – Module resolution tests
+- [09-tools.md](09-tools.md) – `kestrel` CLI (user-facing run/build; E2E harness uses compiler/VM directly)
