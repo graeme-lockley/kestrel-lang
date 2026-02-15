@@ -175,6 +175,8 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
             const t = apply(inferExpr(stmt.value));
             // Var bindings are not generalized (mutable)
             env.set(stmt.name, t);
+          } else if (stmt.kind === 'ExprStmt') {
+            inferExpr(stmt.expr);
           } else {
             const targetT = inferExpr(stmt.target);
             const v = inferExpr(stmt.value);
@@ -452,6 +454,8 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         const t = apply(inferExpr(node.value));
         // Var bindings not generalized
         env.set(node.name, t);
+      } else if (node.kind === 'ExprStmt') {
+        inferExpr(node.expr);
       } else if (node.kind === 'AssignStmt') {
         const targetT = inferExpr(node.target);
         const valueT = inferExpr(node.value);
@@ -480,6 +484,7 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         const n2 = node as { kind: string; [k: string]: unknown };
         if (n2.kind === 'Program' && Array.isArray(n2.body)) n2.body.forEach(resolveNode);
         if (n2.kind === 'ValStmt' || n2.kind === 'VarStmt') { resolveNode(n2.value); }
+        if (n2.kind === 'ExprStmt') { resolveNode(n2.expr); }
         if (n2.kind === 'FunDecl') resolveNode(n2.body);
         if (n2.kind === 'BlockExpr') {
           (n2.stmts as unknown[]).forEach(resolveNode);

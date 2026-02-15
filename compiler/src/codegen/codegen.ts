@@ -226,6 +226,9 @@ function emitExpr(
           const slot = blockEnv.size;
           blockEnv.set(stmt.name, slot);
           emitStoreLocal(slot);
+        } else if (stmt.kind === 'ExprStmt') {
+          emitExpr(stmt.expr, blockEnv, funNameToId, shapes);
+          // Expression result is left on stack, will be discarded
         }
       }
       emitExpr(expr.result, blockEnv, funNameToId, shapes);
@@ -569,7 +572,7 @@ export function codegen(program: Program): CodegenResult {
   }
 
   const stmts = program.body.filter((n): n is TopLevelStmt =>
-    n.kind === 'ValStmt' || n.kind === 'VarStmt' || n.kind === 'AssignStmt'
+    n.kind === 'ValStmt' || n.kind === 'VarStmt' || n.kind === 'AssignStmt' || n.kind === 'ExprStmt'
   );
   const env = new Map<string, number>();
 
@@ -579,6 +582,9 @@ export function codegen(program: Program): CodegenResult {
       const slot = env.size;
       env.set(stmt.name, slot);
       emitStoreLocal(slot);
+    } else if (stmt.kind === 'ExprStmt') {
+      emitExpr(stmt.expr, env, funNameToId, shapes, adts);
+      // Expression result is left on stack and will be discarded
     } else {
       const target = stmt.target;
       if (target.kind === 'FieldExpr') {

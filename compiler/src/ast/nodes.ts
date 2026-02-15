@@ -144,7 +144,7 @@ export interface TupleType extends NodeBase {
   elements: Type[];
 }
 
-export type TopLevelStmt = ValStmt | VarStmt | AssignStmt;
+export type TopLevelStmt = ValStmt | VarStmt | AssignStmt | ExprStmt;
 
 export interface ValStmt extends NodeBase {
   kind: 'ValStmt';
@@ -162,6 +162,11 @@ export interface AssignStmt extends NodeBase {
   kind: 'AssignStmt';
   target: Expr;
   value: Expr;
+}
+
+export interface ExprStmt extends NodeBase {
+  kind: 'ExprStmt';
+  expr: Expr;
 }
 
 export type Expr =
@@ -286,7 +291,7 @@ export interface TupleExpr extends NodeBase {
 
 export interface BlockExpr extends NodeBase {
   kind: 'BlockExpr';
-  stmts: (ValStmt | VarStmt | AssignStmt)[];
+  stmts: (ValStmt | VarStmt | AssignStmt | ExprStmt)[];
   result: Expr;
 }
 

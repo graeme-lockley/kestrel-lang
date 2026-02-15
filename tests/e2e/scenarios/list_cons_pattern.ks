@@ -13,5 +13,5 @@ val numbers = [1, 2, 3, 4, 5]
 val len = length(numbers)
 val total = sum(numbers)
 
-val _ = print(len)
-val _ = print(total)
+print(len)
+print(total)

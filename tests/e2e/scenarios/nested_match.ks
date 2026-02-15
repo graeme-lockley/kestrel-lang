@@ -1,10 +1,37 @@
-// Pattern matching with booleans
-fun check(b: Bool): Int = match (b) {
-  _ => 42
+// Test nested pattern matching with lists
+fun isEmpty(xs: List<Int>): Int = match (xs) {
+  [] => 1
+  h :: t => 0
 }
 
-val r1 = check(True)
-val r2 = check(False)
+val empty = []
+val nonempty = [1, 2, 3]
 
-val _ = print(r1)
-val _ = print(r2)
+print(isEmpty(empty))
+print(isEmpty(nonempty))
+
+// Test getting first element
+fun first(xs: List<Int>): Int = match (xs) {
+  [] => 0
+  h :: t => h
+}
+
+print(first(empty))
+print(first(nonempty))
+
+// Test nested lists with matching
+val list1 = [20, 30, 40]
+val list2 = [5, 15, 25]
+
+print(first(list1))
+print(first(list2))
+
+// Test matching with conditionals
+fun classifyFirst(xs: List<Int>): Int = match (xs) {
+  [] => 0
+  h :: t => if (h > 10) 100 else 50
+}
+
+print(classifyFirst(empty))
+print(classifyFirst(list1))
+print(classifyFirst(list2))

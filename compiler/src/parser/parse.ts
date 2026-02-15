@@ -378,10 +378,15 @@ class Parser {
       const value = this.parseExpr();
       return { kind: 'VarStmt', name, value };
     }
-    const target = this.parseExpr();
-    this.expect('op', ':=');
-    const value = this.parseExpr();
-    return { kind: 'AssignStmt', target, value };
+    const expr = this.parseExpr();
+    // Check if it's an assignment statement
+    if (this.at('op', ':=')) {
+      this.advance();
+      const value = this.parseExpr();
+      return { kind: 'AssignStmt', target: expr, value };
+    }
+    // Otherwise it's an expression statement
+    return { kind: 'ExprStmt', expr };
   }
 
   private isExprStart(): boolean {
