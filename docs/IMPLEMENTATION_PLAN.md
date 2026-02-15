@@ -100,9 +100,9 @@ kestrel/
 
 ### 0.5 Deliverables and validation
 
-- [ ] `compiler/` has `npm run build` and `npm test` (unit + integration placeholders).
-- [ ] `vm/` has `zig build` and `zig build test` (placeholders).
-- [ ] `scripts/test-all.sh` runs compiler tests, VM tests, and E2E (E2E can be skipped or no-op until first scenario exists); each layer can also be run independently.
+- [x] `compiler/` has `npm run build` and `npm test` (unit + integration placeholders).
+- [x] `vm/` has `zig build` and `zig build test` (placeholders).
+- [x] `scripts/test-all.sh` runs compiler tests, VM tests, and E2E (E2E can be skipped or no-op until first scenario exists); each layer can also be run independently.
 
 ---
 
@@ -204,7 +204,8 @@ kestrel/
 - [x] Bytecode writer: full sections (string table, constant pool, function table, code, debug, shape, ADT); instruction encoder (opcodes 0x01–0x1D).
 - [x] Codegen: literals, locals, top-level val/var, binary ops, if/else; emits valid .kbc per 03/04.
 - [x] E2E scenarios (empty.ks, val_plus.ks) compile and run on the VM.
-- [ ] Import table and resolution (deferred).
+- [x] Import table emission (specifier indices in .kbc).
+- [ ] Import resolution (path/stdlib/URL, multi-file compile) — deferred.
 
 ---
 
@@ -243,7 +244,9 @@ kestrel/
 
 - [x] VM loads valid .kbc (header, constant pool, code); rejects invalid magic/version.
 - [x] Core instructions: LOAD_CONST, LOAD_LOCAL, STORE_LOCAL, ADD, SUB, MUL, DIV, MOD, POW, EQ–GE, JUMP, JUMP_IF_FALSE, RET.
-- [ ] CALL, record/ADT/heap, GC, exceptions, async (deferred).
+- [x] CALL, record, ADT, GC, exceptions, async (VM has these).
+- [ ] SPREAD (opcode 0x19) — not yet in VM.
+- [ ] Float (heap value / FLOAT kind) — not yet in VM.
 
 ---
 
@@ -304,6 +307,16 @@ kestrel/
 
 - [x] Stdlib layout: `stdlib/kestrel/` with placeholder .ks (option, result, list, value, string, stack, json, fs, http); `vm/src/primitives.zig` stub for future __write_stdout_string etc.
 - [ ] Minimal VM primitives implemented and wired; Option/Result/List/Value as Kestrel ADTs; full stdlib implementations; compiler/VM import resolution and primitive dispatch.
+
+---
+
+## Remaining gaps
+
+- **SPREAD:** Opcode 0x19 not yet implemented in VM; compiler may emit it for record spread.
+- **Float:** Float as heap value (FLOAT kind) not yet in VM; no float literal/arithmetic in runtime.
+- **Import resolution:** Path/stdlib/URL resolution and multi-file compile (07) — deferred; import table emission is done.
+- **VM linking:** Loading and linking stdlib/other .kbc when a module imports them — deferred.
+- **Stdlib implementations:** Full kestrel:string, stack, json, fs, http and Option/Result/List/Value in .ks; minimal primitives in VM — not yet done.
 
 ---
 
