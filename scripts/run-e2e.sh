@@ -24,7 +24,24 @@ cd "$COMPILER" && npm run build >/dev/null 2>&1 && cd "$ROOT" || { echo "Compile
 cd "$VM" && zig build -Doptimize=ReleaseSafe >/dev/null 2>&1 && cd "$ROOT" || { echo "VM build failed" >&2; exit 1; }
 
 count=0
-for f in "$SCENARIOS"/*.ks; do
+if [ -n "${1:-}" ]; then
+  # Run single file: accept "logical_not", "logical_not.ks", or path
+  arg="$1"
+  if [ -f "$arg" ]; then
+    files=("$arg")
+  elif [ -f "$SCENARIOS/$arg" ]; then
+    files=("$SCENARIOS/$arg")
+  elif [ -f "$SCENARIOS/${arg%.ks}.ks" ]; then
+    files=("$SCENARIOS/${arg%.ks}.ks")
+  else
+    echo "run-e2e: file not found: $arg" >&2
+    exit 1
+  fi
+else
+  files=("$SCENARIOS"/*.ks)
+fi
+
+for f in "${files[@]}"; do
   [ -f "$f" ] || continue
   count=$((count + 1))
   name=$(basename "$f" .ks)
