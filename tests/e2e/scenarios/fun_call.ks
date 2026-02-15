@@ -7,23 +7,23 @@ val a = double(3)
 val b = triple(4)
 val c = square(5)
 
-print(a)
+println(a)
 // 6
-print(b)
+println(b)
 // 12
-print(c)
+println(c)
 // 25
 
 // Test nested function calls
 val nested = double(double(2))
 val chained = triple(double(3))
 
-print(nested)
+println(nested)
 // 8
-print(chained)
+println(chained)
 // 18
 
 // Test with zero
 val zero = double(0)
-print(zero)
+println(zero)
 // 0

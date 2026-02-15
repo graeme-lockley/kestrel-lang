@@ -6,11 +6,11 @@ val f1 = fib(1)
 val f5 = fib(5)
 val f10 = fib(10)
 
-print(f0)
+println(f0)
 // 0
-print(f1)
+println(f1)
 // 1
-print(f5)
+println(f5)
 // 5
-print(f10)
+println(f10)
 // 55

@@ -7,9 +7,9 @@ val task1 = compute(21)
 val task2 = compute(50)
 
 // For now, just print some constants to verify the test runs
-print(42)
+println(42)
 // 42
-print(100)
+println(100)
 // 100
-print(142)
+println(142)
 // 142

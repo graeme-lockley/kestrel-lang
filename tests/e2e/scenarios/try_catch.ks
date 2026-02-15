@@ -8,9 +8,9 @@ val result1 = safeDivide(10, 2)
 val result2 = safeDivide(10, 0)
 val result3 = safeDivide(20, 4)
 
-print(result1)
+println(result1)
 // 5
-print(result2)
+println(result2)
 // 0
-print(result3)
+println(result3)
 // 5

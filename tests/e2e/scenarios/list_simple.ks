@@ -11,19 +11,19 @@ fun head(xs: List<Int>): Int = match (xs) {
   h :: t => h
 }
 
-print(head(empty))
+println(head(empty))
 // 0
-print(head(one))
+println(head(one))
 // 1
-print(head(two))
+println(head(two))
 // 1
-print(head(three))
+println(head(three))
 // 1
-print(head(five))
+println(head(five))
 // 1
 
 // Test that lists can be constructed and used
 val list1 = [10, 20, 30]
 val h1 = head(list1)
-print(h1)
+println(h1)
 // 10

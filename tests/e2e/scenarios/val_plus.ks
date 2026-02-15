@@ -5,31 +5,31 @@ val mul = 6 * 7
 val div = 20 / 4
 val mod = 17 % 5
 
-print(add)
+println(add)
 // 15
-print(sub)
+println(sub)
 // 7
-print(mul)
+println(mul)
 // 42
-print(div)
+println(div)
 // 5
-print(mod)
+println(mod)
 // 2
 
 // Test operator precedence
 val complex = 2 + 3 * 4
 val parens = (2 + 3) * 4
 
-print(complex)
+println(complex)
 // 14
-print(parens)
+println(parens)
 // 20
 
 // Test chained operations
 val chain1 = 100 / 10 / 2
 val chain2 = 10 - 3 - 2
 
-print(chain1)
+println(chain1)
 // 5
-print(chain2)
+println(chain2)
 // 5

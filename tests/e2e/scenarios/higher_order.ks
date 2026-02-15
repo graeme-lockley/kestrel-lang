@@ -6,7 +6,7 @@ fun increment(x: Int): Int = x + 1
 val a = double(double(5))
 val b = increment(increment(10))
 
-print(a)
+println(a)
 // 20
-print(b)
+println(b)
 // 12

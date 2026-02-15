@@ -240,11 +240,22 @@ VM instruction `AWAIT`:
 
 ------------------------------------------------------------------------
 
-# 7. Standard Library
+# 7. Standard Library and Built-in Primitives
+
+## 7.1 Built-in print and println
+
+The language provides two variadic built-in primitives for stdout:
+
+- **`print(a, b, ...)`** — Print each value separated by spaces; **no** trailing newline.
+- **`println(a, b, ...)`** — Print each value separated by spaces; **with** trailing newline.
+
+Both accept one or more arguments of any type; each value is formatted (e.g. as in string conversion) and output with a single space between values. These are distinct from the **kestrel:stack** module’s `print(T): Unit` (see 02-stdlib), which is for stack-trace and stdlib use.
+
+## 7.2 Standard Library modules
 
 Contract: implementations must provide these modules with the listed signatures. See **`docs/specs/02-stdlib.md`** for the full contract.
 
-## kestrel:string
+### kestrel:string
 
 -   length(String): Int
 -   slice(String, Int, Int): String
@@ -252,13 +263,13 @@ Contract: implementations must provide these modules with the listed signatures.
 -   equals(String, String): Bool
 -   toUpperCase(String): String
 
-## kestrel:stack
+### kestrel:stack
 
 -   trace(T): StackTrace\<T\>
 -   print(T): Unit
 -   format(T): String
 
-## kestrel:http
+### kestrel:http
 
 -   createServer((Request) -> Task\<Response\>): Server
 -   listen(Server, { host: String, port: Int }): Task\<Unit\>
@@ -268,12 +279,12 @@ Contract: implementations must provide these modules with the listed signatures.
 -   requestId(Request): String
 -   nowMs(): Int
 
-## kestrel:json
+### kestrel:json
 
 -   parse(String): Value
 -   stringify(Value): String
 
-## kestrel:fs
+### kestrel:fs
 
 -   readText(String): Task\<String\>
 

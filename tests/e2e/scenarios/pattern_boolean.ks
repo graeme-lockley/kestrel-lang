@@ -15,13 +15,13 @@ val b = boolToInt(False)
 val c = boolToString(True)
 val d = boolToString(False)
 
-print(a)
+println(a)
 // 1
-print(b)
+println(b)
 // 0
-print(c)
+println(c)
 // True
-print(d)
+println(d)
 // False
 
 // Match on literals
@@ -34,7 +34,7 @@ val f = match (False) {
   False => 40
 }
 
-print(e)
+println(e)
 // 10
-print(f)
+println(f)
 // 40

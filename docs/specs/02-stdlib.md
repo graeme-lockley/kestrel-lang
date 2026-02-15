@@ -22,14 +22,16 @@ String operations. All functions take the string as an explicit argument (no mem
 
 ---
 
+**Built-in primitives (language):** The language provides built-in `print` and `println` (variadic, space-separated output; see language spec). These are distinct from the stdlib module below.
+
 ## kestrel:stack
 
-Stack traces and basic I/O formatting.
+Stack traces and basic I/O formatting. This module is for stack-trace and formatting utilities; the **built-in** `print`/`println` are language primitives (variadic, space-separated).
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `trace` | `(T) -> StackTrace<T>` | Stack trace for the thrown value of type `T` |
-| `print` | `(T) -> Unit` | Print value (e.g. to stdout); polymorphic in argument type |
+| `print` | `(T) -> Unit` | Print value (e.g. to stdout); polymorphic in argument type (stdlib wrapper; distinct from built-in `print`) |
 | `format` | `(T) -> String` | Format value as string (used implicitly in template interpolation); polymorphic in argument type |
 
 ---

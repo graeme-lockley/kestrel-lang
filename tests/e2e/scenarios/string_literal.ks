@@ -4,13 +4,13 @@ val message = "Kestrel strings work!"
 val empty = ""
 val withSpaces = "  spaces  "
 
-print(greeting)
+println(greeting)
 // Hello, World!
-print(message)
+println(message)
 // Kestrel strings work!
-print(empty)
+println(empty)
 //
-print(withSpaces)
+println(withSpaces)
 //   spaces  
 
 // Test strings with special characters
@@ -18,10 +18,10 @@ val newline = "Line1\nLine2"
 val tab = "Tab\there"
 val quote = "She said \"hello\""
 
-print(newline)
+println(newline)
 // Line1
 // Line2
-print(tab)
+println(tab)
 // Tab	here
-print(quote)
+println(quote)
 // She said "hello"

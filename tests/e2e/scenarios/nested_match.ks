@@ -7,9 +7,9 @@ fun isEmpty(xs: List<Int>): Int = match (xs) {
 val empty = []
 val nonempty = [1, 2, 3]
 
-print(isEmpty(empty))
+println(isEmpty(empty))
 // 1
-print(isEmpty(nonempty))
+println(isEmpty(nonempty))
 // 0
 
 // Test getting first element
@@ -18,18 +18,18 @@ fun first(xs: List<Int>): Int = match (xs) {
   h :: t => h
 }
 
-print(first(empty))
+println(first(empty))
 // 0
-print(first(nonempty))
+println(first(nonempty))
 // 1
 
 // Test nested lists with matching
 val list1 = [20, 30, 40]
 val list2 = [5, 15, 25]
 
-print(first(list1))
+println(first(list1))
 // 20
-print(first(list2))
+println(first(list2))
 // 5
 
 // Test matching with conditionals
@@ -38,9 +38,9 @@ fun classifyFirst(xs: List<Int>): Int = match (xs) {
   h :: t => if (h > 10) 100 else 50
 }
 
-print(classifyFirst(empty))
+println(classifyFirst(empty))
 // 0
-print(classifyFirst(list1))
+println(classifyFirst(list1))
 // 100
-print(classifyFirst(list2))
+println(classifyFirst(list2))
 // 50

@@ -10,18 +10,18 @@ val three = [1, 2, 3]
 val five = [1, 2, 3, 4, 5]
 val ten = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-print(length(empty))
+println(length(empty))
 // 0
-print(length(one))
+println(length(one))
 // 1
-print(length(three))
+println(length(three))
 // 3
-print(length(five))
+println(length(five))
 // 5
-print(length(ten))
+println(length(ten))
 // 10
 
 // Test with different values
 val mixed = [42, 0, 5, 100]
-print(length(mixed))
+println(length(mixed))
 // 4

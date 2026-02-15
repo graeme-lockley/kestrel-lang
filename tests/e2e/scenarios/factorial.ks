@@ -7,19 +7,19 @@ val f5 = fact(5)
 val f7 = fact(7)
 val f10 = fact(10)
 
-print(f0)
+println(f0)
 // 1
-print(f1)
+println(f1)
 // 1
-print(f5)
+println(f5)
 // 120
-print(f7)
+println(f7)
 // 5040
-print(f10)
+println(f10)
 // 3628800
 
 // Test with direct calls
-print(fact(3))
+println(fact(3))
 // 6
-print(fact(6))
+println(fact(6))
 // 720

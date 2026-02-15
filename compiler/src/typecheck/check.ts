@@ -38,10 +38,15 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
   const env = new Map<string, InternalType>();
   let inAsyncContext = false; // Track if we're in an async function
 
-  // Add builtin primitives to environment
-  // print: forall a. a -> Unit
+  // Add builtin primitives to environment (variadic: ≥1 arg, Unit)
+  // print / println: typechecked at call site as (T1, T2, ...) -> Unit with args.length >= 1
   const printTypeVar = freshVar();
   env.set('print', generalize({
+    kind: 'arrow',
+    params: [printTypeVar],
+    return: { kind: 'prim', name: 'Unit' }
+  }, new Set()));
+  env.set('println', generalize({
     kind: 'arrow',
     params: [printTypeVar],
     return: { kind: 'prim', name: 'Unit' }
@@ -163,6 +168,16 @@ export function typecheck(program: Program): { ok: true } | { ok: false; errors:
         return result;
       }
       case 'CallExpr': {
+        // Built-in variadic print/println: (a, b, ...) -> Unit, require at least one arg
+        if (expr.callee.kind === 'IdentExpr' && (expr.callee.name === 'print' || expr.callee.name === 'println')) {
+          if (expr.args.length < 1) {
+            throw new TypeCheckError('print and println require at least one argument', expr);
+          }
+          for (const arg of expr.args) inferExpr(arg);
+          result = { kind: 'prim', name: 'Unit' };
+          setInferredType(expr, result);
+          return result;
+        }
         const calleeT = inferExpr(expr.callee);
         const argTs = expr.args.map(inferExpr);
         const ret = freshVar();

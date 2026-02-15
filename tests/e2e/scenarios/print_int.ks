@@ -1,4 +1,4 @@
 // Print an integer using the builtin print primitive
 val x = 42
-print(x)
+println(x)
 // 42

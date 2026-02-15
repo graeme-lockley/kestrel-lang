@@ -3,31 +3,31 @@
 val t = True
 val f = False
 
-print(!True)
+println(!True)
 // false
-print(!t)
+println(!t)
 // false
 
-print(!False)
+println(!False)
 // true
-print(!f)
+println(!f)
 // true
 
 // Double negation
-print(!!True)
+println(!!True)
 // true
-print(!!t)
+println(!!t)
 // true
 
 // Not with comparisons
 val d = !(5 > 3)
-print(d)
+println(d)
 // false
 val e = !(10 == 20)
-print(e)
+println(e)
 // true
 
 // Not in conditional
 val result = if (!False) 100 else 200
-print(result)
+println(result)
 // 100
