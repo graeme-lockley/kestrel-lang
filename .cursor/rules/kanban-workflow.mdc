@@ -1,0 +1,35 @@
+---
+description: Kanban workflow for stories in docs/kanban
+alwaysApply: true
+---
+
+# Kanban Workflow
+
+Stories live in `docs/kanban/` with folders: **unplanned**, **backlog**, **doing**, **done**.
+
+## Workflow
+
+1. **unplanned** — Stories for refinement. The human moves refined stories to backlog.
+2. **backlog** — Ready for work. Pick up stories from here.
+3. **doing** — Active work. When starting a story, move it here.
+4. **done** — Completed. When a story is complete, move it here.
+
+## When Picking Up a Story
+
+1. Move the story file from `docs/kanban/backlog/` to `docs/kanban/doing/`.
+2. Add a **Tasks** section to the story with concrete checkboxes, e.g.:
+   ```markdown
+   ## Tasks
+   - [ ] Task 1
+   - [ ] Task 2
+   ```
+3. Tick off tasks as you complete them: `- [x] Task 1`.
+
+## When Completing a Story
+
+1. Ensure all tasks are ticked.
+2. Move the story from `docs/kanban/doing/` to `docs/kanban/done/`.
+
+## Story Format
+
+Stories are markdown files. Include: title, description, acceptance criteria, and tasks (once in doing).
