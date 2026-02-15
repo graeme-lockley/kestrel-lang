@@ -122,10 +122,9 @@ export function compileFile(
       });
     }
 
-    const tcOpts: TypecheckOptions = { importBindings: importBindings.size > 0 ? importBindings : undefined, captureExports: true };
+    const tcOpts: TypecheckOptions = { importBindings: importBindings.size > 0 ? importBindings : undefined };
     const tc = typecheck(program, tcOpts);
     if (!tc.ok) return { ok: false, errors: tc.errors };
-    if (!tc.exports) return { ok: false, errors: ['Typecheck did not return exports'] };
 
     const mainFuncCount = program.body.filter((n) => n.kind === 'FunDecl').length;
     const importedFuncIds = new Map<string, number>();

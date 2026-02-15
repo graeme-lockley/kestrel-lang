@@ -75,24 +75,36 @@ export interface CodegenResult {
   adts: AdtEntry[];
 }
 
-const stringTable: string[] = [];
-const constantPool: ConstantEntry[] = [];
-
-function stringIndex(s: string): number {
-  const i = stringTable.indexOf(s);
-  if (i >= 0) return i;
-  stringTable.push(s);
-  return stringTable.length - 1;
-}
-
-function addConstant(c: ConstantEntry): number {
-  const i = constantPool.length;
-  constantPool.push(c);
-  return i;
+/** Context for codegen: string table, constant pool, and helpers. */
+function makeCodegenContext() {
+  const stringTable: string[] = [];
+  const constantPool: ConstantEntry[] = [];
+  function stringIndex(s: string): number {
+    const i = stringTable.indexOf(s);
+    if (i >= 0) return i;
+    stringTable.push(s);
+    return stringTable.length - 1;
+  }
+  function addConstant(c: ConstantEntry): number {
+    const i = constantPool.length;
+    constantPool.push(c);
+    return i;
+  }
+  return { stringTable, constantPool, stringIndex, addConstant };
 }
 
 /** Emit code for expr; leaves value on stack. funNameToId for CallExpr, shapes for RecordExpr, adts for List/ADT. */
-function emitExpr(
+function makeEmitExpr(
+  stringIndex: (s: string) => number,
+  addConstant: (c: ConstantEntry) => number
+): (
+  expr: Expr,
+  env: Map<string, number>,
+  funNameToId?: Map<string, number>,
+  shapes?: ShapeEntry[],
+  adts?: AdtEntry[]
+) => void {
+  return function emitExpr(
   expr: Expr,
   env: Map<string, number>,
   funNameToId?: Map<string, number>,
@@ -571,6 +583,7 @@ function emitExpr(
       // Fallback: push unit
       emitLoadConst(addConstant({ tag: ConstTag.Unit }));
   }
+};
 }
 
 export interface CodegenOptions {
@@ -580,8 +593,10 @@ export interface CodegenOptions {
 
 /** Generate bytecode for program. */
 export function codegen(program: Program, options?: CodegenOptions): CodegenResult {
-  stringTable.length = 0;
-  constantPool.length = 0;
+  const ctx = makeCodegenContext();
+  const { stringTable, constantPool, stringIndex } = ctx;
+  const emitExpr = makeEmitExpr(ctx.stringIndex, ctx.addConstant);
+
   codeStart();
   const shapes: ShapeEntry[] = [];
 

@@ -5,16 +5,8 @@
 import type { CodegenResult } from './codegen/codegen.js';
 import type { ConstantEntry } from './bytecode/constants.js';
 import { ConstTag } from './bytecode/constants.js';
-
-const Op = {
-  LOAD_CONST: 0x01,
-  CALL: 0x10,
-  CONSTRUCT: 0x14,
-  ALLOC_RECORD: 0x16,
-  GET_FIELD: 0x17,
-  SET_FIELD: 0x18,
-  SPREAD: 0x19,
-} as const;
+import { Op } from './bytecode/instructions.js';
+import { readU32, patchU32At } from './bytecode/readwrite.js';
 
 function patchDepCode(
   code: Uint8Array,
@@ -28,36 +20,24 @@ function patchDepCode(
     switch (op) {
       case Op.LOAD_CONST:
         if (pc + 4 <= out.length) {
-          const idx = (out[pc]! | (out[pc + 1]! << 8) | (out[pc + 2]! << 16) | (out[pc + 3]! << 24)) >>> 0;
-          const n = (idx + offsets.constOffset) >>> 0;
-          out[pc] = n & 0xff;
-          out[pc + 1] = (n >> 8) & 0xff;
-          out[pc + 2] = (n >> 16) & 0xff;
-          out[pc + 3] = (n >> 24) & 0xff;
+          const idx = readU32(out, pc);
+          patchU32At(out, pc, idx + offsets.constOffset);
         }
         pc += 4;
         break;
       case Op.CALL:
         if (pc + 8 <= out.length) {
-          const fnId = (out[pc]! | (out[pc + 1]! << 8) | (out[pc + 2]! << 16) | (out[pc + 3]! << 24)) >>> 0;
+          const fnId = readU32(out, pc);
           if (fnId !== 0xffffff00 && fnId !== 0xffffff01) {
-            const n = (fnId + offsets.funcOffset) >>> 0;
-            out[pc] = n & 0xff;
-            out[pc + 1] = (n >> 8) & 0xff;
-            out[pc + 2] = (n >> 16) & 0xff;
-            out[pc + 3] = (n >> 24) & 0xff;
+            patchU32At(out, pc, fnId + offsets.funcOffset);
           }
         }
         pc += 8;
         break;
       case Op.CONSTRUCT:
         if (pc + 12 <= out.length) {
-          const adtId = (out[pc]! | (out[pc + 1]! << 8) | (out[pc + 2]! << 16) | (out[pc + 3]! << 24)) >>> 0;
-          const n = (adtId + offsets.adtOffset) >>> 0;
-          out[pc] = n & 0xff;
-          out[pc + 1] = (n >> 8) & 0xff;
-          out[pc + 2] = (n >> 16) & 0xff;
-          out[pc + 3] = (n >> 24) & 0xff;
+          const adtId = readU32(out, pc);
+          patchU32At(out, pc, adtId + offsets.adtOffset);
         }
         pc += 12;
         break;
@@ -66,47 +46,43 @@ function patchDepCode(
       case Op.SET_FIELD:
       case Op.SPREAD:
         if (pc + 4 <= out.length) {
-          const idx = (out[pc]! | (out[pc + 1]! << 8) | (out[pc + 2]! << 16) | (out[pc + 3]! << 24)) >>> 0;
-          const n = (idx + offsets.shapeOffset) >>> 0;
-          out[pc] = n & 0xff;
-          out[pc + 1] = (n >> 8) & 0xff;
-          out[pc + 2] = (n >> 16) & 0xff;
-          out[pc + 3] = (n >> 24) & 0xff;
+          const idx = readU32(out, pc);
+          patchU32At(out, pc, idx + offsets.shapeOffset);
         }
         pc += 4;
         break;
-      case 0x02: // LOAD_LOCAL
-      case 0x03: // STORE_LOCAL
+      case Op.LOAD_LOCAL:
+      case Op.STORE_LOCAL:
         pc += 4;
         break;
-      case 0x04:
-      case 0x05:
-      case 0x06:
-      case 0x07:
-      case 0x08:
-      case 0x09:
-      case 0x0a:
-      case 0x0b:
-      case 0x0c:
-      case 0x0d:
-      case 0x0e:
-      case 0x0f:
-      case 0x11: // RET
+      case Op.ADD:
+      case Op.SUB:
+      case Op.MUL:
+      case Op.DIV:
+      case Op.MOD:
+      case Op.POW:
+      case Op.EQ:
+      case Op.NE:
+      case Op.LT:
+      case Op.LE:
+      case Op.GT:
+      case Op.GE:
+      case Op.RET:
         break;
-      case 0x12: // JUMP
-      case 0x13: // JUMP_IF_FALSE
-      case 0x1b: // TRY
+      case Op.JUMP:
+      case Op.JUMP_IF_FALSE:
+      case Op.TRY:
         pc += 4;
         break;
-      case 0x15: // MATCH
+      case Op.MATCH:
         {
-          const count = (out[pc]! | (out[pc + 1]! << 8) | (out[pc + 2]! << 16) | (out[pc + 3]! << 24)) >>> 0;
+          const count = readU32(out, pc);
           pc += 4 + count * 4;
         }
         break;
-      case 0x1a: // THROW
-      case 0x1c: // END_TRY
-      case 0x1d: // AWAIT
+      case Op.THROW:
+      case Op.END_TRY:
+      case Op.AWAIT:
         break;
       default:
         pc = out.length;

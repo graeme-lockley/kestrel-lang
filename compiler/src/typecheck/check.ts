@@ -34,11 +34,9 @@ export class TypeCheckError extends Error {
 export interface TypecheckOptions {
   /** Import bindings (localName -> type) to add to scope before typechecking. */
   importBindings?: Map<string, InternalType>;
-  /** If true, return the export set (FunDecl names -> types) on success. */
-  captureExports?: boolean;
 }
 
-export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports?: Map<string, InternalType> } | { ok: false; errors: string[] } {
+export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports: Map<string, InternalType> } | { ok: false; errors: string[] } {
   resetVarId();
   const errors: string[] = [];
   const subst = new Map<number, InternalType>();
@@ -572,17 +570,14 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     }
     resolveNode(program);
 
-    if (options?.captureExports) {
-      const exports = new Map<string, InternalType>();
-      for (const node of program.body) {
-        if (node.kind === 'FunDecl') {
-          const t = env.get(node.name);
-          if (t != null) exports.set(node.name, apply(t));
-        }
+    const exports = new Map<string, InternalType>();
+    for (const node of program.body) {
+      if (node.kind === 'FunDecl') {
+        const t = env.get(node.name);
+        if (t != null) exports.set(node.name, apply(t));
       }
-      return { ok: true, exports };
     }
-    return { ok: true };
+    return { ok: true, exports };
   } catch (e) {
     if (e instanceof UnifyError) {
       errors.push(`${e.message}: ${typeStr(e.left)} vs ${typeStr(e.right)}`);
