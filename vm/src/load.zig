@@ -23,6 +23,8 @@ pub const Module = struct {
     functions: []const FnEntry,
     shapes: []const ShapeEntry,
     strings: []const StringEntry,
+    /// Allocated string constant heap objects (tag-6); caller must free each then this slice.
+    string_slices: []const []const u8,
 };
 
 fn align4(n: usize) usize {
@@ -83,6 +85,41 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
     const constants = try allocator.alloc(Value, pool_count);
     errdefer allocator.free(constants);
 
+    // First pass: count string constants (tag 6)
+    var string_count: usize = 0;
+    if (pool_count > 0 and pool_start + 4 <= data.len) {
+        var o: usize = pool_start + 4;
+        for (constants) |_| {
+            if (o + 4 > data.len) return error.InvalidKbc;
+            o = align4(o);
+            const entry_start = o;
+            const tag = data[o];
+            o += 4;
+            var entry_size: usize = 4;
+            switch (tag) {
+                0 => entry_size = 12,
+                1 => entry_size = 12,
+                2, 3, 4 => {},
+                5 => entry_size = 8,
+                6 => {
+                    string_count += 1;
+                    if (o + 4 > data.len) return error.InvalidKbc;
+                    const str_idx = std.mem.readInt(u32, data[o..][0..4], .little);
+                    if (str_idx < strings.len) {
+                        entry_size = 8;
+                    }
+                },
+                else => {},
+            }
+            o = align4(entry_start + entry_size);
+        }
+    }
+
+    const string_slices = try allocator.alloc([]const u8, string_count);
+    errdefer allocator.free(string_slices);
+    var string_idx: usize = 0;
+    errdefer for (string_slices[0..string_idx]) |s| allocator.free(s);
+
     if (pool_count > 0 and pool_start + 4 <= data.len) {
         var o: usize = pool_start + 4;
         for (constants) |*out| {
@@ -108,22 +145,20 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
                     entry_size = 8;
                 },
                 6 => {
-                    // String constant - create STRING_KIND heap object
                     if (o + 4 > data.len) return error.InvalidKbc;
-                    const str_idx = std.mem.readInt(u32, data[o..][0..4], .little);
-                    if (str_idx >= strings.len) return error.InvalidKbc;
-
-                    const str_data = strings[str_idx].data;
-                    const obj_size = 8 + str_data.len; // kind(1) + mark(1) + pad(2) + len(4) + data
-                    const obj = try allocator.alignedAlloc(u8, @enumFromInt(3), obj_size);
-
+                    const str_idx_val = std.mem.readInt(u32, data[o..][0..4], .little);
+                    if (str_idx_val >= strings.len) return error.InvalidKbc;
+                    const str_data = strings[str_idx_val].data;
+                    const obj_size = 8 + str_data.len;
+                    const obj = try allocator.alloc(u8, obj_size);
                     obj[0] = 4; // STRING_KIND
-                    obj[1] = 0; // mark byte
-                    obj[2] = 0; // pad
-                    obj[3] = 0; // pad
+                    obj[1] = 0;
+                    obj[2] = 0;
+                    obj[3] = 0;
                     std.mem.writeInt(u32, obj[4..8], @as(u32, @intCast(str_data.len)), .little);
                     @memcpy(obj[8..8+str_data.len], str_data);
-
+                    string_slices[string_idx] = obj;
+                    string_idx += 1;
                     out.* = Value.ptr(@intFromPtr(obj.ptr));
                     entry_size = 8;
                 },
@@ -175,6 +210,7 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
         .functions = functions,
         .shapes = shapes,
         .strings = strings,
+        .string_slices = string_slices,
     };
 }
 
@@ -183,6 +219,10 @@ test "load minimal kbc" {
     const m = try load(a, "test/fixtures/empty.kbc");
     defer a.free(m.code);
     defer a.free(m.constants);
+    defer {
+        for (m.string_slices) |s| a.free(s);
+        a.free(m.string_slices);
+    }
     if (m.functions.len > 0) a.free(m.functions);
     if (m.shapes.len > 0) a.free(m.shapes);
     try std.testing.expect(m.code.len >= 1);

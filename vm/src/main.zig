@@ -21,7 +21,11 @@ pub fn main() !void {
 
     const module = try load_mod.load(allocator, path);
     defer allocator.free(module.code);
-    defer allocator.free(module.constants);
+    defer {
+        for (module.string_slices) |s| allocator.free(s);
+        allocator.free(module.string_slices);
+        allocator.free(module.constants);
+    }
     defer if (module.functions.len > 0) allocator.free(module.functions);
     defer if (module.shapes.len > 0) allocator.free(module.shapes);
     defer if (module.strings.len > 0) allocator.free(module.strings);
