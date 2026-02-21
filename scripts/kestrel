@@ -82,11 +82,56 @@ needs_compile() {
   return 1
 }
 
+# Stale if .kbc missing, or (when .kbc.deps exists) any listed path is newer than .kbc; else fall back to entry-only check.
+needs_compile_with_deps() {
+  local ks="$1" kbc="$2"
+  [ ! -f "$kbc" ] && return 0
+  local deps="${kbc}.deps"
+  if [ -f "$deps" ]; then
+    while IFS= read -r dep || [ -n "$dep" ]; do
+      [ -z "$dep" ] && continue
+      if [ -f "$dep" ] && [ "$dep" -nt "$kbc" ] 2>/dev/null; then
+        return 0
+      fi
+    done < "$deps"
+    return 1
+  fi
+  needs_compile "$ks" "$kbc"
+}
+
+# Write paths that are newer than kbc to a temp file (one path per line). Used for --stale-file so we only print "Compiling" for changed files.
+write_stale_file() {
+  local kbc="$1"
+  local deps="${kbc}.deps"
+  [ ! -f "$deps" ] && return
+  local stale
+  stale=$(mktemp)
+  while IFS= read -r dep || [ -n "$dep" ]; do
+    [ -z "$dep" ] && continue
+    if [ -f "$dep" ] && [ "$dep" -nt "$kbc" ] 2>/dev/null; then
+      echo "$dep" >> "$stale"
+    fi
+  done < "$deps"
+  echo "$stale"
+}
+
 do_compile() {
   local ks="$1" kbc="$2"
-  if ! node "$COMPILER_CLI" "$ks" -o "$kbc" 2>/dev/null; then
-    echo "kestrel: compile failed for $ks" >&2
-    exit 1
+  local stale_file
+  stale_file=$(write_stale_file "$kbc")
+  if [ -n "$stale_file" ] && [ -s "$stale_file" ]; then
+    if ! node "$COMPILER_CLI" "$ks" -o "$kbc" --stale-file "$stale_file"; then
+      rm -f "$stale_file"
+      echo "kestrel: compile failed for $ks" >&2
+      exit 1
+    fi
+    rm -f "$stale_file"
+  else
+    [ -n "$stale_file" ] && rm -f "$stale_file"
+    if ! node "$COMPILER_CLI" "$ks" -o "$kbc"; then
+      echo "kestrel: compile failed for $ks" >&2
+      exit 1
+    fi
   fi
 }
 
@@ -126,7 +171,7 @@ cmd_run() {
   shift
   local kbc
   kbc=$(kbc_path_for "$resolved")
-  if needs_compile "$resolved" "$kbc"; then
+  if needs_compile_with_deps "$resolved" "$kbc"; then
     mkdir -p "$(dirname "$kbc")"
     do_compile "$resolved" "$kbc"
   fi
@@ -149,7 +194,7 @@ cmd_dis() {
   fi
   local kbc
   kbc=$(kbc_path_for "$resolved")
-  if needs_compile "$resolved" "$kbc"; then
+  if needs_compile_with_deps "$resolved" "$kbc"; then
     mkdir -p "$(dirname "$kbc")"
     do_compile "$resolved" "$kbc"
   fi

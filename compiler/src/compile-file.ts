@@ -1,8 +1,8 @@
 /**
  * Multi-module compilation: resolve imports, compile dependencies, bundle.
  */
-import { readFileSync, existsSync } from 'fs';
-import { resolve as pathResolve, dirname } from 'path';
+import { readFileSync } from 'fs';
+import { resolve as pathResolve } from 'path';
 import { tokenize } from './lexer/index.js';
 import { parse } from './parser/index.js';
 import { typecheck, type TypecheckOptions } from './typecheck/check.js';
@@ -18,6 +18,10 @@ export interface CompileFileOptions {
   projectRoot?: string;
   /** Path to stdlib directory. Default: projectRoot/stdlib */
   stdlibDir?: string;
+  /** Called once per file after compile (not on cache hit). Receives absolute path and duration in ms. */
+  onCompilingFile?: (absolutePath: string, durationMs: number) => void;
+  /** If set, only call onCompilingFile for paths in this set (so only "stale" files are reported). */
+  stalePaths?: Set<string>;
 }
 
 function getDistinctSpecifiers(program: Program): string[] {
@@ -54,15 +58,17 @@ function getRequestedImports(imp: ImportDecl): Map<string, string> {
 export function compileFile(
   inputPath: string,
   options?: CompileFileOptions
-): { ok: true; kbc: Uint8Array } | { ok: false; errors: string[] } {
+): { ok: true; kbc: Uint8Array; dependencyPaths: string[] } | { ok: false; errors: string[] } {
   const projectRoot = options?.projectRoot ?? process.cwd();
   const stdlibDir = options?.stdlibDir ?? pathResolve(projectRoot, 'stdlib');
   const absPath = pathResolve(inputPath);
 
   const visited = new Set<string>();
-  const cache = new Map<string, { program: Program; exports: Map<string, InternalType>; codegenResult: CodegenResult }>();
+  const cache = new Map<string, { program: Program; exports: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] }>();
+  const onCompilingFile = options?.onCompilingFile;
+  const stalePaths = options?.stalePaths;
 
-  function compileOne(filePath: string): { ok: true; program: Program; exports: Map<string, InternalType>; codegenResult: CodegenResult } | { ok: false; errors: string[] } {
+  function compileOne(filePath: string): { ok: true; program: Program; exports: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] } | { ok: false; errors: string[] } {
     if (visited.has(filePath)) {
       return { ok: false, errors: [`Circular import: ${filePath}`] };
     }
@@ -70,6 +76,8 @@ export function compileFile(
 
     const cached = cache.get(filePath);
     if (cached) return { ok: true, ...cached };
+
+    const compileStart = performance.now();
 
     let source: string;
     try {
@@ -92,7 +100,7 @@ export function compileFile(
     }
 
     const importBindings = new Map<string, InternalType>();
-    const depResults: { spec: string; path: string; result: CodegenResult; exportSet: Set<string> }[] = [];
+    const depResults: { spec: string; path: string; result: CodegenResult; exportSet: Set<string>; dependencyPaths: string[] }[] = [];
 
     for (const spec of specs) {
       const depPath = resolved.get(spec)!;
@@ -119,6 +127,7 @@ export function compileFile(
         path: depPath,
         result: depOut.codegenResult,
         exportSet: depExportSet,
+        dependencyPaths: depOut.dependencyPaths,
       });
     }
 
@@ -152,9 +161,14 @@ export function compileFile(
       ? bundleCodegenResults(mainResult, depResults.map((d) => d.result))
       : mainResult;
 
-    cache.set(filePath, { program, exports: tc.exports, codegenResult: bundled });
+    const dependencyPaths = [filePath, ...depResults.flatMap((d) => d.dependencyPaths)];
+    cache.set(filePath, { program, exports: tc.exports, codegenResult: bundled, dependencyPaths });
     visited.delete(filePath);
-    return { ok: true, program, exports: tc.exports, codegenResult: bundled };
+    const durationMs = Math.round(performance.now() - compileStart);
+    if (!stalePaths || stalePaths.has(filePath)) {
+      onCompilingFile?.(filePath, durationMs);
+    }
+    return { ok: true, program, exports: tc.exports, codegenResult: bundled, dependencyPaths };
   }
 
   const out = compileOne(absPath);
@@ -170,5 +184,5 @@ export function compileFile(
     out.codegenResult.adts
   );
 
-  return { ok: true, kbc };
+  return { ok: true, kbc, dependencyPaths: out.dependencyPaths };
 }
