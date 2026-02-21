@@ -468,6 +468,25 @@ function makeEmitExpr(
           emitCall(0xFFFFFF02, 1);
           break;
         }
+        if (expr.callee.name === '__json_parse' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF05, 1);
+          break;
+        }
+        if (expr.callee.name === '__json_stringify' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF06, 1);
+          break;
+        }
+        if (expr.callee.name === '__read_file_async' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF07, 1);
+          break;
+        }
+        if (expr.callee.name === '__now_ms' && expr.args.length === 0) {
+          emitCall(0xFFFFFF08, 0);
+          break;
+        }
 
         // Built-in ADT constructors: Some(x), Ok(x), Err(e), Null(), Bool(x), Int(x), etc.
         if (adts != null) {

@@ -105,6 +105,27 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     params: [{ kind: 'app', name: 'List', args: [{ kind: 'tuple', elements: [tString, valueType] }] }],
     return: valueType,
   }, new Set()));
+  // JSON primitives (stdlib kestrel:json calls these)
+  env.set('__json_parse', generalize({
+    kind: 'arrow',
+    params: [tString],
+    return: valueType,
+  }, new Set()));
+  env.set('__json_stringify', generalize({
+    kind: 'arrow',
+    params: [valueType],
+    return: tString,
+  }, new Set()));
+  env.set('__read_file_async', generalize({
+    kind: 'arrow',
+    params: [tString],
+    return: { kind: 'app', name: 'Task', args: [tString] },
+  }, new Set()));
+  env.set('__now_ms', generalize({
+    kind: 'arrow',
+    params: [],
+    return: tInt,
+  }, new Set()));
 
   function apply(t: InternalType): InternalType {
     return applySubst(t, subst);

@@ -205,7 +205,7 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
                 pc += 8;
 
                 // Check for primitive functions (0xFFFFFF00 range)
-                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF04 and sp >= arity) {
+                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF08 and sp >= arity) {
                     if (fn_id == 0xFFFFFF00 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, false);
@@ -263,6 +263,28 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
                         @memcpy(obj[8..][0..slice_a.len], slice_a);
                         @memcpy(obj[8 + slice_a.len ..][0..slice_b.len], slice_b);
                         stack[sp] = Value.ptr(@intFromPtr(obj.ptr));
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF05 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.jsonParse(&gc, arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF06 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.jsonStringify(&gc, arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF07 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.readFileAsync(&gc, arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF08 and arity == 0) {
+                        stack[sp] = primitives.nowMs();
                         sp += 1;
                         continue;
                     }
