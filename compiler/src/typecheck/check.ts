@@ -588,6 +588,17 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const t = apply(inferExpr(node.value));
         // Var bindings not generalized
         env.set(node.name, t);
+      } else if (node.kind === 'ValDecl') {
+        const valueT = inferExpr(node.value);
+        if (node.type) unify(valueT, astTypeToInternal(node.type), subst);
+        const t = apply(valueT);
+        const scheme = generalize(t, envFreeVars());
+        env.set(node.name, scheme);
+      } else if (node.kind === 'VarDecl') {
+        const valueT = inferExpr(node.value);
+        if (node.type) unify(valueT, astTypeToInternal(node.type), subst);
+        const t = apply(valueT);
+        env.set(node.name, t);
       } else if (node.kind === 'ExprStmt') {
         inferExpr(node.expr);
       } else if (node.kind === 'AssignStmt') {
@@ -617,7 +628,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       if ('kind' in node && node !== null) {
         const n2 = node as { kind: string; [k: string]: unknown };
         if (n2.kind === 'Program' && Array.isArray(n2.body)) n2.body.forEach(resolveNode);
-        if (n2.kind === 'ValStmt' || n2.kind === 'VarStmt') { resolveNode(n2.value); }
+        if (n2.kind === 'ValStmt' || n2.kind === 'VarStmt' || n2.kind === 'ValDecl' || n2.kind === 'VarDecl') { resolveNode(n2.value); }
         if (n2.kind === 'ExprStmt') { resolveNode(n2.expr); }
         if (n2.kind === 'FunDecl') resolveNode(n2.body);
         if (n2.kind === 'BlockExpr') {
@@ -639,7 +650,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
 
     const exports = new Map<string, InternalType>();
     for (const node of program.body) {
-      if (node.kind === 'FunDecl') {
+      if (node.kind === 'FunDecl' || node.kind === 'ValDecl' || node.kind === 'VarDecl') {
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));
       }

@@ -201,7 +201,31 @@ class Parser {
       const type = this.parseType();
       return { kind: 'TypeDecl', name, type };
     }
-    throw new ParseError('Expected fun, type, or export exception', this.current().span.start, this.current().span.line, this.current().span.column);
+    if (this.at('keyword', 'val')) {
+      this.advance();
+      const name = this.expect('ident').value!;
+      let type: Type | undefined;
+      if (this.at('colon')) {
+        this.advance();
+        type = this.parseType();
+      }
+      this.expect('op', '=');
+      const value = this.parseExpr();
+      return { kind: 'ValDecl', name, type, value };
+    }
+    if (this.at('keyword', 'var')) {
+      this.advance();
+      const name = this.expect('ident').value!;
+      let type: Type | undefined;
+      if (this.at('colon')) {
+        this.advance();
+        type = this.parseType();
+      }
+      this.expect('op', '=');
+      const value = this.parseExpr();
+      return { kind: 'VarDecl', name, type, value };
+    }
+    throw new ParseError('Expected fun, type, export exception, val, or var', this.current().span.start, this.current().span.line, this.current().span.column);
   }
 
   private parseFunDecl(): import('../ast/nodes.js').FunDecl {

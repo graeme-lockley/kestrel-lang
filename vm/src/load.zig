@@ -35,6 +35,8 @@ pub const Module = struct {
     import_specifiers: []const []const u8,
     /// Imported function table (03 §6.6); fn_id in [function_count, function_count + len) uses this.
     imported_functions: []const ImportedFnEntry,
+    /// Module global slots (export var); init's STORE_LOCAL writes here; LOAD_GLOBAL reads. Caller must free.
+    globals: []Value,
 };
 
 fn align4(n: usize) usize {
@@ -182,11 +184,17 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
     var functions: []const FnEntry = &[_]FnEntry{};
     var import_specifiers: []const []const u8 = &[_][]const u8{};
     var imported_functions: []const ImportedFnEntry = &[_]ImportedFnEntry{};
-    if (s2_start + 4 <= data.len) {
-        const fn_count = std.mem.readInt(u32, data[s2_start..][0..4], .little);
+    var globals: []Value = &[_]Value{};
+    if (s2_start + 8 <= data.len) {
+        const n_globals = std.mem.readInt(u32, data[s2_start..][0..4], .little);
+        const fn_count = std.mem.readInt(u32, data[s2_start + 4 ..][0..4], .little);
+        if (n_globals > 0) {
+            globals = try allocator.alloc(Value, n_globals);
+            for (globals) |*v| v.* = Value.unit();
+        }
         const fns = try allocator.alloc(FnEntry, fn_count);
         errdefer allocator.free(fns);
-        var o: usize = s2_start + 4;
+        var o: usize = s2_start + 8; // after n_globals and fn_count
         for (fns) |*e| {
             if (o + 24 > data.len) return error.InvalidKbc;
             _ = std.mem.readInt(u32, data[o..][0..4], .little); // name_index
@@ -273,6 +281,7 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
         .string_slices = string_slices,
         .import_specifiers = import_specifiers,
         .imported_functions = imported_functions,
+        .globals = globals,
     };
 }
 
@@ -290,6 +299,7 @@ pub fn freeModule(allocator: std.mem.Allocator, m: *const Module) void {
         allocator.free(m.import_specifiers);
     }
     if (m.imported_functions.len > 0) allocator.free(m.imported_functions);
+    if (m.globals.len > 0) allocator.free(m.globals);
 }
 
 test "load minimal kbc" {
@@ -305,6 +315,7 @@ test "load minimal kbc" {
     if (m.shapes.len > 0) a.free(m.shapes);
     if (m.import_specifiers.len > 0) a.free(m.import_specifiers);
     if (m.imported_functions.len > 0) a.free(m.imported_functions);
+    if (m.globals.len > 0) a.free(m.globals);
     try std.testing.expect(m.code.len >= 1);
     try std.testing.expect(m.code[0] == 0x11);
 }

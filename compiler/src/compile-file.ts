@@ -39,11 +39,11 @@ function getDistinctSpecifiers(program: Program): string[] {
   return specs;
 }
 
-/** Export set: names we consider exported (top-level FunDecl). */
+/** Export set: names we consider exported (top-level FunDecl, ValDecl, VarDecl). */
 function getExportSet(program: Program): Set<string> {
   const names = new Set<string>();
   for (const node of program.body) {
-    if (node.kind === 'FunDecl') names.add(node.name);
+    if (node.kind === 'FunDecl' || node.kind === 'ValDecl' || node.kind === 'VarDecl') names.add(node.name);
   }
   return names;
 }
@@ -139,7 +139,8 @@ export function compileFile(
             const exportSet = new Set(typesExports.keys());
             const nameToExport = new Map<string, { function_index: number; arity: number; type: InternalType }>();
             for (const [name, exp] of typesExports) {
-              if (exp.kind === 'function') nameToExport.set(name, { function_index: exp.function_index, arity: exp.arity, type: exp.type });
+              if (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var')
+                nameToExport.set(name, { function_index: exp.function_index, arity: exp.arity, type: exp.type });
             }
             for (const imp of program.imports) {
               if (imp.spec !== spec) continue;
@@ -149,7 +150,7 @@ export function compileFile(
                 if (exp == null) {
                   return { ok: false, errors: [`Module ${spec} does not export ${externalName}`] };
                 }
-                if (exp.kind === 'function') importBindings.set(localName, exp.type);
+                if (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var') importBindings.set(localName, exp.type);
               }
             }
             depResults.push({ spec, path: depPath, exportSet, nameToExport, fromTypesFile: true });
@@ -242,14 +243,27 @@ export function compileFile(
         mainResult.importSpecifierIndices,
         mainResult.importedFunctionTable ?? [],
         mainResult.shapes,
-        mainResult.adts
+        mainResult.adts,
+        mainResult.nGlobals ?? 0
       );
       writeFileSync(paths.kbc, kbcBytes);
-      const typeExports = new Map<string, { function_index: number; arity: number; type: InternalType }>();
+      const exportKind = new Map<string, 'function' | 'val' | 'var'>();
+      for (const node of program.body) {
+        if (node.kind === 'FunDecl') exportKind.set(node.name, 'function');
+        if (node.kind === 'ValDecl') exportKind.set(node.name, 'val');
+        if (node.kind === 'VarDecl') exportKind.set(node.name, 'var');
+      }
+      const typeExports = new Map<string, { kind: 'function' | 'val' | 'var'; function_index: number; arity: number; type: InternalType }>();
       for (let i = 0; i < mainResult.functionTable.length; i++) {
         const name = mainResult.stringTable[mainResult.functionTable[i]!.nameIndex];
         const t = tc.exports.get(name);
-        if (name && t) typeExports.set(name, { function_index: i, arity: mainResult.functionTable[i]!.arity, type: t });
+        if (name && t)
+          typeExports.set(name, {
+            kind: exportKind.get(name) ?? 'function',
+            function_index: i,
+            arity: mainResult.functionTable[i]!.arity,
+            type: t,
+          });
       }
       writeTypesFile(paths.kti, typeExports);
     }
@@ -300,7 +314,8 @@ export function compileFile(
     out.codegenResult.importSpecifierIndices,
     out.codegenResult.importedFunctionTable ?? [],
     out.codegenResult.shapes,
-    out.codegenResult.adts
+    out.codegenResult.adts,
+    out.codegenResult.nGlobals ?? 0
   );
 
   return { ok: true, kbc, dependencyPaths: out.dependencyPaths };

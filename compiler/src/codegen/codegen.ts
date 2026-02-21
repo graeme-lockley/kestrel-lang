@@ -3,9 +3,35 @@
  * Covers: module initializer, top-level val/var, fun decls, literals, locals, calls.
  */
 import type { Program, Expr, TopLevelStmt } from '../ast/nodes.js';
-import type { FunDecl } from '../ast/nodes.js';
+import type { FunDecl, ValDecl, VarDecl } from '../ast/nodes.js';
 import type { ConstantEntry } from '../bytecode/constants.js';
 import { ConstTag } from '../bytecode/constants.js';
+
+/** If expr is a literal, return the constant entry for it; else null (export val/var must be constant). */
+function literalToConstant(expr: Expr, stringIndex: (s: string) => number): ConstantEntry | null {
+  if (expr.kind !== 'LiteralExpr') return null;
+  switch (expr.literal) {
+    case 'int':
+      return { tag: ConstTag.Int, value: parseInt(expr.value, 10) };
+    case 'float':
+      return { tag: ConstTag.Float, value: parseFloat(expr.value) };
+    case 'string':
+      return { tag: ConstTag.String, stringIndex: stringIndex(expr.value) };
+    case 'char': {
+      const ch = expr.value.length >= 2 ? expr.value.slice(1, -1) : expr.value;
+      const codePoint = ch.startsWith('\\u') ? parseInt(ch.slice(2), 16) : ch.codePointAt(0) ?? 0;
+      return { tag: ConstTag.Char, value: codePoint };
+    }
+    case 'true':
+      return { tag: ConstTag.True };
+    case 'false':
+      return { tag: ConstTag.False };
+    case 'unit':
+      return { tag: ConstTag.Unit };
+    default:
+      return { tag: ConstTag.Unit };
+  }
+}
 import { getInferredType } from '../typecheck/check.js';
 import type { ImportedFunctionEntry } from '../bytecode/write.js';
 import {
@@ -17,6 +43,7 @@ import {
   emitStoreLocal,
   emitRet,
   emitLoadLocal,
+  emitLoadGlobal,
   emitCall,
   emitAllocRecord,
   emitGetField,
@@ -147,6 +174,8 @@ export interface CodegenResult {
   importedFunctionTable?: ImportedFunctionEntry[];
   shapes: ShapeEntry[];
   adts: AdtEntry[];
+  /** Number of module global slots (init's locals); 0 if none. Used for export var. */
+  nGlobals?: number;
 }
 
 /** Context for codegen: string table, constant pool, and helpers. */
@@ -250,9 +279,17 @@ function makeEmitExpr(
         }
       }
       const slot = env.get(expr.name);
-      if (slot === undefined) throw new Error(`Codegen: unknown variable ${expr.name}`);
-      emitLoadLocal(slot);
-      break;
+      if (slot !== undefined) {
+        emitLoadLocal(slot);
+        break;
+      }
+      // Imported value (export val/var) is a 0-arity function; call it to get the value
+      const fnId = funNameToId?.get(expr.name);
+      if (fnId !== undefined) {
+        emitCall(fnId, 0);
+        break;
+      }
+      throw new Error(`Codegen: unknown variable ${expr.name}`);
     }
     case 'BinaryExpr': {
       if (expr.op === '&') {
@@ -701,7 +738,7 @@ export interface CodegenOptions {
 /** Generate bytecode for program. */
 export function codegen(program: Program, options?: CodegenOptions): CodegenResult {
   const ctx = makeCodegenContext();
-  const { stringTable, constantPool, stringIndex } = ctx;
+  const { stringTable, constantPool, stringIndex, addConstant } = ctx;
   const emitExpr = makeEmitExpr(ctx.stringIndex, ctx.addConstant);
 
   codeStart();
@@ -755,15 +792,21 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   }
 
   const funDecls = program.body.filter((n): n is FunDecl => n.kind === 'FunDecl');
+  const valOrVarDecls = program.body.filter(
+    (n): n is ValDecl | VarDecl => n.kind === 'ValDecl' || n.kind === 'VarDecl'
+  );
   const funNameToId = new Map<string, number>();
   // Add imported function IDs first (for cross-module calls)
   if (options?.importedFuncIds) {
     for (const [name, id] of options.importedFuncIds) funNameToId.set(name, id);
   }
-  // Function IDs: 0xFFFFFF00/01 = print/println; 0..n-1 = our functions
+  // Function IDs: 0xFFFFFF00/01 = print/println; 0..n-1 = our functions (then getters for val/var)
   for (let i = 0; i < funDecls.length; i++) {
     funNameToId.set(funDecls[i]!.name, i);
     stringIndex(funDecls[i]!.name); // ensure name is in string table
+  }
+  for (const d of valOrVarDecls) {
+    stringIndex(d.name);
   }
 
   const stmts = program.body.filter((n): n is TopLevelStmt =>
@@ -771,16 +814,29 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   );
   const env = new Map<string, number>();
 
-  for (const stmt of stmts) {
-    if (stmt.kind === 'ValStmt' || stmt.kind === 'VarStmt') {
+  for (const node of program.body) {
+    if (node.kind === 'ValStmt' || node.kind === 'VarStmt') {
+      const stmt = node;
       emitExpr(stmt.value, env, funNameToId, shapes, adts);
       const slot = env.size;
       env.set(stmt.name, slot);
       emitStoreLocal(slot);
-    } else if (stmt.kind === 'ExprStmt') {
+    } else if (node.kind === 'ValDecl') {
+      // Exported val: getter is LOAD_CONST + RET below; skip init
+      continue;
+    } else if (node.kind === 'VarDecl') {
+      // Exported var: init stores to module global slot so assignment works; getter uses LOAD_GLOBAL
+      const decl = node;
+      emitExpr(decl.value, env, funNameToId, shapes, adts);
+      const slot = env.size;
+      env.set(decl.name, slot);
+      emitStoreLocal(slot);
+    } else if (node.kind === 'ExprStmt') {
+      const stmt = node;
       emitExpr(stmt.expr, env, funNameToId, shapes, adts);
       // Expression result is left on stack and will be discarded
-    } else {
+    } else if (node.kind === 'AssignStmt') {
+      const stmt = node;
       const target = stmt.target;
       if (target.kind === 'FieldExpr') {
         const objType = getInferredType(target.object);
@@ -809,6 +865,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
         }
       }
     }
+    // Skip FunDecl, TypeDecl, ExceptionDecl, ExportDecl (handled elsewhere)
   }
 
   emitRet();
@@ -834,6 +891,35 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     codeOffsetSoFar += fnCode.length;
   }
 
+  const nGlobals = env.size;
+
+  // Export val/var as 0-arity getters: val = LOAD_CONST + RET, var = LOAD_GLOBAL slot + RET
+  for (const decl of valOrVarDecls) {
+    if (decl.kind === 'ValDecl') {
+      const c = literalToConstant(decl.value, stringIndex);
+      if (c == null) throw new Error(`Codegen: export val requires constant initializer: ${decl.name}`);
+      const constIdx = addConstant(c);
+      codeStart();
+      emitLoadConst(constIdx);
+      emitRet();
+    } else {
+      const slot = env.get(decl.name);
+      if (slot === undefined) throw new Error(`Codegen: export var slot missing: ${decl.name}`);
+      codeStart();
+      emitLoadGlobal(slot);
+      emitRet();
+    }
+    const fnCode = codeSlice();
+    functionTable.push({
+      nameIndex: stringIndex(decl.name),
+      arity: 0,
+      codeOffset: codeOffsetSoFar,
+    });
+    funNameToId.set(decl.name, functionTable.length - 1);
+    codeChunks.push(fnCode);
+    codeOffsetSoFar += fnCode.length;
+  }
+
   const totalCodeLen = codeChunks.reduce((s, c) => s + c.length, 0);
   const code = new Uint8Array(totalCodeLen);
   let off = 0;
@@ -850,5 +936,6 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     importSpecifierIndices,
     shapes,
     adts,
+    nGlobals: nGlobals > 0 ? nGlobals : undefined,
   };
 }

@@ -160,6 +160,8 @@ function deserializeType(raw: unknown, schemeVars?: InternalType[]): InternalTyp
   return { kind: 'prim', name: 'Unit' };
 }
 
+export type TypesFileExportKind = 'function' | 'val' | 'var';
+
 export interface TypesFileFunctionExport {
   kind: 'function';
   function_index: number;
@@ -167,32 +169,58 @@ export interface TypesFileFunctionExport {
   type: SerType;
 }
 
+export interface TypesFileValExport {
+  kind: 'val';
+  function_index: number;
+  type: SerType;
+}
+
+export interface TypesFileVarExport {
+  kind: 'var';
+  function_index: number;
+  type: SerType;
+}
+
+export type TypesFileExportEntry = TypesFileFunctionExport | TypesFileValExport | TypesFileVarExport;
+
 export interface TypesFileExport {
-  functions: Record<string, TypesFileFunctionExport>;
+  functions: Record<string, TypesFileExportEntry>;
 }
 
 export interface ResolvedTypesFileExport {
-  kind: 'function';
+  kind: TypesFileExportKind;
   function_index: number;
   arity: number;
   type: InternalType;
 }
 
+export type TypesFileExportInput = {
+  kind?: TypesFileExportKind;
+  function_index: number;
+  arity?: number;
+  type: InternalType;
+};
+
 /**
- * Write a types file for a package. Call after codegen; exports should be name -> { function_index, arity, type }.
+ * Write a types file for a package. Call after codegen; exports include kind ('function' | 'val' | 'var').
  */
-export function writeTypesFile(
-  path: string,
-  exports: Map<string, { function_index: number; arity: number; type: InternalType }>
-): void {
-  const functions: Record<string, TypesFileFunctionExport> = {};
+export function writeTypesFile(path: string, exports: Map<string, TypesFileExportInput>): void {
+  const functions: Record<string, TypesFileExportEntry> = {};
   for (const [name, exp] of exports) {
-    functions[name] = {
-      kind: 'function',
-      function_index: exp.function_index,
-      arity: exp.arity,
-      type: serializeType(exp.type),
-    };
+    const serType = serializeType(exp.type);
+    const kind = exp.kind ?? 'function';
+    if (kind === 'val') {
+      functions[name] = { kind: 'val', function_index: exp.function_index, type: serType };
+    } else if (kind === 'var') {
+      functions[name] = { kind: 'var', function_index: exp.function_index, type: serType };
+    } else {
+      functions[name] = {
+        kind: 'function',
+        function_index: exp.function_index,
+        arity: exp.arity ?? 0,
+        type: serType,
+      };
+    }
   }
   const payload: TypesFileExport = { functions };
   const content = JSON.stringify({ version: KTI_VERSION, ...payload }, null, 0);
@@ -202,21 +230,23 @@ export function writeTypesFile(
 /**
  * Read a types file and return export set for use as import bindings.
  * Returns map: local name (when used as import) -> { kind, function_index, arity, type }.
+ * Val/var have arity 0 (getter).
  */
 export function readTypesFile(path: string): Map<string, ResolvedTypesFileExport> {
   const content = readFileSync(path, 'utf-8');
-  const data = JSON.parse(content) as { version?: number; functions?: Record<string, TypesFileFunctionExport> };
+  const data = JSON.parse(content) as { version?: number; functions?: Record<string, TypesFileExportEntry> };
   if (data.version !== KTI_VERSION) {
     throw new Error(`Types file ${path}: unsupported version ${data.version ?? 'missing'}`);
   }
   const out = new Map<string, ResolvedTypesFileExport>();
   const functions = data.functions ?? {};
   for (const [name, exp] of Object.entries(functions)) {
-    if (exp.kind !== 'function') continue;
+    const kind = exp.kind ?? 'function';
+    const arity = kind === 'function' ? (exp as TypesFileFunctionExport).arity : 0;
     out.set(name, {
-      kind: 'function',
+      kind: kind as TypesFileExportKind,
       function_index: exp.function_index,
-      arity: exp.arity,
+      arity,
       type: deserializeType(exp.type),
     });
   }

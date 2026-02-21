@@ -75,6 +75,7 @@ const THROW: u8 = 0x1A;
 const TRY: u8 = 0x1B;
 const END_TRY: u8 = 0x1C;
 const AWAIT: u8 = 0x1D;
+const LOAD_GLOBAL: u8 = 0x1E;
 
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
@@ -122,6 +123,8 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
     var sp: usize = 0;
     var locals: [max_locals]Value = undefined;
     for (&locals) |*v| v.* = Value.unit();
+    // Init and export-var getters use module.globals; regular functions use saved_locals
+    var current_locals: []Value = if (current_module.globals.len > 0) current_module.globals else locals[0..];
     var call_frames: [max_frames]CallFrame = undefined;
     for (&call_frames) |*f| {
         f.* = .{ .pc = 0, .module = module, .saved_sp = 0, .discard_return = false };
@@ -158,7 +161,7 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
     while (pc < code.len) {
         // Periodic GC check
         if (gc.bytes_allocated >= gc.next_gc) {
-            gc.collect(stack[0..sp], locals[0..max_locals]);
+            gc.collect(stack[0..sp], current_locals);
         }
 
         const op = code[pc];
@@ -175,17 +178,25 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
             LOAD_LOCAL => {
                 const idx = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
-                if (idx < max_locals) {
-                    stack[sp] = locals[idx];
+                if (idx < current_locals.len) {
+                    stack[sp] = current_locals[idx];
+                    sp += 1;
+                }
+            },
+            LOAD_GLOBAL => {
+                const idx = std.mem.readInt(u32, code[pc..][0..4], .little);
+                pc += 4;
+                if (idx < current_module.globals.len) {
+                    stack[sp] = current_module.globals[idx];
                     sp += 1;
                 }
             },
             STORE_LOCAL => {
                 const idx = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
-                if (sp > 0 and idx < max_locals) {
+                if (sp > 0 and idx < current_locals.len) {
                     sp -= 1;
-                    locals[idx] = stack[sp];
+                    current_locals[idx] = stack[sp];
                 }
             },
             CALL => {
@@ -279,24 +290,30 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
                     // When a package is first loaded, run its module initializer (top-level code at offset 0) before calling into it.
                     if (!already_loaded) {
                         call_frames[frame_sp] = .{ .pc = pc - 9, .module = current_module, .saved_sp = sp, .discard_return = true };
-                        for (saved_locals[frame_sp][0..max_locals], locals) |*s, l| s.* = l;
+                        for (0..max_locals) |i| {
+                            saved_locals[frame_sp][i] = if (i < current_locals.len) current_locals[i] else Value.unit();
+                        }
                         frame_sp += 1;
                         current_module = dep_module;
                         code = current_module.code;
                         constants = current_module.constants;
                         functions = current_module.functions;
                         shapes = current_module.shapes;
+                        current_locals = if (dep_module.globals.len > 0) dep_module.globals else saved_locals[frame_sp][0..];
                         pc = 0;
                         continue;
                     }
                     if (imp_entry.function_index >= dep_module.functions.len) continue;
                     const target_entry = dep_module.functions[imp_entry.function_index];
                     call_frames[frame_sp] = .{ .pc = pc, .module = current_module, .saved_sp = sp - arity };
-                    for (saved_locals[frame_sp][0..max_locals], locals) |*s, l| s.* = l;
+                    for (0..max_locals) |i| {
+                        saved_locals[frame_sp][i] = if (i < current_locals.len) current_locals[i] else Value.unit();
+                    }
                     frame_sp += 1;
+                    current_locals = saved_locals[frame_sp][0..];
                     var i: usize = 0;
                     while (i < arity) : (i += 1) {
-                        locals[i] = stack[sp - arity + i];
+                        current_locals[i] = stack[sp - arity + i];
                     }
                     sp -= arity;
                     current_module = dep_module;
@@ -313,11 +330,14 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
                 const entry = functions[fn_id];
                 if (sp < arity) continue;
                 call_frames[frame_sp] = .{ .pc = pc, .module = current_module, .saved_sp = sp - arity };
-                for (saved_locals[frame_sp][0..max_locals], locals) |*s, l| s.* = l;
+                for (0..max_locals) |i| {
+                    saved_locals[frame_sp][i] = if (i < current_locals.len) current_locals[i] else Value.unit();
+                }
                 frame_sp += 1;
+                current_locals = saved_locals[frame_sp][0..];
                 var i: usize = 0;
                 while (i < arity) : (i += 1) {
-                    locals[i] = stack[sp - arity + i];
+                    current_locals[i] = stack[sp - arity + i];
                 }
                 sp -= arity;
                 pc = entry.code_offset;
@@ -568,7 +588,7 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
                 constants = current_module.constants;
                 functions = current_module.functions;
                 shapes = current_module.shapes;
-                for (locals[0..max_locals], saved_locals[frame_sp]) |*l, s| l.* = s;
+                current_locals = saved_locals[frame_sp][0..];
                 pc = frame.pc;
                 sp = frame.saved_sp;
                 if (!frame.discard_return) {

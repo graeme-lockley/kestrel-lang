@@ -77,6 +77,7 @@ export interface ImportedFunctionEntry {
 }
 
 function sizeSection2(
+  nGlobals: number,
   functionTable: { nameIndex: number; arity: number; codeOffset: number }[],
   importSpecifierIndices: number[],
   importedFunctionTable: ImportedFunctionEntry[] = []
@@ -90,6 +91,7 @@ function sizeSection2(
   const importCount = importSpecifierIndices.length;
   const importedFnCount = importedFunctionTable.length;
   return (
+    4 + // n_globals
     4 +
     fnCount * 24 +
     4 +
@@ -108,12 +110,15 @@ function sizeSection2(
 function writeSection2(
   buf: ArrayBuffer,
   offset: number,
+  nGlobals: number,
   functionTable: { nameIndex: number; arity: number; codeOffset: number }[],
   importSpecifierIndices: number[],
   importedFunctionTable: ImportedFunctionEntry[] = []
 ): void {
   const dv = new DataView(buf);
   let o = offset;
+  writeU32(dv, o, nGlobals);
+  o += 4;
   writeU32(dv, o, functionTable.length);
   o += 4;
   for (const fn of functionTable) {
@@ -227,11 +232,12 @@ export function writeKbc(
   importSpecifierIndices: number[] = [],
   importedFunctionTable: ImportedFunctionEntry[] = [],
   shapes: { nameIndices: number[] }[] = [],
-  adts: { nameIndex: number; constructors: { nameIndex: number; payloadTypeIndex: number }[] }[] = []
+  adts: { nameIndex: number; constructors: { nameIndex: number; payloadTypeIndex: number }[] }[] = [],
+  nGlobals: number = 0
 ): Uint8Array {
   const section0Len = sizeStringTable(stringTable);
   const section1Len = sizeConstantPool(constantPool);
-  const section2Len = sizeSection2(functionTable, importSpecifierIndices, importedFunctionTable);
+  const section2Len = sizeSection2(nGlobals, functionTable, importSpecifierIndices, importedFunctionTable);
   const section3Len = align4(code.length); // Code section padded per spec 03 §1 (4-byte alignment)
   const section4Len = 8;  // debug: file_count=0, entry_count=0
   const section5Len = sizeSection5(shapes);
@@ -262,7 +268,7 @@ export function writeKbc(
 
   writeStringTable(buf, section0Start, stringTable);
   writeConstantPool(buf, section1Start, constantPool);
-  writeSection2(buf, section2Start, functionTable, importSpecifierIndices, importedFunctionTable);
+  writeSection2(buf, section2Start, nGlobals, functionTable, importSpecifierIndices, importedFunctionTable);
   new Uint8Array(buf, section3Start, code.length).set(code);
   writeU32(dv, section4Start, 0);
   writeU32(dv, section4Start + 4, 0);
@@ -276,7 +282,7 @@ export function writeKbc(
 export function writeMinimalKbc(): Uint8Array {
   const section0Len = 4;
   const section1Len = 4;
-  const section2Len = 20;
+  const section2Len = 4 + 20; // n_globals + rest
   const codeLen = 1;
   const codeSectionLen = align4(codeLen);
   const section4Len = 8;
@@ -330,11 +336,12 @@ export function writeMinimalKbc(): Uint8Array {
   writeU32(dv, o, 0);
 
   o = section2Start;
-  writeU32(dv, o, 0);
-  writeU32(dv, o + 4, 0);
+  writeU32(dv, o, 0); // n_globals
+  writeU32(dv, o + 4, 0); // function_count
   writeU32(dv, o + 8, 0);
   writeU32(dv, o + 12, 0);
   writeU32(dv, o + 16, 0);
+  writeU32(dv, o + 20, 0);
 
   o = section3StartAligned;
   new Uint8Array(buf, o, 1)[0] = RET;

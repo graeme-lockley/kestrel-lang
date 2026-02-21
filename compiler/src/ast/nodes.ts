@@ -32,7 +32,21 @@ export interface SideEffectImport extends NodeBase {
   spec: string;
 }
 
-export type TopLevelDecl = FunDecl | TypeDecl | ExceptionDecl | ExportDecl;
+export type TopLevelDecl = FunDecl | TypeDecl | ExceptionDecl | ExportDecl | ValDecl | VarDecl;
+
+export interface ValDecl extends NodeBase {
+  kind: 'ValDecl';
+  name: string;
+  type?: Type;
+  value: Expr;
+}
+
+export interface VarDecl extends NodeBase {
+  kind: 'VarDecl';
+  name: string;
+  type?: Type;
+  value: Expr;
+}
 
 export interface ExportDecl extends NodeBase {
   kind: 'ExportDecl';
