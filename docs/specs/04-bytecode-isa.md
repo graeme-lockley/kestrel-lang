@@ -10,7 +10,7 @@ The Kestrel VM is **stack-based**. Instructions operate on an operand stack and 
 
 ## 1. Core Instructions
 
-All jump **offsets** are **byte offsets** (signed or unsigned, see §4) relative to a defined base (e.g. current instruction or start of current function) so that the same .kbc file is interpreted identically by every implementation. All **indices** refer to the tables defined in [03-bytecode-format.md](03-bytecode-format.md) as stated below.
+All jump **offsets** are **byte offsets** (signed or unsigned, see §4) relative to a defined base (e.g. current instruction or start of current function) so that the same .kbc file is interpreted identically by every implementation. All **indices** refer to the tables defined in [03-bytecode-format.md](03-bytecode-format.md) as stated below. References to constants, locals, functions, and types are **by index/offset only**; name-based resolution is not used at load or runtime (03 §0, 07 §9).
 
 ### 1.1 Constants and Locals
 
@@ -56,7 +56,7 @@ Logical `&` and `|` in the language are short-circuit; the compiler emits branch
 
 | Instruction | Operands | Effect |
 |-------------|----------|--------|
-| `CALL` | `fn_id` (u32), `arity` (u32) | Pop `arity` arguments (left-to-right: first arg at lowest stack position). Call the function identified by **function table index** `fn_id` (03 §6.1); `fn_id` in [0, function_count). Push return value. Cross-module calls use a linked function index (resolved at load/link time). |
+| `CALL` | `fn_id` (u32), `arity` (u32) | Pop `arity` arguments (left-to-right: first arg at lowest stack position). **Local call:** if `fn_id` in [0, function_count), call the function at that index in **this** module’s function table (03 §6.1). **Cross-package call:** if `fn_id` in [function_count, function_count + imported_function_count), the VM uses the **imported function table** (03 §6.6): entry index `k` = `fn_id` - function_count gives (import_index, function_index); resolve the module for that import (load on first use, 07 §9), then call function at `function_index` in that module’s function table. Push return value. |
 | `RET` | — | Pop the top value as the return value and return to the caller (caller’s frame receives that value). Used for both function exit and module initializer exit (03 §7). |
 
 **Language coverage:** Function application `f(args)`, constructor application (when compiled as call to constructor), pipeline `|>` / `<|` (compiled to calls). **Alias:** `RETURN` may be used as a synonym for `RET`; 03 refers to `RET`.
@@ -120,7 +120,7 @@ The code section (03 §7) contains a sequence of instructions. Every operand tha
 | Operand | Meaning | 03 reference |
 |---------|---------|----------------|
 | `idx` (LOAD_CONST) | Constant pool index | Section 1 (Constant pool); [0, constant_pool_count) |
-| `fn_id` (CALL) | Function table index | Section 2, §6.1 (Function table); [0, function_count). Code address = code section start + function_entry.code_offset. |
+| `fn_id` (CALL) | Local or imported function index | **Local:** [0, function_count) → 03 §6.1 (this module’s function table); code address = code section start + function_entry.code_offset. **Imported:** [function_count, function_count + imported_function_count) → 03 §6.6 (imported function table) yields (import_index, function_index); VM resolves module for import, then calls that function in that module. |
 | `adt_id`, `ctor` (CONSTRUCT) | ADT index and constructor index | Section 6 (ADT table); constructor order = runtime tag. |
 | `shape_id` (ALLOC_RECORD, SPREAD) | Shape table index | Section 5 (Shape table); [0, shape_count) |
 | `slot` (GET_FIELD, SET_FIELD) | Field index within the record’s shape | Shape’s field order (03 §9) |

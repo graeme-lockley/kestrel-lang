@@ -10,9 +10,10 @@ This document specifies the Kestrel module system in enough detail that implemen
 
 ## 1. Definitions
 
-- **Module:** A single compilation unit. One **source file** (e.g. `.ks`) is one module; it compiles to one **.kbc** file (03). The identity of a module for resolution is determined by its **module specifier** (see below).
+- **Module:** A single compilation unit. One **source file** (e.g. `.ks`) is one module. The identity of a module for resolution is determined by its **module specifier** (see below).
+- **Package:** A module compiled into two artifacts: (1) a **binary file** (e.g. `.kbc`, see 03) containing the executable bytecode for that module, and (2) a **types file** (compile-time only) containing all **exported declarations** (function signatures, types, constants, variables) in a format that allows a **referring package to be typechecked without parsing or compiling** the referenced package. The types file does **not** contain bytecode; it **does** contain **offsets** (e.g. function index, constant index) into the package’s binary so that the **calling** package can be compiled with **static offsets** (no name lookup at load or runtime). See §5 and §8.
 - **Module specifier:** The **exact string value** of the STRING token in an import or re-export (the literal in `import ... from "..."` or `export ... from "..."`). No normalisation is applied for the purpose of this spec: the specifier is the character sequence between the quotes after string literal parsing (including escape sequences resolved). Examples: `"./m.ks"`, `"https://example.com/lib.ks"`, `"kestrel:string"`. Two specifiers are **the same** if and only if they are **string-equal** (byte-for-byte or Unicode code point equality, implementation must be consistent).
-- **Resolved artifact:** The result of **resolution**: the concrete module (source file, compiled .kbc, or built-in module) that a specifier maps to. Resolution is the process of mapping a specifier to exactly one artifact (or failing).
+- **Resolved artifact:** The result of **resolution**: the concrete module (source file, compiled binary and types file, or built-in module) that a specifier maps to. Resolution is the process of mapping a specifier to exactly one artifact (or failing).
 - **Public binding (of a module):** A name that another module can import from this module. Defined in §3. A module’s **export set** is the set of names it exports (each name appears at most once after conflict resolution).
 
 ---
@@ -102,7 +103,15 @@ The grammar is in 01 §3.1 (ImportDecl, ImportClause, ImportSpec). The following
 
 ---
 
-## 5. Bytecode Import Table (03)
+## 5. Compilation Artifacts
+
+- Each **package** (one module) is compiled into a single **binary file** (03) and a **types file**. The binary is used at runtime; the types file is used only at compile time.
+- **Types file:** Contains all exported declarations (signatures and types) so that a referring package can **typecheck** without parsing or compiling the dependency. The types file also contains **offsets** (e.g. function table index, constant pool index) for each exported value and function, so that the **calling** package’s compiler can emit **static offsets** (e.g. CALL with a function index, LOAD_CONST with a constant index). No name lookup is required at load or runtime for variables, constants, or functions (03, 04).
+- **Binary file:** Contains only bytecode and tables (03). All references inside the binary are by index/offset (03 §0). The VM and loader do not use names for resolution at runtime.
+
+---
+
+## 6. Bytecode Import Table (03)
 
 - The **import table** (03 §6.5) stores the list of module specifiers that this module imports from. It does **not** store resolved paths, URLs, or any normalised form. It stores the **exact specifier string** as it appeared in the source (the STRING token value).
 - **Content:** For each **distinct** specifier that appears in any import declaration of the current module, the compiler must emit **exactly one** entry in the import table. Each entry is the **string table index** (03 §0) of that specifier string. So: (1) Ensure the specifier string is in the string table; (2) Add one u32 (that string table index) to the import table for each distinct specifier.
@@ -112,7 +121,7 @@ The grammar is in 01 §3.1 (ImportDecl, ImportClause, ImportSpec). The following
 
 ---
 
-## 6. Lockfile
+## 7. Lockfile
 
 - **File name and location:** `kestrel.lock` in the **project root**, or in an implementation-defined location (e.g. alongside the main module). The implementation must define how the project root is determined.
 - **Purpose:** When present, the lockfile records enough information to resolve **URL** (and optionally **path**) dependencies **without network access or other non-determinism**. For each specifier that was resolved from a URL (or path), the lockfile typically stores a content hash or a pinned URL/version so that the next resolution uses the same artifact.
@@ -122,21 +131,22 @@ The grammar is in 01 §3.1 (ImportDecl, ImportClause, ImportSpec). The following
 
 ---
 
-## 7. Determinism and Compile-Time Errors
+## 8. Determinism and Compile-Time Errors
 
 - **Determinism:** Given the same **source files**, **project layout**, **lockfile** (if present), and **environment** (e.g. cache directory, network disabled when lockfile present), module resolution and the resulting dependency graph must be **the same**. No implementation may produce different resolved modules or different export sets for the same inputs.
 - **Compile-time errors (summary):** The implementation must report an error and must not produce a valid .kbc in at least the following cases: (1) A named import or re-export references a name that the resolved module does not export. (2) Two exports introduce the same name from different sources (export conflict). (3) Two imports bind the same local name from different specifiers (import name conflict), unless the programmer uses `as` to rename. (4) Module not found (resolution failure). (5) Invalid specifier (if the implementation defines validity). The implementation may report additional errors (e.g. namespace name not UPPER_IDENT, duplicate import of same name from same specifier); see 01 for lexical and grammatical requirements.
 
 ---
 
-## 8. Loading and Linking (Runtime)
+## 9. Loading and Linking (Runtime)
 
-- **Loading:** The VM (or host) loads one or more .kbc files. The process of **finding** which .kbc files to load (e.g. from the import table of the entry module and then recursively) is **implementation-defined** but should use the specifier strings in the import table to resolve dependencies (e.g. by path or by a registry).
-- **Linking:** Cross-module references (e.g. CALL to a function in another module) are resolved at **load time** or **link time**: the compiler emits indices or placeholders that the loader/linker fills in with the actual address or function index of the target module’s export. The exact mechanism (per-module function index space vs global index, etc.) is **implementation-defined**. The module system only requires that (1) the import table in each .kbc accurately lists the specifiers that module depends on, and (2) resolution at runtime (or at link time) is deterministic when the same specifiers and environment are used.
+- **Import vs. load:** An **import** declares a dependency at compile time (used for typechecking and for emitting static references). It does **not** cause the dependency’s binary to be loaded. **Loading** must be deferred until **first use**: the dependency’s binary is loaded only when execution **actually uses** that package (e.g. first call into that module, first access to an exported value). Given a specific execution path, a dependency may never be used and therefore never loaded. This allows optional or conditional use of dependencies and avoids loading and initializing modules that are never needed on that path.
+- **Loading:** The VM (or host) loads a package’s **binary file** when that package is first needed (first use). The process of **finding** which binary to load (e.g. from the import table and the specifier) is **implementation-defined** but should use the specifier strings in the import table to resolve the dependency (e.g. by path or by a registry). The **types file** is not used at runtime; only the binary is loaded.
+- **Linking:** Cross-module references (e.g. CALL to a function in another module) are expressed as **indices or offsets** (03, 04). The calling package’s compiler obtains these from the dependency’s **types file** at compile time and emits static offsets (e.g. function index, constant index). The loader/linker resolves these when the target package’s binary is loaded (e.g. by mapping module + index to actual address or function index). **Name-based lookup** is not used at load or runtime for variables, constants, or functions; all references are by offset/index.
 
 ---
 
-## 9. Implementor Checklist
+## 10. Implementor Checklist
 
 1. **Parse** all ImportDecl and ExportDecl per 01 §3.1; extract the STRING value (specifier) for each.
 2. **Distinct specifiers:** Build the set of distinct specifiers (string equality) from all import declarations.
@@ -145,14 +155,15 @@ The grammar is in 01 §3.1 (ImportDecl, ImportClause, ImportSpec). The following
 5. **Import checks:** For each named import, verify that the requested external name is in the resolved module’s export set; otherwise compile error. For namespace import, ensure the namespace name is UPPER_IDENT and unique.
 6. **Import name conflicts:** Ensure no local name is bound from two different specifiers without explicit rename; report compile error if so.
 7. **Bytecode:** Write the string table so that each distinct specifier string appears at least once; write the import table (03 §6.5) with `import_count` = number of distinct specifiers and one `module_specifier_index` (u32) per distinct specifier, pointing to that string. Do not store resolved paths or normalised URLs in the import table—only the source specifier string.
-8. **Code generation:** When generating code for cross-module calls or references, use the **resolved** module’s export information (e.g. function index, type index) so that the emitted bytecode is valid. The import table is for dependency recording; the actual references are embedded in the code and type table (03).
+8. **Types file:** Emit a types file (07 §5) for this package with exported declarations and **offsets** (function index, constant index, etc.) so that referring packages can typecheck and emit static offsets without parsing this package.
+9. **Code generation:** When generating code for cross-module calls or references, use the **resolved** module’s **types file** (export offsets) so that the emitted bytecode uses static indices (e.g. function index, constant index). No name lookup at load or runtime. Emit the **imported function table** (03 §6.6): for each call to an imported function, add an entry (import_index, function_index from that dependency’s types file); assign such entries consecutive indices starting at function_count so that CALL fn_id with fn_id ≥ function_count resolves via that table. The import table (03 §6.5) records dependency specifiers; the imported function table (03 §6.6) maps CALL indices to (import, function_index).
 
 ---
 
-## 10. Relation to Other Specs
+## 11. Relation to Other Specs
 
 | Spec | Relation |
 |------|----------|
 | **01** | ImportDecl, ExportDecl, TopLevelDecl grammar (01 §3.1). STRING is the specifier. UPPER_IDENT for namespace; IDENT for named import/export. Program order: imports first, then declarations and statements. |
 | **02** | Standard library module names (`kestrel:string`, `kestrel:stack`, `kestrel:http`, `kestrel:json`, `kestrel:fs`) must resolve to modules that satisfy 02. No other spec may use those names for a different contract. |
-| **03** | One .kbc per module. Import table (§6.5): `import_count` and one u32 (string table index) per distinct import specifier; the string is the **exact source specifier**. Exported names appear in function table (§6.1), exported type declarations (§6.4), and ADT table (§10) for exceptions. |
+| **03** | One .kbc (binary) per module; references in bytecode are by offset/index only (03 §0). Import table (§6.5): `import_count` and one u32 (string table index) per distinct import specifier; the string is the **exact source specifier**. Exported names and their offsets appear in the package’s types file (07 §5); function table (§6.1), exported type declarations (§6.4), and ADT table (§10) hold the definitions in the binary. |

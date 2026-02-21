@@ -4,7 +4,20 @@ Version: 1.0
 
 ---
 
-Kestrel compiles to a bytecode file with extension `.kbc`. **One `.kbc` file represents one module** (one compilation unit). This document specifies the exact file layout and section format so that all implementations produce and consume identical binaries.
+Kestrel compiles to a bytecode file with extension `.kbc`. **One `.kbc` file represents one module** (one compilation unit). This document specifies the exact file layout and section format so that all implementations produce and consume identical binaries. A module may have an associated **types file** (07 §5) used at compile time only; the .kbc file is the only artifact used at runtime.
+
+---
+
+## 0. References by Offset; No Name-Based Resolution
+
+All references to **variables**, **constants**, and **functions** in the bytecode are by **index or offset**, not by name. Name-based lookup is slow and must not be used for execution.
+
+- **Constants:** Instructions (e.g. LOAD_CONST, 04 §1.1) refer to the **constant pool** by **index** (§5).
+- **Functions:** The CALL instruction (04 §1.5) takes a single **function index** operand. That index is either **local** ([0, function_count) → this module’s function table §6.1) or **imported** ([function_count, function_count + imported_function_count) → §6.6 imported function table, which yields (import_index, function_index in that module). No package or name is encoded in the instruction; the package is determined by the imported function table (§6.6).
+- **Locals:** LOAD_LOCAL / STORE_LOCAL (04 §1.1) use **slot indices**.
+- **Types, shapes, ADTs:** The type table (§6.2), shape table (§9), and ADT table (§10) are referenced by **type_index**, **shape_index**, and **adt_index**.
+
+**Name tables** (e.g. string table for function names in §6.1 `name_index`) exist for **debugging, reflection, and tooling** only. They must **not** be used for resolving references at load time or at runtime. The VM and loader resolve all references using only indices and offsets from the binary. Cross-module references are obtained at compile time from the dependency’s **types file** (07 §5), which supplies the offsets so the caller emits static indices.
 
 ---
 
@@ -45,9 +58,9 @@ Sections appear in the order listed. Each section starts at the byte offset give
 | 5 | Shape table | **Only** store of record shapes (field names and types); type table references shapes here by index (Record tag). |
 | 6 | ADT table | **Only** store of ADT definitions (type name, constructors, payload types); type table references ADTs here by index (ADT tag). |
 
-Index validity: string table indices in [0, string_table_count); constant pool indices in [0, constant_pool_count); function indices in [0, function_count); type_index in [0, type_count); shape_index (Record tag) in [0, shape_count); adt_index (ADT tag) in [0, adt_count). Each kind of data lives in exactly one section (no duplication).
+Index validity: string table indices in [0, string_table_count); constant pool indices in [0, constant_pool_count); function table indices (local) in [0, function_count); **CALL fn_id** (04) may be in [0, function_count + imported_function_count) — local calls use [0, function_count), cross-package calls use [function_count, function_count + imported_function_count) and resolve via §6.6; type_index in [0, type_count); shape_index (Record tag) in [0, shape_count); adt_index (ADT tag) in [0, adt_count). Each kind of data lives in exactly one section (no duplication).
 
-**Determining module dependencies:** A module’s imports are recorded **only** in the **import table** (§6.5), which is a subsection at the end of section 2 (Function table). There is **no dedicated section** and **no header offset** for dependencies. To obtain the list of modules this file imports from: (1) start at `section_offsets[2]`; (2) parse section 2 in fixed order — 6.1 Function table, 6.2 Type table, 6.4 Exported type declarations, 6.5 Import table — skipping or decoding each subsection until you reach 6.5; (3) read `import_count` (u32) then `import_count` × u32; each u32 is a string table index whose value is the import source (e.g. `"kestrel:string"`). Resolve each index in the string table (section 0) to get the dependency list.
+**Determining module dependencies:** A module’s imports are recorded **only** in the **import table** (§6.5), which is a subsection of section 2. There is **no dedicated section** and **no header offset** for dependencies. To obtain the list of modules this file imports from: (1) start at `section_offsets[2]`; (2) parse section 2 in fixed order — 6.1 Function table, 6.2 Type table, 6.4 Exported type declarations, 6.5 Import table, 6.6 Imported function table — skipping or decoding each subsection until you reach 6.5; (3) read `import_count` (u32) then `import_count` × u32; each u32 is a string table index whose value is the import source (e.g. `"kestrel:string"`). Resolve each index in the string table (section 0) to get the dependency list.
 
 ---
 
@@ -98,7 +111,7 @@ Index validity: string table indices in [0, string_table_count); constant pool i
 
 ## 6. Section 2: Function Table and Type Table
 
-**Purpose:** Holds all module-level metadata: function entries, type table, exported type aliases, and import table. Subsection **layout** order is fixed: 6.1 Function table → 6.2 Type table (offsets + type blob; blob content format is 6.3) → 6.4 Exported type declarations → 6.5 Import table. Each subsection starts at the next 4-byte-aligned offset after the previous one.
+**Purpose:** Holds all module-level metadata: function entries, type table, exported type aliases, import table, and imported function table (for cross-package calls). Subsection **layout** order is fixed: 6.1 Function table → 6.2 Type table (offsets + type blob; blob content format is 6.3) → 6.4 Exported type declarations → 6.5 Import table → 6.6 Imported function table. Each subsection starts at the next 4-byte-aligned offset after the previous one.
 
 **Skip distances (to reach import table without decoding type blob):** Let `S2` = start of section 2 (byte at `section_offsets[2]`). To jump to the start of the import table (6.5):
 
@@ -112,11 +125,11 @@ So: **start of 6.5** = `S2 + 4 + function_count×24 + skip_6_2 + pad + 4 + expor
 ### 6.1 Function table
 
 - `function_count` (u32).
-- Then `function_count` entries, each **24 bytes** (6 × u32), 4-byte aligned:
+- Then `function_count` entries, each **24 bytes** (6 × u32), 4-byte aligned. **Calls and other references use the function table index only;** name lookups are not used for execution (§0).
 
 | Offset in entry | Type | Field | Description |
 |-----------------|------|--------|-------------|
-| 0  | u32 | name_index | String table index of function name |
+| 0  | u32 | name_index | String table index of function name (for debug/reflection only; not used for call resolution) |
 | 4  | u32 | arity | Number of parameters |
 | 8  | u32 | code_offset | Byte offset of first instruction **relative to start of code section** (section 3) |
 | 12 | u32 | flags | Bit 0 = async (1 if async, 0 otherwise); bits 1–31 reserved (0) |
@@ -169,7 +182,7 @@ Only **exported** type aliases are listed. ADT and record definitions are in the
 
 ### 6.5 Import table
 
-**This is the only place in the .kbc file that records the module’s imports.** There is no dedicated section index for dependencies and no dependency offset in the header; the compiler or loader must parse section 2 in order (6.1 → 6.2 → 6.4 → 6.5) to reach this table.
+**This is the only place in the .kbc file that records the module’s imports.** There is no dedicated section index for dependencies and no dependency offset in the header; the compiler or loader must parse section 2 in order (6.1 → 6.2 → 6.4 → 6.5 → 6.6) to reach the import table and the imported function table.
 
 At the next 4-byte-aligned offset after the exported type declarations (6.4):
 
@@ -177,6 +190,19 @@ At the next 4-byte-aligned offset after the exported type declarations (6.4):
 - Then `import_count` × u32: `module_specifier_index` (u32): string table index of the import source string (the literal in `import ... from "..."`; e.g. `"kestrel:string"` or a path).
 
 Order of entries is unspecified. Per-symbol import details (which names are imported from which module) are not stored here; the compiler resolves those at compile time and embeds references (e.g. function index, type index) in the code and type table.
+
+### 6.6 Imported function table (cross-package calls)
+
+**Purpose:** Enables **CALL** (04 §1.5) to target functions in other packages. The CALL instruction’s `fn_id` operand can refer either to a **local** function (index in [0, function_count)) or to an **imported** function (index in [function_count, function_count + imported_function_count)). For an imported call, the VM uses this table to resolve (import_index, function_index in that module).
+
+At the next 4-byte-aligned offset after the import table (6.5):
+
+- `imported_function_count` (u32): number of distinct external call targets this module uses (one entry per (import, function) pair the code calls).
+- Then `imported_function_count` entries, each 8 bytes (2 × u32), 4-byte aligned:
+  - `import_index` (u32): index into this module’s **import table** (6.5); identifies which dependency (0 = first import, 1 = second, etc.). Must be in [0, import_count).
+  - `function_index` (u32): index into the **imported** module’s function table (03 §6.1). Obtained at compile time from that dependency’s **types file** (07 §5).
+
+**CALL resolution:** For **CALL** `fn_id`, `arity`: if `fn_id` < `function_count`, the call is **local** (dispatch to the code_offset of function table entry `fn_id` in this module). If `fn_id` ≥ `function_count`, let `k` = `fn_id` - `function_count`; `k` must be in [0, imported_function_count). The k-th entry in this table gives (`import_index`, `function_index`). The VM resolves the module for that import (loading it on first use per 07 §9), then calls the function at `function_index` in that module’s function table. Thus CALL has a single index space: [0, function_count) = local, [function_count, function_count + imported_function_count) = imported.
 
 ---
 
