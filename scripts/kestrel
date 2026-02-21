@@ -89,8 +89,15 @@ needs_compile_with_deps() {
   local deps="${kbc}.deps"
   if [ -f "$deps" ]; then
     while IFS= read -r dep || [ -n "$dep" ]; do
+      dep="${dep%$'\r'}"
+      dep="${dep#"${dep%%[![:space:]]*}"}"
+      dep="${dep%"${dep##*[![:space:]]}"}"
       [ -z "$dep" ] && continue
-      if [ -f "$dep" ] && [ "$dep" -nt "$kbc" ] 2>/dev/null; then
+      if [ ! -f "$dep" ]; then continue; fi
+      # Use explicit mtime comparison (dep >= kbc) so we recompile when dep is newer or same second
+      dep_mtime=$(stat -f '%m' "$dep" 2>/dev/null || stat -c '%Y' "$dep" 2>/dev/null)
+      kbc_mtime=$(stat -f '%m' "$kbc" 2>/dev/null || stat -c '%Y' "$kbc" 2>/dev/null)
+      if [ -n "$dep_mtime" ] && [ -n "$kbc_mtime" ] && [ "$dep_mtime" -ge "$kbc_mtime" ]; then
         return 0
       fi
     done < "$deps"
@@ -107,9 +114,14 @@ write_stale_file() {
   local stale
   stale=$(mktemp)
   while IFS= read -r dep || [ -n "$dep" ]; do
+    dep="${dep%$'\r'}"
+    dep="${dep#"${dep%%[![:space:]]*}"}"
+    dep="${dep%"${dep##*[![:space:]]}"}"
     [ -z "$dep" ] && continue
-    if [ -f "$dep" ] && [ "$dep" -nt "$kbc" ] 2>/dev/null; then
-      echo "$dep" >> "$stale"
+    if [ -f "$dep" ]; then
+      dep_mtime=$(stat -f '%m' "$dep" 2>/dev/null || stat -c '%Y' "$dep" 2>/dev/null)
+      kbc_mtime=$(stat -f '%m' "$kbc" 2>/dev/null || stat -c '%Y' "$kbc" 2>/dev/null)
+      [ -n "$dep_mtime" ] && [ -n "$kbc_mtime" ] && [ "$dep_mtime" -ge "$kbc_mtime" ] && echo "$dep" >> "$stale"
     fi
   done < "$deps"
   echo "$stale"
@@ -120,6 +132,8 @@ do_compile() {
   local stale_file
   stale_file=$(write_stale_file "$kbc")
   if [ -n "$stale_file" ] && [ -s "$stale_file" ]; then
+    # So the compiler prints "Compiling entry.ks" when only transitive deps were stale
+    echo "$(cd "$(dirname "$ks")" && pwd)/$(basename "$ks")" >> "$stale_file"
     if ! node "$COMPILER_CLI" "$ks" -o "$kbc" --stale-file "$stale_file"; then
       rm -f "$stale_file"
       echo "kestrel: compile failed for $ks" >&2

@@ -175,6 +175,7 @@ export type Expr =
   | TryExpr
   | LambdaExpr
   | PipeExpr
+  | TemplateExpr
   | LiteralExpr
   | IdentExpr
   | CallExpr
@@ -226,6 +227,16 @@ export interface PipeExpr extends NodeBase {
   left: Expr;
   op: '|>' | '<|';
   right: Expr;
+}
+
+/** String with interpolation: parts are literal segments and expressions. */
+export type TemplatePart =
+  | { type: 'literal'; value: string }
+  | { type: 'interp'; expr: Expr };
+
+export interface TemplateExpr extends NodeBase {
+  kind: 'TemplateExpr';
+  parts: TemplatePart[];
 }
 
 export interface LiteralExpr extends NodeBase {

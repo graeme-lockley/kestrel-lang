@@ -3,7 +3,7 @@ const std = @import("std");
 const Value = @import("value.zig").Value;
 
 /// Format a single value to a string (no newline). Caller must have enough buffer.
-fn formatOne(val: Value, out: []u8) []const u8 {
+pub fn formatOne(val: Value, out: []u8) []const u8 {
     return switch (val.tag) {
         .int => std.fmt.bufPrint(out, "{d}", .{Value.intTo(val)}) catch return "<value>",
         .bool => std.fmt.bufPrint(out, "{}", .{val.payload != 0}) catch return "<value>",
@@ -62,4 +62,15 @@ pub fn printInt(n: i64) void {
 
 pub fn writeStdoutString(_: std.mem.Allocator, _: Value) void {
     // TODO: resolve string value (PTR to STRING heap), write UTF-8 to stdout
+}
+
+/// If val is a PTR to a STRING heap object, return the UTF-8 slice; else null.
+pub fn getStringSlice(val: Value) ?[]const u8 {
+    if (val.tag != .ptr) return null;
+    const addr = Value.ptrTo(val);
+    if (addr == 0) return null;
+    const base = @as([*]const u8, @ptrFromInt(addr));
+    if (base[0] != 4) return null; // STRING_KIND
+    const len = std.mem.readInt(u32, base[4..8], .little);
+    return base[8..8+len];
 }

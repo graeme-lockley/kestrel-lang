@@ -8,6 +8,7 @@ import type {
   TopLevelDecl,
   TopLevelStmt,
   Expr,
+  TemplatePart,
   Pattern,
   Type,
   Case,
@@ -15,6 +16,7 @@ import type {
   Param,
   TypeField,
 } from '../ast/nodes.js';
+import { tokenize } from '../lexer/tokenize.js';
 
 export class ParseError extends Error {
   constructor(
@@ -31,6 +33,12 @@ export class ParseError extends Error {
 export function parse(tokens: Token[]): Program {
   const p = new Parser(tokens);
   return p.parseProgram();
+}
+
+/** Parse a single expression from a token array (e.g. for interpolation). */
+export function parseExpression(tokens: Token[]): Expr {
+  const p = new Parser(tokens);
+  return p.parseOneExpr();
 }
 
 class Parser {
@@ -418,6 +426,15 @@ class Parser {
     return this.parsePipeExpr();
   }
 
+  /** Public entry to parse a single expression (used for interpolation). */
+  parseOneExpr(): Expr {
+    return this.parseExpr();
+  }
+
+  atEof(): boolean {
+    return this.at('eof');
+  }
+
   private parsePipeExpr(): Expr {
     let left = this.parseConsExpr();
     while (this.at('op', '|>') || this.at('op', '<|')) {
@@ -630,8 +647,32 @@ class Parser {
       return { kind: 'LiteralExpr', literal: 'float', value };
     }
     if (this.at('string')) {
-      const value = this.advance().value!;
-      return { kind: 'LiteralExpr', literal: 'string', value };
+      const tok = this.advance();
+      const partsRaw = tok.templateParts;
+      if (partsRaw != null && partsRaw.length > 0) {
+        const parts: TemplatePart[] = [];
+        for (const p of partsRaw) {
+          if (p.type === 'literal') {
+            parts.push({ type: 'literal', value: p.value });
+          } else {
+            const subTokens = tokenize(p.source);
+            const subParser = new Parser(subTokens);
+            const expr = subParser.parseOneExpr();
+            if (!subParser.atEof()) {
+              const cur = subParser.current();
+              throw new ParseError(
+                'Expected single expression in interpolation',
+                cur.span.start,
+                cur.span.line,
+                cur.span.column
+              );
+            }
+            parts.push({ type: 'interp', expr });
+          }
+        }
+        return { kind: 'TemplateExpr', parts };
+      }
+      return { kind: 'LiteralExpr', literal: 'string', value: tok.value ?? '' };
     }
     if (this.at('char')) {
       const value = this.advance().value!;

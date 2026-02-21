@@ -7,6 +7,7 @@ import type { FunDecl } from '../ast/nodes.js';
 import type { ConstantEntry } from '../bytecode/constants.js';
 import { ConstTag } from '../bytecode/constants.js';
 import { getInferredType } from '../typecheck/check.js';
+import type { ImportedFunctionEntry } from '../bytecode/write.js';
 import {
   codeStart,
   codeSlice,
@@ -142,6 +143,8 @@ export interface CodegenResult {
   code: Uint8Array;
   functionTable: FunctionEntry[];
   importSpecifierIndices: number[];
+  /** For cross-package CALL; built by compile-file and emitted in section 2 §6.6. */
+  importedFunctionTable?: ImportedFunctionEntry[];
   shapes: ShapeEntry[];
   adts: AdtEntry[];
 }
@@ -219,6 +222,21 @@ function makeEmitExpr(
           break;
         default:
           emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+      }
+      break;
+    }
+    case 'TemplateExpr': {
+      const emptyIdx = addConstant({ tag: ConstTag.String, stringIndex: stringIndex('') });
+      emitLoadConst(emptyIdx);
+      for (const part of expr.parts) {
+        if (part.type === 'literal') {
+          const idx = addConstant({ tag: ConstTag.String, stringIndex: stringIndex(part.value) });
+          emitLoadConst(idx);
+        } else {
+          emitExpr(part.expr, env, funNameToId, shapes, adts);
+          emitCall(0xffffff03, 1); // format value -> string
+        }
+        emitCall(0xffffff04, 2); // concat(top-1, top) -> result
       }
       break;
     }

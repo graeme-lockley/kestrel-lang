@@ -70,10 +70,16 @@ function writeConstantPool(buf: ArrayBuffer, offset: number, constants: Constant
   return o - offset;
 }
 
-/** Section 2: function table, type_count=1, minimal type blob, exported types=0, import table. */
+/** Section 2: function table, type blob, exported types, import table, imported function table (03 §6.6). */
+export interface ImportedFunctionEntry {
+  importIndex: number;
+  functionIndex: number;
+}
+
 function sizeSection2(
   functionTable: { nameIndex: number; arity: number; codeOffset: number }[],
-  importSpecifierIndices: number[]
+  importSpecifierIndices: number[],
+  importedFunctionTable: ImportedFunctionEntry[] = []
 ): number {
   const fnCount = functionTable.length;
   const typeCount = 1;
@@ -82,14 +88,29 @@ function sizeSection2(
   const pad = (4 - (afterTypeBlob % 4)) % 4;
   const exportedCount = 0;
   const importCount = importSpecifierIndices.length;
-  return 4 + fnCount * 24 + 4 + (typeCount + 1) * 4 + typeBlobLen + pad + 4 + exportedCount * 8 + 4 + importCount * 4;
+  const importedFnCount = importedFunctionTable.length;
+  return (
+    4 +
+    fnCount * 24 +
+    4 +
+    (typeCount + 1) * 4 +
+    typeBlobLen +
+    pad +
+    4 +
+    exportedCount * 8 +
+    4 +
+    importCount * 4 +
+    4 +
+    importedFnCount * 8
+  );
 }
 
 function writeSection2(
   buf: ArrayBuffer,
   offset: number,
   functionTable: { nameIndex: number; arity: number; codeOffset: number }[],
-  importSpecifierIndices: number[]
+  importSpecifierIndices: number[],
+  importedFunctionTable: ImportedFunctionEntry[] = []
 ): void {
   const dv = new DataView(buf);
   let o = offset;
@@ -125,6 +146,13 @@ function writeSection2(
   for (const idx of importSpecifierIndices) {
     writeU32(dv, o, idx);
     o += 4;
+  }
+  writeU32(dv, o, importedFunctionTable.length); // imported_function_count (03 §6.6)
+  o += 4;
+  for (const entry of importedFunctionTable) {
+    writeU32(dv, o, entry.importIndex);
+    writeU32(dv, o + 4, entry.functionIndex);
+    o += 8;
   }
 }
 
@@ -197,12 +225,13 @@ export function writeKbc(
   code: Uint8Array,
   functionTable: { nameIndex: number; arity: number; codeOffset: number }[] = [],
   importSpecifierIndices: number[] = [],
+  importedFunctionTable: ImportedFunctionEntry[] = [],
   shapes: { nameIndices: number[] }[] = [],
   adts: { nameIndex: number; constructors: { nameIndex: number; payloadTypeIndex: number }[] }[] = []
 ): Uint8Array {
   const section0Len = sizeStringTable(stringTable);
   const section1Len = sizeConstantPool(constantPool);
-  const section2Len = sizeSection2(functionTable, importSpecifierIndices);
+  const section2Len = sizeSection2(functionTable, importSpecifierIndices, importedFunctionTable);
   const section3Len = align4(code.length); // Code section padded per spec 03 §1 (4-byte alignment)
   const section4Len = 8;  // debug: file_count=0, entry_count=0
   const section5Len = sizeSection5(shapes);
@@ -233,7 +262,7 @@ export function writeKbc(
 
   writeStringTable(buf, section0Start, stringTable);
   writeConstantPool(buf, section1Start, constantPool);
-  writeSection2(buf, section2Start, functionTable, importSpecifierIndices);
+  writeSection2(buf, section2Start, functionTable, importSpecifierIndices, importedFunctionTable);
   new Uint8Array(buf, section3Start, code.length).set(code);
   writeU32(dv, section4Start, 0);
   writeU32(dv, section4Start + 4, 0);

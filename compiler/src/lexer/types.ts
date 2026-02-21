@@ -24,14 +24,21 @@ export type TokenKind =
   | 'newline'
   | 'eof';
 
+/** String literal with interpolation: parts alternate literal segments and expression sources. */
+export type TemplatePart =
+  | { type: 'literal'; value: string }
+  | { type: 'interp'; source: string };
+
 export interface Token {
   kind: TokenKind;
   value?: string;
+  /** Set for string tokens that contain interpolation; then value is the empty string. */
+  templateParts?: TemplatePart[];
   span: Span;
 }
 
 export const KEYWORDS = new Set([
-  'fun', 'type', 'val', 'var', 'mut', 'if', 'else', 'match', 'try', 'catch', 'throw',
+  'as', 'fun', 'type', 'val', 'var', 'mut', 'if', 'else', 'match', 'try', 'catch', 'throw',
   'async', 'await', 'export', 'import', 'from', 'exception', 'is', 'True', 'False',
 ]);
 

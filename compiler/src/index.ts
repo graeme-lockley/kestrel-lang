@@ -24,7 +24,7 @@ export function compile(source: string): { ok: true; ast: import('./parser/index
 /** Emit .kbc from typed AST (codegen + full sections). */
 export function emitKbc(ast: import('./parser/index.js').Program): Uint8Array {
   const { stringTable, constantPool, code, functionTable, importSpecifierIndices, shapes, adts } = codegen(ast);
-  return writeKbc(stringTable, constantPool, code, functionTable, importSpecifierIndices, shapes, adts);
+  return writeKbc(stringTable, constantPool, code, functionTable, importSpecifierIndices, [], shapes, adts);
 }
 
 export { tokenize } from './lexer/index.js';

@@ -48,7 +48,99 @@ function readI32(data: Uint8Array, offset: number): number {
   return u | 0;
 }
 
-function disasm(data: Uint8Array, codeStart: number, codeEnd: number): string[] {
+function readI64(data: Uint8Array, offset: number): bigint {
+  const lo = readU32(data, offset);
+  const hi = readU32(data, offset + 4);
+  return BigInt(lo) | (BigInt(hi) << 32n);
+}
+
+function align4(n: number): number {
+  return (n + 3) & ~3;
+}
+
+/** Parse section 0 (string table) and return array of UTF-8 decoded strings. */
+function parseStringTable(data: Uint8Array, sectionStart: number, sectionEnd: number): string[] {
+  const strings: string[] = [];
+  if (sectionStart + 4 > sectionEnd) return strings;
+  const count = readU32(data, sectionStart);
+  let o = sectionStart + 4;
+  for (let i = 0; i < count && o + 4 <= sectionEnd; i++) {
+    o = align4(o);
+    const len = readU32(data, o);
+    o += 4;
+    if (o + len > sectionEnd) break;
+    strings.push(new TextDecoder().decode(data.subarray(o, o + len)));
+    o += len;
+  }
+  return strings;
+}
+
+/** Parse section 1 (constant pool) and return comment strings for each constant (for LOAD_CONST). */
+function parseConstantPool(data: Uint8Array, sectionStart: number, sectionEnd: number, strings: string[]): string[] {
+  const comments: string[] = [];
+  if (sectionStart + 4 > sectionEnd) return comments;
+  const count = readU32(data, sectionStart);
+  let o = sectionStart + 4;
+  for (let i = 0; i < count && o + 4 <= sectionEnd; i++) {
+    o = align4(o);
+    const entryStart = o;
+    const tag = data[o];
+    o += 4;
+    let payloadLen = 0;
+    let comment = '';
+    switch (tag) {
+      case 0: // Int
+        if (o + 8 <= sectionEnd) {
+          const v = Number(readI64(data, o));
+          comment = String(v);
+        }
+        payloadLen = 8;
+        break;
+      case 1: // Float
+        if (o + 8 <= sectionEnd && data.buffer) {
+          const v = new DataView(data.buffer, data.byteOffset + o, 8).getFloat64(0, true);
+          comment = String(v);
+        }
+        payloadLen = 8;
+        break;
+      case 2:
+        comment = 'false';
+        break;
+      case 3:
+        comment = 'true';
+        break;
+      case 4:
+        comment = '()';
+        break;
+      case 5: // Char
+        if (o + 4 <= sectionEnd) {
+          const cp = readU32(data, o);
+          comment = cp <= 0xffff ? JSON.stringify(String.fromCodePoint(cp)) : `\\u{${cp.toString(16)}}`;
+        }
+        payloadLen = 4;
+        break;
+      case 6: // String
+        if (o + 4 <= sectionEnd) {
+          const idx = readU32(data, o);
+          comment = idx < strings.length ? JSON.stringify(strings[idx]) : '?';
+        }
+        payloadLen = 4;
+        break;
+      default:
+        break;
+    }
+    comments.push(comment);
+    o = align4(entryStart + 4 + payloadLen);
+  }
+  return comments;
+}
+
+function disasm(
+  data: Uint8Array,
+  codeStart: number,
+  codeEnd: number,
+  constantComments: string[] = []
+): string[] {
   const lines: string[] = [];
   let pc = codeStart;
 
@@ -59,13 +151,24 @@ function disasm(data: Uint8Array, codeStart: number, codeEnd: number): string[] 
 
     const name = OP_NAMES[op];
     if (name === undefined) {
+      if (op === 0x00) break;
       lines.push(`  ${String(base).padStart(6)}  ??? 0x${op.toString(16).padStart(2, '0')}`);
       continue;
     }
 
     let operands = '';
+    let constComment = '';
     switch (op) {
       case 0x01: // LOAD_CONST
+        {
+          const idx = readU32(data, pc);
+          operands = ` ${idx}`;
+          if (idx < constantComments.length && constantComments[idx] !== '') {
+            constComment = `  ; ${constantComments[idx]}`;
+          }
+          pc += 4;
+        }
+        break;
       case 0x02: // LOAD_LOCAL
       case 0x03: // STORE_LOCAL
       case 0x16: // ALLOC_RECORD
@@ -106,7 +209,7 @@ function disasm(data: Uint8Array, codeStart: number, codeEnd: number): string[] 
         break;
     }
 
-    lines.push(`  ${String(base).padStart(6)}  ${name}${operands}`);
+    lines.push(`  ${String(base).padStart(6)}  ${name}${operands}${constComment}`);
   }
 
   return lines;
@@ -143,11 +246,23 @@ function main(): void {
     process.exit(1);
   }
 
+  const section0 = readU32(data, 8);
+  const section1 = readU32(data, 12);
+  const section2 = readU32(data, 16);
   const section3 = readU32(data, 20);
   const section4 = readU32(data, 24);
   const codeEnd = Math.min(section4, data.length);
 
-  const lines = disasm(data, section3, codeEnd);
+  const strings =
+    section0 < data.length && section1 > section0
+      ? parseStringTable(data, section0, section1)
+      : [];
+  const constantComments =
+    section1 < data.length && section2 > section1
+      ? parseConstantPool(data, section1, section2, strings)
+      : [];
+
+  const lines = disasm(data, section3, codeEnd, constantComments);
   process.stdout.write(`; Code section (offset ${section3}, ${codeEnd - section3} bytes)\n`);
   for (const line of lines) {
     process.stdout.write(line + '\n');

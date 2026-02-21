@@ -2,6 +2,7 @@
 const std = @import("std");
 const Value = @import("value.zig").Value;
 const GC = @import("gc.zig").GC;
+const load_mod = @import("load.zig");
 const primitives = @import("primitives.zig");
 
 fn binopInt(stack: *[4096]Value, sp: *usize, op: *const fn (i64, i64) i64) void {
@@ -89,22 +90,65 @@ const ExceptionHandler = struct {
     frame_depth: usize,
 };
 
-pub fn run(allocator: std.mem.Allocator, module: anytype) void {
-    const code = module.code;
-    const constants = module.constants;
-    const functions = module.functions;
-    const shapes = module.shapes;
+const CallFrame = struct {
+    pc: usize,
+    module: *const load_mod.Module,
+    saved_sp: usize,
+    /// When true, RET should restore sp and not push the return value (module init run for side effects only).
+    discard_return: bool = false,
+};
+
+/// Resolve import specifier to .kbc path: same directory as entry_path, specifier with .ks replaced by .kbc (07 §9 cache mirror).
+fn resolveImportPath(allocator: std.mem.Allocator, specifier: []const u8, entry_path: []const u8) ![]const u8 {
+    if (specifier.len > 0 and std.mem.indexOf(u8, specifier, "kestrel:") == @as(?usize, 0)) {
+        return error.StdlibImportNotResolved;
+    }
+    const entry_dir = std.fs.path.dirname(entry_path) orelse ".";
+    const base_len = if (std.mem.endsWith(u8, specifier, ".ks")) specifier.len - 3 else specifier.len;
+    const base = specifier[0..base_len];
+    const kbc_name = try std.fmt.allocPrint(allocator, "{s}.kbc", .{base});
+    defer allocator.free(kbc_name);
+    return std.fs.path.join(allocator, &[_][]const u8{ entry_dir, kbc_name });
+}
+
+pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_path: []const u8) void {
+    var current_module = module;
+    var code = current_module.code;
+    var constants = current_module.constants;
+    var functions = current_module.functions;
+    var shapes = current_module.shapes;
     var stack: [4096]Value = undefined;
+    for (&stack) |*v| v.* = Value.unit();
     var sp: usize = 0;
     var locals: [max_locals]Value = undefined;
     for (&locals) |*v| v.* = Value.unit();
-    var return_pc: [max_frames]usize = undefined;
+    var call_frames: [max_frames]CallFrame = undefined;
+    for (&call_frames) |*f| {
+        f.* = .{ .pc = 0, .module = module, .saved_sp = 0, .discard_return = false };
+    }
     var saved_locals: [max_frames][max_locals]Value = undefined;
+    for (&saved_locals) |*frame| {
+        for (&frame.*) |*v| v.* = Value.unit();
+    }
     var frame_sp: usize = 0;
     var pc: usize = 0;
 
+    var module_cache = std.ArrayListUnmanaged(load_mod.Module){};
+    module_cache.ensureTotalCapacity(allocator, 32) catch return;
+    defer {
+        for (module_cache.items) |*m| load_mod.freeModule(allocator, m);
+        module_cache.deinit(allocator);
+    }
+    var path_to_module = std.StringHashMap(*const load_mod.Module).init(allocator);
+    defer {
+        var it = path_to_module.keyIterator();
+        while (it.next()) |key_ptr| allocator.free(key_ptr.*);
+        path_to_module.deinit();
+    }
+
     // Exception handler stack
     var handlers: [max_handlers]ExceptionHandler = undefined;
+    for (&handlers) |*h| h.* = .{ .handler_pc = 0, .stack_sp = 0, .frame_depth = 0 };
     var handler_sp: usize = 0;
 
     // Initialize GC
@@ -150,7 +194,7 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                 pc += 8;
 
                 // Check for primitive functions (0xFFFFFF00 range)
-                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF02 and sp >= arity) {
+                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF04 and sp >= arity) {
                     if (fn_id == 0xFFFFFF00 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, false);
@@ -170,14 +214,105 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                         sp -= 1;
                         const exit_code = Value.intTo(code_val);
                         std.process.exit(@intCast(exit_code));
+                    } else if (fn_id == 0xFFFFFF03 and arity == 1) {
+                        const val = stack[sp - 1];
+                        sp -= 1;
+                        var format_buf: [4096]u8 = undefined;
+                        const slice = primitives.formatOne(val, &format_buf);
+                        const total = 8 + slice.len;
+                        const obj = gc.allocObject(total) catch {
+                            stack[sp] = Value.unit();
+                            sp += 1;
+                            continue;
+                        };
+                        @memset(obj, 0);
+                        obj[0] = STRING_KIND;
+                        std.mem.writeInt(u32, obj[4..8], @as(u32, @intCast(slice.len)), .little);
+                        @memcpy(obj[8..][0..slice.len], slice);
+                        stack[sp] = Value.ptr(@intFromPtr(obj.ptr));
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF04 and arity == 2) {
+                        const b = stack[sp - 1];
+                        const a = stack[sp - 2];
+                        sp -= 2;
+                        var buf_a: [4096]u8 = undefined;
+                        var buf_b: [4096]u8 = undefined;
+                        const slice_a = primitives.getStringSlice(a) orelse primitives.formatOne(a, &buf_a);
+                        const slice_b = primitives.getStringSlice(b) orelse primitives.formatOne(b, &buf_b);
+                        const total_len = slice_a.len + slice_b.len;
+                        const obj = gc.allocObject(8 + total_len) catch {
+                            stack[sp] = Value.unit();
+                            sp += 1;
+                            continue;
+                        };
+                        @memset(obj, 0);
+                        obj[0] = STRING_KIND;
+                        std.mem.writeInt(u32, obj[4..8], @as(u32, @intCast(total_len)), .little);
+                        @memcpy(obj[8..][0..slice_a.len], slice_a);
+                        @memcpy(obj[8 + slice_a.len ..][0..slice_b.len], slice_b);
+                        stack[sp] = Value.ptr(@intFromPtr(obj.ptr));
+                        sp += 1;
+                        continue;
                     }
                 }
 
-                // Regular function call
-                if (frame_sp >= max_frames or fn_id >= functions.len) continue;
+                // Imported function call (03 §6.6)
+                if (fn_id >= functions.len) {
+                    const k: usize = fn_id - functions.len;
+                    if (frame_sp >= max_frames or k >= current_module.imported_functions.len or sp < arity) continue;
+                    const imp_entry = current_module.imported_functions[k];
+                    if (imp_entry.import_index >= current_module.import_specifiers.len) continue;
+                    const specifier = current_module.import_specifiers[imp_entry.import_index];
+                    const dep_path = resolveImportPath(allocator, specifier, entry_path) catch continue;
+                    defer allocator.free(dep_path);
+                    const already_loaded = path_to_module.get(dep_path) != null;
+                    const dep_module = blk: {
+                        if (path_to_module.get(dep_path)) |ptr| break :blk ptr;
+                        module_cache.ensureTotalCapacity(allocator, module_cache.items.len + 1) catch continue;
+                        const loaded = load_mod.load(allocator, dep_path) catch continue;
+                        module_cache.appendAssumeCapacity(loaded);
+                        const ptr = &module_cache.items[module_cache.items.len - 1];
+                        path_to_module.put(allocator.dupe(u8, dep_path) catch continue, ptr) catch {};
+                        break :blk ptr;
+                    };
+                    // When a package is first loaded, run its module initializer (top-level code at offset 0) before calling into it.
+                    if (!already_loaded) {
+                        call_frames[frame_sp] = .{ .pc = pc - 9, .module = current_module, .saved_sp = sp, .discard_return = true };
+                        for (saved_locals[frame_sp][0..max_locals], locals) |*s, l| s.* = l;
+                        frame_sp += 1;
+                        current_module = dep_module;
+                        code = current_module.code;
+                        constants = current_module.constants;
+                        functions = current_module.functions;
+                        shapes = current_module.shapes;
+                        pc = 0;
+                        continue;
+                    }
+                    if (imp_entry.function_index >= dep_module.functions.len) continue;
+                    const target_entry = dep_module.functions[imp_entry.function_index];
+                    call_frames[frame_sp] = .{ .pc = pc, .module = current_module, .saved_sp = sp - arity };
+                    for (saved_locals[frame_sp][0..max_locals], locals) |*s, l| s.* = l;
+                    frame_sp += 1;
+                    var i: usize = 0;
+                    while (i < arity) : (i += 1) {
+                        locals[i] = stack[sp - arity + i];
+                    }
+                    sp -= arity;
+                    current_module = dep_module;
+                    code = current_module.code;
+                    constants = current_module.constants;
+                    functions = current_module.functions;
+                    shapes = current_module.shapes;
+                    pc = target_entry.code_offset;
+                    continue;
+                }
+
+                // Local function call
+                if (frame_sp >= max_frames) continue;
                 const entry = functions[fn_id];
                 if (sp < arity) continue;
-                return_pc[frame_sp] = pc;
+                call_frames[frame_sp] = .{ .pc = pc, .module = current_module, .saved_sp = sp - arity };
                 for (saved_locals[frame_sp][0..max_locals], locals) |*s, l| s.* = l;
                 frame_sp += 1;
                 var i: usize = 0;
@@ -427,10 +562,19 @@ pub fn run(allocator: std.mem.Allocator, module: anytype) void {
                     return;
                 }
                 frame_sp -= 1;
+                const frame = call_frames[frame_sp];
+                current_module = frame.module;
+                code = current_module.code;
+                constants = current_module.constants;
+                functions = current_module.functions;
+                shapes = current_module.shapes;
                 for (locals[0..max_locals], saved_locals[frame_sp]) |*l, s| l.* = s;
-                pc = return_pc[frame_sp];
-                stack[sp] = ret_val;
-                sp += 1;
+                pc = frame.pc;
+                sp = frame.saved_sp;
+                if (!frame.discard_return) {
+                    stack[sp] = ret_val;
+                    sp += 1;
+                }
             },
             else => return, // unknown opcode: stop execution
         }

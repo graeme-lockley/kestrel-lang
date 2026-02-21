@@ -132,32 +132,72 @@ export function tokenize(source: string): Token[] {
     const l = line;
     const c = column;
     take(); // "
-    let value = '';
+    const parts: import('./types.js').TemplatePart[] = [];
+    let literal = '';
     while (i < source.length) {
       const c2 = peek();
       if (c2 === '"') {
         take();
-        break;
+        if (literal.length > 0) parts.push({ type: 'literal', value: literal });
+        if (parts.length === 0) {
+          return { kind: 'string', value: '', span: span(start, i, l, c) };
+        }
+        if (parts.length === 1 && parts[0]!.type === 'literal') {
+          return { kind: 'string', value: parts[0].value, span: span(start, i, l, c) };
+        }
+        return { kind: 'string', value: '', templateParts: parts, span: span(start, i, l, c) };
       }
       if (c2 === '\\') {
         take();
         const esc = take();
-        if (esc === 'n') value += '\n';
-        else if (esc === 'r') value += '\r';
-        else if (esc === 't') value += '\t';
-        else if (esc === '"' || esc === '\\') value += esc;
+        if (esc === 'n') literal += '\n';
+        else if (esc === 'r') literal += '\r';
+        else if (esc === 't') literal += '\t';
+        else if (esc === '"' || esc === '\\') literal += esc;
         else if (esc === 'u' && peek() === '{') {
           take();
           let hex = '';
           while (/[0-9a-fA-F]/.test(peek())) hex += take();
           if (peek() !== '}' || hex.length === 0) return null;
           take();
-          value += String.fromCodePoint(parseInt(hex, 16));
+          literal += String.fromCodePoint(parseInt(hex, 16));
         } else return null;
+      } else if (c2 === '$') {
+        take();
+        if (peek() === '{') {
+          if (literal.length > 0) {
+            parts.push({ type: 'literal', value: literal });
+            literal = '';
+          }
+          take(); // {
+          let depth = 1;
+          const interpStart = i;
+          while (i < source.length && depth > 0) {
+            const ch = take();
+            if (ch === '{') depth++;
+            else if (ch === '}') {
+              depth--;
+              if (depth == 0) break;
+            }
+          }
+          if (depth !== 0) return null;
+          const sourceSlice = source.slice(interpStart, i - 1); // exclude the closing }
+          parts.push({ type: 'interp', source: sourceSlice });
+        } else if (/[a-zA-Z_]/.test(peek())) {
+          if (literal.length > 0) {
+            parts.push({ type: 'literal', value: literal });
+            literal = '';
+          }
+          let ident = '';
+          while (/[A-Za-z0-9_]/.test(peek())) ident += take();
+          parts.push({ type: 'interp', source: ident });
+        } else {
+          literal += '$';
+        }
       } else if (c2 === '\n') return null;
-      else value += take();
+      else literal += take();
     }
-    return { kind: 'string', value, span: span(start, i, l, c) };
+    return null;
   }
 
   function readChar(): Token | null {

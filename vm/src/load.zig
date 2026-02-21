@@ -17,6 +17,12 @@ pub const StringEntry = struct {
     data: []const u8,
 };
 
+/// One entry in the imported function table (03 §6.6): CALL fn_id >= function_count resolves via this.
+pub const ImportedFnEntry = struct {
+    import_index: u32,
+    function_index: u32,
+};
+
 pub const Module = struct {
     code: []const u8,
     constants: []const Value,
@@ -25,6 +31,10 @@ pub const Module = struct {
     strings: []const StringEntry,
     /// Allocated string constant heap objects (tag-6); caller must free each then this slice.
     string_slices: []const []const u8,
+    /// Import table (03 §6.5): specifier string for each dependency (index = import_index).
+    import_specifiers: []const []const u8,
+    /// Imported function table (03 §6.6); fn_id in [function_count, function_count + len) uses this.
+    imported_functions: []const ImportedFnEntry,
 };
 
 fn align4(n: usize) usize {
@@ -170,6 +180,8 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
 
     const s2_start = section_offsets[2];
     var functions: []const FnEntry = &[_]FnEntry{};
+    var import_specifiers: []const []const u8 = &[_][]const u8{};
+    var imported_functions: []const ImportedFnEntry = &[_]ImportedFnEntry{};
     if (s2_start + 4 <= data.len) {
         const fn_count = std.mem.readInt(u32, data[s2_start..][0..4], .little);
         const fns = try allocator.alloc(FnEntry, fn_count);
@@ -183,6 +195,54 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
             o += 24;
         }
         functions = fns;
+
+        // Skip 6.2 type table: type_count + (type_count+1)*4 + blob
+        if (o + 4 > data.len) return error.InvalidKbc;
+        const type_count = std.mem.readInt(u32, data[o..][0..4], .little);
+        o += 4;
+        if (o + (type_count + 1) * 4 > data.len) return error.InvalidKbc;
+        const blob_len = std.mem.readInt(u32, data[o + type_count * 4 ..][0..4], .little);
+        o += (type_count + 1) * 4 + blob_len;
+        o = align4(o);
+
+        // Skip 6.4 exported type declarations
+        if (o + 4 > data.len) return error.InvalidKbc;
+        const exported_type_count = std.mem.readInt(u32, data[o..][0..4], .little);
+        o += 4 + exported_type_count * 8;
+
+        // 6.5 Import table
+        if (o + 4 > data.len) return error.InvalidKbc;
+        const import_count = std.mem.readInt(u32, data[o..][0..4], .little);
+        o += 4;
+        const spec_list = try allocator.alloc([]const u8, import_count);
+        errdefer allocator.free(spec_list);
+        for (spec_list) |*spec_ptr| {
+            if (o + 4 > data.len) return error.InvalidKbc;
+            const str_idx = std.mem.readInt(u32, data[o..][0..4], .little);
+            o += 4;
+            if (str_idx < strings.len) {
+                spec_ptr.* = try allocator.dupe(u8, strings[str_idx].data);
+            } else {
+                spec_ptr.* = &[_]u8{};
+            }
+        }
+        import_specifiers = spec_list;
+
+        // 6.6 Imported function table (only if still inside section 2)
+        const s2_end = section_offsets[3];
+        if (o + 4 <= data.len and o + 4 <= s2_end) {
+            const imported_fn_count = std.mem.readInt(u32, data[o..][0..4], .little);
+            o += 4;
+            const imp_fns = try allocator.alloc(ImportedFnEntry, imported_fn_count);
+            errdefer allocator.free(imp_fns);
+            for (imp_fns) |*entry| {
+                if (o + 8 > data.len) return error.InvalidKbc;
+                entry.import_index = std.mem.readInt(u32, data[o..][0..4], .little);
+                entry.function_index = std.mem.readInt(u32, data[o + 4 ..][0..4], .little);
+                o += 8;
+            }
+            imported_functions = imp_fns;
+        }
     }
 
     const s5_start = section_offsets[5];
@@ -211,7 +271,25 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
         .shapes = shapes,
         .strings = strings,
         .string_slices = string_slices,
+        .import_specifiers = import_specifiers,
+        .imported_functions = imported_functions,
     };
+}
+
+/// Free all allocator-owned memory in a Module. Call after use when the module was loaded with load().
+pub fn freeModule(allocator: std.mem.Allocator, m: *const Module) void {
+    allocator.free(m.code);
+    allocator.free(m.constants);
+    for (m.string_slices) |s| allocator.free(s);
+    allocator.free(m.string_slices);
+    if (m.functions.len > 0) allocator.free(m.functions);
+    if (m.shapes.len > 0) allocator.free(m.shapes);
+    if (m.strings.len > 0) allocator.free(m.strings);
+    if (m.import_specifiers.len > 0) {
+        for (m.import_specifiers) |s| allocator.free(s);
+        allocator.free(m.import_specifiers);
+    }
+    if (m.imported_functions.len > 0) allocator.free(m.imported_functions);
 }
 
 test "load minimal kbc" {
@@ -225,6 +303,8 @@ test "load minimal kbc" {
     }
     if (m.functions.len > 0) a.free(m.functions);
     if (m.shapes.len > 0) a.free(m.shapes);
+    if (m.import_specifiers.len > 0) a.free(m.import_specifiers);
+    if (m.imported_functions.len > 0) a.free(m.imported_functions);
     try std.testing.expect(m.code.len >= 1);
     try std.testing.expect(m.code[0] == 0x11);
 }

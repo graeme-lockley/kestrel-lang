@@ -1,15 +1,15 @@
 /**
- * Multi-module compilation: resolve imports, compile dependencies, bundle.
+ * Multi-module compilation: resolve imports, emit one .kbc + .kti per package (07 §5).
  */
-import { readFileSync } from 'fs';
-import { resolve as pathResolve } from 'path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { resolve as pathResolve, dirname } from 'path';
 import { tokenize } from './lexer/index.js';
 import { parse } from './parser/index.js';
 import { typecheck, type TypecheckOptions } from './typecheck/check.js';
 import { codegen, type CodegenResult } from './codegen/codegen.js';
-import { writeKbc } from './bytecode/write.js';
+import { writeKbc, type ImportedFunctionEntry } from './bytecode/write.js';
 import { resolveSpecifier } from './resolve.js';
-import { bundleCodegenResults } from './bundle.js';
+import { readTypesFile, writeTypesFile, isTypesFileFresh } from './types-file.js';
 import type { Program, ImportDecl } from './ast/nodes.js';
 import type { InternalType } from './types/internal.js';
 
@@ -22,6 +22,8 @@ export interface CompileFileOptions {
   onCompilingFile?: (absolutePath: string, durationMs: number) => void;
   /** If set, only call onCompilingFile for paths in this set (so only "stale" files are reported). */
   stalePaths?: Set<string>;
+  /** If set, write each compiled package's .kbc and .kti here. Enables VM to load deps on first use. */
+  getOutputPaths?: (sourcePath: string) => { kbc: string; kti: string };
 }
 
 function getDistinctSpecifiers(program: Program): string[] {
@@ -99,36 +101,88 @@ export function compileFile(
       resolved.set(spec, r.path);
     }
 
+    const getOutputPaths = options?.getOutputPaths;
     const importBindings = new Map<string, InternalType>();
-    const depResults: { spec: string; path: string; result: CodegenResult; exportSet: Set<string>; dependencyPaths: string[] }[] = [];
+    type DepResult =
+      | { spec: string; path: string; result: CodegenResult; exportSet: Set<string>; dependencyPaths: string[]; fromTypesFile?: false }
+      | { spec: string; path: string; exportSet: Set<string>; nameToExport: Map<string, { function_index: number; arity: number; type: InternalType }>; fromTypesFile: true };
+    const depResults: DepResult[] = [];
 
     for (const spec of specs) {
       const depPath = resolved.get(spec)!;
-      const depOut = compileOne(depPath);
-      if (!depOut.ok) return depOut;
-
-      const depExports = depOut.exports;
-      const depExportSet = new Set(depExports.keys());
-
-      for (const imp of program.imports) {
-        if (imp.spec !== spec) continue;
-        const requested = getRequestedImports(imp);
-        for (const [localName, externalName] of requested) {
-          const t = depExports.get(externalName);
-          if (t == null) {
-            return { ok: false, errors: [`Module ${spec} does not export ${externalName}`] };
+      let usedTypesFile = false;
+      if (getOutputPaths) {
+        const paths = getOutputPaths(depPath);
+        if (isTypesFileFresh(paths.kti, depPath)) {
+          // If any transitive dep is in the stale set, force recompile (so m2 recompiles when m3 is stale)
+          let anyTransitiveStale = false;
+          if (stalePaths?.size) {
+            const depsFile = paths.kbc + '.deps';
+            if (existsSync(depsFile)) {
+              try {
+                const content = readFileSync(depsFile, 'utf-8');
+                for (const line of content.split('\n')) {
+                  const p = line.trim();
+                  if (p && stalePaths.has(p)) {
+                    anyTransitiveStale = true;
+                    break;
+                  }
+                }
+              } catch {
+                /* ignore */
+              }
+            }
           }
-          importBindings.set(localName, t);
+          if (!anyTransitiveStale) {
+            try {
+              const typesExports = readTypesFile(paths.kti);
+            const exportSet = new Set(typesExports.keys());
+            const nameToExport = new Map<string, { function_index: number; arity: number; type: InternalType }>();
+            for (const [name, exp] of typesExports) {
+              if (exp.kind === 'function') nameToExport.set(name, { function_index: exp.function_index, arity: exp.arity, type: exp.type });
+            }
+            for (const imp of program.imports) {
+              if (imp.spec !== spec) continue;
+              const requested = getRequestedImports(imp);
+              for (const [localName, externalName] of requested) {
+                const exp = typesExports.get(externalName);
+                if (exp == null) {
+                  return { ok: false, errors: [`Module ${spec} does not export ${externalName}`] };
+                }
+                if (exp.kind === 'function') importBindings.set(localName, exp.type);
+              }
+            }
+            depResults.push({ spec, path: depPath, exportSet, nameToExport, fromTypesFile: true });
+            usedTypesFile = true;
+            } catch {
+              // Fall through to compile
+            }
+          }
         }
       }
-
-      depResults.push({
-        spec,
-        path: depPath,
-        result: depOut.codegenResult,
-        exportSet: depExportSet,
-        dependencyPaths: depOut.dependencyPaths,
-      });
+      if (!usedTypesFile) {
+        const depOut = compileOne(depPath);
+        if (!depOut.ok) return depOut;
+        const depExportSet = new Set(depOut.exports.keys());
+        for (const imp of program.imports) {
+          if (imp.spec !== spec) continue;
+          const requested = getRequestedImports(imp);
+          for (const [localName, externalName] of requested) {
+            const t = depOut.exports.get(externalName);
+            if (t == null) {
+              return { ok: false, errors: [`Module ${spec} does not export ${externalName}`] };
+            }
+            importBindings.set(localName, t);
+          }
+        }
+        depResults.push({
+          spec,
+          path: depPath,
+          result: depOut.codegenResult,
+          exportSet: depExportSet,
+          dependencyPaths: depOut.dependencyPaths,
+        });
+      }
     }
 
     const tcOpts: TypecheckOptions = { importBindings: importBindings.size > 0 ? importBindings : undefined };
@@ -137,38 +191,102 @@ export function compileFile(
 
     const mainFuncCount = program.body.filter((n) => n.kind === 'FunDecl').length;
     const importedFuncIds = new Map<string, number>();
-    let funcOffset = mainFuncCount;
-    for (const { spec, result, exportSet } of depResults) {
-      const depNameToIndex = new Map<string, number>();
-      for (let i = 0; i < result.functionTable.length; i++) {
-        const fnName = result.stringTable[result.functionTable[i]!.nameIndex];
-        if (fnName) depNameToIndex.set(fnName, i);
-      }
-      for (const imp of program.imports) {
-        if (imp.kind !== 'NamedImport' || imp.spec !== spec) continue;
-        for (const s of imp.specs) {
-          const depIdx = depNameToIndex.get(s.external);
-          if (depIdx !== undefined && exportSet.has(s.external)) {
-            importedFuncIds.set(s.local, funcOffset + depIdx);
+    const importedFunctionTable: ImportedFunctionEntry[] = [];
+    for (let specIndex = 0; specIndex < specs.length; specIndex++) {
+      const spec = specs[specIndex]!;
+      const dep = depResults.find((d) => d.spec === spec);
+      if (!dep) continue;
+      if (dep.fromTypesFile) {
+        const { exportSet, nameToExport } = dep;
+        for (const imp of program.imports) {
+          if (imp.kind !== 'NamedImport' || imp.spec !== spec) continue;
+          for (const s of imp.specs) {
+            const exp = nameToExport.get(s.external);
+            if (exp !== undefined && exportSet.has(s.external)) {
+              importedFunctionTable.push({ importIndex: specIndex, functionIndex: exp.function_index });
+              importedFuncIds.set(s.local, mainFuncCount + importedFunctionTable.length - 1);
+            }
+          }
+        }
+      } else {
+        const { result, exportSet } = dep;
+        const depNameToIndex = new Map<string, number>();
+        for (let i = 0; i < result.functionTable.length; i++) {
+          const fnName = result.stringTable[result.functionTable[i]!.nameIndex];
+          if (fnName) depNameToIndex.set(fnName, i);
+        }
+        for (const imp of program.imports) {
+          if (imp.kind !== 'NamedImport' || imp.spec !== spec) continue;
+          for (const s of imp.specs) {
+            const depIdx = depNameToIndex.get(s.external);
+            if (depIdx !== undefined && exportSet.has(s.external)) {
+              importedFunctionTable.push({ importIndex: specIndex, functionIndex: depIdx });
+              importedFuncIds.set(s.local, mainFuncCount + importedFunctionTable.length - 1);
+            }
           }
         }
       }
-      funcOffset += result.functionTable.length;
     }
 
     const mainResult = codegen(program, { importedFuncIds });
-    const bundled = depResults.length > 0
-      ? bundleCodegenResults(mainResult, depResults.map((d) => d.result))
-      : mainResult;
+    mainResult.importedFunctionTable = importedFunctionTable;
 
-    const dependencyPaths = [filePath, ...depResults.flatMap((d) => d.dependencyPaths)];
-    cache.set(filePath, { program, exports: tc.exports, codegenResult: bundled, dependencyPaths });
+    if (getOutputPaths) {
+      const paths = getOutputPaths(filePath);
+      mkdirSync(dirname(paths.kbc), { recursive: true });
+      const kbcBytes = writeKbc(
+        mainResult.stringTable,
+        mainResult.constantPool,
+        mainResult.code,
+        mainResult.functionTable,
+        mainResult.importSpecifierIndices,
+        mainResult.importedFunctionTable ?? [],
+        mainResult.shapes,
+        mainResult.adts
+      );
+      writeFileSync(paths.kbc, kbcBytes);
+      const typeExports = new Map<string, { function_index: number; arity: number; type: InternalType }>();
+      for (let i = 0; i < mainResult.functionTable.length; i++) {
+        const name = mainResult.stringTable[mainResult.functionTable[i]!.nameIndex];
+        const t = tc.exports.get(name);
+        if (name && t) typeExports.set(name, { function_index: i, arity: mainResult.functionTable[i]!.arity, type: t });
+      }
+      writeTypesFile(paths.kti, typeExports);
+    }
+
+    const dependencyPaths = [
+      filePath,
+      ...depResults.flatMap((d) => {
+        if ('dependencyPaths' in d) return [d.path, ...d.dependencyPaths];
+        const transitive: string[] = [];
+        if (getOutputPaths) {
+          const depPaths = getOutputPaths(d.path);
+          const depsFile = depPaths.kbc + '.deps';
+          if (existsSync(depsFile)) {
+            try {
+              const content = readFileSync(depsFile, 'utf-8');
+              for (const line of content.split('\n')) {
+                const p = line.trim();
+                if (p) transitive.push(p);
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+        return [d.path, ...transitive];
+      }),
+    ];
+    if (getOutputPaths) {
+      const paths = getOutputPaths(filePath);
+      writeFileSync(paths.kbc + '.deps', dependencyPaths.join('\n') + '\n');
+    }
+    cache.set(filePath, { program, exports: tc.exports, codegenResult: mainResult, dependencyPaths });
     visited.delete(filePath);
     const durationMs = Math.round(performance.now() - compileStart);
-    if (!stalePaths || stalePaths.has(filePath)) {
-      onCompilingFile?.(filePath, durationMs);
-    }
-    return { ok: true, program, exports: tc.exports, codegenResult: bundled, dependencyPaths };
+    // Report every file we compile (so incremental runs show full chain: e.g. m3, m2, hello)
+    onCompilingFile?.(filePath, durationMs);
+    return { ok: true, program, exports: tc.exports, codegenResult: mainResult, dependencyPaths };
   }
 
   const out = compileOne(absPath);
@@ -180,6 +298,7 @@ export function compileFile(
     out.codegenResult.code,
     out.codegenResult.functionTable,
     out.codegenResult.importSpecifierIndices,
+    out.codegenResult.importedFunctionTable ?? [],
     out.codegenResult.shapes,
     out.codegenResult.adts
   );

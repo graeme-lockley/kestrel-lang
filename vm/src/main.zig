@@ -29,7 +29,14 @@ pub fn main() !void {
     defer if (module.functions.len > 0) allocator.free(module.functions);
     defer if (module.shapes.len > 0) allocator.free(module.shapes);
     defer if (module.strings.len > 0) allocator.free(module.strings);
-    exec_mod.run(allocator, module);
+    defer {
+        if (module.import_specifiers.len > 0) {
+            for (module.import_specifiers) |s| allocator.free(s);
+            allocator.free(module.import_specifiers);
+        }
+    }
+    defer if (module.imported_functions.len > 0) allocator.free(module.imported_functions);
+    exec_mod.run(allocator, &module, path);
 }
 
 test "vm placeholder" {

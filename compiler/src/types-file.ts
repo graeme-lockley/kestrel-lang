@@ -1,0 +1,245 @@
+/**
+ * Types file (07 §5): compile-time artifact for package consumers.
+ * Format: JSON with exported names and offsets (function_index, arity, type).
+ */
+import { readFileSync, writeFileSync, statSync } from 'fs';
+import type { InternalType } from './types/internal.js';
+import { freshVar } from './types/internal.js';
+
+const KTI_VERSION = 1;
+
+/** Serialized type for JSON (var ids in scheme body are 0-based indices into scheme vars). */
+type SerType =
+  | { kind: 'var'; id: number }
+  | { kind: 'prim'; name: string }
+  | { kind: 'arrow'; params: SerType[]; return: SerType }
+  | { kind: 'record'; fields: { name: string; mut: boolean; type: SerType }[]; row?: SerType }
+  | { kind: 'app'; name: string; args: SerType[] }
+  | { kind: 'tuple'; elements: SerType[] }
+  | { kind: 'union'; left: SerType; right: SerType }
+  | { kind: 'inter'; left: SerType; right: SerType }
+  | { kind: 'scheme'; varCount: number; body: SerType };
+
+function serializeType(t: InternalType, schemeVarToIndex?: Map<number, number>): SerType {
+  if (t.kind === 'var') {
+    if (schemeVarToIndex != null) {
+      const idx = schemeVarToIndex.get(t.id);
+      if (idx !== undefined) return { kind: 'var', id: idx };
+    }
+    return { kind: 'var', id: t.id };
+  }
+  if (t.kind === 'prim') return { kind: 'prim', name: t.name };
+  if (t.kind === 'arrow') {
+    return {
+      kind: 'arrow',
+      params: t.params.map((p) => serializeType(p, schemeVarToIndex)),
+      return: serializeType(t.return, schemeVarToIndex),
+    };
+  }
+  if (t.kind === 'record') {
+    return {
+      kind: 'record',
+      fields: t.fields.map((f) => ({
+        name: f.name,
+        mut: f.mut,
+        type: serializeType(f.type, schemeVarToIndex),
+      })),
+      row: t.row ? serializeType(t.row, schemeVarToIndex) : undefined,
+    };
+  }
+  if (t.kind === 'app') {
+    return {
+      kind: 'app',
+      name: t.name,
+      args: t.args.map((a) => serializeType(a, schemeVarToIndex)),
+    };
+  }
+  if (t.kind === 'tuple') {
+    return {
+      kind: 'tuple',
+      elements: t.elements.map((e) => serializeType(e, schemeVarToIndex)),
+    };
+  }
+  if (t.kind === 'union') {
+    return {
+      kind: 'union',
+      left: serializeType(t.left, schemeVarToIndex),
+      right: serializeType(t.right, schemeVarToIndex),
+    };
+  }
+  if (t.kind === 'inter') {
+    return {
+      kind: 'inter',
+      left: serializeType(t.left, schemeVarToIndex),
+      right: serializeType(t.right, schemeVarToIndex),
+    };
+  }
+  if (t.kind === 'scheme') {
+    const varToIndex = new Map<number, number>();
+    t.vars.forEach((v, i) => varToIndex.set(v, i));
+    return {
+      kind: 'scheme',
+      varCount: t.vars.length,
+      body: serializeType(t.body, varToIndex),
+    };
+  }
+  return { kind: 'prim', name: 'Unit' };
+}
+
+function deserializeType(raw: unknown, schemeVars?: InternalType[]): InternalType {
+  if (raw == null || typeof raw !== 'object' || !('kind' in raw)) {
+    return { kind: 'prim', name: 'Unit' };
+  }
+  const o = raw as Record<string, unknown>;
+  const kind = o.kind as string;
+  if (kind === 'var') {
+    const id = o.id as number;
+    if (schemeVars != null && id >= 0 && id < schemeVars.length) return schemeVars[id]!;
+    return { kind: 'var', id };
+  }
+  if (kind === 'prim') {
+    const name = o.name as string;
+    if (['Int', 'Float', 'Bool', 'String', 'Unit', 'Char', 'Rune'].includes(name)) {
+      return { kind: 'prim', name: name as 'Int' | 'Float' | 'Bool' | 'String' | 'Unit' | 'Char' | 'Rune' };
+    }
+    return { kind: 'prim', name: 'Unit' };
+  }
+  if (kind === 'arrow') {
+    return {
+      kind: 'arrow',
+      params: (o.params as unknown[]).map((p) => deserializeType(p, schemeVars)),
+      return: deserializeType(o.return, schemeVars),
+    };
+  }
+  if (kind === 'record') {
+    return {
+      kind: 'record',
+      fields: ((o.fields as unknown[]) || []).map((f: unknown) => {
+        const r = f as Record<string, unknown>;
+        return { name: r.name as string, mut: (r.mut as boolean) ?? false, type: deserializeType(r.type, schemeVars) };
+      }),
+      row: o.row != null ? deserializeType(o.row, schemeVars) : undefined,
+    };
+  }
+  if (kind === 'app') {
+    return {
+      kind: 'app',
+      name: o.name as string,
+      args: ((o.args as unknown[]) || []).map((a) => deserializeType(a, schemeVars)),
+    };
+  }
+  if (kind === 'tuple') {
+    return {
+      kind: 'tuple',
+      elements: ((o.elements as unknown[]) || []).map((e) => deserializeType(e, schemeVars)),
+    };
+  }
+  if (kind === 'union') {
+    return {
+      kind: 'union',
+      left: deserializeType(o.left, schemeVars),
+      right: deserializeType(o.right, schemeVars),
+    };
+  }
+  if (kind === 'inter') {
+    return {
+      kind: 'inter',
+      left: deserializeType(o.left, schemeVars),
+      right: deserializeType(o.right, schemeVars),
+    };
+  }
+  if (kind === 'scheme') {
+    const varCount = (o.varCount as number) ?? 0;
+    const vars = Array.from({ length: varCount }, () => freshVar());
+    return {
+      kind: 'scheme',
+      vars: vars.map((v) => (v as { kind: 'var'; id: number }).id),
+      body: deserializeType(o.body, vars),
+    };
+  }
+  return { kind: 'prim', name: 'Unit' };
+}
+
+export interface TypesFileFunctionExport {
+  kind: 'function';
+  function_index: number;
+  arity: number;
+  type: SerType;
+}
+
+export interface TypesFileExport {
+  functions: Record<string, TypesFileFunctionExport>;
+}
+
+export interface ResolvedTypesFileExport {
+  kind: 'function';
+  function_index: number;
+  arity: number;
+  type: InternalType;
+}
+
+/**
+ * Write a types file for a package. Call after codegen; exports should be name -> { function_index, arity, type }.
+ */
+export function writeTypesFile(
+  path: string,
+  exports: Map<string, { function_index: number; arity: number; type: InternalType }>
+): void {
+  const functions: Record<string, TypesFileFunctionExport> = {};
+  for (const [name, exp] of exports) {
+    functions[name] = {
+      kind: 'function',
+      function_index: exp.function_index,
+      arity: exp.arity,
+      type: serializeType(exp.type),
+    };
+  }
+  const payload: TypesFileExport = { functions };
+  const content = JSON.stringify({ version: KTI_VERSION, ...payload }, null, 0);
+  writeFileSync(path, content, 'utf-8');
+}
+
+/**
+ * Read a types file and return export set for use as import bindings.
+ * Returns map: local name (when used as import) -> { kind, function_index, arity, type }.
+ */
+export function readTypesFile(path: string): Map<string, ResolvedTypesFileExport> {
+  const content = readFileSync(path, 'utf-8');
+  const data = JSON.parse(content) as { version?: number; functions?: Record<string, TypesFileFunctionExport> };
+  if (data.version !== KTI_VERSION) {
+    throw new Error(`Types file ${path}: unsupported version ${data.version ?? 'missing'}`);
+  }
+  const out = new Map<string, ResolvedTypesFileExport>();
+  const functions = data.functions ?? {};
+  for (const [name, exp] of Object.entries(functions)) {
+    if (exp.kind !== 'function') continue;
+    out.set(name, {
+      kind: 'function',
+      function_index: exp.function_index,
+      arity: exp.arity,
+      type: deserializeType(exp.type),
+    });
+  }
+  return out;
+}
+
+/**
+ * Check if a types file exists and is not stale relative to sourcePath.
+ * Returns true if typesPath exists and is newer than sourcePath (or sourcePath doesn't exist).
+ */
+export function isTypesFileFresh(typesPath: string, sourcePath: string): boolean {
+  try {
+    const typesStat = statSync(typesPath, { throwIfNoEntry: false });
+    if (!typesStat?.isFile()) return false;
+    let sourceStat: ReturnType<typeof statSync> | null = null;
+    try {
+      sourceStat = statSync(sourcePath, { throwIfNoEntry: false });
+    } catch {
+      return true; // no source -> consider types fresh
+    }
+    if (!sourceStat) return true;
+    return typesStat.mtimeMs >= sourceStat.mtimeMs;
+  } catch {
+    return false;
+  }
+}
