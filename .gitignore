@@ -5,6 +5,8 @@ compiler/node_modules/
 vm/zig-out/
 vm/.zig-cache/
 *.kbc
+*.kti
+*.kbc.deps
 
 # Editor
 .vscode/

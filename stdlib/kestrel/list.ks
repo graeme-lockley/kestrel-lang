@@ -1,4 +1,4 @@
-// List<T> — Phase 5: ADT (Nil/Cons) per spec 02. Syntax [] and :: are built-in; helpers in Kestrel.
+// List<T> — ADT with Nil, Cons(head, tail). Syntax [], [a,b,...c], :: built-in. Type and constructors per spec 02.
 export fun length(xs: List<Int>): Int = match (xs) {
   [] => 0
   _ :: tail => 1 + length(tail)

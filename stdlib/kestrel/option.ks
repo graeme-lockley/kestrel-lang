@@ -1,4 +1,4 @@
-// Option<T> — Phase 5: ADT (Some/None) per spec 02. Constructors are built-in; helpers in Kestrel.
+// Option<T> — ADT with constructors Some(x), None (built-in). Type and constructors per spec 02.
 export fun getOrElse(o: Option<Int>, default: Int): Int = match (o) {
   None => default
   Some{ value = x } => x

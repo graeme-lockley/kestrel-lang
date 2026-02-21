@@ -1,4 +1,4 @@
-// Result<T, E> — Phase 5: ADT (Ok/Err) per spec 02. Constructors are built-in; helpers in Kestrel.
+// Result<T, E> — ADT with constructors Ok(x), Err(e) (built-in). Type and constructors per spec 02.
 export fun getOrElse(r: Result<Int, Int>, default: Int): Int = match (r) {
   Err{ value = _ } => default
   Ok{ value = x } => x
