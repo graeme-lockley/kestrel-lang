@@ -44,6 +44,7 @@ import {
   emitRet,
   emitLoadLocal,
   emitLoadGlobal,
+  emitStoreGlobal,
   emitCall,
   emitAllocRecord,
   emitGetField,
@@ -176,6 +177,8 @@ export interface CodegenResult {
   adts: AdtEntry[];
   /** Number of module global slots (init's locals); 0 if none. Used for export var. */
   nGlobals?: number;
+  /** For each export var, the function table index of its setter (1-arity). Used for .kti and importer. */
+  varSetterIndices?: Map<string, number>;
 }
 
 /** Context for codegen: string table, constant pool, and helpers. */
@@ -789,6 +792,8 @@ function makeEmitExpr(
 export interface CodegenOptions {
   /** Map of imported function names to their indices in the (possibly merged) function table. */
   importedFuncIds?: Map<string, number>;
+  /** Map of imported var names to the imported function table index of their setter (1-arity). */
+  importedVarSetterIds?: Map<string, number>;
 }
 
 /** Generate bytecode for program. */
@@ -914,8 +919,13 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
         emitExpr(stmt.value, env, funNameToId, shapes, adts);
         if (stmt.target.kind === 'IdentExpr') {
           const slot = env.get(stmt.target.name);
-          if (slot === undefined) throw new Error(`Codegen: assign to unknown ${stmt.target.name}`);
-          emitStoreLocal(slot);
+          if (slot !== undefined) {
+            emitStoreLocal(slot);
+          } else {
+            const setterId = options?.importedVarSetterIds?.get(stmt.target.name);
+            if (setterId !== undefined) emitCall(setterId, 1);
+            else throw new Error(`Codegen: assign to unknown ${stmt.target.name}`);
+          }
         } else {
           emitStoreLocal(0);
         }
@@ -949,6 +959,8 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
 
   const nGlobals = env.size;
 
+  const varSetterIndices = new Map<string, number>();
+
   // Export val/var as 0-arity getters: val = LOAD_CONST + RET, var = LOAD_GLOBAL slot + RET
   for (const decl of valOrVarDecls) {
     if (decl.kind === 'ValDecl') {
@@ -976,6 +988,26 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     codeOffsetSoFar += fnCode.length;
   }
 
+  // Export var setters: 1-arity, body LOAD_LOCAL 0 → STORE_GLOBAL slot → RET
+  for (const decl of valOrVarDecls) {
+    if (decl.kind !== 'VarDecl') continue;
+    const slot = env.get(decl.name);
+    if (slot === undefined) throw new Error(`Codegen: export var slot missing: ${decl.name}`);
+    codeStart();
+    emitLoadLocal(0);
+    emitStoreGlobal(slot);
+    emitRet();
+    const setterCode = codeSlice();
+    functionTable.push({
+      nameIndex: stringIndex(decl.name + '$set'),
+      arity: 1,
+      codeOffset: codeOffsetSoFar,
+    });
+    varSetterIndices.set(decl.name, functionTable.length - 1);
+    codeChunks.push(setterCode);
+    codeOffsetSoFar += setterCode.length;
+  }
+
   const totalCodeLen = codeChunks.reduce((s, c) => s + c.length, 0);
   const code = new Uint8Array(totalCodeLen);
   let off = 0;
@@ -993,5 +1025,6 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     shapes,
     adts,
     nGlobals: nGlobals > 0 ? nGlobals : undefined,
+    varSetterIndices: varSetterIndices.size > 0 ? varSetterIndices : undefined,
   };
 }

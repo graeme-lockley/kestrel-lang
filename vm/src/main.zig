@@ -19,7 +19,7 @@ pub fn main() !void {
     const path = args[1];
     _ = value_mod;
 
-    const module = try load_mod.load(allocator, path);
+    var module = try load_mod.load(allocator, path);
     defer allocator.free(module.code);
     defer {
         for (module.string_slices) |s| allocator.free(s);

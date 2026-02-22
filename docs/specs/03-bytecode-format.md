@@ -204,6 +204,8 @@ At the next 4-byte-aligned offset after the import table (6.5):
 
 **CALL resolution:** For **CALL** `fn_id`, `arity`: if `fn_id` < `function_count`, the call is **local** (dispatch to the code_offset of function table entry `fn_id` in this module). If `fn_id` ≥ `function_count`, let `k` = `fn_id` - `function_count`; `k` must be in [0, imported_function_count). The k-th entry in this table gives (`import_index`, `function_index`). The VM resolves the module for that import (loading it on first use per 07 §9), then calls the function at `function_index` in that module’s function table. Thus CALL has a single index space: [0, function_count) = local, [function_count, function_count + imported_function_count) = imported.
 
+For an imported **var** (07 §5.1), the calling package may emit **two** entries in this table: one for the getter and one for the setter, so that CALL with the first index reads the var and CALL with the second index (one argument) updates it. The types file (07 §5) supplies both indices for vars.
+
 ---
 
 ## 7. Section 3: Code Section

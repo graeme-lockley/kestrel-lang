@@ -75,7 +75,7 @@ export import from exception is True False
 
 Single- and multi-character tokens the lexer must recognize (longest match):
 
-- **Assignment:** `:=`
+- **Assignment:** `:=`. The left-hand side may be an identifier bound by a named import of an **export var** (07); semantics are as in 07 §9 (assignment to imported var).
 - **Comparison:** `==`, `!=`, `>=`, `<=`, `<`, `>`
 - **Arithmetic / logic:** `+`, `-`, `*`, `/`, `%`, `**`, `|`, `&`, `|>`, `<|`, `::`
 - **Case / lambda arrow:** `=>` — single token (used in match cases and lambdas); must not be lexed as `=` followed by `>`.

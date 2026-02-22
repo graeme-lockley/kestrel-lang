@@ -32,6 +32,7 @@ export const enum Op {
   END_TRY = 0x1c,
   AWAIT = 0x1d,
   LOAD_GLOBAL = 0x1e,
+  STORE_GLOBAL = 0x1f,
 }
 
 const code: number[] = [];
@@ -76,6 +77,12 @@ export function emitStoreLocal(idx: number): void {
 /** Append LOAD_GLOBAL idx (load from module globals; used by export var getters). */
 export function emitLoadGlobal(idx: number): void {
   u8(Op.LOAD_GLOBAL);
+  u32(idx);
+}
+
+/** Append STORE_GLOBAL idx (store to module globals; used by export var setter). */
+export function emitStoreGlobal(idx: number): void {
+  u8(Op.STORE_GLOBAL);
   u32(idx);
 }
 

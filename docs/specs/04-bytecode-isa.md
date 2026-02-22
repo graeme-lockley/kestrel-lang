@@ -19,8 +19,10 @@ All jump **offsets** are **byte offsets** (signed or unsigned, see §4) relative
 | `LOAD_CONST` | `idx` (u32) | Push constant at index `idx` from the **constant pool** (03 §5). `idx` must be in [0, constant_pool_count). |
 | `LOAD_LOCAL` | `idx` (u32) | Push value in local slot `idx`. |
 | `STORE_LOCAL` | `idx` (u32) | Pop value and store in local slot `idx`. |
+| `LOAD_GLOBAL` | `idx` (u32) | Push value in module global slot `idx` (03 §6, 05). Used by export var getters. |
+| `STORE_GLOBAL` | `idx` (u32) | Pop value and store in module global slot `idx`. Used by export var setters. |
 
-**Language coverage:** Literals (Int, Float, Bool, Unit, Char, String), `val`/`var` bindings, parameters.
+**Language coverage:** Literals (Int, Float, Bool, Unit, Char, String), `val`/`var` bindings, parameters. Module globals (export var) use LOAD_GLOBAL / STORE_GLOBAL (03, 05).
 
 ### 1.2 Arithmetic
 
@@ -171,8 +173,10 @@ Each instruction has a single-byte opcode. Opcodes 0x00–0x1E are assigned as b
 | 0x1B   | TRY             | handler_offset (i32) |
 | 0x1C   | END_TRY         | (none) |
 | 0x1D   | AWAIT           | (none) |
+| 0x1E   | LOAD_GLOBAL     | idx (u32) |
+| 0x1F   | STORE_GLOBAL    | idx (u32) |
 
-**Reserved:** 0x00, 0x1E–0xFF. Decoder must reject reserved or unknown opcodes.
+**Reserved:** 0x00, 0x20–0xFF. Decoder must reject reserved or unknown opcodes.
 
 ### 4.2 MATCH instruction layout
 
@@ -191,6 +195,8 @@ So the total size of a MATCH instruction is **1 + 4 + 4×count** bytes. The next
 | LOAD_CONST        | 1 + 4 = 5    |
 | LOAD_LOCAL        | 1 + 4 = 5    |
 | STORE_LOCAL       | 1 + 4 = 5    |
+| LOAD_GLOBAL       | 1 + 4 = 5    |
+| STORE_GLOBAL      | 1 + 4 = 5    |
 | ADD, SUB, MUL, DIV, MOD, POW | 1 |
 | EQ, NE, LT, LE, GT, GE       | 1 |
 | CALL              | 1 + 4 + 4 = 9 |

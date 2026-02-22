@@ -109,6 +109,22 @@ The grammar is in 01 §3.1 (ImportDecl, ImportClause, ImportSpec). The following
 - **Types file:** Contains all exported declarations (signatures and types) so that a referring package can **typecheck** without parsing or compiling the dependency. The types file also contains **offsets** (e.g. function table index, constant pool index) for each exported value and function, so that the **calling** package’s compiler can emit **static offsets** (e.g. CALL with a function index, LOAD_CONST with a constant index). No name lookup is required at load or runtime for variables, constants, or functions (03, 04).
 - **Binary file:** Contains only bytecode and tables (03). All references inside the binary are by index/offset (03 §0). The VM and loader do not use names for resolution at runtime.
 
+### 5.1 Types file format
+
+The types file is **JSON**. Implementations must produce and consume this format so that compilers and tools remain compatible. File extension is implementation-defined (e.g. `.kti`).
+
+- **Top-level fields:**
+  - `version` (number): format version; currently **1**. Consumers must reject unsupported versions.
+  - `functions` (object): map from **export name** (string) to an **export entry** (object). Every exported function, value, or variable must appear exactly once under its export name.
+
+- **Export entry by kind.** Each entry in `functions` has a `kind` field and a `type` field (serialized type for typechecking). The remaining fields depend on `kind`:
+
+  - **function:** `kind` = `"function"`, `function_index` (number, index into the package’s function table 03 §6.1), `arity` (number). Used for exported functions.
+  - **val:** `kind` = `"val"`, `function_index` (number). Getter only (0-arity function in the package’s function table). Used for exported immutable values.
+  - **var:** `kind` = `"var"`, `function_index` (number), **`setter_index`** (number), `type`. Both indices are into the **same** package’s function table (03 §6.1). `function_index` is the **getter** (0-arity); `setter_index` is the **setter** (1-arity). Writers for packages that export vars **must** emit `setter_index`. Consumers must support all three kinds; for **var**, both getter and setter indices are required so that importers can emit CALL getter (read) and CALL setter (assign). Readers that only need callable exports may use `function_index` only; writers for packages that export vars must emit `setter_index`.
+
+- **Type encoding:** The `type` field in each entry is a serialized type (structure is implementation-defined but must be sufficient for typechecking and for distinguishing primitives, arrows, records, etc.). Exact encoding is out of scope here; see the reference implementation or [export-var-setter-sketch.md](export-var-setter-sketch.md) for one implementation approach.
+
 ---
 
 ## 6. Bytecode Import Table (03)
@@ -143,6 +159,8 @@ The grammar is in 01 §3.1 (ImportDecl, ImportClause, ImportSpec). The following
 - **Import vs. load:** An **import** declares a dependency at compile time (used for typechecking and for emitting static references). It does **not** cause the dependency’s binary to be loaded. **Loading** must be deferred until **first use**: the dependency’s binary is loaded only when execution **actually uses** that package (e.g. first call into that module, first access to an exported value). Given a specific execution path, a dependency may never be used and therefore never loaded. This allows optional or conditional use of dependencies and avoids loading and initializing modules that are never needed on that path.
 - **Loading:** The VM (or host) loads a package’s **binary file** when that package is first needed (first use). The process of **finding** which binary to load (e.g. from the import table and the specifier) is **implementation-defined** but should use the specifier strings in the import table to resolve the dependency (e.g. by path or by a registry). The **types file** is not used at runtime; only the binary is loaded.
 - **Linking:** Cross-module references (e.g. CALL to a function in another module) are expressed as **indices or offsets** (03, 04). The calling package’s compiler obtains these from the dependency’s **types file** at compile time and emits static offsets (e.g. function index, constant index). The loader/linker resolves these when the target package’s binary is loaded (e.g. by mapping module + index to actual address or function index). **Name-based lookup** is not used at load or runtime for variables, constants, or functions; all references are by offset/index.
+
+- **Assignment to imported var:** An assignment `x := expr` in module B where `x` is a named import of an **export var** from module A has the same effect as calling a 1-argument function (the **setter**) exported by A: the RHS is evaluated, the setter is invoked with that value, and the exporter’s global is updated. The importer emits CALL with the setter index from the types file (07 §5.1); no name lookup at runtime.
 
 ---
 

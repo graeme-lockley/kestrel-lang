@@ -178,6 +178,7 @@ export interface TypesFileValExport {
 export interface TypesFileVarExport {
   kind: 'var';
   function_index: number;
+  setter_index: number;
   type: SerType;
 }
 
@@ -192,6 +193,8 @@ export interface ResolvedTypesFileExport {
   function_index: number;
   arity: number;
   type: InternalType;
+  /** Setter function index in package function table; present when kind === 'var'. */
+  setter_index?: number;
 }
 
 export type TypesFileExportInput = {
@@ -199,6 +202,8 @@ export type TypesFileExportInput = {
   function_index: number;
   arity?: number;
   type: InternalType;
+  /** Required when kind === 'var'. */
+  setter_index?: number;
 };
 
 /**
@@ -212,7 +217,9 @@ export function writeTypesFile(path: string, exports: Map<string, TypesFileExpor
     if (kind === 'val') {
       functions[name] = { kind: 'val', function_index: exp.function_index, type: serType };
     } else if (kind === 'var') {
-      functions[name] = { kind: 'var', function_index: exp.function_index, type: serType };
+      const setter_index = exp.setter_index;
+      if (setter_index === undefined) throw new Error(`Types file: var export "${name}" requires setter_index`);
+      functions[name] = { kind: 'var', function_index: exp.function_index, setter_index, type: serType };
     } else {
       functions[name] = {
         kind: 'function',
@@ -243,12 +250,17 @@ export function readTypesFile(path: string): Map<string, ResolvedTypesFileExport
   for (const [name, exp] of Object.entries(functions)) {
     const kind = exp.kind ?? 'function';
     const arity = kind === 'function' ? (exp as TypesFileFunctionExport).arity : 0;
-    out.set(name, {
+    const resolved: ResolvedTypesFileExport = {
       kind: kind as TypesFileExportKind,
       function_index: exp.function_index,
       arity,
       type: deserializeType(exp.type),
-    });
+    };
+    if (kind === 'var') {
+      const ve = exp as TypesFileVarExport;
+      if (ve.setter_index !== undefined) resolved.setter_index = ve.setter_index;
+    }
+    out.set(name, resolved);
   }
   return out;
 }

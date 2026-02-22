@@ -76,6 +76,7 @@ const TRY: u8 = 0x1B;
 const END_TRY: u8 = 0x1C;
 const AWAIT: u8 = 0x1D;
 const LOAD_GLOBAL: u8 = 0x1E;
+const STORE_GLOBAL: u8 = 0x1F;
 
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
@@ -93,7 +94,7 @@ const ExceptionHandler = struct {
 
 const CallFrame = struct {
     pc: usize,
-    module: *const load_mod.Module,
+    module: *load_mod.Module,
     saved_sp: usize,
     /// When true, RET should restore sp and not push the return value (module init run for side effects only).
     discard_return: bool = false,
@@ -112,7 +113,7 @@ fn resolveImportPath(allocator: std.mem.Allocator, specifier: []const u8, entry_
     return std.fs.path.join(allocator, &[_][]const u8{ entry_dir, kbc_name });
 }
 
-pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_path: []const u8) void {
+pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: []const u8) void {
     var current_module = module;
     var code = current_module.code;
     var constants = current_module.constants;
@@ -142,7 +143,7 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
         for (module_cache.items) |*m| load_mod.freeModule(allocator, m);
         module_cache.deinit(allocator);
     }
-    var path_to_module = std.StringHashMap(*const load_mod.Module).init(allocator);
+    var path_to_module = std.StringHashMap(*load_mod.Module).init(allocator);
     defer {
         var it = path_to_module.keyIterator();
         while (it.next()) |key_ptr| allocator.free(key_ptr.*);
@@ -189,6 +190,14 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
                 if (idx < current_module.globals.len) {
                     stack[sp] = current_module.globals[idx];
                     sp += 1;
+                }
+            },
+            STORE_GLOBAL => {
+                const idx = std.mem.readInt(u32, code[pc..][0..4], .little);
+                pc += 4;
+                if (sp > 0 and idx < current_module.globals.len) {
+                    sp -= 1;
+                    current_module.globals[idx] = stack[sp];
                 }
             },
             STORE_LOCAL => {
