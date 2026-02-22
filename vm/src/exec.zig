@@ -283,7 +283,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     } else if (fn_id == 0xFFFFFF05 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.jsonParse(&gc, arg);
+                        stack[sp] = primitives.jsonParse(&gc, arg, current_module.module_index);
                         sp += 1;
                         continue;
                     } else if (fn_id == 0xFFFFFF06 and arity == 1) {
