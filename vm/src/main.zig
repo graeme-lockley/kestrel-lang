@@ -20,22 +20,7 @@ pub fn main() !void {
     _ = value_mod;
 
     var module = try load_mod.load(allocator, path);
-    defer allocator.free(module.code);
-    defer {
-        for (module.string_slices) |s| allocator.free(s);
-        allocator.free(module.string_slices);
-        allocator.free(module.constants);
-    }
-    defer if (module.functions.len > 0) allocator.free(module.functions);
-    defer if (module.shapes.len > 0) allocator.free(module.shapes);
-    defer if (module.strings.len > 0) allocator.free(module.strings);
-    defer {
-        if (module.import_specifiers.len > 0) {
-            for (module.import_specifiers) |s| allocator.free(s);
-            allocator.free(module.import_specifiers);
-        }
-    }
-    defer if (module.imported_functions.len > 0) allocator.free(module.imported_functions);
+    defer load_mod.freeModule(allocator, &module);
     exec_mod.run(allocator, &module, path);
 }
 

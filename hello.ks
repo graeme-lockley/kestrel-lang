@@ -8,4 +8,6 @@ println(message2())
 
 hello := "hello"
 
-println(message2())
+println({a = 1, b = hello})
+println([1, 2, 3, 4, 5])
+println(Some(10))

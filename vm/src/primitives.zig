@@ -2,6 +2,7 @@
 const std = @import("std");
 const Value = @import("value.zig").Value;
 const gc_mod = @import("gc.zig");
+const load_mod = @import("load.zig");
 const GC = gc_mod.GC;
 
 // Value ADT constructor tags (spec 02, codegen.ts)
@@ -16,52 +17,212 @@ const VALUE_OBJECT: u32 = 6;
 const LIST_NIL: u32 = 0;
 const LIST_CONS: u32 = 1;
 
-/// Format a single value to a string (no newline). Caller must have enough buffer.
-pub fn formatOne(val: Value, out: []u8) []const u8 {
-    return switch (val.tag) {
-        .int => std.fmt.bufPrint(out, "{d}", .{Value.intTo(val)}) catch return "<value>",
-        .bool => std.fmt.bufPrint(out, "{}", .{val.payload != 0}) catch return "<value>",
-        .unit => std.fmt.bufPrint(out, "()", .{}) catch return "<value>",
-        .char => blk: {
+fn appendSlice(buf: []u8, pos: *usize, s: []const u8) bool {
+    if (pos.* + s.len > buf.len) return false;
+    @memcpy(buf[pos.*..][0..s.len], s);
+    pos.* += s.len;
+    return true;
+}
+
+/// Format a value into buf starting at start; returns new position or null if buffer too small.
+fn formatInto(val: Value, buf: []u8, start: usize, module_cache: ?[]const *const load_mod.Module) ?usize {
+    if (start >= buf.len) return null;
+    var pos = start;
+    switch (val.tag) {
+        .int => {
+            const written = std.fmt.bufPrint(buf[pos..], "{d}", .{Value.intTo(val)}) catch return null;
+            return pos + written.len;
+        },
+        .bool => {
+            const s = if (val.payload != 0) "true" else "false";
+            if (pos + s.len > buf.len) return null;
+            @memcpy(buf[pos..][0..s.len], s);
+            return pos + s.len;
+        },
+        .unit => {
+            if (pos + 2 > buf.len) return null;
+            buf[pos] = '(';
+            buf[pos + 1] = ')';
+            return pos + 2;
+        },
+        .char => {
             const c = @as(u21, @intCast(val.payload));
             var cbuf: [4]u8 = undefined;
             const len = std.unicode.utf8Encode(c, &cbuf) catch 1;
-            break :blk std.fmt.bufPrint(out, "{s}", .{cbuf[0..len]}) catch "<value>";
+            if (pos + len > buf.len) return null;
+            @memcpy(buf[pos..][0..len], cbuf[0..len]);
+            return pos + len;
         },
-        .ptr => blk: {
+        .ptr => {
             const addr = Value.ptrTo(val);
-            if (addr == 0) break :blk std.fmt.bufPrint(out, "()", .{}) catch return "<value>";
-
+            if (addr == 0) {
+                if (pos + 2 > buf.len) return null;
+                buf[pos] = '(';
+                buf[pos + 1] = ')';
+                return pos + 2;
+            }
             const base = @as([*]const u8, @ptrFromInt(addr));
             const kind = base[0];
-
-            if (kind == 4) { // STRING_KIND
+            if (kind == gc_mod.STRING_KIND) {
                 const len = std.mem.readInt(u32, base[4..8], .little);
                 const str_data = base[8..8+len];
-                break :blk std.fmt.bufPrint(out, "{s}", .{str_data}) catch "<value>";
+                if (pos + str_data.len > buf.len) return null;
+                @memcpy(buf[pos..][0..str_data.len], str_data);
+                return pos + str_data.len;
             }
-
-            break :blk std.fmt.bufPrint(out, "<value>", .{}) catch "<value>";
+            if (kind == gc_mod.RECORD_KIND) {
+                const field_count = std.mem.readInt(u32, base[12..16], .little);
+                const fields = @as([*]const Value, @alignCast(@ptrCast(base + gc_mod.RECORD_HEADER)));
+                if (module_cache) |cache| {
+                    const mod_idx = std.mem.readInt(u32, base[4..8], .little);
+                    const shape_id = std.mem.readInt(u32, base[8..12], .little);
+                    if (mod_idx < cache.len and cache[mod_idx].*.shapes.len > shape_id) {
+                        const shape = &cache[mod_idx].*.shapes[shape_id];
+                        if (!appendSlice(buf, &pos, "{ ")) return null;
+                        var i: usize = 0;
+                        while (i < field_count) : (i += 1) {
+                            if (i > 0 and !appendSlice(buf, &pos, ", ")) return null;
+                            if (i < shape.field_names.len and !appendSlice(buf, &pos, shape.field_names[i])) return null;
+                            if (!appendSlice(buf, &pos, " = ")) return null;
+                            const next = formatInto(fields[i], buf, pos, module_cache) orelse return null;
+                            pos = next;
+                        }
+                        if (!appendSlice(buf, &pos, " }")) return null;
+                        return pos;
+                    }
+                }
+                if (!appendSlice(buf, &pos, "{ ")) return null;
+                var i: usize = 0;
+                while (i < field_count) : (i += 1) {
+                    if (i > 0 and !appendSlice(buf, &pos, ", ")) return null;
+                    const next = formatInto(fields[i], buf, pos, module_cache) orelse return null;
+                    pos = next;
+                }
+                if (!appendSlice(buf, &pos, " }")) return null;
+                return pos;
+            }
+            if (kind == gc_mod.ADT_KIND) {
+                const layout_ver = base[2];
+                if (layout_ver == 1 and module_cache != null and module_cache.?.len > 0) {
+                    const mod_idx = std.mem.readInt(u32, base[4..8], .little);
+                    const adt_id = std.mem.readInt(u32, base[8..12], .little);
+                    const ctor = std.mem.readInt(u32, base[12..16], .little);
+                    const arity = std.mem.readInt(u32, base[16..20], .little);
+                    const payloads = @as([*]const Value, @alignCast(@ptrCast(base + gc_mod.ADT_HEADER)));
+                    const cache = module_cache.?;
+                    if (mod_idx < cache.len and cache[mod_idx].*.adts.len > adt_id) {
+                        const adt = &cache[mod_idx].*.adts[adt_id];
+                        const is_list = adt.name.len == 4 and std.mem.eql(u8, adt.name, "List");
+                        if (is_list and adt.constructor_names.len >= 2 and ctor == 0) {
+                            if (!appendSlice(buf, &pos, "[]")) return null;
+                            return pos;
+                        }
+                        if (is_list and ctor == 1 and arity >= 2) {
+                            if (!appendSlice(buf, &pos, "[")) return null;
+                            var first = true;
+                            var tail = val;
+                            while (true) {
+                                const tail_addr = Value.ptrTo(tail);
+                                if (tail_addr == 0) break;
+                                const tb = @as([*]const u8, @ptrFromInt(tail_addr));
+                                if (tb[0] != gc_mod.ADT_KIND or tb[2] != 1) break;
+                                const tctor = std.mem.readInt(u32, tb[12..16], .little);
+                                if (tctor == 0) break;
+                                if (tctor != 1) break;
+                                const tf = @as([*]const Value, @alignCast(@ptrCast(tb + gc_mod.ADT_HEADER)));
+                                if (!first and !appendSlice(buf, &pos, ", ")) return null;
+                                const next = formatInto(tf[0], buf, pos, module_cache) orelse return null;
+                                pos = next;
+                                first = false;
+                                tail = tf[1];
+                            }
+                            if (!appendSlice(buf, &pos, "]")) return null;
+                            return pos;
+                        }
+                        if (ctor < adt.constructor_names.len) {
+                            if (!appendSlice(buf, &pos, adt.constructor_names[ctor])) return null;
+                            if (arity > 0) {
+                                if (!appendSlice(buf, &pos, "(")) return null;
+                                var i: usize = 0;
+                                while (i < arity) : (i += 1) {
+                                    if (i > 0 and !appendSlice(buf, &pos, ", ")) return null;
+                                    const next = formatInto(payloads[i], buf, pos, module_cache) orelse return null;
+                                    pos = next;
+                                }
+                                if (!appendSlice(buf, &pos, ")")) return null;
+                            }
+                            return pos;
+                        }
+                    }
+                }
+                // Old ADT layout (primitive-allocated Value/List): ctor at 4..8, payloads at 8
+                const ctor_old = std.mem.readInt(u32, base[4..8], .little);
+                if (ctor_old == 0) {
+                    if (!appendSlice(buf, &pos, "[]")) return null;
+                    return pos;
+                }
+                if (ctor_old == 1) {
+                    if (!appendSlice(buf, &pos, "[")) return null;
+                    var first = true;
+                    var tail = val;
+                    while (true) {
+                        const tail_addr = Value.ptrTo(tail);
+                        if (tail_addr == 0) break;
+                        const tb = @as([*]const u8, @ptrFromInt(tail_addr));
+                        if (tb[0] != gc_mod.ADT_KIND) break;
+                        const tctor = std.mem.readInt(u32, tb[4..8], .little);
+                        if (tctor == 0) break;
+                        if (tctor != 1) break;
+                        const tf = @as([*]const Value, @alignCast(@ptrCast(tb + 8)));
+                        if (!first and !appendSlice(buf, &pos, ", ")) return null;
+                        const next = formatInto(tf[0], buf, pos, module_cache) orelse return null;
+                        pos = next;
+                        first = false;
+                        tail = tf[1];
+                    }
+                    if (!appendSlice(buf, &pos, "]")) return null;
+                    return pos;
+                }
+                const fallback = "<value>";
+                if (pos + fallback.len > buf.len) return null;
+                @memcpy(buf[pos..][0..fallback.len], fallback);
+                return pos + fallback.len;
+            }
+            const fallback = "<value>";
+            if (pos + fallback.len > buf.len) return null;
+            @memcpy(buf[pos..][0..fallback.len], fallback);
+            return pos + fallback.len;
         },
-        else => std.fmt.bufPrint(out, "<value>", .{}) catch "<value>",
-    };
+        else => {
+            const fallback = "<value>";
+            if (pos + fallback.len > buf.len) return null;
+            @memcpy(buf[pos..][0..fallback.len], fallback);
+            return pos + fallback.len;
+        },
+    }
+}
+
+/// Format a single value to a string (no newline). Caller must have enough buffer (e.g. 4096 for nested values).
+pub fn formatOne(val: Value, out: []u8, module_cache: ?[]const *const load_mod.Module) []const u8 {
+    if (formatInto(val, out, 0, module_cache)) |end| return out[0..end];
+    return "<value>";
 }
 
 /// Print N values to stdout, space-separated, with optional trailing newline (built-in print/println).
-pub fn printN(values: []const Value, trailing_newline: bool) void {
+pub fn printN(values: []const Value, trailing_newline: bool, module_cache: ?[]const *const load_mod.Module) void {
     const stdout = std.fs.File{ .handle = std.posix.STDOUT_FILENO };
-    var part: [256]u8 = undefined;
+    var part: [4096]u8 = undefined;
     for (values, 0..) |val, i| {
         if (i > 0) _ = stdout.write(" ") catch {};
-        const s = formatOne(val, &part);
+        const s = formatOne(val, &part, module_cache);
         _ = stdout.write(s) catch {};
     }
     if (trailing_newline) _ = stdout.write("\n") catch {};
 }
 
 /// Print a single value to stdout (legacy; adds newline). Prefer printN for built-in print/println.
-pub fn print(val: Value) void {
-    printN(&.{val}, true);
+pub fn print(val: Value, module_cache: ?[]const *const load_mod.Module) void {
+    printN(&.{val}, true, module_cache);
 }
 
 /// Print an integer (for stdlib)

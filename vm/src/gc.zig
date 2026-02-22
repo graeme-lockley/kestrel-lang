@@ -9,10 +9,11 @@ pub const TASK_KIND: u8 = 3;
 pub const STRING_KIND: u8 = 4;
 
 // Heap object layout:
-// Common: kind(1) + mark(1) + pad(2) + type_data(4) = 8 bytes header
-// - For RECORD: type_data is field_count, followed by field_count * 8 bytes of Values
-// - For ADT: type_data is ctor_tag, followed by payload Values
+// - RECORD: kind(1)+mark(1)+pad(2)+module_index(4)+shape_id(4)+field_count(4)+pad(4)=16, then field_count*8 bytes
+// - ADT: kind(1)+mark(1)+pad(2)+module_index(4)+adt_id(4)+ctor(4)+arity(4)+pad(4)=24, then arity*8 bytes
 // Objects are 8-byte aligned
+pub const RECORD_HEADER: usize = 16;
+pub const ADT_HEADER: usize = 24;
 
 // Linked list of all allocated objects
 pub const ObjectNode = struct {
@@ -77,9 +78,8 @@ pub const GC = struct {
         // Mark children based on object kind
         switch (kind) {
             RECORD_KIND => {
-                // Records: kind(1) + mark(1) + pad(2) + field_count(4) + fields
-                const field_count = std.mem.readInt(u32, base[4..8], .little);
-                const fields_ptr = @as([*]Value, @alignCast(@ptrCast(base + 8)));
+                const field_count = std.mem.readInt(u32, base[12..16], .little);
+                const fields_ptr = @as([*]Value, @alignCast(@ptrCast(base + RECORD_HEADER)));
                 var i: usize = 0;
                 while (i < field_count) : (i += 1) {
                     const field = fields_ptr[i];
@@ -89,25 +89,14 @@ pub const GC = struct {
                 }
             },
             ADT_KIND => {
-                // ADTs: kind(1) + mark(1) + pad(2) + ctor_tag(4) + fields
-                // We need to know arity to know how many fields to trace
-                // For now, find this object in our tracking list to get size
-                var current = self.objects;
-                while (current) |node| {
-                    if (node.addr == addr) {
-                        const fields_size = node.size - 8;
-                        const field_count = fields_size / 8;
-                        const fields_ptr = @as([*]Value, @alignCast(@ptrCast(base + 8)));
-                        var i: usize = 0;
-                        while (i < field_count) : (i += 1) {
-                            const field = fields_ptr[i];
-                            if (field.tag == .ptr) {
-                                self.mark(Value.ptrTo(field));
-                            }
-                        }
-                        break;
+                const arity = std.mem.readInt(u32, base[16..20], .little);
+                const payloads_ptr = @as([*]Value, @alignCast(@ptrCast(base + ADT_HEADER)));
+                var i: usize = 0;
+                while (i < arity) : (i += 1) {
+                    const field = payloads_ptr[i];
+                    if (field.tag == .ptr) {
+                        self.mark(Value.ptrTo(field));
                     }
-                    current = node.next;
                 }
             },
             TASK_KIND => {

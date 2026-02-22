@@ -2,6 +2,7 @@
 const std = @import("std");
 const Value = @import("value.zig").Value;
 const GC = @import("gc.zig").GC;
+const gc_mod = @import("gc.zig");
 const load_mod = @import("load.zig");
 const primitives = @import("primitives.zig");
 
@@ -137,11 +138,16 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
     var frame_sp: usize = 0;
     var pc: usize = 0;
 
-    var module_cache = std.ArrayListUnmanaged(load_mod.Module){};
-    module_cache.ensureTotalCapacity(allocator, 32) catch return;
+    var module_ptrs = std.ArrayListUnmanaged(*const load_mod.Module){};
+    defer module_ptrs.deinit(allocator);
+    module_ptrs.ensureTotalCapacity(allocator, 32) catch return;
+    module.module_index = 0;
+    module_ptrs.appendAssumeCapacity(module);
+    var dependency_cache = std.ArrayListUnmanaged(load_mod.Module){};
+    dependency_cache.ensureTotalCapacity(allocator, 32) catch return;
     defer {
-        for (module_cache.items) |*m| load_mod.freeModule(allocator, m);
-        module_cache.deinit(allocator);
+        for (dependency_cache.items) |*m| load_mod.freeModule(allocator, m);
+        dependency_cache.deinit(allocator);
     }
     var path_to_module = std.StringHashMap(*load_mod.Module).init(allocator);
     defer {
@@ -217,14 +223,14 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF0D and sp >= arity) {
                     if (fn_id == 0xFFFFFF00 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
-                        primitives.printN(args, false);
+                        primitives.printN(args, false, module_ptrs.items);
                         sp -= arity;
                         stack[sp] = Value.unit();
                         sp += 1;
                         continue;
                     } else if (fn_id == 0xFFFFFF01 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
-                        primitives.printN(args, true);
+                        primitives.printN(args, true, module_ptrs.items);
                         sp -= arity;
                         stack[sp] = Value.unit();
                         sp += 1;
@@ -238,7 +244,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const val = stack[sp - 1];
                         sp -= 1;
                         var format_buf: [4096]u8 = undefined;
-                        const slice = primitives.formatOne(val, &format_buf);
+                        const slice = primitives.formatOne(val, &format_buf, module_ptrs.items);
                         const total = 8 + slice.len;
                         const obj = gc.allocObject(total) catch {
                             stack[sp] = Value.unit();
@@ -258,8 +264,8 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         sp -= 2;
                         var buf_a: [4096]u8 = undefined;
                         var buf_b: [4096]u8 = undefined;
-                        const slice_a = primitives.getStringSlice(a) orelse primitives.formatOne(a, &buf_a);
-                        const slice_b = primitives.getStringSlice(b) orelse primitives.formatOne(b, &buf_b);
+                        const slice_a = primitives.getStringSlice(a) orelse primitives.formatOne(a, &buf_a, module_ptrs.items);
+                        const slice_b = primitives.getStringSlice(b) orelse primitives.formatOne(b, &buf_b, module_ptrs.items);
                         const total_len = slice_a.len + slice_b.len;
                         const obj = gc.allocObject(8 + total_len) catch {
                             stack[sp] = Value.unit();
@@ -345,10 +351,12 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     const already_loaded = path_to_module.get(dep_path) != null;
                     const dep_module = blk: {
                         if (path_to_module.get(dep_path)) |ptr| break :blk ptr;
-                        module_cache.ensureTotalCapacity(allocator, module_cache.items.len + 1) catch continue;
-                        const loaded = load_mod.load(allocator, dep_path) catch continue;
-                        module_cache.appendAssumeCapacity(loaded);
-                        const ptr = &module_cache.items[module_cache.items.len - 1];
+                        dependency_cache.ensureTotalCapacity(allocator, dependency_cache.items.len + 1) catch continue;
+                        var loaded = load_mod.load(allocator, dep_path) catch continue;
+                        loaded.module_index = @intCast(module_ptrs.items.len);
+                        dependency_cache.appendAssumeCapacity(loaded);
+                        const ptr = &dependency_cache.items[dependency_cache.items.len - 1];
+                        module_ptrs.appendAssumeCapacity(ptr);
                         path_to_module.put(allocator.dupe(u8, dep_path) catch continue, ptr) catch {};
                         break :blk ptr;
                     };
@@ -439,12 +447,14 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 pc += 4;
                 if (shape_id >= shapes.len or sp < shapes[shape_id].field_count) continue;
                 const n = shapes[shape_id].field_count;
-                const rec = gc.allocObject(8 + n * 8) catch continue;
+                const rec = gc.allocObject(gc_mod.RECORD_HEADER + n * 8) catch continue;
                 @memset(rec, 0);
                 rec[0] = RECORD_KIND;
                 rec[1] = 0; // mark bit
-                std.mem.writeInt(u32, rec[4..8], n, .little);
-                const fields_ptr = @as([*]Value, @alignCast(@ptrCast(rec.ptr + 8)));
+                std.mem.writeInt(u32, rec[4..8], current_module.module_index, .little);
+                std.mem.writeInt(u32, rec[8..12], shape_id, .little);
+                std.mem.writeInt(u32, rec[12..16], n, .little);
+                const fields_ptr = @as([*]Value, @alignCast(@ptrCast(rec.ptr + gc_mod.RECORD_HEADER)));
                 var i: usize = 0;
                 while (i < n) : (i += 1) {
                     fields_ptr[i] = stack[sp - n + i];
@@ -463,7 +473,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 if (v.tag != .ptr) continue;
                 const addr = Value.ptrTo(v);
                 const base = @as([*]const u8, @ptrFromInt(addr));
-                const field_offset = 8 + slot * 8;
+                const field_offset = gc_mod.RECORD_HEADER + slot * 8;
                 const field_ptr = @as(*const Value, @alignCast(@ptrCast(base + field_offset)));
                 stack[sp] = field_ptr.*;
                 sp += 1;
@@ -478,7 +488,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 if (rec.tag != .ptr) continue;
                 const addr = Value.ptrTo(rec);
                 const base = @as([*]u8, @ptrFromInt(addr));
-                const field_offset = 8 + slot * 8;
+                const field_offset = gc_mod.RECORD_HEADER + slot * 8;
                 const field_ptr = @as(*Value, @alignCast(@ptrCast(base + field_offset)));
                 field_ptr.* = val;
                 stack[sp] = Value.unit();
@@ -489,15 +499,17 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 const ctor = std.mem.readInt(u32, code[pc + 4 ..][0..4], .little);
                 const arity = std.mem.readInt(u32, code[pc + 8 ..][0..4], .little);
                 pc += 12;
-                _ = adt_id; // Not used for now, ADT info in module (future)
                 if (sp < arity) continue;
-                // Allocate ADT: kind(1) + mark(1) + pad(2) + ctor_tag(4) + arity * 8 bytes
-                const adt = gc.allocObject(8 + arity * 8) catch continue;
+                const adt = gc.allocObject(gc_mod.ADT_HEADER + arity * 8) catch continue;
                 @memset(adt, 0);
                 adt[0] = ADT_KIND;
                 adt[1] = 0; // mark bit
-                std.mem.writeInt(u32, adt[4..8], ctor, .little);
-                const fields_ptr = @as([*]Value, @alignCast(@ptrCast(adt.ptr + 8)));
+                adt[2] = 1; // layout version 1 (has module_index, adt_id for formatting)
+                std.mem.writeInt(u32, adt[4..8], current_module.module_index, .little);
+                std.mem.writeInt(u32, adt[8..12], adt_id, .little);
+                std.mem.writeInt(u32, adt[12..16], ctor, .little);
+                std.mem.writeInt(u32, adt[16..20], arity, .little);
+                const fields_ptr = @as([*]Value, @alignCast(@ptrCast(adt.ptr + gc_mod.ADT_HEADER)));
                 var i: usize = 0;
                 while (i < arity) : (i += 1) {
                     fields_ptr[i] = stack[sp - arity + i];
@@ -542,7 +554,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     pc += count * 4;
                     continue;
                 }
-                const ctor_tag = std.mem.readInt(u32, base[4..8], .little);
+                const ctor_tag = std.mem.readInt(u32, base[12..16], .little);
                 if (ctor_tag >= count) {
                     pc += count * 4;
                     continue;

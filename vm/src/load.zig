@@ -11,6 +11,16 @@ pub const FnEntry = struct {
 
 pub const ShapeEntry = struct {
     field_count: u32,
+    /// Field names (string table slices) for formatting; length = field_count.
+    field_names: []const []const u8,
+};
+
+/// One ADT definition (section 6): type name and constructor names for formatting.
+pub const AdtEntry = struct {
+    /// Type name (string table slice).
+    name: []const u8,
+    /// Constructor names in tag order; length = constructor_count.
+    constructor_names: []const []const u8,
 };
 
 pub const StringEntry = struct {
@@ -28,6 +38,8 @@ pub const Module = struct {
     constants: []const Value,
     functions: []const FnEntry,
     shapes: []const ShapeEntry,
+    /// ADT table (section 6) for constructor/type names when formatting.
+    adts: []const AdtEntry,
     strings: []const StringEntry,
     /// Allocated string constant heap objects (tag-6); caller must free each then this slice.
     string_slices: []const []const u8,
@@ -37,6 +49,10 @@ pub const Module = struct {
     imported_functions: []const ImportedFnEntry,
     /// Module global slots (export var); init's STORE_LOCAL writes here; LOAD_GLOBAL reads. Caller must free.
     globals: []Value,
+    /// Index in the VM's module cache; set by caller when the module is registered. Used for record/ADT formatting.
+    module_index: u32 = 0,
+    /// File buffer; string table and section data point into this. Freed in freeModule.
+    file_data: []const u8,
 };
 
 fn align4(n: usize) usize {
@@ -265,34 +281,78 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
             if (o + 4 > data.len) return error.InvalidKbc;
             o = align4(o);
             s.field_count = std.mem.readInt(u32, data[o..][0..4], .little);
-            o += 4 + s.field_count * 8; // skip field_count pairs (name_index, type_index)
+            o += 4;
+            const names_buf = try allocator.alloc([]const u8, s.field_count);
+            errdefer allocator.free(names_buf);
+            for (names_buf) |*name_slot| {
+                if (o + 8 > data.len) return error.InvalidKbc;
+                const name_index = std.mem.readInt(u32, data[o..][0..4], .little);
+                o += 8; // name_index, type_index
+                name_slot.* = if (name_index < strings.len) strings[name_index].data else &[_]u8{};
+            }
+            s.field_names = names_buf;
             o = align4(o);
         }
         shapes = shape_list;
     }
 
-    allocator.free(data);
+    const s6_start = section_offsets[6];
+    const s6_end = data.len;
+    var adts: []const AdtEntry = &[_]AdtEntry{};
+    if (s6_start + 4 <= s6_end) {
+        const adt_count = std.mem.readInt(u32, data[s6_start..][0..4], .little);
+        const adt_list = try allocator.alloc(AdtEntry, adt_count);
+        errdefer allocator.free(adt_list);
+        var o: usize = s6_start + 4;
+        for (adt_list) |*a| {
+            o = align4(o);
+            if (o + 8 > data.len) return error.InvalidKbc;
+            const name_index = std.mem.readInt(u32, data[o..][0..4], .little);
+            const constructor_count = std.mem.readInt(u32, data[o + 4..][0..4], .little);
+            o += 8;
+            a.name = if (name_index < strings.len) strings[name_index].data else &[_]u8{};
+            const ctor_names_buf = try allocator.alloc([]const u8, constructor_count);
+            errdefer allocator.free(ctor_names_buf);
+            var c: usize = 0;
+            while (c < constructor_count) : (c += 1) {
+                if (o + 8 > data.len) return error.InvalidKbc;
+                const ctor_name_index = std.mem.readInt(u32, data[o..][0..4], .little);
+                o += 8; // name_index, payload_type_index
+                ctor_names_buf[c] = if (ctor_name_index < strings.len) strings[ctor_name_index].data else &[_]u8{};
+            }
+            a.constructor_names = ctor_names_buf;
+            o = align4(o);
+        }
+        adts = adt_list;
+    }
+
     return .{
         .code = code,
         .constants = constants,
         .functions = functions,
         .shapes = shapes,
+        .adts = adts,
         .strings = strings,
         .string_slices = string_slices,
         .import_specifiers = import_specifiers,
         .imported_functions = imported_functions,
         .globals = globals,
+        .file_data = data,
     };
 }
 
 /// Free all allocator-owned memory in a Module. Call after use when the module was loaded with load().
 pub fn freeModule(allocator: std.mem.Allocator, m: *const Module) void {
+    allocator.free(m.file_data);
     allocator.free(m.code);
     allocator.free(m.constants);
     for (m.string_slices) |s| allocator.free(s);
     allocator.free(m.string_slices);
     if (m.functions.len > 0) allocator.free(m.functions);
+    for (m.shapes) |s| allocator.free(s.field_names);
     if (m.shapes.len > 0) allocator.free(m.shapes);
+    for (m.adts) |a| allocator.free(a.constructor_names);
+    if (m.adts.len > 0) allocator.free(m.adts);
     if (m.strings.len > 0) allocator.free(m.strings);
     if (m.import_specifiers.len > 0) {
         for (m.import_specifiers) |s| allocator.free(s);
@@ -305,6 +365,7 @@ pub fn freeModule(allocator: std.mem.Allocator, m: *const Module) void {
 test "load minimal kbc" {
     const a = std.testing.allocator;
     const m = try load(a, "test/fixtures/empty.kbc");
+    defer a.free(m.file_data);
     defer a.free(m.code);
     defer a.free(m.constants);
     defer {
@@ -312,7 +373,10 @@ test "load minimal kbc" {
         a.free(m.string_slices);
     }
     if (m.functions.len > 0) a.free(m.functions);
+    for (m.shapes) |s| a.free(s.field_names);
     if (m.shapes.len > 0) a.free(m.shapes);
+    for (m.adts) |ad| a.free(ad.constructor_names);
+    if (m.adts.len > 0) a.free(m.adts);
     if (m.import_specifiers.len > 0) a.free(m.import_specifiers);
     if (m.imported_functions.len > 0) a.free(m.imported_functions);
     if (m.globals.len > 0) a.free(m.globals);
