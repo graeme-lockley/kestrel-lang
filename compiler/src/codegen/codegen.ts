@@ -487,6 +487,43 @@ function makeEmitExpr(
           emitCall(0xFFFFFF08, 0);
           break;
         }
+        if (expr.callee.name === '__string_length' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF09, 1);
+          break;
+        }
+        if (expr.callee.name === '__string_slice' && expr.args.length === 3) {
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF0A, 3);
+          break;
+        }
+        if (expr.callee.name === '__string_index_of' && expr.args.length === 2) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF0B, 2);
+          break;
+        }
+        if (expr.callee.name === '__string_equals' && expr.args.length === 2) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF0C, 2);
+          break;
+        }
+        if (expr.callee.name === '__string_upper' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF0D, 1);
+          break;
+        }
+        if (expr.callee.name === '__format_one' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF03, 1);
+          break;
+        }
+        if (expr.callee.name === '__print_one' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF00, 1);
+          break;
+        }
 
         // Built-in ADT constructors: Some(x), Ok(x), Err(e), Null(), Bool(x), Int(x), etc.
         if (adts != null) {

@@ -205,7 +205,7 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
                 pc += 8;
 
                 // Check for primitive functions (0xFFFFFF00 range)
-                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF08 and sp >= arity) {
+                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF0D and sp >= arity) {
                     if (fn_id == 0xFFFFFF00 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, false);
@@ -285,6 +285,40 @@ pub fn run(allocator: std.mem.Allocator, module: *const load_mod.Module, entry_p
                         continue;
                     } else if (fn_id == 0xFFFFFF08 and arity == 0) {
                         stack[sp] = primitives.nowMs();
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF09 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.stringLength(arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF0A and arity == 3) {
+                        const end_v = stack[sp - 1];
+                        const start_v = stack[sp - 2];
+                        const s_v = stack[sp - 3];
+                        sp -= 3;
+                        stack[sp] = primitives.stringSlice(&gc, s_v, start_v, end_v);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF0B and arity == 2) {
+                        const sub = stack[sp - 1];
+                        const s = stack[sp - 2];
+                        sp -= 2;
+                        stack[sp] = primitives.stringIndexOf(s, sub);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF0C and arity == 2) {
+                        const b = stack[sp - 1];
+                        const a = stack[sp - 2];
+                        sp -= 2;
+                        stack[sp] = primitives.stringEquals(a, b);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF0D and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.stringUpper(&gc, arg);
                         sp += 1;
                         continue;
                     }

@@ -267,3 +267,52 @@ pub fn nowMs() Value {
     const ms = std.time.milliTimestamp();
     return Value.int(@intCast(ms));
 }
+
+// --- String primitives (kestrel:string) ---
+
+/// (String) -> Int: character length in UTF-8 bytes.
+pub fn stringLength(s_val: Value) Value {
+    const s = getStringSlice(s_val) orelse return Value.int(0);
+    return Value.int(@intCast(s.len));
+}
+
+/// (String, Int, Int) -> String: substring [start, end). Clamps to valid range.
+pub fn stringSlice(gc: *GC, s_val: Value, start_val: Value, end_val: Value) Value {
+    const s = getStringSlice(s_val) orelse return Value.ptr(0);
+    var start = Value.intTo(start_val);
+    var end = Value.intTo(end_val);
+    if (start < 0) start = 0;
+    if (end > @as(i64, @intCast(s.len))) end = @intCast(s.len);
+    if (start >= end) return allocString(gc, s[0..0]) catch Value.ptr(0);
+    const su = @as(usize, @intCast(start));
+    const eu = @as(usize, @intCast(end));
+    if (eu > s.len) return allocString(gc, s[0..0]) catch Value.ptr(0);
+    return allocString(gc, s[su..eu]) catch Value.ptr(0);
+}
+
+/// (String, String) -> Int: index of first occurrence of sub in s, or -1.
+pub fn stringIndexOf(s_val: Value, sub_val: Value) Value {
+    const s = getStringSlice(s_val) orelse return Value.int(-1);
+    const sub = getStringSlice(sub_val) orelse return Value.int(-1);
+    const idx = std.mem.indexOf(u8, s, sub) orelse return Value.int(-1);
+    return Value.int(@intCast(idx));
+}
+
+/// (String, String) -> Bool: value equality.
+pub fn stringEquals(a_val: Value, b_val: Value) Value {
+    const a = getStringSlice(a_val) orelse return Value.boolVal(false);
+    const b = getStringSlice(b_val) orelse return Value.boolVal(false);
+    return Value.boolVal(std.mem.eql(u8, a, b));
+}
+
+/// (String) -> String: uppercase copy (ASCII only for simplicity).
+pub fn stringUpper(gc: *GC, s_val: Value) Value {
+    const s = getStringSlice(s_val) orelse return Value.ptr(0);
+    var out = std.ArrayList(u8).initCapacity(page_alloc, s.len) catch return Value.ptr(0);
+    defer out.deinit(page_alloc);
+    for (s) |c| {
+        const up = if (c >= 'a' and c <= 'z') c - 32 else c;
+        out.append(page_alloc, up) catch return Value.ptr(0);
+    }
+    return allocString(gc, out.items) catch Value.ptr(0);
+}

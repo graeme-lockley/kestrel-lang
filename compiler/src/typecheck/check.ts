@@ -126,6 +126,45 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     params: [],
     return: tInt,
   }, new Set()));
+  // String primitives (kestrel:string)
+  env.set('__string_length', generalize({
+    kind: 'arrow',
+    params: [tString],
+    return: tInt,
+  }, new Set()));
+  env.set('__string_slice', generalize({
+    kind: 'arrow',
+    params: [tString, tInt, tInt],
+    return: tString,
+  }, new Set()));
+  env.set('__string_index_of', generalize({
+    kind: 'arrow',
+    params: [tString, tString],
+    return: tInt,
+  }, new Set()));
+  env.set('__string_equals', generalize({
+    kind: 'arrow',
+    params: [tString, tString],
+    return: tBool,
+  }, new Set()));
+  env.set('__string_upper', generalize({
+    kind: 'arrow',
+    params: [tString],
+    return: tString,
+  }, new Set()));
+  // Stack primitives (kestrel:stack): format one value to string, print one value
+  const formatArgT = freshVar();
+  env.set('__format_one', generalize({
+    kind: 'arrow',
+    params: [formatArgT],
+    return: tString,
+  }, new Set()));
+  const printArgT = freshVar();
+  env.set('__print_one', generalize({
+    kind: 'arrow',
+    params: [printArgT],
+    return: { kind: 'prim', name: 'Unit' },
+  }, new Set()));
 
   function apply(t: InternalType): InternalType {
     return applySubst(t, subst);
