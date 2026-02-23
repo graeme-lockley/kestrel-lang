@@ -66,6 +66,7 @@ export interface ExportNamed extends NodeBase {
 
 export interface FunDecl extends NodeBase {
   kind: 'FunDecl';
+  exported: boolean;
   async: boolean;
   name: string;
   params: Param[];
@@ -81,6 +82,7 @@ export interface Param extends NodeBase {
 
 export interface TypeDecl extends NodeBase {
   kind: 'TypeDecl';
+  exported: boolean;
   name: string;
   type: Type;
 }

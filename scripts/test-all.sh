@@ -6,11 +6,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "== Compiler tests =="
-cd compiler && npm test && cd ..
+(cd compiler && npm test)
 
 echo "== VM tests =="
-# --verbose prints the test run command so there is visible output when tests pass
-cd vm && zig build test --verbose 2>&1 && cd .. || exit 1
+(cd vm && zig build test --verbose 2>&1)
 echo "VM tests passed."
 
 echo "== E2E =="

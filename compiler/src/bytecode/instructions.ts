@@ -33,6 +33,8 @@ export const enum Op {
   AWAIT = 0x1d,
   LOAD_GLOBAL = 0x1e,
   STORE_GLOBAL = 0x1f,
+  CALL_INDIRECT = 0x20,
+  LOAD_FN = 0x21,
 }
 
 const code: number[] = [];
@@ -124,6 +126,18 @@ export function emitCall(fnId: number, arity: number): void {
   u32(arity);
 }
 
+/** Append CALL_INDIRECT arity. Callee (fn_ref) is on stack below args. */
+export function emitCallIndirect(arity: number): void {
+  u8(Op.CALL_INDIRECT);
+  u32(arity);
+}
+
+/** Append LOAD_FN fn_index. At runtime, creates fn_ref(current_module, fn_index). */
+export function emitLoadFn(fnIndex: number): void {
+  u8(Op.LOAD_FN);
+  u32(fnIndex);
+}
+
 /** Append CONSTRUCT adt_id, ctor, arity. */
 export function emitConstruct(adtId: number, ctor: number, arity: number): void {
   u8(Op.CONSTRUCT);
@@ -191,4 +205,15 @@ export function patchI32(offset: number, value: number): void {
 /** Copy emitted bytes. */
 export function codeSlice(): Uint8Array {
   return new Uint8Array(code);
+}
+
+/** Save current code buffer state (for nested compilation like lambdas). */
+export function codeSave(): number[] {
+  return code.slice();
+}
+
+/** Restore code buffer from saved state. */
+export function codeRestore(saved: number[]): void {
+  code.length = 0;
+  for (const b of saved) code.push(b);
 }

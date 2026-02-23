@@ -175,10 +175,10 @@ class Parser {
       const spec = this.expect('string').value!;
       return { kind: 'ExportDecl', inner: { kind: 'ExportNamed', spec, specs } };
     }
-    return this.parseTopLevelDecl();
+    return this.parseTopLevelDecl(true);
   }
 
-  private parseTopLevelDecl(): TopLevelDecl {
+  private parseTopLevelDecl(exported = false): TopLevelDecl {
     if (this.at('keyword', 'export')) {
       this.advance();
       this.expect('keyword', 'exception');
@@ -192,14 +192,14 @@ class Parser {
       return { kind: 'ExceptionDecl', name, fields };
     }
     if (this.at('keyword', 'fun')) {
-      return this.parseFunDecl();
+      return this.parseFunDecl(exported);
     }
     if (this.at('keyword', 'type')) {
       this.advance();
       const name = this.expect('ident').value!;
       this.expect('op', '=');
       const type = this.parseType();
-      return { kind: 'TypeDecl', name, type };
+      return { kind: 'TypeDecl', exported, name, type };
     }
     if (this.at('keyword', 'val')) {
       this.advance();
@@ -228,7 +228,7 @@ class Parser {
     throw new ParseError('Expected fun, type, export exception, val, or var', this.current().span.start, this.current().span.line, this.current().span.column);
   }
 
-  private parseFunDecl(): import('../ast/nodes.js').FunDecl {
+  private parseFunDecl(exported = false): import('../ast/nodes.js').FunDecl {
     const async = this.at('keyword', 'async');
     if (async) this.advance();
     this.expect('keyword', 'fun');
@@ -239,7 +239,7 @@ class Parser {
     const returnType = this.parseType();
     this.expect('op', '=');
     const body = this.parseExpr();
-    return { kind: 'FunDecl', async, name, params, returnType, body };
+    return { kind: 'FunDecl', exported, async, name, params, returnType, body };
   }
 
   private parseParamList(): Param[] {
@@ -612,6 +612,7 @@ class Parser {
       const cases: Case[] = [];
       while (!this.at('rbrace')) {
         cases.push(this.parseCase());
+        if (this.at('comma')) this.advance();
       }
       this.expect('rbrace');
       return { kind: 'MatchExpr', scrutinee, cases };
@@ -722,13 +723,46 @@ class Parser {
       return { kind: 'ListExpr', elements };
     }
     if (this.at('lbrace')) {
-      return this.parseRecordExpr();
+      return this.parseRecordOrBlock();
     }
     if (this.at('keyword', 'throw')) {
       this.advance();
       return { kind: 'ThrowExpr', value: this.parseExpr() };
     }
     throw new ParseError('Expected expression', this.current().span.start, this.current().span.line, this.current().span.column);
+  }
+
+  private parseRecordOrBlock(): Expr {
+    // Distinguish { ident = expr, ... } (record) from { stmt; ...; expr } (block).
+    // Record: { ident = ..., ... } or { mut ident = ..., ... } or { ...spread, ... } or { }
+    // Block: { val ...; ... } or { var ...; ... } or { expr; ... }
+    const saved = this.i;
+    const next1 = this.tokens[this.i + 1];
+    if (next1 && next1.kind === 'rbrace') {
+      // empty { } — record
+      return this.parseRecordExpr();
+    }
+    if (next1 && (next1.value === 'val' || next1.value === 'var')) {
+      // { val ... or { var ... — block
+      return this.parseBlock();
+    }
+    if (next1 && next1.value === '...') {
+      // { ...spread — record
+      return this.parseRecordExpr();
+    }
+    if (next1 && next1.value === 'mut') {
+      // { mut ident = ... — record
+      return this.parseRecordExpr();
+    }
+    // Check: { ident = ... — if the token after ident is '=', it's a record
+    if (next1 && next1.kind === 'ident') {
+      const next2 = this.tokens[this.i + 2];
+      if (next2 && next2.kind === 'op' && next2.value === '=') {
+        return this.parseRecordExpr();
+      }
+    }
+    // Otherwise, treat as block
+    return this.parseBlock();
   }
 
   private parseRecordExpr(): Expr {
@@ -775,9 +809,11 @@ class Parser {
         if (this.at('op', ':=')) {
           this.advance();
           stmts.push({ kind: 'AssignStmt', target: expr, value: this.parseExpr() });
-        } else {
+        } else if (this.at('rbrace')) {
           result = expr;
           break;
+        } else {
+          stmts.push({ kind: 'ExprStmt', expr });
         }
       }
       if (this.at('semicolon')) this.advance();

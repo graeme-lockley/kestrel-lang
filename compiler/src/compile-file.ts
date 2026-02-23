@@ -10,8 +10,55 @@ import { codegen, type CodegenResult } from './codegen/codegen.js';
 import { writeKbc, type ImportedFunctionEntry } from './bytecode/write.js';
 import { resolveSpecifier } from './resolve.js';
 import { readTypesFile, writeTypesFile, isTypesFileFresh } from './types-file.js';
-import type { Program, ImportDecl } from './ast/nodes.js';
+import type { Program, ImportDecl, Expr } from './ast/nodes.js';
 import type { InternalType } from './types/internal.js';
+
+/** Count all LambdaExpr nodes in an expression tree (used to predict function table size). */
+function countLambdasInExpr(e: Expr): number {
+  switch (e.kind) {
+    case 'LambdaExpr': return 1 + countLambdasInExpr(e.body);
+    case 'CallExpr': return countLambdasInExpr(e.callee) + e.args.reduce((n, a) => n + countLambdasInExpr(a), 0);
+    case 'BinaryExpr': return countLambdasInExpr(e.left) + countLambdasInExpr(e.right);
+    case 'UnaryExpr': return countLambdasInExpr(e.operand);
+    case 'IfExpr': return countLambdasInExpr(e.cond) + countLambdasInExpr(e.then) + countLambdasInExpr(e.else);
+    case 'MatchExpr': return countLambdasInExpr(e.scrutinee) + e.cases.reduce((n, c) => n + countLambdasInExpr(c.body), 0);
+    case 'TryExpr': return countLambdasInExpr(e.body) + e.cases.reduce((n, c) => n + countLambdasInExpr(c.body), 0);
+    case 'PipeExpr': return countLambdasInExpr(e.left) + countLambdasInExpr(e.right);
+    case 'ConsExpr': return countLambdasInExpr(e.head) + countLambdasInExpr(e.tail);
+    case 'FieldExpr': return countLambdasInExpr(e.object);
+    case 'ThrowExpr': return countLambdasInExpr(e.value);
+    case 'AwaitExpr': return countLambdasInExpr(e.value);
+    case 'TupleExpr': return e.elements.reduce((n, el) => n + countLambdasInExpr(el), 0);
+    case 'ListExpr': return e.elements.reduce((n, el) => {
+      if (typeof el === 'object' && 'spread' in el) return n + countLambdasInExpr((el as { spread: true; expr: Expr }).expr);
+      return n + countLambdasInExpr(el as Expr);
+    }, 0);
+    case 'RecordExpr': return (e.spread ? countLambdasInExpr(e.spread) : 0) + e.fields.reduce((n, f) => n + countLambdasInExpr(f.value), 0);
+    case 'TemplateExpr': return e.parts.reduce((n, p) => n + (p.type === 'interp' ? countLambdasInExpr(p.expr) : 0), 0);
+    case 'BlockExpr': {
+      let n = countLambdasInExpr(e.result);
+      for (const s of e.stmts) {
+        if (s.kind === 'ExprStmt') n += countLambdasInExpr(s.expr);
+        else if (s.kind === 'AssignStmt') n += countLambdasInExpr(s.target) + countLambdasInExpr(s.value);
+        else n += countLambdasInExpr(s.value);
+      }
+      return n;
+    }
+    default: return 0;
+  }
+}
+
+function countLambdasInProgram(program: Program): number {
+  let n = 0;
+  for (const node of program.body) {
+    if ('body' in node && node.kind === 'FunDecl') n += countLambdasInExpr(node.body);
+    if (node.kind === 'ValDecl' || node.kind === 'VarDecl') n += countLambdasInExpr(node.value);
+    if (node.kind === 'ValStmt' || node.kind === 'VarStmt') n += countLambdasInExpr(node.value);
+    if (node.kind === 'ExprStmt') n += countLambdasInExpr(node.expr);
+    if (node.kind === 'AssignStmt') n += countLambdasInExpr(node.value);
+  }
+  return n;
+}
 
 export interface CompileFileOptions {
   /** Project root (for stdlib resolution). Default: process.cwd() */
@@ -39,11 +86,12 @@ function getDistinctSpecifiers(program: Program): string[] {
   return specs;
 }
 
-/** Export set: names we consider exported (top-level FunDecl, ValDecl, VarDecl). */
+/** Export set: names we consider exported (top-level FunDecl, ValDecl, VarDecl, TypeDecl). */
 function getExportSet(program: Program): Set<string> {
   const names = new Set<string>();
   for (const node of program.body) {
-    if (node.kind === 'FunDecl' || node.kind === 'ValDecl' || node.kind === 'VarDecl') names.add(node.name);
+    if ((node.kind === 'FunDecl' || node.kind === 'TypeDecl') && node.exported) names.add(node.name);
+    else if (node.kind === 'ValDecl' || node.kind === 'VarDecl') names.add(node.name);
   }
   return names;
 }
@@ -66,18 +114,19 @@ export function compileFile(
   const absPath = pathResolve(inputPath);
 
   const visited = new Set<string>();
-  const cache = new Map<string, { program: Program; exports: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] }>();
+  const cache = new Map<string, { program: Program; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] }>();
   const onCompilingFile = options?.onCompilingFile;
   const stalePaths = options?.stalePaths;
 
-  function compileOne(filePath: string): { ok: true; program: Program; exports: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] } | { ok: false; errors: string[] } {
+  function compileOne(filePath: string): { ok: true; program: Program; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] } | { ok: false; errors: string[] } {
     if (visited.has(filePath)) {
       return { ok: false, errors: [`Circular import: ${filePath}`] };
     }
-    visited.add(filePath);
 
     const cached = cache.get(filePath);
     if (cached) return { ok: true, ...cached };
+
+    visited.add(filePath);
 
     const compileStart = performance.now();
 
@@ -103,6 +152,7 @@ export function compileFile(
 
     const getOutputPaths = options?.getOutputPaths;
     const importBindings = new Map<string, InternalType>();
+    const typeAliasBindings = new Map<string, InternalType>();
     type DepResult =
       | { spec: string; path: string; result: CodegenResult; exportSet: Set<string>; dependencyPaths: string[]; fromTypesFile?: false }
       | { spec: string; path: string; exportSet: Set<string>; nameToExport: Map<string, { function_index: number; arity: number; type: InternalType; setter_index?: number }>; fromTypesFile: true };
@@ -135,8 +185,8 @@ export function compileFile(
           }
           if (!anyTransitiveStale) {
             try {
-              const typesExports = readTypesFile(paths.kti);
-            const exportSet = new Set(typesExports.keys());
+              const { exports: typesExports, typeAliases: typesTypeAliases } = readTypesFile(paths.kti);
+            const exportSet = new Set([...typesExports.keys(), ...typesTypeAliases.keys()]);
             const nameToExport = new Map<string, { function_index: number; arity: number; type: InternalType; setter_index?: number }>();
             for (const [name, exp] of typesExports) {
               if (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var') {
@@ -150,10 +200,15 @@ export function compileFile(
               const requested = getRequestedImports(imp);
               for (const [localName, externalName] of requested) {
                 const exp = typesExports.get(externalName);
-                if (exp == null) {
+                const ta = typesTypeAliases.get(externalName);
+                if (exp == null && ta == null) {
                   return { ok: false, errors: [`Module ${spec} does not export ${externalName}`] };
                 }
-                if (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var') importBindings.set(localName, exp.type);
+                if (ta != null) {
+                  typeAliasBindings.set(localName, ta.type);
+                } else if (exp != null && (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var')) {
+                  importBindings.set(localName, exp.type);
+                }
               }
             }
             depResults.push({ spec, path: depPath, exportSet, nameToExport, fromTypesFile: true });
@@ -176,7 +231,11 @@ export function compileFile(
             if (t == null) {
               return { ok: false, errors: [`Module ${spec} does not export ${externalName}`] };
             }
-            importBindings.set(localName, t);
+            if (depOut.exportedTypeAliases.has(externalName)) {
+              typeAliasBindings.set(localName, t);
+            } else {
+              importBindings.set(localName, t);
+            }
           }
         }
         depResults.push({
@@ -189,11 +248,18 @@ export function compileFile(
       }
     }
 
-    const tcOpts: TypecheckOptions = { importBindings: importBindings.size > 0 ? importBindings : undefined };
+    const tcOpts: TypecheckOptions = {
+      importBindings: importBindings.size > 0 ? importBindings : undefined,
+      typeAliasBindings: typeAliasBindings.size > 0 ? typeAliasBindings : undefined,
+    };
     const tc = typecheck(program, tcOpts);
     if (!tc.ok) return { ok: false, errors: tc.errors };
 
-    const mainFuncCount = program.body.filter((n) => n.kind === 'FunDecl').length;
+    const funDeclCount = program.body.filter((n) => n.kind === 'FunDecl').length;
+    const lambdaCount = countLambdasInProgram(program);
+    const valOrVarCount = program.body.filter((n) => n.kind === 'ValDecl' || n.kind === 'VarDecl').length;
+    const varSetterCount = program.body.filter((n) => n.kind === 'VarDecl').length;
+    const mainFuncCount = funDeclCount + lambdaCount + valOrVarCount + varSetterCount;
     const importedFuncIds = new Map<string, number>();
     const importedVarSetterIds = new Map<string, number>();
     const importedFunctionTable: ImportedFunctionEntry[] = [];
@@ -268,7 +334,7 @@ export function compileFile(
       writeFileSync(paths.kbc, kbcBytes);
       const exportKind = new Map<string, 'function' | 'val' | 'var'>();
       for (const node of program.body) {
-        if (node.kind === 'FunDecl') exportKind.set(node.name, 'function');
+        if (node.kind === 'FunDecl' && node.exported) exportKind.set(node.name, 'function');
         if (node.kind === 'ValDecl') exportKind.set(node.name, 'val');
         if (node.kind === 'VarDecl') exportKind.set(node.name, 'var');
       }
@@ -288,7 +354,7 @@ export function compileFile(
           typeExports.set(name, entry);
         }
       }
-      writeTypesFile(paths.kti, typeExports);
+      writeTypesFile(paths.kti, typeExports, tc.exportedTypeAliases);
     }
 
     const dependencyPaths = [
@@ -318,12 +384,12 @@ export function compileFile(
       const paths = getOutputPaths(filePath);
       writeFileSync(paths.kbc + '.deps', dependencyPaths.join('\n') + '\n');
     }
-    cache.set(filePath, { program, exports: tc.exports, codegenResult: mainResult, dependencyPaths });
+    cache.set(filePath, { program, exports: tc.exports, exportedTypeAliases: tc.exportedTypeAliases, codegenResult: mainResult, dependencyPaths });
     visited.delete(filePath);
     const durationMs = Math.round(performance.now() - compileStart);
     // Report every file we compile (so incremental runs show full chain: e.g. m3, m2, hello)
     onCompilingFile?.(filePath, durationMs);
-    return { ok: true, program, exports: tc.exports, codegenResult: mainResult, dependencyPaths };
+    return { ok: true, program, exports: tc.exports, exportedTypeAliases: tc.exportedTypeAliases, codegenResult: mainResult, dependencyPaths };
   }
 
   const out = compileOne(absPath);

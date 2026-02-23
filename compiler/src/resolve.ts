@@ -9,6 +9,7 @@ import { existsSync } from 'fs';
 const STDLIB_NAMES = [
   'kestrel:string', 'kestrel:stack', 'kestrel:http', 'kestrel:json', 'kestrel:fs',
   'kestrel:option', 'kestrel:result', 'kestrel:list', 'kestrel:value', 'kestrel:test',
+  'kestrel:process', 'kestrel:console',
 ] as const;
 
 /** Map stdlib specifier to path segment (e.g. kestrel:string -> kestrel/string.ks). */

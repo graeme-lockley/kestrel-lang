@@ -444,6 +444,68 @@ pub fn stringEquals(a_val: Value, b_val: Value) Value {
     return Value.boolVal(std.mem.eql(u8, a, b));
 }
 
+/// Deep structural equality: (T, T) -> Bool
+pub fn equals(a: Value, b: Value) Value {
+    return Value.boolVal(deepEqual(a, b));
+}
+
+fn deepEqual(a: Value, b: Value) bool {
+    if (a.tag != b.tag) return false;
+    switch (a.tag) {
+        .int, .bool, .char => return a.payload == b.payload,
+        .unit => return true,
+        .ptr => {
+            const addr_a = Value.ptrTo(a);
+            const addr_b = Value.ptrTo(b);
+            if (addr_a == 0 and addr_b == 0) return true;
+            if (addr_a == 0 or addr_b == 0) return false;
+            const base_a = @as([*]const u8, @ptrFromInt(addr_a));
+            const base_b = @as([*]const u8, @ptrFromInt(addr_b));
+            const kind_a = base_a[0];
+            const kind_b = base_b[0];
+            if (kind_a != kind_b) return false;
+            if (kind_a == gc_mod.STRING_KIND) {
+                const len_a = std.mem.readInt(u32, base_a[4..8], .little);
+                const len_b = std.mem.readInt(u32, base_b[4..8], .little);
+                if (len_a != len_b) return false;
+                return std.mem.eql(u8, base_a[8 .. 8 + len_a], base_b[8 .. 8 + len_b]);
+            }
+            if (kind_a == gc_mod.RECORD_KIND) {
+                const fc_a = std.mem.readInt(u32, base_a[12..16], .little);
+                const fc_b = std.mem.readInt(u32, base_b[12..16], .little);
+                if (fc_a != fc_b) return false;
+                const fields_a = @as([*]const Value, @alignCast(@ptrCast(base_a + gc_mod.RECORD_HEADER)));
+                const fields_b = @as([*]const Value, @alignCast(@ptrCast(base_b + gc_mod.RECORD_HEADER)));
+                var i: usize = 0;
+                while (i < fc_a) : (i += 1) {
+                    if (!deepEqual(fields_a[i], fields_b[i])) return false;
+                }
+                return true;
+            }
+            if (kind_a == gc_mod.ADT_KIND) {
+                const adt_id_a = std.mem.readInt(u32, base_a[8..12], .little);
+                const adt_id_b = std.mem.readInt(u32, base_b[8..12], .little);
+                if (adt_id_a != adt_id_b) return false;
+                const ctor_a = std.mem.readInt(u32, base_a[12..16], .little);
+                const ctor_b = std.mem.readInt(u32, base_b[12..16], .little);
+                if (ctor_a != ctor_b) return false;
+                const arity_a = std.mem.readInt(u32, base_a[16..20], .little);
+                const arity_b = std.mem.readInt(u32, base_b[16..20], .little);
+                if (arity_a != arity_b) return false;
+                const payloads_a = @as([*]const Value, @alignCast(@ptrCast(base_a + gc_mod.ADT_HEADER)));
+                const payloads_b = @as([*]const Value, @alignCast(@ptrCast(base_b + gc_mod.ADT_HEADER)));
+                var i: usize = 0;
+                while (i < arity_a) : (i += 1) {
+                    if (!deepEqual(payloads_a[i], payloads_b[i])) return false;
+                }
+                return true;
+            }
+            return false;
+        },
+        else => return false,
+    }
+}
+
 /// (String) -> String: uppercase copy (ASCII only for simplicity).
 pub fn stringUpper(gc: *GC, s_val: Value) Value {
     const s = getStringSlice(s_val) orelse return Value.ptr(0);
@@ -454,4 +516,183 @@ pub fn stringUpper(gc: *GC, s_val: Value) Value {
         out.append(page_alloc, up) catch return Value.ptr(0);
     }
     return allocString(gc, out.items) catch Value.ptr(0);
+}
+
+// --- Process/FS primitives ---
+
+fn allocRecord(gc: *GC, module_index: u32, shape_id: u32, fields: []const Value) !Value {
+    const total = gc_mod.RECORD_HEADER + fields.len * 8;
+    const mem = try gc.allocObject(total);
+    @memset(mem, 0);
+    mem[0] = gc_mod.RECORD_KIND;
+    std.mem.writeInt(u32, mem[4..8], module_index, .little);
+    std.mem.writeInt(u32, mem[8..12], shape_id, .little);
+    std.mem.writeInt(u32, mem[12..16], @as(u32, @intCast(fields.len)), .little);
+    const fld = @as([*]Value, @alignCast(@ptrCast(mem.ptr + gc_mod.RECORD_HEADER)));
+    for (fields, 0..) |v, i| {
+        fld[i] = v;
+    }
+    return Value.ptr(@intFromPtr(mem.ptr));
+}
+
+/// Build a List<T> from a Zig slice (constructs Cons/Nil chain). module_index 0 is usually the entry module.
+fn allocList(gc: *GC, items: []const Value) !Value {
+    var tail = try allocListAdt(gc, 0, LIST_NIL, null, null);
+    var i = items.len;
+    while (i > 0) {
+        i -= 1;
+        tail = try allocListAdt(gc, 0, LIST_CONS, items[i], tail);
+    }
+    return tail;
+}
+
+/// () -> Record { os, args, env, cwd } using current_module.shapes[0] and shapes[1].
+pub fn getProcess(gc: *GC, current_module: *const load_mod.Module) Value {
+    const module_index = current_module.module_index;
+
+    const os_str = comptime switch (@import("builtin").os.tag) {
+        .macos => "darwin",
+        .linux => "linux",
+        .windows => "windows",
+        else => "unknown",
+    };
+    const os_val = allocString(gc, os_str) catch return Value.unit();
+
+    // args
+    const raw_args = std.process.argsAlloc(page_alloc) catch return Value.unit();
+    defer std.process.argsFree(page_alloc, raw_args);
+    var arg_vals = std.ArrayList(Value).initCapacity(page_alloc, raw_args.len) catch return Value.unit();
+    defer arg_vals.deinit(page_alloc);
+    for (raw_args) |a| {
+        const s = allocString(gc, a) catch return Value.unit();
+        arg_vals.append(page_alloc, s) catch return Value.unit();
+    }
+    const args_list = allocList(gc, arg_vals.items) catch return Value.unit();
+
+    // env
+    const env_shape_id: u32 = if (current_module.shapes.len > 1) 1 else 0;
+    var env_vals = std.ArrayList(Value).initCapacity(page_alloc, 64) catch return Value.unit();
+    defer env_vals.deinit(page_alloc);
+    {
+        const env_ptr = std.c.environ;
+        var idx: usize = 0;
+        while (env_ptr[idx]) |entry| : (idx += 1) {
+            const entry_slice = std.mem.sliceTo(entry, 0);
+            if (std.mem.indexOf(u8, entry_slice, "=")) |eq_pos| {
+                const k = allocString(gc, entry_slice[0..eq_pos]) catch return Value.unit();
+                const v = allocString(gc, entry_slice[eq_pos + 1 ..]) catch return Value.unit();
+                const pair = allocRecord(gc, module_index, env_shape_id, &[_]Value{ k, v }) catch return Value.unit();
+                env_vals.append(page_alloc, pair) catch return Value.unit();
+            }
+        }
+    }
+    const env_list = allocList(gc, env_vals.items) catch return Value.unit();
+
+    // cwd
+    var cwd_buf: [4096]u8 = undefined;
+    const cwd_slice = std.posix.getcwd(&cwd_buf) catch "unknown";
+    const cwd_val = allocString(gc, cwd_slice) catch return Value.unit();
+
+    // Build 4-field record { os, args, env, cwd } using shapes[0]
+    const proc_shape_id: u32 = 0;
+    return allocRecord(gc, module_index, proc_shape_id, &[_]Value{ os_val, args_list, env_list, cwd_val }) catch Value.unit();
+}
+
+/// (String) -> List<String>: directory listing. Each entry is "fullpath\tfile" or "fullpath\tdir".
+pub fn listDir(gc: *GC, path_val: Value) Value {
+    const path_slice = getStringSlice(path_val) orelse return allocList(gc, &[_]Value{}) catch Value.unit();
+
+    var dir = std.fs.cwd().openDir(path_slice, .{ .iterate = true }) catch
+        return allocList(gc, &[_]Value{}) catch Value.unit();
+    defer dir.close();
+
+    var entries = std.ArrayList(Value).initCapacity(page_alloc, 64) catch return Value.unit();
+    defer entries.deinit(page_alloc);
+
+    var it = dir.iterate();
+    while (it.next() catch null) |entry| {
+        const kind_str: []const u8 = if (entry.kind == .directory) "dir" else "file";
+        const full = std.fmt.allocPrint(page_alloc, "{s}/{s}\t{s}", .{ path_slice, entry.name, kind_str }) catch continue;
+        defer page_alloc.free(full);
+        const s = allocString(gc, full) catch continue;
+        entries.append(page_alloc, s) catch continue;
+    }
+
+    return allocList(gc, entries.items) catch Value.unit();
+}
+
+/// (String, String) -> Unit: write text content to a file.
+pub fn writeText(path_val: Value, content_val: Value) void {
+    const path_slice = getStringSlice(path_val) orelse return;
+    const content_slice = getStringSlice(content_val) orelse return;
+    const file = std.fs.cwd().createFile(path_slice, .{}) catch return;
+    defer file.close();
+    _ = file.writeAll(content_slice) catch {};
+}
+
+/// () -> String: current OS name.
+pub fn getOs(gc: *GC) Value {
+    const os_str = comptime switch (@import("builtin").os.tag) {
+        .macos => "darwin",
+        .linux => "linux",
+        .windows => "windows",
+        else => "unknown",
+    };
+    return allocString(gc, os_str) catch Value.ptr(0);
+}
+
+/// () -> List<String>: command-line arguments.
+pub fn getArgs(gc: *GC) Value {
+    const raw_args = std.process.argsAlloc(page_alloc) catch return Value.ptr(0);
+    defer std.process.argsFree(page_alloc, raw_args);
+    var arg_vals = std.ArrayList(Value).initCapacity(page_alloc, raw_args.len) catch return Value.ptr(0);
+    defer arg_vals.deinit(page_alloc);
+    for (raw_args) |a| {
+        const s = allocString(gc, a) catch return Value.ptr(0);
+        arg_vals.append(page_alloc, s) catch return Value.ptr(0);
+    }
+    return allocList(gc, arg_vals.items) catch Value.ptr(0);
+}
+
+/// () -> String: current working directory.
+pub fn getCwd(gc: *GC) Value {
+    var cwd_buf: [4096]u8 = undefined;
+    const cwd_slice = std.posix.getcwd(&cwd_buf) catch "unknown";
+    return allocString(gc, cwd_slice) catch Value.ptr(0);
+}
+
+/// (String, List<String>) -> Int: spawn process and wait, return exit code.
+pub fn runProcess(prog_val: Value, args_val: Value) Value {
+    const prog_slice = getStringSlice(prog_val) orelse return Value.int(1);
+
+    var argv = std.ArrayList([]const u8).initCapacity(page_alloc, 16) catch return Value.int(1);
+    defer argv.deinit(page_alloc);
+    argv.append(page_alloc, prog_slice) catch return Value.int(1);
+
+    // Walk the list ADT to extract argument strings
+    var cur = args_val;
+    while (cur.tag == .ptr) {
+        const addr = Value.ptrTo(cur);
+        if (addr == 0) break;
+        const base = @as([*]const u8, @ptrFromInt(addr));
+        if (base[0] != gc_mod.ADT_KIND) break;
+        const ctor = std.mem.readInt(u32, base[12..16], .little);
+        if (ctor == LIST_NIL) break;
+        if (ctor != LIST_CONS) break;
+        const payloads = @as([*]const Value, @alignCast(@ptrCast(base + gc_mod.ADT_HEADER)));
+        const s = getStringSlice(payloads[0]) orelse break;
+        argv.append(page_alloc, s) catch break;
+        cur = payloads[1];
+    }
+
+    var child = std.process.Child.init(argv.items, page_alloc);
+    child.stdout_behavior = .Inherit;
+    child.stderr_behavior = .Inherit;
+    child.stdin_behavior = .Inherit;
+    child.spawn() catch return Value.int(1);
+    const term = child.wait() catch return Value.int(1);
+    return switch (term) {
+        .Exited => |code| Value.int(@intCast(code)),
+        else => Value.int(1),
+    };
 }

@@ -205,7 +205,9 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
         const n_globals = std.mem.readInt(u32, data[s2_start..][0..4], .little);
         const fn_count = std.mem.readInt(u32, data[s2_start + 4 ..][0..4], .little);
         if (n_globals > 0) {
-            globals = try allocator.alloc(Value, n_globals);
+            const min_locals = 128;
+            const alloc_size = if (n_globals > min_locals) n_globals else min_locals;
+            globals = try allocator.alloc(Value, alloc_size);
             for (globals) |*v| v.* = Value.unit();
         }
         const fns = try allocator.alloc(FnEntry, fn_count);

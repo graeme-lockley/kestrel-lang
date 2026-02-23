@@ -34,19 +34,31 @@ export class TypeCheckError extends Error {
 export interface TypecheckOptions {
   /** Import bindings (localName -> type) to add to scope before typechecking. */
   importBindings?: Map<string, InternalType>;
+  /** Imported type aliases (localName -> type) to resolve in function signatures. */
+  typeAliasBindings?: Map<string, InternalType>;
 }
 
-export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports: Map<string, InternalType> } | { ok: false; errors: string[] } {
+export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType> } | { ok: false; errors: string[] } {
   resetVarId();
   const errors: string[] = [];
   const subst = new Map<number, InternalType>();
   const env = new Map<string, InternalType>();
+  const typeAliases = new Map<string, InternalType>();
   let inAsyncContext = false; // Track if we're in an async function
 
   // Add import bindings first (so they can be used in the module)
   const importBindings = options?.importBindings;
   if (importBindings) {
     for (const [name, t] of importBindings) env.set(name, t);
+  }
+
+  // Add imported type aliases so they resolve in function signatures
+  const typeAliasBindings = options?.typeAliasBindings;
+  if (typeAliasBindings) {
+    for (const [name, t] of typeAliasBindings) {
+      typeAliases.set(name, t);
+      env.set(name, t);
+    }
   }
 
   // Add builtin primitives to environment (variadic: ≥1 arg, Unit)
@@ -166,6 +178,56 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     return: { kind: 'prim', name: 'Unit' },
   }, new Set()));
 
+  const eqA = freshVar(); const eqB = freshVar();
+  env.set('__equals', generalize({
+    kind: 'arrow',
+    params: [eqA, eqB],
+    return: tBool,
+  }, new Set()));
+
+  const processRetT = freshVar();
+  env.set('__get_process', generalize({
+    kind: 'arrow',
+    params: [],
+    return: processRetT,
+  }, new Set()));
+
+  env.set('__get_os', generalize({
+    kind: 'arrow',
+    params: [],
+    return: tString,
+  }, new Set()));
+
+  env.set('__get_args', generalize({
+    kind: 'arrow',
+    params: [],
+    return: { kind: 'app', name: 'List', args: [tString] },
+  }, new Set()));
+
+  env.set('__get_cwd', generalize({
+    kind: 'arrow',
+    params: [],
+    return: tString,
+  }, new Set()));
+
+  env.set('__list_dir', generalize({
+    kind: 'arrow',
+    params: [tString],
+    return: { kind: 'app', name: 'List', args: [tString] },
+  }, new Set()));
+
+  env.set('__write_text', generalize({
+    kind: 'arrow',
+    params: [tString, tString],
+    return: tUnit,
+  }, new Set()));
+
+  env.set('__run_process', generalize({
+    kind: 'arrow',
+    params: [tString, { kind: 'app', name: 'List', args: [tString] }],
+    return: tInt,
+  }, new Set()));
+
   function apply(t: InternalType): InternalType {
     return applySubst(t, subst);
   }
@@ -217,6 +279,34 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         errors.push(`Non-exhaustive match: missing constructors: ${missing.join(', ')}`);
       }
     }
+  }
+
+  /**
+   * Walk a record's row chain to find a field by name.
+   * If the field is found, returns its type. If not found and the chain
+   * ends in a row variable, extends the row with the field and returns
+   * the fresh field type. Returns null only if the record is closed.
+   */
+  function findFieldInRecord(rec: InternalType & { kind: 'record' }, name: string): InternalType | null {
+    const field = rec.fields.find((f) => f.name === name);
+    if (field != null) return field.type;
+    if (rec.row == null) return null;
+    const rowApplied = apply(rec.row);
+    if (rowApplied.kind === 'var') {
+      const fieldType = freshVar();
+      const newRowVar = freshVar();
+      const extension: InternalType = {
+        kind: 'record',
+        fields: [{ name, mut: false, type: fieldType }],
+        row: newRowVar,
+      };
+      unify(rowApplied, extension, subst);
+      return fieldType;
+    }
+    if (rowApplied.kind === 'record') {
+      return findFieldInRecord(rowApplied, name);
+    }
+    return null;
   }
 
   function inferExpr(expr: Expr): InternalType {
@@ -401,13 +491,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           throw new TypeCheckError(`Expected record or tuple type, got ${applied.kind}`, expr);
         }
 
-        const field = applied.fields.find((f) => f.name === expr.field);
-        if (field == null) {
-          throw new TypeCheckError(`Unknown field: ${expr.field}`, expr);
+        const found = findFieldInRecord(applied, expr.field);
+        if (found != null) {
+          result = apply(found);
+          setInferredType(expr, result);
+          return result;
         }
-        result = apply(field.type);
-        setInferredType(expr, result);
-        return result;
+        throw new TypeCheckError(`Unknown field: ${expr.field}`, expr);
       }
       case 'MatchExpr': {
         const scrutT = inferExpr(expr.scrutinee);
@@ -558,10 +648,29 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         setInferredType(expr, result);
         return result;
       }
-      case 'PipeExpr':
+      case 'PipeExpr': {
+        const leftT = apply(inferExpr(expr.left));
+        const rightT = apply(inferExpr(expr.right));
         result = freshVar();
+        if (expr.op === '|>') {
+          unify(rightT, { kind: 'arrow', params: [leftT], return: result }, subst);
+        } else {
+          unify(leftT, { kind: 'arrow', params: [rightT], return: result }, subst);
+        }
+        result = apply(result);
         setInferredType(expr, result);
         return result;
+      }
+      case 'TemplateExpr': {
+        for (const part of expr.parts) {
+          if (part.type !== 'literal') {
+            inferExpr(part.expr);
+          }
+        }
+        result = tString;
+        setInferredType(expr, result);
+        return result;
+      }
       default:
         result = freshVar();
         setInferredType(expr, result);
@@ -574,9 +683,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       if (node.kind === 'FunDecl') {
         const sigScope = new Map<string, InternalType>();
         const paramTs = node.params.map((p) =>
-          p.type ? astTypeToInternalWithScope(p.type, sigScope) : freshVar()
+          p.type ? astTypeToInternalWithScope(p.type, sigScope, typeAliases) : freshVar()
         );
-        const returnT = astTypeToInternalWithScope(node.returnType, sigScope);
+        const returnT = astTypeToInternalWithScope(node.returnType, sigScope, typeAliases);
 
         // Check if async function: return type must be Task<T>
         if (node.async) {
@@ -639,7 +748,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const scheme = generalize(appliedFnType, envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'TypeDecl') {
-        env.set(node.name, astTypeToInternal(node.type));
+        const aliasType = astTypeToInternal(node.type);
+        env.set(node.name, aliasType);
+        typeAliases.set(node.name, aliasType);
       } else if (node.kind === 'ValStmt') {
         const t = apply(inferExpr(node.value));
         const scheme = generalize(t, envFreeVars());
@@ -702,6 +813,14 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         if (n2.kind === 'RecordExpr') (n2.fields as { value: unknown }[]).forEach((f) => resolveNode(f.value));
         if (n2.kind === 'TupleExpr') (n2.elements as unknown[]).forEach(resolveNode);
         if (n2.kind === 'FieldExpr') resolveNode(n2.object);
+        if (n2.kind === 'TemplateExpr') (n2.parts as { type: string; expr?: unknown }[]).forEach((p) => { if (p.expr) resolveNode(p.expr); });
+        if (n2.kind === 'ListExpr') (n2.elements as unknown[]).forEach(resolveNode);
+        if (n2.kind === 'ConsExpr') { resolveNode(n2.head); resolveNode(n2.tail); }
+        if (n2.kind === 'MatchExpr') { resolveNode(n2.scrutinee); (n2.cases as { body: unknown }[]).forEach((c) => resolveNode(c.body)); }
+        if (n2.kind === 'ThrowExpr') resolveNode(n2.value);
+        if (n2.kind === 'TryExpr') { resolveNode(n2.body); (n2.cases as { body: unknown }[]).forEach((c) => resolveNode(c.body)); }
+        if (n2.kind === 'AwaitExpr') resolveNode(n2.value);
+        if (n2.kind === 'PipeExpr') { resolveNode(n2.left); resolveNode(n2.right); }
         if (n2.kind === 'AssignStmt') { resolveNode(n2.target); resolveNode(n2.value); }
         if (n2.kind === 'LambdaExpr') resolveNode(n2.body);
       }
@@ -709,13 +828,23 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     resolveNode(program);
 
     const exports = new Map<string, InternalType>();
+    const exportedTypeAliases = new Map<string, InternalType>();
     for (const node of program.body) {
-      if (node.kind === 'FunDecl' || node.kind === 'ValDecl' || node.kind === 'VarDecl') {
+      if (node.kind === 'FunDecl' && node.exported) {
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));
+      } else if (node.kind === 'ValDecl' || node.kind === 'VarDecl') {
+        const t = env.get(node.name);
+        if (t != null) exports.set(node.name, apply(t));
+      } else if (node.kind === 'TypeDecl' && node.exported) {
+        const t = typeAliases.get(node.name);
+        if (t != null) {
+          exports.set(node.name, apply(t));
+          exportedTypeAliases.set(node.name, apply(t));
+        }
       }
     }
-    return { ok: true, exports };
+    return { ok: true, exports, exportedTypeAliases };
   } catch (e) {
     if (e instanceof UnifyError) {
       errors.push(`${e.message}: ${typeStr(e.left)} vs ${typeStr(e.right)}`);

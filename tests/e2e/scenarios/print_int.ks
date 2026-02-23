@@ -1,4 +1,0 @@
-// Print an integer using the builtin print primitive
-val x = 42
-println(x)
-// 42

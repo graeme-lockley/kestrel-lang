@@ -78,6 +78,8 @@ const END_TRY: u8 = 0x1C;
 const AWAIT: u8 = 0x1D;
 const LOAD_GLOBAL: u8 = 0x1E;
 const STORE_GLOBAL: u8 = 0x1F;
+const CALL_INDIRECT: u8 = 0x20;
+const LOAD_FN: u8 = 0x21;
 
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
@@ -103,12 +105,45 @@ const CallFrame = struct {
 
 /// Resolve import specifier to .kbc path: same directory as entry_path, specifier with .ks replaced by .kbc (07 §9 cache mirror).
 fn resolveImportPath(allocator: std.mem.Allocator, specifier: []const u8, entry_path: []const u8) ![]const u8 {
-    if (specifier.len > 0 and std.mem.indexOf(u8, specifier, "kestrel:") == @as(?usize, 0)) {
+    if (specifier.len > 8 and std.mem.eql(u8, specifier[0..8], "kestrel:")) {
+        const mod_name = specifier[8..];
+        const deps_path = try std.fmt.allocPrint(allocator, "{s}.deps", .{entry_path});
+        defer allocator.free(deps_path);
+        const deps_file = std.fs.cwd().openFile(deps_path, .{}) catch {
+            return error.StdlibImportNotResolved;
+        };
+        defer deps_file.close();
+        const deps_content = deps_file.readToEndAlloc(allocator, 1024 * 1024) catch {
+            return error.StdlibImportNotResolved;
+        };
+        defer allocator.free(deps_content);
+        const needle = try std.fmt.allocPrint(allocator, "/kestrel/{s}.ks", .{mod_name});
+        defer allocator.free(needle);
+        var lines = std.mem.splitScalar(u8, deps_content, '\n');
+        while (lines.next()) |line| {
+            const trimmed = std.mem.trim(u8, line, " \t\r");
+            if (trimmed.len == 0) continue;
+            if (std.mem.endsWith(u8, trimmed, needle)) {
+                const home = std.posix.getenv("HOME") orelse "/tmp";
+                const env_cache = std.posix.getenv("KESTREL_CACHE");
+                const cache_root = env_cache orelse try std.fmt.allocPrint(allocator, "{s}/.kestrel/kbc", .{home});
+                defer if (env_cache == null) allocator.free(cache_root);
+                const base = trimmed[0 .. trimmed.len - 3];
+                return std.fmt.allocPrint(allocator, "{s}{s}.kbc", .{ cache_root, base });
+            }
+        }
         return error.StdlibImportNotResolved;
     }
-    const entry_dir = std.fs.path.dirname(entry_path) orelse ".";
     const base_len = if (std.mem.endsWith(u8, specifier, ".ks")) specifier.len - 3 else specifier.len;
     const base = specifier[0..base_len];
+    if (specifier[0] == '/') {
+        const home = std.posix.getenv("HOME") orelse "/tmp";
+        const env_cache = std.posix.getenv("KESTREL_CACHE");
+        const cache_root = env_cache orelse try std.fmt.allocPrint(allocator, "{s}/.kestrel/kbc", .{home});
+        defer if (env_cache == null) allocator.free(cache_root);
+        return std.fmt.allocPrint(allocator, "{s}{s}.kbc", .{ cache_root, base });
+    }
+    const entry_dir = std.fs.path.dirname(entry_path) orelse ".";
     const kbc_name = try std.fmt.allocPrint(allocator, "{s}.kbc", .{base});
     defer allocator.free(kbc_name);
     return std.fs.path.join(allocator, &[_][]const u8{ entry_dir, kbc_name });
@@ -131,7 +166,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
     for (&call_frames) |*f| {
         f.* = .{ .pc = 0, .module = module, .saved_sp = 0, .discard_return = false };
     }
-    var saved_locals: [max_frames][max_locals]Value = undefined;
+    var saved_locals: [max_frames + 1][max_locals]Value = undefined;
     for (&saved_locals) |*frame| {
         for (&frame.*) |*v| v.* = Value.unit();
     }
@@ -206,6 +241,12 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     current_module.globals[idx] = stack[sp];
                 }
             },
+            LOAD_FN => {
+                const fn_idx = std.mem.readInt(u32, code[pc..][0..4], .little);
+                pc += 4;
+                stack[sp] = Value.fnRef(@intCast(current_module.module_index), fn_idx);
+                sp += 1;
+            },
             STORE_LOCAL => {
                 const idx = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
@@ -220,7 +261,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 pc += 8;
 
                 // Check for primitive functions (0xFFFFFF00 range)
-                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF0D and sp >= arity) {
+                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF15 and sp >= arity) {
                     if (fn_id == 0xFFFFFF00 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, false, module_ptrs.items);
@@ -336,6 +377,50 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         stack[sp] = primitives.stringUpper(&gc, arg);
                         sp += 1;
                         continue;
+                    } else if (fn_id == 0xFFFFFF0E and arity == 2) {
+                        const b = stack[sp - 1];
+                        const a = stack[sp - 2];
+                        sp -= 2;
+                        stack[sp] = primitives.equals(a, b);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF0F and arity == 0) {
+                        stack[sp] = primitives.getProcess(&gc, current_module);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF10 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.listDir(&gc, arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF11 and arity == 2) {
+                        const content = stack[sp - 1];
+                        const path = stack[sp - 2];
+                        sp -= 2;
+                        primitives.writeText(path, content);
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF12 and arity == 2) {
+                        const args_val = stack[sp - 1];
+                        const prog = stack[sp - 2];
+                        sp -= 2;
+                        stack[sp] = primitives.runProcess(prog, args_val);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF13 and arity == 0) {
+                        stack[sp] = primitives.getOs(&gc);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF14 and arity == 0) {
+                        stack[sp] = primitives.getArgs(&gc);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF15 and arity == 0) {
+                        stack[sp] = primitives.getCwd(&gc);
+                        sp += 1;
+                        continue;
                     }
                 }
 
@@ -415,6 +500,36 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 sp -= arity;
                 pc = entry.code_offset;
             },
+            CALL_INDIRECT => {
+                const arity = std.mem.readInt(u32, code[pc..][0..4], .little);
+                pc += 4;
+
+                if (sp < arity + 1 or frame_sp >= max_frames) continue;
+                const fn_val = stack[sp - arity - 1];
+                if (fn_val.tag != .fn_ref) continue;
+                const target_mod_idx = Value.fnRefModule(fn_val);
+                const fn_id = Value.fnRefIndex(fn_val);
+                const target_module: *load_mod.Module = if (target_mod_idx < module_ptrs.items.len) @constCast(module_ptrs.items[target_mod_idx]) else continue;
+                if (fn_id >= target_module.functions.len) continue;
+                const entry = target_module.functions[fn_id];
+                call_frames[frame_sp] = .{ .pc = pc, .module = current_module, .saved_sp = sp - arity - 1 };
+                for (0..max_locals) |ci| {
+                    saved_locals[frame_sp][ci] = if (ci < current_locals.len) current_locals[ci] else Value.unit();
+                }
+                frame_sp += 1;
+                current_locals = saved_locals[frame_sp][0..];
+                var i: usize = 0;
+                while (i < arity) : (i += 1) {
+                    current_locals[i] = stack[sp - arity + i];
+                }
+                sp -= arity + 1;
+                current_module = target_module;
+                code = current_module.code;
+                constants = current_module.constants;
+                functions = current_module.functions;
+                shapes = current_module.shapes;
+                pc = entry.code_offset;
+            },
             ADD => binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a + b; } }).f),
             SUB => binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a - b; } }).f),
             MUL => binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a * b; } }).f),
@@ -473,7 +588,9 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 if (v.tag != .ptr) continue;
                 const addr = Value.ptrTo(v);
                 const base = @as([*]const u8, @ptrFromInt(addr));
-                const field_offset = gc_mod.RECORD_HEADER + slot * 8;
+                const kind = base[0];
+                const header_size: usize = if (kind == gc_mod.ADT_KIND) gc_mod.ADT_HEADER else gc_mod.RECORD_HEADER;
+                const field_offset = header_size + slot * 8;
                 const field_ptr = @as(*const Value, @alignCast(@ptrCast(base + field_offset)));
                 stack[sp] = field_ptr.*;
                 sp += 1;
@@ -488,7 +605,9 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 if (rec.tag != .ptr) continue;
                 const addr = Value.ptrTo(rec);
                 const base = @as([*]u8, @ptrFromInt(addr));
-                const field_offset = gc_mod.RECORD_HEADER + slot * 8;
+                const kind = base[0];
+                const header_size: usize = if (kind == gc_mod.ADT_KIND) gc_mod.ADT_HEADER else gc_mod.RECORD_HEADER;
+                const field_offset = header_size + slot * 8;
                 const field_ptr = @as(*Value, @alignCast(@ptrCast(base + field_offset)));
                 field_ptr.* = val;
                 stack[sp] = Value.unit();
@@ -514,6 +633,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 while (i < arity) : (i += 1) {
                     fields_ptr[i] = stack[sp - arity + i];
                 }
+
                 sp -= arity;
                 const addr = @intFromPtr(adt.ptr);
                 stack[sp] = Value.ptr(addr);
@@ -652,12 +772,11 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 }
             },
             RET => {
-                if (sp == 0) return;
-                const ret_val = stack[sp - 1];
-                sp -= 1;
-                if (frame_sp == 0) {
-                    return;
-                }
+                if (frame_sp == 0) return;
+                const ret_val = if (sp > 0) blk: {
+                    sp -= 1;
+                    break :blk stack[sp];
+                } else Value.unit();
                 frame_sp -= 1;
                 const frame = call_frames[frame_sp];
                 current_module = frame.module;
@@ -673,7 +792,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     sp += 1;
                 }
             },
-            else => return, // unknown opcode: stop execution
+            else => return,
         }
     }
 }

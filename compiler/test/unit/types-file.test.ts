@@ -18,8 +18,8 @@ describe('types-file', () => {
     });
     writeTypesFile(path, exports);
     const read = readTypesFile(path);
-    expect(read.size).toBe(1);
-    const lengthExport = read.get('length');
+    expect(read.exports.size).toBe(1);
+    const lengthExport = read.exports.get('length');
     expect(lengthExport).toBeDefined();
     expect(lengthExport?.kind).toBe('function');
     expect(lengthExport?.function_index).toBe(0);

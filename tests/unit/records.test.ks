@@ -1,0 +1,40 @@
+import { Suite, group, eq } from "kestrel:test"
+
+export fun run(s: Suite): Unit =
+  group(s, "records", (s1: Suite) => {
+    val point = { x = 10, y = 20 };
+    eq(s1, "field access .x", "${point.x}", "${10}");
+    eq(s1, "field access .y", "${point.y}", "${20}");
+
+    group(s1, "mutable fields", (mf: Suite) => {
+      val box = { mut value = 0 };
+      eq(mf, "initial value", "${box.value}", "${0}");
+      box.value := 42;
+      eq(mf, "after mutation", "${box.value}", "${42}");
+      box.value := 99;
+      eq(mf, "second mutation", "${box.value}", "${99}");
+      ()
+    });
+
+    group(s1, "nested records", (nr: Suite) => {
+      val nested = { outer = { inner = 77 } };
+      eq(nr, "nested.outer.inner", "${nested.outer.inner}", "${77}");
+      ()
+    });
+
+    group(s1, "row polymorphism", (rp: Suite) => {
+      val point2d = { x = 10, y = 20 };
+      val point3d = { x = 5, y = 15, z = 25 };
+      val pointWithExtra = { x = 1, y = 2, z = 3, w = 4 };
+      eq(rp, "point2d.x", "${point2d.x}", "${10}");
+      eq(rp, "point3d.x", "${point3d.x}", "${5}");
+      eq(rp, "pointWithExtra.x", "${pointWithExtra.x}", "${1}");
+      eq(rp, "point2d.y", "${point2d.y}", "${20}");
+      eq(rp, "point3d.z", "${point3d.z}", "${25}");
+      eq(rp, "pointWithExtra.w", "${pointWithExtra.w}", "${4}");
+      eq(rp, "sum2d", "${point2d.x + point2d.y}", "${30}");
+      eq(rp, "sum3d", "${point3d.x + point3d.y + point3d.z}", "${45}");
+      ()
+    });
+    ()
+  })

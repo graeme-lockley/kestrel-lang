@@ -7,9 +7,9 @@ pub const Tag = enum(u3) {
     unit,
     char,
     ptr,
+    fn_ref,
     _reserved1,
     _reserved2,
-    _reserved3,
 };
 
 pub const Value = packed struct(u64) {
@@ -41,6 +41,20 @@ pub const Value = packed struct(u64) {
     pub fn ptrTo(v: Value) usize {
         if (v.tag != .ptr) return 0;
         return @as(usize, v.payload) << 3;
+    }
+
+    /// Encode a function reference: module_index (upper 16 bits of payload) + fn_index (lower 32 bits).
+    pub fn fnRef(module_index: u16, fn_index: u32) Value {
+        const payload: u61 = (@as(u61, module_index) << 32) | @as(u61, fn_index);
+        return .{ .tag = .fn_ref, .payload = payload };
+    }
+    pub fn fnRefModule(v: Value) u16 {
+        if (v.tag != .fn_ref) return 0;
+        return @truncate(v.payload >> 32);
+    }
+    pub fn fnRefIndex(v: Value) u32 {
+        if (v.tag != .fn_ref) return 0;
+        return @truncate(v.payload);
     }
 };
 

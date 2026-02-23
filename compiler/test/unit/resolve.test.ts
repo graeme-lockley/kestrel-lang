@@ -18,12 +18,12 @@ describe('resolve', () => {
     }
   });
 
-  it('resolves relative path ./other.ks', () => {
-    const fromFile = resolve(projectRoot, 'tests/e2e/scenarios/two_module.ks');
-    const r = resolveSpecifier('./lib_double.ks', { fromFile, stdlibDir });
+  it('resolves relative path ./double_helper.ks', () => {
+    const fromFile = resolve(projectRoot, 'tests/fixtures/two_module.ks');
+    const r = resolveSpecifier('./double_helper.ks', { fromFile, stdlibDir });
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.path).toContain('lib_double.ks');
+      expect(r.path).toContain('double_helper.ks');
     }
   });
 

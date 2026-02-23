@@ -220,40 +220,18 @@ cmd_test() {
   if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
     build_compiler_vm
   fi
-  local unit_dir="$ROOT/tests/unit"
-  local out_dir="$ROOT/out/test"
-  mkdir -p "$out_dir"
-  local passed=0 failed=0
-  local files=("$unit_dir"/*.ks)
-  if [ ! -f "${files[0]:-}" ]; then
-    echo -e "${DIM}No unit tests (add .ks files to tests/unit/)${RESET}"
-    return 0
+  local runner="$ROOT/scripts/run_tests.ks"
+  if [ ! -f "$runner" ]; then
+    echo "kestrel: test runner not found: $runner" >&2
+    exit 1
   fi
-  for ks in "${files[@]}"; do
-    [ -f "$ks" ] || continue
-    local name=$(basename "$ks" .ks)
-    local kbc="$out_dir/${name}.kbc"
-    if ! (cd "$ROOT" && node "$COMPILER_CLI" "$ks" -o "$kbc") 2>/dev/null; then
-      echo -e "  ${RED}FAIL${RESET} $name.ks (compile error)"
-      failed=$((failed + 1))
-      continue
-    fi
-    if "$VM_BIN" "$kbc" >/dev/null 2>&1; then
-      echo -e "  ${GREEN}PASS${RESET} $name.ks"
-      passed=$((passed + 1))
-    else
-      echo -e "  ${RED}FAIL${RESET} $name.ks"
-      failed=$((failed + 1))
-    fi
-  done
-  local total=$((passed + failed))
-  echo ""
-  if [ "$failed" -eq 0 ]; then
-    echo -e "Tests: ${GREEN}$passed passed${RESET}, $total total"
-  else
-    echo -e "Tests: ${GREEN}$passed passed${RESET}, ${RED}$failed failed${RESET}, $total total"
+  local kbc
+  kbc=$(kbc_path_for "$runner")
+  if needs_compile_with_deps "$runner" "$kbc"; then
+    mkdir -p "$(dirname "$kbc")"
+    do_compile "$runner" "$kbc"
   fi
-  [ "$failed" -eq 0 ] || exit 1
+  "$VM_BIN" "$kbc" "$@"
 }
 
 # Main

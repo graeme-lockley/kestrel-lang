@@ -22,14 +22,32 @@ describe('parse (integration)', () => {
   it('parses fun decl with param and return type', () => {
     const ast = parse(tokenize('fun id(x): Int = 1'));
     expect(ast.kind).toBe('Program');
-    expect(ast.body[0]).toMatchObject({ kind: 'FunDecl', name: 'id' });
+    expect(ast.body[0]).toMatchObject({ kind: 'FunDecl', exported: false, name: 'id' });
+  });
+
+  it('parses export fun decl', () => {
+    const ast = parse(tokenize('export fun id(x): Int = 1'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'FunDecl', exported: true, name: 'id' });
   });
 
   it('parses fun decl with typed param', () => {
     const ast = parse(tokenize('fun id(x: Int): Int = 1'));
     expect(ast.kind).toBe('Program');
     const fn = ast.body[0];
-    expect(fn).toMatchObject({ kind: 'FunDecl', name: 'id' });
+    expect(fn).toMatchObject({ kind: 'FunDecl', exported: false, name: 'id' });
     if (fn.kind === 'FunDecl') expect(fn.params[0].type).toBeDefined();
+  });
+
+  it('parses type decl as non-exported', () => {
+    const ast = parse(tokenize('type Foo = Int'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', exported: false, name: 'Foo' });
+  });
+
+  it('parses export type decl', () => {
+    const ast = parse(tokenize('export type Foo = Int'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', exported: true, name: 'Foo' });
   });
 });

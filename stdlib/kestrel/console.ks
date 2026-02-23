@@ -1,0 +1,7 @@
+export val ESC = "\u{1b}"
+export val GREEN = "${ESC}[32m"
+export val RED = "${ESC}[31m"
+export val DIM = "${ESC}[2m"
+export val RESET = "${ESC}[0m"
+export val CHECK = "\u{2713}"
+export val CROSS = "\u{2717}"

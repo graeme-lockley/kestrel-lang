@@ -12,13 +12,16 @@ import { freshVar, prim } from './internal.js';
  */
 export function astTypeToInternalWithScope(
   ast: Type,
-  scope: Map<string, InternalType>
+  scope: Map<string, InternalType>,
+  typeAliases?: Map<string, InternalType>
 ): InternalType {
   switch (ast.kind) {
     case 'PrimType':
       return prim(ast.name as PrimName);
     case 'IdentType': {
       if (ast.name === 'Value') return { kind: 'app', name: 'Value', args: [] };
+      const alias = typeAliases?.get(ast.name);
+      if (alias != null) return alias;
       let t = scope.get(ast.name);
       if (t == null) {
         t = freshVar();
@@ -29,8 +32,8 @@ export function astTypeToInternalWithScope(
     case 'ArrowType':
       return {
         kind: 'arrow',
-        params: ast.params.map((p) => astTypeToInternalWithScope(p, scope)),
-        return: astTypeToInternalWithScope(ast.return, scope),
+        params: ast.params.map((p) => astTypeToInternalWithScope(p, scope, typeAliases)),
+        return: astTypeToInternalWithScope(ast.return, scope, typeAliases),
       };
     case 'RecordType':
       return {
@@ -38,27 +41,27 @@ export function astTypeToInternalWithScope(
         fields: ast.fields.map((f) => ({
           name: f.name,
           mut: f.mut,
-          type: astTypeToInternalWithScope(f.type, scope),
+          type: astTypeToInternalWithScope(f.type, scope, typeAliases),
         })),
       };
     case 'RowVarType':
       return freshVar();
     case 'AppType':
-      return { kind: 'app', name: ast.name, args: ast.args.map((a) => astTypeToInternalWithScope(a, scope)) };
+      return { kind: 'app', name: ast.name, args: ast.args.map((a) => astTypeToInternalWithScope(a, scope, typeAliases)) };
     case 'UnionType':
       return {
         kind: 'union',
-        left: astTypeToInternalWithScope(ast.left, scope),
-        right: astTypeToInternalWithScope(ast.right, scope),
+        left: astTypeToInternalWithScope(ast.left, scope, typeAliases),
+        right: astTypeToInternalWithScope(ast.right, scope, typeAliases),
       };
     case 'InterType':
       return {
         kind: 'inter',
-        left: astTypeToInternalWithScope(ast.left, scope),
-        right: astTypeToInternalWithScope(ast.right, scope),
+        left: astTypeToInternalWithScope(ast.left, scope, typeAliases),
+        right: astTypeToInternalWithScope(ast.right, scope, typeAliases),
       };
     case 'TupleType':
-      return { kind: 'tuple', elements: ast.elements.map((e) => astTypeToInternalWithScope(e, scope)) };
+      return { kind: 'tuple', elements: ast.elements.map((e) => astTypeToInternalWithScope(e, scope, typeAliases)) };
     default:
       return freshVar();
   }

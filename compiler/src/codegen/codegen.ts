@@ -69,6 +69,10 @@ import {
   emitTry,
   emitEndTry,
   emitAwait,
+  emitCallIndirect,
+  emitLoadFn,
+  codeSave,
+  codeRestore,
 } from '../bytecode/instructions.js';
 
 export interface FunctionEntry {
@@ -199,18 +203,26 @@ function makeCodegenContext() {
   return { stringTable, constantPool, stringIndex, addConstant };
 }
 
+export interface LambdaEntry {
+  arity: number;
+  code: Uint8Array;
+}
+
 /** Emit code for expr; leaves value on stack. funNameToId for CallExpr, shapes for RecordExpr, adts for List/ADT. */
 function makeEmitExpr(
   stringIndex: (s: string) => number,
-  addConstant: (c: ConstantEntry) => number
-): (
+  addConstant: (c: ConstantEntry) => number,
+  lambdaEntries: LambdaEntry[],
+  funDeclCountRef: { value: number },
+): { emitExpr: (
   expr: Expr,
   env: Map<string, number>,
   funNameToId?: Map<string, number>,
   shapes?: ShapeEntry[],
   adts?: AdtEntry[]
-) => void {
-  return function emitExpr(
+) => void; moduleGlobals: Map<string, number> } {
+  const moduleGlobals = new Map<string, number>();
+  return { moduleGlobals, emitExpr: function emitExpr(
   expr: Expr,
   env: Map<string, number>,
   funNameToId?: Map<string, number>,
@@ -286,6 +298,11 @@ function makeEmitExpr(
         emitLoadLocal(slot);
         break;
       }
+      const globalSlot = moduleGlobals.get(expr.name);
+      if (globalSlot !== undefined) {
+        emitLoadGlobal(globalSlot);
+        break;
+      }
       // Imported value (export val/var) is a 0-arity function; call it to get the value
       const fnId = funNameToId?.get(expr.name);
       if (fnId !== undefined) {
@@ -296,14 +313,11 @@ function makeEmitExpr(
     }
     case 'BinaryExpr': {
       if (expr.op === '&') {
-        // a & b: eval a; if false push false; else eval b, discard a and leave b (temp locals 254,255)
+        // a & b: eval a; JUMP_IF_FALSE pops a – if false, push False; else eval b (result)
         emitExpr(expr.left, env, funNameToId, shapes, adts);
         const andSkipPos = codeOffset();
-        emitJumpIfFalse(0); // patch: jump to push false
+        emitJumpIfFalse(0);
         emitExpr(expr.right, env, funNameToId, shapes, adts);
-        emitStoreLocal(126); // right -> temp
-        emitStoreLocal(127); // pop left
-        emitLoadLocal(126);  // result = right
         const andJumpOverFalse = codeOffset();
         emitJump(0);
         const andPushFalsePos = codeOffset();
@@ -390,21 +404,45 @@ function makeEmitExpr(
       const blockEnv = new Map(env);
       for (const stmt of expr.stmts) {
         if (stmt.kind === 'ValStmt') {
-          emitExpr(stmt.value, blockEnv, funNameToId, shapes);
+          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts);
           const slot = blockEnv.size;
           blockEnv.set(stmt.name, slot);
           emitStoreLocal(slot);
         } else if (stmt.kind === 'VarStmt') {
-          emitExpr(stmt.value, blockEnv, funNameToId, shapes);
+          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts);
           const slot = blockEnv.size;
           blockEnv.set(stmt.name, slot);
           emitStoreLocal(slot);
         } else if (stmt.kind === 'ExprStmt') {
-          emitExpr(stmt.expr, blockEnv, funNameToId, shapes);
-          // Expression result is left on stack, will be discarded
+          emitExpr(stmt.expr, blockEnv, funNameToId, shapes, adts);
+        } else if (stmt.kind === 'AssignStmt') {
+          const target = stmt.target;
+          if (target.kind === 'FieldExpr') {
+            const objType = getInferredType(target.object);
+            let fieldSlot = -1;
+            if (objType?.kind === 'record') {
+              fieldSlot = objType.fields.findIndex((f) => f.name === target.field);
+            }
+            if (fieldSlot >= 0) {
+              emitExpr(target.object, blockEnv, funNameToId, shapes, adts);
+              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts);
+              emitSetField(fieldSlot);
+            }
+          } else if (target.kind === 'IdentExpr') {
+            emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts);
+            const localSlot = blockEnv.get(target.name);
+            if (localSlot !== undefined) {
+              emitStoreLocal(localSlot);
+            } else {
+              const gSlot = moduleGlobals.get(target.name);
+              if (gSlot !== undefined) {
+                emitStoreGlobal(gSlot);
+              }
+            }
+          }
         }
       }
-      emitExpr(expr.result, blockEnv, funNameToId, shapes);
+      emitExpr(expr.result, blockEnv, funNameToId, shapes, adts);
       break;
     }
     case 'TupleExpr': {
@@ -527,6 +565,42 @@ function makeEmitExpr(
           emitCall(0xFFFFFF00, 1);
           break;
         }
+        if (expr.callee.name === '__equals' && expr.args.length === 2) {
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF0E, 2);
+          break;
+        }
+        if (expr.callee.name === '__get_process' && expr.args.length === 0) {
+          emitCall(0xFFFFFF0F, 0);
+          break;
+        }
+        if (expr.callee.name === '__get_os' && expr.args.length === 0) {
+          emitCall(0xFFFFFF13, 0);
+          break;
+        }
+        if (expr.callee.name === '__get_args' && expr.args.length === 0) {
+          emitCall(0xFFFFFF14, 0);
+          break;
+        }
+        if (expr.callee.name === '__get_cwd' && expr.args.length === 0) {
+          emitCall(0xFFFFFF15, 0);
+          break;
+        }
+        if (expr.callee.name === '__list_dir' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF10, 1);
+          break;
+        }
+        if (expr.callee.name === '__write_text' && expr.args.length === 2) {
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF11, 2);
+          break;
+        }
+        if (expr.callee.name === '__run_process' && expr.args.length === 2) {
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          emitCall(0xFFFFFF12, 2);
+          break;
+        }
 
         // Built-in ADT constructors: Some(x), Ok(x), Err(e), Null(), Bool(x), Int(x), etc.
         if (adts != null) {
@@ -546,6 +620,15 @@ function makeEmitExpr(
             emitCall(fnId, expr.args.length);
             break;
           }
+        }
+
+        // Local variable holding a function value (closure / lambda)
+        const localSlot = env.get(expr.callee.name);
+        if (localSlot !== undefined) {
+          emitLoadLocal(localSlot);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          emitCallIndirect(expr.args.length);
+          break;
         }
       }
       emitLoadConst(addConstant({ tag: ConstTag.Unit }));
@@ -782,11 +865,35 @@ function makeEmitExpr(
       // AWAIT leaves the result on stack
       break;
     }
+    case 'PipeExpr': {
+      if (expr.op === '|>') {
+        const call: Expr = { kind: 'CallExpr', callee: expr.right, args: [expr.left] };
+        emitExpr(call, env, funNameToId, shapes, adts);
+      } else {
+        const call: Expr = { kind: 'CallExpr', callee: expr.left, args: [expr.right] };
+        emitExpr(call, env, funNameToId, shapes, adts);
+      }
+      break;
+    }
+    case 'LambdaExpr': {
+      const saved = codeSave();
+      codeStart();
+      const lambdaEnv = new Map<string, number>();
+      for (let i = 0; i < expr.params.length; i++) lambdaEnv.set(expr.params[i]!.name, i);
+      emitExpr(expr.body, lambdaEnv, funNameToId, shapes, adts);
+      emitRet();
+      const lambdaCode = codeSlice();
+      codeRestore(saved);
+      const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
+      lambdaEntries.push({ arity: expr.params.length, code: lambdaCode });
+      emitLoadFn(lambdaIndex);
+      break;
+    }
     default:
       // Fallback: push unit
       emitLoadConst(addConstant({ tag: ConstTag.Unit }));
   }
-};
+} };
 }
 
 export interface CodegenOptions {
@@ -800,7 +907,9 @@ export interface CodegenOptions {
 export function codegen(program: Program, options?: CodegenOptions): CodegenResult {
   const ctx = makeCodegenContext();
   const { stringTable, constantPool, stringIndex, addConstant } = ctx;
-  const emitExpr = makeEmitExpr(ctx.stringIndex, ctx.addConstant);
+  const lambdaEntries: LambdaEntry[] = [];
+  const funDeclCountRef = { value: 0 };
+  const { emitExpr, moduleGlobals } = makeEmitExpr(ctx.stringIndex, ctx.addConstant, lambdaEntries, funDeclCountRef);
 
   codeStart();
   const shapes: ShapeEntry[] = [];
@@ -861,7 +970,8 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   if (options?.importedFuncIds) {
     for (const [name, id] of options.importedFuncIds) funNameToId.set(name, id);
   }
-  // Function IDs: 0xFFFFFF00/01 = print/println; 0..n-1 = our functions (then getters for val/var)
+  // Function IDs: 0xFFFFFF00/01 = print/println; 0..n-1 = our functions (then lambdas, then getters for val/var)
+  funDeclCountRef.value = funDecls.length;
   for (let i = 0; i < funDecls.length; i++) {
     funNameToId.set(funDecls[i]!.name, i);
     stringIndex(funDecls[i]!.name); // ensure name is in string table
@@ -881,16 +991,21 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
       emitExpr(stmt.value, env, funNameToId, shapes, adts);
       const slot = env.size;
       env.set(stmt.name, slot);
+      moduleGlobals.set(stmt.name, slot);
       emitStoreLocal(slot);
     } else if (node.kind === 'ValDecl') {
-      // Exported val: getter is LOAD_CONST + RET below; skip init
-      continue;
+      emitExpr(node.value, env, funNameToId, shapes, adts);
+      const valSlot = env.size;
+      env.set(node.name, valSlot);
+      moduleGlobals.set(node.name, valSlot);
+      emitStoreLocal(valSlot);
     } else if (node.kind === 'VarDecl') {
       // Exported var: init stores to module global slot so assignment works; getter uses LOAD_GLOBAL
       const decl = node;
       emitExpr(decl.value, env, funNameToId, shapes, adts);
       const slot = env.size;
       env.set(decl.name, slot);
+      moduleGlobals.set(decl.name, slot);
       emitStoreLocal(slot);
     } else if (node.kind === 'ExprStmt') {
       const stmt = node;
@@ -957,18 +1072,28 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     codeOffsetSoFar += fnCode.length;
   }
 
+  // Lambda functions (compiled inline during emitExpr; add them to function table after FunDecls)
+  for (const lambda of lambdaEntries) {
+    functionTable.push({
+      nameIndex: stringIndex('<lambda>'),
+      arity: lambda.arity,
+      codeOffset: codeOffsetSoFar,
+    });
+    codeChunks.push(lambda.code);
+    codeOffsetSoFar += lambda.code.length;
+  }
+
   const nGlobals = env.size;
 
   const varSetterIndices = new Map<string, number>();
 
-  // Export val/var as 0-arity getters: val = LOAD_CONST + RET, var = LOAD_GLOBAL slot + RET
+  // Export val/var as 0-arity getters: LOAD_GLOBAL slot + RET
   for (const decl of valOrVarDecls) {
     if (decl.kind === 'ValDecl') {
-      const c = literalToConstant(decl.value, stringIndex);
-      if (c == null) throw new Error(`Codegen: export val requires constant initializer: ${decl.name}`);
-      const constIdx = addConstant(c);
+      const slot = env.get(decl.name);
+      if (slot === undefined) throw new Error(`Codegen: export val slot missing: ${decl.name}`);
       codeStart();
-      emitLoadConst(constIdx);
+      emitLoadGlobal(slot);
       emitRet();
     } else {
       const slot = env.get(decl.name);

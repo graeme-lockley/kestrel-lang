@@ -1,25 +1,8 @@
-# E2E scenarios
+# E2E tests
 
-Each `.ks` file in `scenarios/` is compiled, run on the VM, and its stdout is checked.
+E2E runs **negative tests only**: scenarios that must **fail** (at compile time or at runtime).
 
-## Expected output in the scenario file
+- **Negative scenarios**: `scenarios/negative/*.ks` — see `scenarios/negative/README.md`.
+- **Positive behaviour** (compile + run successfully) is covered by **Kestrel unit tests** in `tests/unit/*.test.ks`, run via `./scripts/kestrel test`. Those unit tests are full compile-and-execute tests with assertions; only failure cases remain in E2E.
 
-Put the expected value **below each `print(...)`** as a comment:
-
-- Use `// <value>` for the line(s) that should match the output of that print.
-- For multi-line output (e.g. a string with `\n`), use one `//` line per output line.
-- A bare `//` means one blank line of output.
-
-Example:
-
-```ks
-print(42)
-// 42
-print("Hello\nWorld")
-// Hello
-// World
-print("")
-//
-```
-
-When the test runs, the runner collects all such comment lines (in order, with the `// ` prefix removed) and compares them to the actual stdout. This keeps the test and its expected output in one file. E2E tests use only this comment mechanism; there is no separate `expected/` directory.
+Run E2E: `./scripts/run-e2e.sh`

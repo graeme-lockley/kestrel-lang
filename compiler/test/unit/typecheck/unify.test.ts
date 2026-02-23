@@ -35,12 +35,12 @@ describe('unify', () => {
     expect(subst.size).toBe(0);
   });
 
-  it('occurs check: α = List<α> throws', () => {
+  it('equi-recursive: α = List<α> unifies (no occurs check error)', () => {
     const subst = new Map<number, import('../../../src/types/internal.js').InternalType>();
     const v = freshVar();
     const listV = { kind: 'app' as const, name: 'List', args: [v] };
-    expect(() => unify(v, listV, subst)).toThrow(UnifyError);
-    expect(() => unify(v, listV, subst)).toThrow(/Occurs check failed|Cannot unify/);
+    expect(() => unify(v, listV, subst)).not.toThrow();
+    expect(subst.size).toBe(1);
   });
 
   it('unifies two vars (success, subst maps one to the other)', () => {

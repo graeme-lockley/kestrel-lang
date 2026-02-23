@@ -52,11 +52,19 @@ export function substitute(t: InternalType, id: number, replacement: InternalTyp
   return t;
 }
 
+const _applySubstExpanding = new Set<number>();
+
 /** Apply substitution map to t (all var ids in map replaced). */
 export function applySubst(t: InternalType, subst: Map<number, InternalType>): InternalType {
   if (t.kind === 'var') {
     const s = subst.get(t.id);
-    if (s != null) return applySubst(s, subst);
+    if (s != null) {
+      if (_applySubstExpanding.has(t.id)) return t;
+      _applySubstExpanding.add(t.id);
+      const result = applySubst(s, subst);
+      _applySubstExpanding.delete(t.id);
+      return result;
+    }
     return t;
   }
   if (t.kind === 'prim') return t;
@@ -123,12 +131,19 @@ export function unify(left: InternalType, right: InternalType, subst: Map<number
 
   if (l.kind === 'var') {
     if (r.kind === 'var' && r.id === l.id) return;
-    if (occurs(l.id, r)) throw new UnifyError(left, right, 'Occurs check failed');
+    if (occurs(l.id, r)) {
+      // Allow equi-recursive types: just bind without occurs check
+      subst.set(l.id, r);
+      return;
+    }
     subst.set(l.id, r);
     return;
   }
   if (r.kind === 'var') {
-    if (occurs(r.id, l)) throw new UnifyError(left, right, 'Occurs check failed');
+    if (occurs(r.id, l)) {
+      subst.set(r.id, l);
+      return;
+    }
     subst.set(r.id, l);
     return;
   }
