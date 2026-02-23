@@ -27,8 +27,8 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
   } else ()
 }
 
-export fun eq(s: Suite, desc: String, actual: String, expected: String): Unit =
-  if (__string_equals(actual, expected)) {
+export fun eq(s: Suite, desc: String, actual, expected): Unit =
+  if (__equals(actual, expected)) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
       println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
@@ -36,8 +36,8 @@ export fun eq(s: Suite, desc: String, actual: String, expected: String): Unit =
   } else {
     s.counts.failed := s.counts.failed + 1;
     println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
-    println("${indent(s.depth)}  expected: ${expected}");
-    println("${indent(s.depth)}  actual:   ${actual}")
+    println("${indent(s.depth)}  expected: ${__format_one(expected)}");
+    println("${indent(s.depth)}  actual:   ${__format_one(actual)}")
   }
 
 export fun printSummary(counts: { passed: mut Int, failed: mut Int }): Unit = {
