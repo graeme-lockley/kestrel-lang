@@ -14,7 +14,7 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
 
   if (!s.summaryOnly) {
     println("${indent(s.depth)}${DIM}${name}${RESET}")
-  } else ();
+  }
 
   body(child);
 
@@ -24,7 +24,7 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
   if (!s.summaryOnly) {
     val countStr = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
     println("${indent(s.depth)}${DIM}${countStr} (${elapsed}ms)${RESET}")
-  } else ()
+  }
 }
 
 export fun eq(s: Suite, desc: String, actual: X, expected: X): Unit =
@@ -32,7 +32,7 @@ export fun eq(s: Suite, desc: String, actual: X, expected: X): Unit =
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
       println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
-    } else ()
+    }
   } else {
     s.counts.failed := s.counts.failed + 1;
     println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");

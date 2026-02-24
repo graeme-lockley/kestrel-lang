@@ -394,7 +394,11 @@ function makeEmitExpr(
       const jumpOverElsePos = codeOffset();
       emitJump(0); // patch later
       const elseStart = codeOffset();
-      emitExpr(expr.else, env, funNameToId, shapes, adts);
+      if (expr.else !== undefined) {
+        emitExpr(expr.else, env, funNameToId, shapes, adts);
+      } else {
+        emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+      }
       const afterElse = codeOffset();
       patchI32(jumpIfFalsePos + 1, elseStart - (jumpIfFalsePos + 5));
       patchI32(jumpOverElsePos + 1, afterElse - (jumpOverElsePos + 5));

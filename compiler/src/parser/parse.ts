@@ -600,8 +600,8 @@ class Parser {
       const cond = this.parseExpr();
       this.expect('rparen');
       const then = this.parseExpr();
-      this.expect('keyword', 'else');
-      return { kind: 'IfExpr', cond, then, else: this.parseExpr() };
+      const elseBranch = this.at('keyword', 'else') ? (this.advance(), this.parseExpr()) : undefined;
+      return { kind: 'IfExpr', cond, then, else: elseBranch };
     }
     if (this.at('keyword', 'match')) {
       this.advance();

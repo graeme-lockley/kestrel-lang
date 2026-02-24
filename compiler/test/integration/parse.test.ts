@@ -19,6 +19,15 @@ describe('parse (integration)', () => {
     if (valStmt.kind === 'ValStmt') expect(valStmt.value.kind).toBe('IfExpr');
   });
 
+  it('parses if without else', () => {
+    const ast = parse(tokenize('val a = if (True) { println("ok") }'));
+    expect(ast.kind).toBe('Program');
+    const valStmt = ast.body[0];
+    if (valStmt.kind === 'ValStmt' && valStmt.value.kind === 'IfExpr') {
+      expect(valStmt.value.else).toBeUndefined();
+    }
+  });
+
   it('parses fun decl with param and return type', () => {
     const ast = parse(tokenize('fun id(x): Int = 1'));
     expect(ast.kind).toBe('Program');

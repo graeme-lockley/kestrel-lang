@@ -20,7 +20,7 @@ function countLambdasInExpr(e: Expr): number {
     case 'CallExpr': return countLambdasInExpr(e.callee) + e.args.reduce((n, a) => n + countLambdasInExpr(a), 0);
     case 'BinaryExpr': return countLambdasInExpr(e.left) + countLambdasInExpr(e.right);
     case 'UnaryExpr': return countLambdasInExpr(e.operand);
-    case 'IfExpr': return countLambdasInExpr(e.cond) + countLambdasInExpr(e.then) + countLambdasInExpr(e.else);
+    case 'IfExpr': return countLambdasInExpr(e.cond) + countLambdasInExpr(e.then) + (e.else !== undefined ? countLambdasInExpr(e.else) : 0);
     case 'MatchExpr': return countLambdasInExpr(e.scrutinee) + e.cases.reduce((n, c) => n + countLambdasInExpr(c.body), 0);
     case 'TryExpr': return countLambdasInExpr(e.body) + e.cases.reduce((n, c) => n + countLambdasInExpr(c.body), 0);
     case 'PipeExpr': return countLambdasInExpr(e.left) + countLambdasInExpr(e.right);

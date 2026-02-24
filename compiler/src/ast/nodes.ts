@@ -210,7 +210,7 @@ export interface IfExpr extends NodeBase {
   kind: 'IfExpr';
   cond: Expr;
   then: Expr;
-  else: Expr;
+  else?: Expr;
 }
 
 export interface MatchExpr extends NodeBase {
