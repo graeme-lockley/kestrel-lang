@@ -58,9 +58,19 @@ fun listLength(lst: List<String>): Int =
     _ :: tl => 1 + listLength(tl)
   }
 
-val testDir = "${cwd}/tests/unit"
-val entries = listDir(testDir)
-val tests = collectTests(entries, [])
+fun append(a: List<String>, b: List<String>): List<String> =
+  match (a) {
+    [] => b,
+    h :: t => h :: append(t, b)
+  }
+
+val unitDir = "${cwd}/tests/unit"
+val stdlibDir = "${cwd}/stdlib/kestrel"
+val unitEntries = listDir(unitDir)
+val stdlibEntries = listDir(stdlibDir)
+val unitTests = collectTests(unitEntries, [])
+val stdlibTests = collectTests(stdlibEntries, [])
+val tests = append(unitTests, stdlibTests)
 val testCount = listLength(tests)
 val summaryOnly = checkSummaryFlag(proc.args)
 

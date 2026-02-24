@@ -36,5 +36,19 @@ export fun run(s: Suite): Unit =
       eq(rp, "sum3d", point3d.x + point3d.y + point3d.z, 45);
       ()
     });
+
+    group(s1, "nested mutable", (nm: Suite) => {
+      val r = { a = { mut b = 1 } };
+      eq(nm, "initial", r.a.b, 1);
+      r.a.b := 2;
+      eq(nm, "after mutation", r.a.b, 2);
+      ()
+    });
+
+    group(s1, "many fields", (mf: Suite) => {
+      val big = { a = 1, b = 2, c = 3, d = 4, e = 5 };
+      eq(mf, "sum fields", big.a + big.b + big.c + big.d + big.e, 15);
+      ()
+    });
     ()
   })

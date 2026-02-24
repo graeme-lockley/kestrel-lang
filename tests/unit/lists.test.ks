@@ -31,6 +31,11 @@ export fun run(s: Suite): Unit =
       eq(con, "empty list length", length([]), 0);
       eq(con, "cons builds list", head(1 :: []), 1);
       eq(con, "literal [1,2,3] length", length([1, 2, 3]), 3);
+      eq(con, "cons chain 1::2::3::[]", length(1 :: 2 :: 3 :: []), 3);
+      eq(con, "cons chain head", head(1 :: 2 :: 3 :: []), 1);
+      eq(con, "single-element list", length([99]), 1);
+      eq(con, "list equality", __equals([1, 2], [1, 2]), True);
+      eq(con, "list inequality", __equals([1, 2], [1, 3]), False);
       ()
     });
 
