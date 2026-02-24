@@ -1,5 +1,6 @@
 import { getProcess, runProcess } from "kestrel:process"
 import { listDir, writeText } from "kestrel:fs"
+import { drop } from "kestrel:list"
 
 val proc = getProcess()
 val cwd = proc.cwd
@@ -32,13 +33,6 @@ fun checkSummaryFlag(args: List<String>): Bool =
   match (args) {
     [] => False,
     hd :: tl => if (__string_equals(hd, "--summary")) True else checkSummaryFlag(tl)
-  }
-
-fun drop(n: Int, args: List<X>): List<X> =
-  if (n <= 0) args
-  else match (args) {
-    [] => [],
-    _ :: tl => drop(n - 1, tl)
   }
 
 fun excludeFlag(args: List<String>): List<String> =
