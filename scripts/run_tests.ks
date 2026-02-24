@@ -34,6 +34,39 @@ fun checkSummaryFlag(args: List<String>): Bool =
     hd :: tl => if (__string_equals(hd, "--summary")) True else checkSummaryFlag(tl)
   }
 
+fun drop(n: Int, args: List<X>): List<X> =
+  if (n <= 0) args
+  else match (args) {
+    [] => [],
+    _ :: tl => drop(n - 1, tl)
+  }
+
+fun excludeFlag(args: List<String>): List<String> =
+  match (args) {
+    [] => [],
+    hd :: tl => if (__string_equals(hd, "--summary")) excludeFlag(tl) else hd :: excludeFlag(tl)
+  }
+
+fun getPathArgs(allArgs: List<String>): List<String> = excludeFlag(drop(2, allArgs))
+
+fun filterToTestFiles(paths: List<String>): List<String> =
+  match (paths) {
+    [] => [],
+    hd :: tl => if (hasSuffix(hd, ".test.ks")) hd :: filterToTestFiles(tl) else filterToTestFiles(tl)
+  }
+
+fun isAbsolute(path: String): Bool =
+  if (__string_length(path) > 0) __string_equals(__string_slice(path, 0, 1), "/") else False
+
+fun resolvePath(base: String, path: String): String =
+  if (isAbsolute(path)) path else "${base}/${path}"
+
+fun resolvePaths(base: String, paths: List<String>): List<String> =
+  match (paths) {
+    [] => [],
+    hd :: tl => resolvePath(base, hd) :: resolvePaths(base, tl)
+  }
+
 fun buildImports(tests: List<String>, idx: Int): String =
   match (tests) {
     [] => "",
@@ -66,13 +99,16 @@ fun append(a: List<String>, b: List<String>): List<String> =
 
 val unitDir = "${cwd}/tests/unit"
 val stdlibDir = "${cwd}/stdlib/kestrel"
-val unitEntries = listDir(unitDir)
-val stdlibEntries = listDir(stdlibDir)
-val unitTests = collectTests(unitEntries, [])
-val stdlibTests = collectTests(stdlibEntries, [])
-val tests = append(unitTests, stdlibTests)
-val testCount = listLength(tests)
+val pathArgs = getPathArgs(proc.args)
 val summaryOnly = checkSummaryFlag(proc.args)
+val tests = if (listLength(pathArgs) == 0) {
+  val unitEntries = listDir(unitDir)
+  val stdlibEntries = listDir(stdlibDir)
+  val unitTests = collectTests(unitEntries, [])
+  val stdlibTests = collectTests(stdlibEntries, [])
+  append(unitTests, stdlibTests)
+} else resolvePaths(proc.cwd, filterToTestFiles(pathArgs))
+val testCount = listLength(tests)
 
 val imports = buildImports(tests, 0)
 val calls = buildCalls(testCount, 0)

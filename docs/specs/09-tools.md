@@ -47,9 +47,9 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.4 test
 
-**Usage:** `kestrel test`
+**Usage:** `kestrel test [files...]`
 
-- **Effect:** Runs the Kestrel-native unit test suite. Discovers `.ks` files under `tests/unit/`, compiles each (with stdlib resolution so that `kestrel:test`, `kestrel:option`, etc. resolve), runs the VM on the compiled bytecode, and reports pass/fail per file.
+- **Effect:** Runs the Kestrel-native unit test suite. If no arguments are given, discovers all `*.test.ks` files under `tests/unit/` and `stdlib/kestrel/`. If one or more arguments are given, runs only those files (paths are relative to the current working directory). Each file is compiled (with stdlib resolution so that `kestrel:test`, `kestrel:option`, etc. resolve), the VM runs the compiled bytecode, and pass/fail is reported per file.
 - **Output:** For each test file, prints a line with PASS (green) or FAIL (red). At the end, prints a summary line: “Tests: X passed, Y failed, Z total” with colour (green for passed count, red for failed count when Y &gt; 0).
 - **Exit code:** 0 if all tests passed; 1 if any test failed or did not compile.
 

@@ -22,7 +22,7 @@ usage() {
   echo "  run   <script[.ks]> [args...]  Compile if needed, then execute via VM" >&2
   echo "  dis   <script[.ks]>            Compile if needed, then disassemble bytecode" >&2
   echo "  build [script.ks]              Build compiler and VM; optionally compile script" >&2
-  echo "  test                            Run Kestrel unit tests (tests/unit/*.ks)" >&2
+  echo "  test [files...]                 Run unit tests; default **/*.test.ks under tests/ and stdlib" >&2
   exit 1
 }
 
