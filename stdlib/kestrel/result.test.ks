@@ -7,10 +7,12 @@ export fun run(s: Suite): Unit =
       eq(sg, "Ok(42) pattern match", match (Ok(42)) { Err { value = _ } => 0, Ok { value = v } => v }, 42)
       eq(sg, "Err(1) pattern match", match (Err(1)) { Err { value = e } => e, Ok { value = _ } => 0 }, 1)
     })
+
     group(s1, "matching", (sg: Suite) => {
       eq(sg, "extract Ok(7)", match (Ok(7)) { Err { value = _ } => 0, Ok { value = x } => x }, 7)
       eq(sg, "extract Err(3)", match (Err(3)) { Err { value = e } => e, Ok { value = _ } => 0 }, 3)
     })
+    
     group(s1, "helpers", (sg: Suite) => {
       eq(sg, "getOrElse Ok(5) 0", getOrElse(Ok(5), 0), 5)
       eq(sg, "getOrElse Err(1) 0", getOrElse(Err(1), 0), 0)
