@@ -7,14 +7,17 @@ export fun run(s: Suite): Unit =
       eq(sg, "multiple vals", { val x = 1; val y = 2; x + y }, 3)
       eq(sg, "shadowing", { val x = 10; val x = 2; x }, 2)
     })
+
     group(s1, "var", (sg: Suite) => {
       eq(sg, "assign and read", { var x = 0; x := 1; x }, 1)
       eq(sg, "increment pattern", { var x = 5; x := x + 1; x }, 6)
     })
+
     group(s1, "nested blocks", (sg: Suite) => {
       eq(sg, "block in block", { val x = { val y = 1; y + 1 }; x }, 2)
       eq(sg, "inner shadowing", { val x = 10; val r = { val x = 1; x }; r }, 1)
     })
+    
     group(s1, "block as expression", (sg: Suite) => {
       val result = { val a = 1; val b = 2; a + b }
       eq(sg, "bind block result", result, 3)

@@ -10,6 +10,7 @@ export fun run(s: Suite): Unit =
       eq(sg, "+(10+5)", +(10 + 5), 15)
       eq(sg, "+(-7)", +(0 - 7), 0 - 7)
     })
+
     group(s1, "minus", (sg: Suite) => {
       eq(sg, "-5", 0 - 5, 0 - 5)
       eq(sg, "-(10+5)", 0 - (10 + 5), 0 - 15)
@@ -20,6 +21,7 @@ export fun run(s: Suite): Unit =
       eq(sg, "-(5+3)*2", (0 - (5 + 3)) * 2, 0 - 16)
       eq(sg, "negate(15)", negate(15), 0 - 15)
     })
+    
     group(s1, "not", (sg: Suite) => {
       eq(sg, "!True", !True, False)
       eq(sg, "!False", !False, True)

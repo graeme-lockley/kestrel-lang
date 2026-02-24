@@ -25,6 +25,7 @@ export fun run(s: Suite): Unit =
       eq(sg, "double(0)", double(0), 0)
       eq(sg, "increment(10)", increment(10), 11)
     })
+
     group(s1, "recursion", (sg: Suite) => {
       eq(sg, "safeDivide(10,2)", safeDivide(10, 2), 5)
       eq(sg, "safeDivide(10,0)", safeDivide(10, 0), 0)
@@ -39,12 +40,14 @@ export fun run(s: Suite): Unit =
       eq(sg, "fib(10) == 55", fib(10), 55)
       eq(sg, "sumList([1,2,3])", sumList([1, 2, 3]), 6)
     })
+
     group(s1, "composition", (sg: Suite) => {
       eq(sg, "double(double(2))", double(double(2)), 8)
       eq(sg, "triple(double(3))", triple(double(3)), 18)
       eq(sg, "double(double(5))", double(double(5)), 20)
       eq(sg, "increment(increment(10))", increment(increment(10)), 12)
     })
+    
     group(s1, "higher-order", (sg: Suite) => {
       eq(sg, "applyTwice lambda increment", applyTwice((x: Int) => x + 1, 0), 2)
       eq(sg, "applyTwice lambda double", applyTwice((x: Int) => x + x, 1), 4)

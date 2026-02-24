@@ -10,10 +10,12 @@ export fun run(s: Suite): Unit =
       eq(sg, "3 |> double", 3 |> double, 6)
       eq(sg, "double <| 5", double <| 5, 10)
     })
+
     group(s1, "chained", (sg: Suite) => {
       eq(sg, "3 |> double |> add1", 3 |> double |> add1, 7)
       eq(sg, "2 |> double |> add1 |> triple", 2 |> double |> add1 |> triple, 15)
     })
+
     group(s1, "backward pipe", (sg: Suite) => {
       eq(sg, "double <| 5", double <| 5, 10)
       eq(sg, "triple <| 1 + 2", triple <| 1 + 2, 9)
