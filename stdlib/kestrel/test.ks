@@ -27,7 +27,7 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
   } else ()
 }
 
-export fun eq(s: Suite, desc: String, actual, expected): Unit =
+export fun eq(s: Suite, desc: String, actual: X, expected: X): Unit =
   if (__equals(actual, expected)) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
