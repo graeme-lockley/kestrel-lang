@@ -275,10 +275,11 @@ Block          ::= "{" { BlockItem } Expr "}"
 BlockItem      ::= Stmt [ ";" | NL ]
 Stmt           ::= "val" LOWER_IDENT "=" Expr
                  | "var" LOWER_IDENT "=" Expr
+                 | "fun" LOWER_IDENT "(" ParamList ")" ":" Type "=" Expr
                  | Expr ":=" Expr
 ```
 
-The trailing **Expr** in a block is the block’s value; it is required. Each statement is followed by a **statement terminator**: `;`, newline, or `}` (when the next token starts the block’s final expression). `NL` denotes a newline token (or newline codepoint) used as terminator. See §3.5.
+A block-local **`fun`** declaration is **desugared** to `val name = (params) => body`; see §3.8 for closures. When the nested `fun` has a **full type signature** (all parameter types and return type), the name is in scope for the body so the function may call itself recursively. The trailing **Expr** in a block is the block’s value; it is required. Each statement is followed by a **statement terminator**: `;`, newline, or `}` (when the next token starts the block’s final expression). `NL` denotes a newline token (or newline codepoint) used as terminator. See §3.5.
 
 ### 3.4 Literals (Expression-Level)
 
@@ -334,10 +335,24 @@ Precedence: `&` tighter than `|`; `->` groups to the right; `*` (product) tighte
 - **Keywords:** Keyword tokens are matched before generic IDENT (e.g. `if` is keyword, not identifier). Match fixed keyword strings as tokens first.
 - **Statement termination:** After a Stmt, the parser must see one of `;`, newline, or `}`. The lexer may emit a **newline token** (e.g. on `\n` or `\r\n`) so the parser can treat it as a terminator; or the parser may use a different rule (e.g. require `;` and ignore newlines, or use the next token’s line number). The choice is implementation-defined; the grammar assumes some notion of statement end.
 - **Ambiguous prefixes:** `( ParamList )` appears in Lambda and in parenthesized Expr. Use context: after `=>` expect Expr; after `(` at expression position expect Expr; after `fun` IDENT `(` expect ParamList. Type versus expression after `(`: if the first token is IDENT followed by `:` or `,` or `)`, parse as ParamList; otherwise parse as Expr.
-- **Record vs block:** `{` can start Block or RecordLit. After `{`, if the next token is `}` (empty record literal) or a label (IDENT `=` or `...`), parse as RecordLit; if the next token is `val`, `var`, or an expression start, parse as Block. (Expression start: Literal, IDENT, `(`, `[`, `throw`, etc.)
+- **Record vs block:** `{` can start Block or RecordLit. After `{`, if the next token is `}` (empty record literal) or a label (IDENT `=` or `...`), parse as RecordLit; if the next token is `val`, `var`, `fun`, or an expression start, parse as Block. (Expression start: Literal, IDENT, `(`, `[`, `throw`, etc.)
 - **Parenthesized type:** `"(" Type ")"` vs `"(" TypeList ")" "->" Type`: after parsing `"("` and one or more types, if the next token is `"->"`, treat as function type and parse the rest of the arrow type; otherwise treat as a single grouped type `"(" Type ")"`.
 - **Paren vs tuple:** After `"("` at expression or pattern position, parse one Expr or Pattern. If the next token is `","`, parse as tuple (two or more elements) and require the matching closing `")"`; otherwise parse as grouping (single `Expr` or `Pattern` and `")"`).
 - **List literal vs pattern:** `"["` at expression position (in Atom) starts `ListLiteral`. `"["` at pattern position starts `ListPattern`. In a list pattern, at most one `"..." LOWER_IDENT` is allowed and only as the **last** component (e.g. `[a, b, ...rest]` or `[...rest]`); the grammar enforces this via `ListPatInner`.
+
+### 3.8 Closures and Capture
+
+Lambdas `(params) => body` and nested functions (block-local `fun`, desugared to `val name = (params) => body`) may **capture** variables from the enclosing block or function scope (lexical/static scope). The **capture set** of a lambda is the set of free variables: identifiers used in `body` that are not in the lambda's own `params` (and not introduced by an inner lambda's params). Enclosing scope includes: earlier `val`/`var`/`fun` bindings in the same block, and (when the block is inside a function) that function's parameters and outer blocks.
+
+The implementation uses **closure conversion**: each capturing lambda is compiled as a **lifted** function that takes an **environment** (a record of captured values) as its first parameter; the environment is built at the point where the lambda is created and stored in a **closure** value. Non-capturing lambdas are represented as a function reference only (no environment). Details are in [04-bytecode-isa.md](04-bytecode-isa.md) §5.1 and [05-runtime-model.md](05-runtime-model.md).
+
+**Capture semantics:** `val` bindings are captured **by value** (the value at creation time is stored in the environment). `var` bindings are captured **by reference** via a mutable cell (e.g. a one-field record) so that assignments to the variable inside the closure are visible outside and vice versa; both the closure and the enclosing scope operate on the same storage.
+
+**Return type:** The declared return type of a block-local `fun name(...): ReturnType = body` is **checked**: the body's inferred type must unify with `ReturnType`; if not, the implementation reports a type error.
+
+**Known limitations (current implementation):**
+
+1. **Chained call of returned closure:** Patterns like `makeAdd(2)(3)` (function returns a closure, immediately called again) may have implementation-specific behaviour; binding the result to a `val` then calling is reliable.
 
 ---
 

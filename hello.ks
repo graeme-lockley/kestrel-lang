@@ -11,3 +11,12 @@ hello := "hello"
 println({a = 1, b = hello})
 println([1, 2, 3, 4, 5])
 println(Some(10))
+
+// --- Var captured by reference: closure and block share the same storage ---
+// inc() mutates n and returns the new value; calling inc() + inc() gives 1 + 2 = 3
+val byRefResult = { var n = 0; fun inc(): Int = { n := n + 1; n }; inc() + inc() }
+println("by-ref inc() + inc() = ${byRefResult}")
+
+// After the closure mutates n, the block sees the same n
+val afterMutate = { var n = 0; fun setOne(): Unit = { n := 1; () }; setOne(); n }
+println("after setOne(), n = ${afterMutate}")

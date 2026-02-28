@@ -411,10 +411,24 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       case 'BlockExpr': {
         for (const stmt of expr.stmts) {
           if (stmt.kind === 'ValStmt') {
-            const t = apply(inferExpr(stmt.value));
-            // Generalize: quantify free vars not in environment
-            const scheme = generalize(t, envFreeVars());
-            env.set(stmt.name, scheme);
+            const val = stmt.value;
+            if (val.kind === 'LambdaExpr' && val.returnType != null && val.params.every((p) => p.type != null)) {
+              // Fully signed block-local fun: add name to scope before inferring (enables recursion); infer lambda then unify with declared type
+              const scope = new Map<string, InternalType>();
+              const paramTs = val.params.map((p) => astTypeToInternalWithScope(p.type!, scope, typeAliases));
+              const returnT = astTypeToInternalWithScope(val.returnType, scope, typeAliases);
+              const arrowT: InternalType = { kind: 'arrow', params: paramTs, return: returnT };
+              env.set(stmt.name, arrowT);
+              const inferred = apply(inferExpr(stmt.value));
+              unify(inferred, arrowT, subst);
+              const scheme = generalize(apply(arrowT), envFreeVars());
+              env.set(stmt.name, scheme);
+            } else {
+              const t = apply(inferExpr(stmt.value));
+              // Generalize: quantify free vars not in environment
+              const scheme = generalize(t, envFreeVars());
+              env.set(stmt.name, scheme);
+            }
           } else if (stmt.kind === 'VarStmt') {
             const t = apply(inferExpr(stmt.value));
             // Var bindings are not generalized (mutable)

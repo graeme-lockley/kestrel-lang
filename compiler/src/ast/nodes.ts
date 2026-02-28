@@ -236,6 +236,10 @@ export interface LambdaExpr extends NodeBase {
   kind: 'LambdaExpr';
   params: Param[];
   body: Expr;
+  /** Set when desugared from block-local `fun name(...): ReturnType = body`. */
+  returnType?: Type;
+  /** When from block-local `fun`, the name being bound (for self-reference in codegen). */
+  bindingName?: string;
 }
 
 export interface PipeExpr extends NodeBase {

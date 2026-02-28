@@ -40,6 +40,14 @@ describe('parse then typecheck (multi-declaration)', () => {
     expect(tc.ok).toBe(true);
   });
 
+  it('typechecks block-local fun with full signature', () => {
+    const source = 'fun f(): Int = { fun add(x: Int): Int = x + 1; add(2) }';
+    const tokens = tokenize(source);
+    const ast = parse(tokens);
+    const tc = typecheck(ast);
+    expect(tc.ok).toBe(true);
+  });
+
   it('inferred types are set on key nodes after typecheck', () => {
     const source = 'val x = 42';
     const tokens = tokenize(source);

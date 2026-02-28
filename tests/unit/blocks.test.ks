@@ -1,5 +1,8 @@
 import { Suite, group, eq } from "kestrel:test"
 
+// Minimal: block with var not inside a closure (direct function return)
+fun testVarBlockDirect(): Int = { var x = 0; x := 1; x }
+
 export fun run(s: Suite): Unit =
   group(s, "blocks", (s1: Suite) => {
     group(s1, "val", (sg: Suite) => {
@@ -9,6 +12,7 @@ export fun run(s: Suite): Unit =
     })
 
     group(s1, "var", (sg: Suite) => {
+      eq(sg, "var block in fun (no closure)", testVarBlockDirect(), 1)
       eq(sg, "assign and read", { var x = 0; x := 1; x }, 1)
       eq(sg, "increment pattern", { var x = 5; x := x + 1; x }, 6)
     })

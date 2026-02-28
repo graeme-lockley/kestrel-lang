@@ -742,8 +742,8 @@ class Parser {
       // empty { } — record
       return this.parseRecordExpr();
     }
-    if (next1 && (next1.value === 'val' || next1.value === 'var')) {
-      // { val ... or { var ... — block
+    if (next1 && (next1.value === 'val' || next1.value === 'var' || next1.value === 'fun')) {
+      // { val ... or { var ... or { fun ... — block
       return this.parseBlock();
     }
     if (next1 && next1.value === '...') {
@@ -804,6 +804,16 @@ class Parser {
         const name = this.expect('ident').value!;
         this.expect('op', '=');
         stmts.push({ kind: 'VarStmt', name, value: this.parseExpr() });
+      } else if (this.at('keyword', 'fun')) {
+        this.advance();
+        const name = this.expect('ident').value!;
+        this.expect('lparen');
+        const params = this.parseParamList();
+        this.expect('colon');
+        const returnType = this.parseType();
+        this.expect('op', '=');
+        const body = this.parseExpr();
+        stmts.push({ kind: 'ValStmt', name, value: { kind: 'LambdaExpr', params, body, returnType, bindingName: name } });
       } else {
         const expr = this.parseExpr();
         if (this.at('op', ':=')) {

@@ -71,6 +71,7 @@ import {
   emitAwait,
   emitCallIndirect,
   emitLoadFn,
+  emitMakeClosure,
   codeSave,
   codeRestore,
 } from '../bytecode/instructions.js';
@@ -85,6 +86,7 @@ export interface FunctionEntry {
 export interface ShapeEntry {
   nameIndices: number[];
 }
+
 
 /** Constructor entry for ADT table (spec 03 §10). */
 export interface ConstructorEntry {
@@ -208,6 +210,184 @@ export interface LambdaEntry {
   code: Uint8Array;
 }
 
+/** Returns true if expr contains a reference to name (excluding params/bound in nested lambdas). */
+function bodyReferencesName(expr: Expr, name: string, bound: Set<string>): boolean {
+  switch (expr.kind) {
+    case 'IdentExpr':
+      return expr.name === name && !bound.has(name);
+    case 'LambdaExpr': {
+      const inner = new Set(bound);
+      for (const p of expr.params) inner.add(p.name);
+      return bodyReferencesName(expr.body, name, inner);
+    }
+    case 'BlockExpr': {
+      const blockBound = new Set(bound);
+      for (const stmt of expr.stmts) {
+        if (stmt.kind === 'ValStmt' || stmt.kind === 'VarStmt') {
+          blockBound.add(stmt.name);
+          if (bodyReferencesName(stmt.value, name, blockBound)) return true;
+        } else if (stmt.kind === 'ExprStmt' && bodyReferencesName(stmt.expr, name, blockBound)) return true;
+        else if (stmt.kind === 'AssignStmt') {
+          if (stmt.target.kind === 'IdentExpr' && bodyReferencesName(stmt.target, name, blockBound)) return true;
+          if (bodyReferencesName(stmt.value, name, blockBound)) return true;
+        }
+      }
+      return bodyReferencesName(expr.result, name, blockBound);
+    }
+    case 'CallExpr':
+      if (bodyReferencesName(expr.callee, name, bound)) return true;
+      for (const a of expr.args) if (bodyReferencesName(a, name, bound)) return true;
+      return false;
+    case 'BinaryExpr':
+      return bodyReferencesName(expr.left, name, bound) || bodyReferencesName(expr.right, name, bound);
+    case 'UnaryExpr':
+      return bodyReferencesName(expr.operand, name, bound);
+    case 'IfExpr':
+      return bodyReferencesName(expr.cond, name, bound) || bodyReferencesName(expr.then, name, bound) || (expr.else != null && bodyReferencesName(expr.else, name, bound));
+    case 'MatchExpr':
+      if (bodyReferencesName(expr.scrutinee, name, bound)) return true;
+      for (const c of expr.cases) if (bodyReferencesName(c.body, name, bound)) return true;
+      return false;
+    case 'TryExpr':
+      if (bodyReferencesName(expr.body, name, bound)) return true;
+      for (const c of expr.cases) if (bodyReferencesName(c.body, name, bound)) return true;
+      return false;
+    case 'PipeExpr':
+      return bodyReferencesName(expr.left, name, bound) || bodyReferencesName(expr.right, name, bound);
+    case 'ConsExpr':
+      return bodyReferencesName(expr.head, name, bound) || bodyReferencesName(expr.tail, name, bound);
+    case 'FieldExpr':
+      return bodyReferencesName(expr.object, name, bound);
+    case 'ThrowExpr':
+      return bodyReferencesName(expr.value, name, bound);
+    case 'AwaitExpr':
+      return bodyReferencesName(expr.value, name, bound);
+    case 'TupleExpr':
+      return expr.elements.some((e) => bodyReferencesName(e, name, bound));
+    case 'ListExpr':
+      return expr.elements.some((el) => typeof el === 'object' && 'expr' in el ? bodyReferencesName((el as { expr: Expr }).expr, name, bound) : bodyReferencesName(el as Expr, name, bound));
+    case 'RecordExpr':
+      return (expr.spread != null && bodyReferencesName(expr.spread, name, bound)) || expr.fields.some((f) => bodyReferencesName(f.value, name, bound));
+    case 'TemplateExpr':
+      return expr.parts.some((p) => p.type === 'interp' && bodyReferencesName(p.expr, name, bound));
+    default:
+      return false;
+  }
+}
+
+/** Single-field shape for ref cells (var by-reference). */
+function getRefShapeId(shapes: ShapeEntry[], stringIndex: (s: string) => number): number {
+  const refField = stringIndex('0');
+  let id = shapes.findIndex((s) => s.nameIndices.length === 1 && s.nameIndices[0] === refField);
+  if (id < 0) {
+    id = shapes.length;
+    shapes.push({ nameIndices: [refField] });
+  }
+  return id;
+}
+
+/** Collect free variables of expr (in scope but not in paramNames), ordered by first occurrence. */
+function getFreeVars(
+  expr: Expr,
+  paramNames: Set<string>,
+  scope: Map<string, number>
+): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  const bound = new Set(paramNames);
+
+  function walk(e: Expr): void {
+    switch (e.kind) {
+      case 'IdentExpr':
+        if (scope.has(e.name) && !bound.has(e.name) && !seen.has(e.name)) {
+          seen.add(e.name);
+          result.push(e.name);
+        }
+        return;
+      case 'LambdaExpr':
+        for (const p of e.params) bound.add(p.name);
+        walk(e.body);
+        for (const p of e.params) bound.delete(p.name);
+        return;
+      case 'BlockExpr': {
+        for (const stmt of e.stmts) {
+          if (stmt.kind === 'ValStmt' || stmt.kind === 'VarStmt') {
+            bound.add(stmt.name);
+            walk(stmt.value);
+          } else if (stmt.kind === 'ExprStmt') walk(stmt.expr);
+          else if (stmt.kind === 'AssignStmt') {
+            if (stmt.target.kind === 'IdentExpr') walk(stmt.target);
+            walk(stmt.value);
+          }
+        }
+        walk(e.result);
+        return;
+      }
+      case 'CallExpr':
+        walk(e.callee);
+        for (const a of e.args) walk(a);
+        return;
+      case 'BinaryExpr':
+        walk(e.left);
+        walk(e.right);
+        return;
+      case 'UnaryExpr':
+        walk(e.operand);
+        return;
+      case 'IfExpr':
+        walk(e.cond);
+        walk(e.then);
+        if (e.else !== undefined) walk(e.else);
+        return;
+      case 'MatchExpr':
+        walk(e.scrutinee);
+        for (const c of e.cases) walk(c.body);
+        return;
+      case 'TryExpr':
+        walk(e.body);
+        for (const c of e.cases) walk(c.body);
+        return;
+      case 'PipeExpr':
+        walk(e.left);
+        walk(e.right);
+        return;
+      case 'ConsExpr':
+        walk(e.head);
+        walk(e.tail);
+        return;
+      case 'FieldExpr':
+        walk(e.object);
+        return;
+      case 'ThrowExpr':
+        walk(e.value);
+        return;
+      case 'AwaitExpr':
+        walk(e.value);
+        return;
+      case 'TupleExpr':
+        for (const el of e.elements) walk(el);
+        return;
+      case 'ListExpr':
+        for (const el of e.elements) {
+          if (typeof el === 'object' && 'spread' in el) walk((el as { expr: Expr }).expr);
+          else walk(el as Expr);
+        }
+        return;
+      case 'RecordExpr':
+        if (e.spread) walk(e.spread);
+        for (const f of e.fields) walk(f.value);
+        return;
+      case 'TemplateExpr':
+        for (const p of e.parts) if (p.type === 'interp') walk(p.expr);
+        return;
+      default:
+        return;
+    }
+  }
+  walk(expr);
+  return result;
+}
+
 /** Emit code for expr; leaves value on stack. funNameToId for CallExpr, shapes for RecordExpr, adts for List/ADT. */
 function makeEmitExpr(
   stringIndex: (s: string) => number,
@@ -219,7 +399,9 @@ function makeEmitExpr(
   env: Map<string, number>,
   funNameToId?: Map<string, number>,
   shapes?: ShapeEntry[],
-  adts?: AdtEntry[]
+  adts?: AdtEntry[],
+  captures?: Map<string, { index: number; isVar: boolean }>,
+  varNames?: Set<string>
 ) => void; moduleGlobals: Map<string, number> } {
   const moduleGlobals = new Map<string, number>();
   return { moduleGlobals, emitExpr: function emitExpr(
@@ -227,7 +409,9 @@ function makeEmitExpr(
   env: Map<string, number>,
   funNameToId?: Map<string, number>,
   shapes?: ShapeEntry[],
-  adts?: AdtEntry[]
+  adts?: AdtEntry[],
+  captures?: Map<string, { index: number; isVar: boolean }>,
+  varNames?: Set<string>
 ): void {
   switch (expr.kind) {
     case 'LiteralExpr': {
@@ -277,7 +461,7 @@ function makeEmitExpr(
           const idx = addConstant({ tag: ConstTag.String, stringIndex: stringIndex(part.value) });
           emitLoadConst(idx);
         } else {
-          emitExpr(part.expr, env, funNameToId, shapes, adts);
+          emitExpr(part.expr, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xffffff03, 1); // format value -> string
         }
         emitCall(0xffffff04, 2); // concat(top-1, top) -> result
@@ -285,6 +469,19 @@ function makeEmitExpr(
       break;
     }
     case 'IdentExpr': {
+      const cap = captures?.get(expr.name);
+      if (cap !== undefined) {
+        emitLoadLocal(0);
+        emitGetField(cap.index);
+        if (cap.isVar) emitGetField(0);
+        break;
+      }
+      const slot = env.get(expr.name);
+      if (slot !== undefined) {
+        emitLoadLocal(slot);
+        if (varNames?.has(expr.name)) emitGetField(0);
+        break;
+      }
       // 0-ary built-in constructors: None, Null
       if (adts != null) {
         const builtin = getBuiltinConstructor(expr.name, 0);
@@ -292,11 +489,6 @@ function makeEmitExpr(
           emitConstruct(builtin.adtId, builtin.ctor, builtin.arity);
           break;
         }
-      }
-      const slot = env.get(expr.name);
-      if (slot !== undefined) {
-        emitLoadLocal(slot);
-        break;
       }
       const globalSlot = moduleGlobals.get(expr.name);
       if (globalSlot !== undefined) {
@@ -314,10 +506,10 @@ function makeEmitExpr(
     case 'BinaryExpr': {
       if (expr.op === '&') {
         // a & b: eval a; JUMP_IF_FALSE pops a – if false, push False; else eval b (result)
-        emitExpr(expr.left, env, funNameToId, shapes, adts);
+        emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         const andSkipPos = codeOffset();
         emitJumpIfFalse(0);
-        emitExpr(expr.right, env, funNameToId, shapes, adts);
+        emitExpr(expr.right, env, funNameToId, shapes, adts, captures, varNames);
         const andJumpOverFalse = codeOffset();
         emitJump(0);
         const andPushFalsePos = codeOffset();
@@ -329,21 +521,21 @@ function makeEmitExpr(
       }
       if (expr.op === '|') {
         // a | b: eval a; if true push true and skip b; else eval b
-        emitExpr(expr.left, env, funNameToId, shapes, adts);
+        emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         const orEvalRightPos = codeOffset();
         emitJumpIfFalse(0); // patch: when false, go eval right
         emitLoadConst(addConstant({ tag: ConstTag.True }));
         const orJumpToEnd = codeOffset();
         emitJump(0); // patch: skip right
         const orRightStart = codeOffset();
-        emitExpr(expr.right, env, funNameToId, shapes, adts);
+        emitExpr(expr.right, env, funNameToId, shapes, adts, captures, varNames);
         const orEnd = codeOffset();
         patchI32(orEvalRightPos + 1, orRightStart - (orEvalRightPos + 5));
         patchI32(orJumpToEnd + 1, orEnd - (orJumpToEnd + 5));
         break;
       }
-      emitExpr(expr.left, env, funNameToId, shapes, adts);
-      emitExpr(expr.right, env, funNameToId, shapes, adts);
+emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.right, env, funNameToId, shapes, adts, captures, varNames);
       switch (expr.op) {
         case '+': emitAdd(); break;
         case '-': emitSub(); break;
@@ -366,18 +558,18 @@ function makeEmitExpr(
       if (expr.op === '-') {
         // Unary minus: 0 - operand
         emitLoadConst(addConstant({ tag: ConstTag.Int, value: 0 }));
-        emitExpr(expr.operand, env, funNameToId, shapes, adts);
+        emitExpr(expr.operand, env, funNameToId, shapes, adts, captures, varNames);
         emitSub();
       } else if (expr.op === '+') {
         // Unary plus: just emit operand
-        emitExpr(expr.operand, env, funNameToId, shapes, adts);
+        emitExpr(expr.operand, env, funNameToId, shapes, adts, captures, varNames);
       } else if (expr.op === '!') {
         // Logical not: constant-fold !True -> False, !False -> True; else (x == False)
         const op = expr.operand;
         if (op.kind === 'LiteralExpr' && (op.literal === 'true' || op.literal === 'false')) {
           emitLoadConst(addConstant({ tag: op.literal === 'true' ? ConstTag.False : ConstTag.True }));
         } else {
-          emitExpr(expr.operand, env, funNameToId, shapes, adts);
+          emitExpr(expr.operand, env, funNameToId, shapes, adts, captures, varNames);
           emitLoadConst(addConstant({ tag: ConstTag.False }));
           emitEq();
         }
@@ -387,15 +579,15 @@ function makeEmitExpr(
       break;
     }
     case 'IfExpr': {
-      emitExpr(expr.cond, env, funNameToId, shapes, adts);
+      emitExpr(expr.cond, env, funNameToId, shapes, adts, captures, varNames);
       const jumpIfFalsePos = codeOffset();
       emitJumpIfFalse(0); // patch later
-      emitExpr(expr.then, env, funNameToId, shapes, adts);
+      emitExpr(expr.then, env, funNameToId, shapes, adts, captures, varNames);
       const jumpOverElsePos = codeOffset();
       emitJump(0); // patch later
       const elseStart = codeOffset();
       if (expr.else !== undefined) {
-        emitExpr(expr.else, env, funNameToId, shapes, adts);
+        emitExpr(expr.else, env, funNameToId, shapes, adts, captures, varNames);
       } else {
         emitLoadConst(addConstant({ tag: ConstTag.Unit }));
       }
@@ -406,19 +598,31 @@ function makeEmitExpr(
     }
     case 'BlockExpr': {
       const blockEnv = new Map(env);
+      const blockVarNames = new Set<string>(expr.stmts.filter((s): s is { kind: 'VarStmt'; name: string; value: Expr } => s.kind === 'VarStmt').map((s) => s.name));
+      const nextVarNames = new Set(varNames ?? []);
+      for (const n of blockVarNames) nextVarNames.add(n);
+      const hasExprStmt = expr.stmts.some((s) => s.kind === 'ExprStmt');
+      if (hasExprStmt) blockEnv.set('$discard', blockEnv.size);
       for (const stmt of expr.stmts) {
         if (stmt.kind === 'ValStmt') {
-          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts);
+          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
           const slot = blockEnv.size;
           blockEnv.set(stmt.name, slot);
           emitStoreLocal(slot);
         } else if (stmt.kind === 'VarStmt') {
-          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts);
+          if (!shapes) break;
+          const refShapeId = getRefShapeId(shapes, stringIndex);
+          emitAllocRecord(refShapeId);
           const slot = blockEnv.size;
           blockEnv.set(stmt.name, slot);
           emitStoreLocal(slot);
+          emitLoadLocal(slot);
+          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          emitSetField(0);
         } else if (stmt.kind === 'ExprStmt') {
-          emitExpr(stmt.expr, blockEnv, funNameToId, shapes, adts);
+          emitExpr(stmt.expr, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          const discardSlot = blockEnv.get('$discard');
+          if (discardSlot !== undefined) emitStoreLocal(discardSlot);
         } else if (stmt.kind === 'AssignStmt') {
           const target = stmt.target;
           if (target.kind === 'FieldExpr') {
@@ -428,25 +632,39 @@ function makeEmitExpr(
               fieldSlot = objType.fields.findIndex((f) => f.name === target.field);
             }
             if (fieldSlot >= 0) {
-              emitExpr(target.object, blockEnv, funNameToId, shapes, adts);
-              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts);
+              emitExpr(target.object, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
               emitSetField(fieldSlot);
             }
           } else if (target.kind === 'IdentExpr') {
-            emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts);
-            const localSlot = blockEnv.get(target.name);
-            if (localSlot !== undefined) {
-              emitStoreLocal(localSlot);
+            const cap = captures?.get(target.name);
+            if (cap?.isVar) {
+              emitLoadLocal(0);
+              emitGetField(cap.index);
+              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+              emitSetField(0);
             } else {
-              const gSlot = moduleGlobals.get(target.name);
-              if (gSlot !== undefined) {
-                emitStoreGlobal(gSlot);
+              const localSlot = blockEnv.get(target.name);
+              if (localSlot !== undefined && nextVarNames.has(target.name)) {
+                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+                emitLoadLocal(localSlot);
+                emitSetField(0);
+              } else {
+                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+                if (localSlot !== undefined) {
+                  emitStoreLocal(localSlot);
+                } else {
+                  const gSlot = moduleGlobals.get(target.name);
+                  if (gSlot !== undefined) {
+                    emitStoreGlobal(gSlot);
+                  }
+                }
               }
             }
           }
         }
       }
-      emitExpr(expr.result, blockEnv, funNameToId, shapes, adts);
+      emitExpr(expr.result, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
       break;
     }
     case 'TupleExpr': {
@@ -457,7 +675,7 @@ function makeEmitExpr(
         shapeId = shapes.length;
         shapes.push({ nameIndices: [...nameIndices] });
       }
-      for (const e of expr.elements) emitExpr(e, env, funNameToId, shapes, adts);
+      for (const e of expr.elements) emitExpr(e, env, funNameToId, shapes, adts, captures, varNames);
       emitAllocRecord(shapeId);
       break;
     }
@@ -469,7 +687,7 @@ function makeEmitExpr(
         shapeId = shapes.length;
         shapes.push({ nameIndices: [...nameIndices] });
       }
-      for (const f of expr.fields) emitExpr(f.value, env, funNameToId, shapes, adts);
+      for (const f of expr.fields) emitExpr(f.value, env, funNameToId, shapes, adts, captures, varNames);
       emitAllocRecord(shapeId);
       break;
     }
@@ -488,7 +706,7 @@ function makeEmitExpr(
         if (i >= 0 && i < expr.object.elements.length) slot = i;
       }
       if (slot >= 0) {
-        emitExpr(expr.object, env, funNameToId, shapes, adts);
+        emitExpr(expr.object, env, funNameToId, shapes, adts, captures, varNames);
         emitGetField(slot);
         break;
       }
@@ -499,32 +717,32 @@ function makeEmitExpr(
       if (expr.callee.kind === 'IdentExpr') {
         // Check for builtin primitives: print (no newline), println (newline)
         if (expr.callee.name === 'print') {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF00, expr.args.length);
           break;
         }
         if (expr.callee.name === 'println') {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF01, expr.args.length);
           break;
         }
         if (expr.callee.name === 'exit' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF02, 1);
           break;
         }
         if (expr.callee.name === '__json_parse' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF05, 1);
           break;
         }
         if (expr.callee.name === '__json_stringify' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF06, 1);
           break;
         }
         if (expr.callee.name === '__read_file_async' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF07, 1);
           break;
         }
@@ -533,44 +751,44 @@ function makeEmitExpr(
           break;
         }
         if (expr.callee.name === '__string_length' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF09, 1);
           break;
         }
         if (expr.callee.name === '__string_slice' && expr.args.length === 3) {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF0A, 3);
           break;
         }
         if (expr.callee.name === '__string_index_of' && expr.args.length === 2) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
-          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF0B, 2);
           break;
         }
         if (expr.callee.name === '__string_equals' && expr.args.length === 2) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
-          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF0C, 2);
           break;
         }
         if (expr.callee.name === '__string_upper' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF0D, 1);
           break;
         }
         if (expr.callee.name === '__format_one' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF03, 1);
           break;
         }
         if (expr.callee.name === '__print_one' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF00, 1);
           break;
         }
         if (expr.callee.name === '__equals' && expr.args.length === 2) {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF0E, 2);
           break;
         }
@@ -591,17 +809,17 @@ function makeEmitExpr(
           break;
         }
         if (expr.callee.name === '__list_dir' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF10, 1);
           break;
         }
         if (expr.callee.name === '__write_text' && expr.args.length === 2) {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF11, 2);
           break;
         }
         if (expr.callee.name === '__run_process' && expr.args.length === 2) {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF12, 2);
           break;
         }
@@ -610,7 +828,7 @@ function makeEmitExpr(
         if (adts != null) {
           const builtin = getBuiltinConstructor(expr.callee.name, expr.args.length);
           if (builtin != null) {
-            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
             emitConstruct(builtin.adtId, builtin.ctor, builtin.arity);
             break;
           }
@@ -620,22 +838,35 @@ function makeEmitExpr(
         if (funNameToId != null) {
           const fnId = funNameToId.get(expr.callee.name);
           if (fnId !== undefined) {
-            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
             emitCall(fnId, expr.args.length);
             break;
           }
+        }
+
+        // Callee is a capture (e.g. self-reference in recursive nested fun); always a closure, not a var
+        const capCallee = captures?.get(expr.callee.name);
+        if (capCallee !== undefined) {
+          emitLoadLocal(0);
+          emitGetField(capCallee.index);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+          emitCallIndirect(expr.args.length);
+          break;
         }
 
         // Local variable holding a function value (closure / lambda)
         const localSlot = env.get(expr.callee.name);
         if (localSlot !== undefined) {
           emitLoadLocal(localSlot);
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
           emitCallIndirect(expr.args.length);
           break;
         }
       }
-      emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+      // Callee is an expression (e.g. makeAdd(2) — call that returns a closure; chained call)
+      emitExpr(expr.callee, env, funNameToId, shapes, adts, captures, varNames);
+      for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+      emitCallIndirect(expr.args.length);
       break;
     }
     case 'ListExpr': {
@@ -657,7 +888,7 @@ function makeEmitExpr(
         }
         // Stack has tail, need to push head then CONSTRUCT
         // CONSTRUCT pops args left-to-right, so push: head, tail
-        emitExpr(elem as Expr, env, funNameToId, shapes, adts); // Push head
+        emitExpr(elem as Expr, env, funNameToId, shapes, adts, captures, varNames); // Push head
         // Now stack: tail, head - need to swap
         const temp1 = env.size;
         const temp2 = env.size + 1;
@@ -674,14 +905,14 @@ function makeEmitExpr(
       if (!adts) break;
       const listAdtId = 0;
       const consCtor = 1;
-      emitExpr(expr.head, env, funNameToId, shapes, adts);
-      emitExpr(expr.tail, env, funNameToId, shapes, adts);
+      emitExpr(expr.head, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.tail, env, funNameToId, shapes, adts, captures, varNames);
       emitConstruct(listAdtId, consCtor, 2);
       break;
     }
     case 'MatchExpr': {
       // match (scrutinee) { Pat1 => e1; Pat2 => e2; ... }
-      emitExpr(expr.scrutinee, env, funNameToId, shapes, adts);
+      emitExpr(expr.scrutinee, env, funNameToId, shapes, adts, captures, varNames);
 
       const scrutineeSlot = env.size;
       env.set('$scrutinee', scrutineeSlot);
@@ -757,7 +988,7 @@ function makeEmitExpr(
               }
             }
 
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
 
             if (matchCase.pattern.kind === 'ConsPattern') {
               if (matchCase.pattern.head.kind === 'VarPattern') env.delete(matchCase.pattern.head.name);
@@ -772,7 +1003,7 @@ function makeEmitExpr(
           } else if (matchCase.pattern.kind === 'WildcardPattern') {
             const firstUncovered = [...Array(jumpTableSize).keys()].find(i => casePositions[i] === undefined);
             if (firstUncovered !== undefined) casePositions[firstUncovered] = caseStart - matchPos;
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
           }
 
           const jumpPos = codeOffset();
@@ -797,10 +1028,10 @@ function makeEmitExpr(
           env.set(firstCase.pattern.name, slot);
           emitLoadLocal(scrutineeSlot);
           emitStoreLocal(slot);
-          emitExpr(firstCase.body, env, funNameToId, shapes, adts);
+          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
           env.delete(firstCase.pattern.name);
         } else {
-          emitExpr(firstCase?.body || { kind: 'LitExpr', value: { kind: 'unit' } }, env, funNameToId, shapes, adts);
+          emitExpr(firstCase?.body || { kind: 'LitExpr', value: { kind: 'unit' } }, env, funNameToId, shapes, adts, captures, varNames);
         }
         env.delete('$scrutinee');
       }
@@ -808,7 +1039,7 @@ function makeEmitExpr(
     }
     case 'ThrowExpr': {
       // Evaluate exception value and throw
-      emitExpr(expr.value, env, funNameToId, shapes, adts);
+      emitExpr(expr.value, env, funNameToId, shapes, adts, captures, varNames);
       emitThrow();
       // Push unit (unreachable but keeps stack consistent)
       emitLoadConst(addConstant({ tag: ConstTag.Unit }));
@@ -821,7 +1052,7 @@ function makeEmitExpr(
       emitTry(0); // Placeholder offset, will be patched
 
       // Emit try block
-      emitExpr(expr.body, env, funNameToId, shapes, adts);
+      emitExpr(expr.body, env, funNameToId, shapes, adts, captures, varNames);
       emitEndTry();
 
       // Jump over catch handler
@@ -846,10 +1077,10 @@ function makeEmitExpr(
           env.set(firstCase.pattern.name, slot);
           emitLoadLocal(excSlot); // Load exception
           emitStoreLocal(slot);
-          emitExpr(firstCase.body, env, funNameToId, shapes, adts);
+          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
           env.delete(firstCase.pattern.name);
         } else {
-          emitExpr(firstCase.body, env, funNameToId, shapes, adts);
+          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
         }
       } else {
         emitLoadConst(addConstant({ tag: ConstTag.Unit }));
@@ -864,7 +1095,7 @@ function makeEmitExpr(
     }
     case 'AwaitExpr': {
       // Evaluate task expression and await it
-      emitExpr(expr.value, env, funNameToId, shapes, adts);
+      emitExpr(expr.value, env, funNameToId, shapes, adts, captures, varNames);
       emitAwait();
       // AWAIT leaves the result on stack
       break;
@@ -872,25 +1103,96 @@ function makeEmitExpr(
     case 'PipeExpr': {
       if (expr.op === '|>') {
         const call: Expr = { kind: 'CallExpr', callee: expr.right, args: [expr.left] };
-        emitExpr(call, env, funNameToId, shapes, adts);
+        emitExpr(call, env, funNameToId, shapes, adts, captures, varNames);
       } else {
         const call: Expr = { kind: 'CallExpr', callee: expr.left, args: [expr.right] };
-        emitExpr(call, env, funNameToId, shapes, adts);
+        emitExpr(call, env, funNameToId, shapes, adts, captures, varNames);
       }
       break;
     }
     case 'LambdaExpr': {
+      const paramNames = new Set(expr.params.map((p) => p.name));
+      let freeVars = getFreeVars(expr.body, paramNames, env);
+      const hasSelf = expr.bindingName != null && bodyReferencesName(expr.body, expr.bindingName, new Set(paramNames));
+      if (hasSelf && expr.bindingName != null) {
+        freeVars = [expr.bindingName, ...freeVars.filter((n) => n !== expr.bindingName)];
+      }
+      if (freeVars.length === 0) {
+        const saved = codeSave();
+        codeStart();
+        const lambdaEnv = new Map<string, number>();
+        for (let i = 0; i < expr.params.length; i++) lambdaEnv.set(expr.params[i]!.name, i);
+        emitExpr(expr.body, lambdaEnv, funNameToId, shapes, adts, captures, varNames);
+        emitRet();
+        const lambdaCode = codeSlice();
+        codeRestore(saved);
+        const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
+        lambdaEntries.push({ arity: expr.params.length, code: lambdaCode });
+        emitLoadFn(lambdaIndex);
+        break;
+      }
+      if (!shapes) break;
+      const nameIndices = freeVars.map((s) => stringIndex(s));
+      let shapeId = shapes.findIndex(
+        (s) =>
+          s.nameIndices.length === nameIndices.length &&
+          s.nameIndices.every((n, i) => n === nameIndices[i])
+      );
+      if (shapeId < 0) {
+        shapeId = shapes.length;
+        shapes.push({ nameIndices });
+      }
+      const captureMap = new Map<string, { index: number; isVar: boolean }>();
+      freeVars.forEach((name, i) => captureMap.set(name, { index: i, isVar: varNames?.has(name) ?? false }));
+      const liftedEnv = new Map<string, number>();
+      liftedEnv.set('__env', 0);
+      for (let i = 0; i < expr.params.length; i++) liftedEnv.set(expr.params[i]!.name, i + 1);
       const saved = codeSave();
       codeStart();
-      const lambdaEnv = new Map<string, number>();
-      for (let i = 0; i < expr.params.length; i++) lambdaEnv.set(expr.params[i]!.name, i);
-      emitExpr(expr.body, lambdaEnv, funNameToId, shapes, adts);
+      emitExpr(expr.body, liftedEnv, funNameToId, shapes, adts, captureMap, undefined);
       emitRet();
       const lambdaCode = codeSlice();
       codeRestore(saved);
       const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
-      lambdaEntries.push({ arity: expr.params.length, code: lambdaCode });
-      emitLoadFn(lambdaIndex);
+      lambdaEntries.push({ arity: expr.params.length + 1, code: lambdaCode });
+      for (const name of freeVars) {
+        if (name === expr.bindingName) {
+          emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+        } else {
+          const slot = env.get(name);
+          if (slot !== undefined) {
+            emitLoadLocal(slot);
+            // For var, slot already holds the ref cell; push as-is for closure env
+          } else {
+            const globalSlot = moduleGlobals.get(name);
+            if (globalSlot !== undefined) {
+              emitLoadGlobal(globalSlot);
+            } else {
+              const fnId = funNameToId?.get(name);
+              if (fnId !== undefined) {
+                emitLoadFn(fnId);
+              }
+              // If still undefined, we skip pushing (avoid corrupting stack); shape may mismatch
+            }
+          }
+        }
+      }
+      emitAllocRecord(shapeId);
+      if (hasSelf) {
+        // BlockExpr will store this ValStmt result at slot = blockEnv.size (= env.size here). Use temps above that.
+        const envTemp = env.size + 1;
+        const closureTemp = env.size + 2;
+        emitStoreLocal(envTemp);
+        emitLoadLocal(envTemp);
+        emitMakeClosure(lambdaIndex);
+        emitStoreLocal(closureTemp);
+        emitLoadLocal(closureTemp);
+        emitLoadLocal(envTemp);
+        emitSetField(0);
+        emitLoadLocal(closureTemp);
+      } else {
+        emitMakeClosure(lambdaIndex);
+      }
       break;
     }
     default:

@@ -169,7 +169,7 @@ The following table summarises the main typing constraints so that implementors 
 | **Field access** `e.x` | e : { x: T, ... } ⇒ type is T. |
 | **If/else** `if (e1) e2 else e3` | e1 : Bool; e2 : T, e3 : T (or T2, T3 unify to a common type) ⇒ type is T. |
 | **Match** `match (e) { cases }` | e : S; each case pattern is typed against S (pattern produces bindings; constructor/list patterns constrain S); case RHSs unify to T; exhaustiveness (§5) ⇒ type is T. |
-| **Lambda** `(p1,...,pn) => e` | Parameter types from annotation or inference; e : R ⇒ type is (T1,...,Tn) -> R. |
+| **Lambda** `(p1,...,pn) => e` | Parameter types from annotation or inference; e : R ⇒ type is (T1,...,Tn) -> R. Lambdas and nested functions may capture enclosing variables (01 §3.8); the type (T1,...,Tn) -> R applies to both non-capturing and capturing closures; closure conversion is a codegen concern and does not change the inferred type. For a **block-local** `fun name(...): ReturnType = body`, when a return type is declared, the body's inferred type is unified with that return type and the binding gets the declared arrow type (params → ReturnType). |
 | **Throw** `throw e` | e : exception type (§7) ⇒ type is bottom (or compatible with context). |
 | **Await** `await e` | e : Task<A>, in async context (§6) ⇒ type is A. |
 | **Narrowing** `if (x is T) { ... }` | In then-branch, x has type original & T (§4). |

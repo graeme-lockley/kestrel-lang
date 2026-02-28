@@ -47,7 +47,7 @@ A conforming implementation must:
 
 ### 2.5 Runtime Model
 
-- **Values:** Tagged values (INT, BOOL, UNIT, CHAR, PTR) and heap objects (FLOAT, STRING, RECORD, ADT, TASK; closure env as RECORD per 04) behave as in [05-runtime-model.md](05-runtime-model.md). No undefined layout assumptions that contradict the spec.
+- **Values:** Tagged values (INT, BOOL, UNIT, CHAR, PTR) and heap objects (FLOAT, STRING, RECORD, ADT, TASK, CLOSURE) behave as in [05-runtime-model.md](05-runtime-model.md). Closure values are fn_ref (non-capturing) or PTR to CLOSURE (capturing); see 04 §1.10, 05 §2. No undefined layout assumptions that contradict the spec.
 - **GC:** Programs that allocate many short-lived objects complete without leaks; no use-after-free when the GC is enabled.
 
 ### 2.6 Modules
@@ -105,7 +105,7 @@ When behaviour is intentionally changed, goldens must be updated (e.g. `UPDATE_G
 
 ### 3.5 Coverage Goals
 
-- **Core language:** At least one golden (or conformance) test per major feature: literals (all bases, strings with interpolation, chars), conditionals, match (including exhaustiveness), try/catch, lambdas, records, ADTs, pipelines (`|>`/`<|`), async/await.
+- **Core language:** At least one golden (or conformance) test per major feature: literals (all bases, strings with interpolation, chars), conditionals, match (including exhaustiveness), try/catch, lambdas, **nested functions and closures** (block-local `fun`, capture of block/function scope, CALL_INDIRECT, LOAD_FN, MAKE_CLOSURE; recursive nested fun with full signature, by-reference capture of `var`, return-type checking and expected type error for mismatch, chained call of returned closure e.g. `makeAdd(2)(3)`; see [functions.test.ks](../../tests/unit/functions.test.ks) and compiler typecheck/parse tests such as typecheck-conformance and nested_fun_return_type_mismatch), records, ADTs, pipelines (`|>`/`<|`), async/await.
 - **Stdlib:** At least one test that calls each standard module’s main entry points (e.g. string ops, stack trace, http server start/stop, json parse/stringify, fs read).
 - **Errors:** Golden or conformance tests for expected compile and runtime errors (e.g. type error message, uncaught exception, overflow).
 

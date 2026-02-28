@@ -129,4 +129,14 @@ describe('compile', () => {
       expect(stringTable[importSpecifierIndices[0]!]).toBe('kestrel:string');
     }
   });
+
+  it('compiles nested fun (fun inside block, desugared to val + lambda)', () => {
+    const result = compile('fun outer(): Int = { fun inner(): Int = 42; inner() }\nval x = outer()');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const out = codegen(result.ast);
+      expect(out.code.length).toBeGreaterThan(0);
+      expect(out.functionTable.length).toBeGreaterThanOrEqual(1);
+    }
+  });
 });

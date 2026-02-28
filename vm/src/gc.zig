@@ -7,13 +7,16 @@ pub const RECORD_KIND: u8 = 1;
 pub const ADT_KIND: u8 = 2;
 pub const TASK_KIND: u8 = 3;
 pub const STRING_KIND: u8 = 4;
+pub const CLOSURE_KIND: u8 = 5;
 
 // Heap object layout:
 // - RECORD: kind(1)+mark(1)+pad(2)+module_index(4)+shape_id(4)+field_count(4)+pad(4)=16, then field_count*8 bytes
 // - ADT: kind(1)+mark(1)+pad(2)+module_index(4)+adt_id(4)+ctor(4)+arity(4)+pad(4)=24, then arity*8 bytes
+// - CLOSURE: kind(1)+mark(1)+pad(2)+module_index(4)+fn_index(4)+pad(4)+env(8)=24
 // Objects are 8-byte aligned
 pub const RECORD_HEADER: usize = 16;
 pub const ADT_HEADER: usize = 24;
+pub const CLOSURE_HEADER: usize = 24;
 
 // Linked list of all allocated objects
 pub const ObjectNode = struct {
@@ -111,6 +114,11 @@ pub const GC = struct {
             STRING_KIND => {
                 // Strings: kind(1) + mark(1) + pad(2) + len(4) + UTF-8 bytes
                 // No pointers to trace
+            },
+            CLOSURE_KIND => {
+                // CLOSURE: env (PTR to RECORD) at offset 16
+                const env_addr = std.mem.readInt(usize, base[16..24], .little);
+                if (env_addr != 0) self.mark(env_addr);
             },
             else => {
                 // Other kinds (FLOAT, etc.) have no pointers to trace

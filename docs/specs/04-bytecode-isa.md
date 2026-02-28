@@ -63,6 +63,16 @@ Logical `&` and `|` in the language are short-circuit; the compiler emits branch
 
 **Language coverage:** Function application `f(args)`, constructor application (when compiled as call to constructor), pipeline `|>` / `<|` (compiled to calls). **Alias:** `RETURN` may be used as a synonym for `RET`; 03 refers to `RET`.
 
+### 1.10 Indirect Calls and Closures
+
+| Instruction | Operands | Effect |
+|-------------|----------|--------|
+| `CALL_INDIRECT` | `arity` (u32) | Pop `arity` arguments, then one callee value. **If callee is fn_ref** (tag fn_ref): call with (module_index, fn_index) and the given `arity`; push return value. **If callee is PTR to CLOSURE** (05 §2): load (module_index, fn_index, env) from the CLOSURE object; push env onto the stack, then the `arity` argument values (so the lifted function receives env as first param); CALL with (module_index, fn_index) and arity = 1 + `arity`; push return value. |
+| `LOAD_FN` | `fn_index` (u32) | Push **fn_ref** (current module index, `fn_index`). Used for non-capturing lambdas and nested functions. |
+| `MAKE_CLOSURE` | `fn_index` (u32) | Pop one value (must be PTR to RECORD = environment). Allocate a **CLOSURE** heap object (05 §2) containing (current module_index, fn_index, env); push PTR to it. Used when creating a capturing lambda or nested function. |
+
+**Language coverage:** First-class function values (lambdas, nested fun), closure creation, calls through a value (e.g. `f(args)` when `f` is a local or parameter). Non-capturing lambdas use LOAD_FN only; capturing lambdas use ALLOC_RECORD (env) then MAKE_CLOSURE. See §5.1.
+
 ### 1.6 Control Flow
 
 | Instruction | Operands | Effect |
@@ -175,8 +185,11 @@ Each instruction has a single-byte opcode. Opcodes 0x00–0x1E are assigned as b
 | 0x1D   | AWAIT           | (none) |
 | 0x1E   | LOAD_GLOBAL     | idx (u32) |
 | 0x1F   | STORE_GLOBAL    | idx (u32) |
+| 0x20   | CALL_INDIRECT   | arity (u32) |
+| 0x21   | LOAD_FN         | fn_index (u32) |
+| 0x22   | MAKE_CLOSURE    | fn_index (u32) |
 
-**Reserved:** 0x00, 0x20–0xFF. Decoder must reject reserved or unknown opcodes.
+**Reserved:** 0x00, 0x23–0xFF. Decoder must reject reserved or unknown opcodes.
 
 ### 4.2 MATCH instruction layout
 
@@ -210,6 +223,9 @@ So the total size of a MATCH instruction is **1 + 4 + 4×count** bytes. The next
 | SPREAD            | 1 + 4 = 5    |
 | THROW, END_TRY, AWAIT | 1 |
 | TRY               | 1 + 4 = 5    |
+| CALL_INDIRECT     | 1 + 4 = 5    |
+| LOAD_FN           | 1 + 4 = 5    |
+| MAKE_CLOSURE      | 1 + 4 = 5    |
 
 Instruction boundaries are thus deterministic: a decoder can always compute the start of the next instruction from the current opcode and operands.
 
@@ -229,16 +245,16 @@ Instruction boundaries are thus deterministic: a decoder can always compute the 
 
 ### 5.1 Anonymous functions and closures
 
-The instruction set **is sufficient** for both anonymous functions and closures; no dedicated closure instructions (e.g. MAKE_CLOSURE, CALL_CLOSURE) are required.
+The instruction set supports anonymous functions and closures via **LOAD_FN**, **MAKE_CLOSURE**, and **CALL_INDIRECT** (§1.10).
 
-- **Anonymous functions without capture** (e.g. `(x, y) => x + y`): The compiler assigns a function table entry (03 §6.1) and emits a normal function body. Calls use **CALL** with that function index. The function has no name in source but is a normal entry in the function table.
+- **Non-capturing lambdas** (e.g. `(x, y) => x + y` with no free variables): The compiler assigns a function table entry (03 §6.1) and emits the lambda body. At the creation site it emits **LOAD_FN** `fn_index`, producing a **fn_ref** value. At call sites it emits **CALL_INDIRECT**; the VM calls the function with the given arity and pushes the return value.
 
-- **Closures** (lambdas that capture variables from an enclosing scope): The compiler uses **closure conversion** (lambda lifting):
-  - Allocate an **environment**: a record (or tuple) holding the captured values, built with **ALLOC_RECORD** and stores/pushes at the point where the closure is created.
-  - Compile the lambda body as a **top-level function** whose first parameter (or a dedicated parameter block) is the environment; it reads captures via **GET_FIELD** (or LOAD_LOCAL for the env parameter).
-  - At every **call site** of the closure: push the environment (the record), then the normal arguments, then **CALL** the lifted function with arity = 1 + number of lambda parameters. The closure value at runtime can be represented as the environment record only; the call site knows the lifted function index at compile time.
+- **Capturing lambdas and nested functions** (lambdas that capture variables from enclosing block or function scope): The compiler uses **closure conversion** (lambda lifting):
+  - Compute the **free variables** of the lambda (01 §3.8). Build an **environment** record at the creation site: push each captured value in a fixed order, then **ALLOC_RECORD** with a shape that has one field per capture (and optionally a “self” slot for recursive nested fun). Then emit **MAKE_CLOSURE** `fn_index`, which pops the env and pushes a **closure value** (PTR to a CLOSURE heap object containing module_index, fn_index, env); see 05 §2.
+  - Compile the lambda body as a **lifted function** whose first parameter is the environment (local 0); the body reads captures via **GET_FIELD** on that env. Add this function to the module’s function table.
+  - At **call sites**, the callee is a value (either fn_ref or closure). The compiler emits **CALL_INDIRECT** `arity`. The VM pops the callee and the arguments; if the callee is a CLOSURE, it pushes the env as the first argument and CALLs the lifted function with arity 1 + `arity`.
 
-So first-class closures (e.g. passing a lambda to `createServer`) are supported using existing instructions: **CALL**, **ALLOC_RECORD**, **GET_FIELD**, **LOAD_LOCAL**, **STORE_LOCAL**. No additional opcodes are needed. A future extension could add MAKE_CLOSURE / CALL_CLOSURE for a single heap-allocated closure value and one indirect call, but it would be an optimization, not a requirement for correctness.
+First-class closures (e.g. passing a lambda to a higher-order function) are thus supported: the closure value is either a fn_ref (no env) or a CLOSURE object (env + function index), and **CALL_INDIRECT** handles both.
 
 ---
 

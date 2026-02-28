@@ -35,6 +35,7 @@ export const enum Op {
   STORE_GLOBAL = 0x1f,
   CALL_INDIRECT = 0x20,
   LOAD_FN = 0x21,
+  MAKE_CLOSURE = 0x22,
 }
 
 const code: number[] = [];
@@ -135,6 +136,12 @@ export function emitCallIndirect(arity: number): void {
 /** Append LOAD_FN fn_index. At runtime, creates fn_ref(current_module, fn_index). */
 export function emitLoadFn(fnIndex: number): void {
   u8(Op.LOAD_FN);
+  u32(fnIndex);
+}
+
+/** Append MAKE_CLOSURE fn_index. Pops env (PTR to RECORD), pushes closure (PTR to CLOSURE). */
+export function emitMakeClosure(fnIndex: number): void {
+  u8(Op.MAKE_CLOSURE);
   u32(fnIndex);
 }
 

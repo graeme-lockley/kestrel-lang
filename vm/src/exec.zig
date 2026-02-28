@@ -80,11 +80,13 @@ const LOAD_GLOBAL: u8 = 0x1E;
 const STORE_GLOBAL: u8 = 0x1F;
 const CALL_INDIRECT: u8 = 0x20;
 const LOAD_FN: u8 = 0x21;
+const MAKE_CLOSURE: u8 = 0x22;
 
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
 const TASK_KIND: u8 = 3;
 const STRING_KIND: u8 = 4;
+const CLOSURE_KIND: u8 = gc_mod.CLOSURE_KIND;
 const max_frames = 32;
 const max_locals = 128;
 const max_handlers = 32;
@@ -245,6 +247,27 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 const fn_idx = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
                 stack[sp] = Value.fnRef(@intCast(current_module.module_index), fn_idx);
+                sp += 1;
+            },
+            MAKE_CLOSURE => {
+                const fn_idx = std.mem.readInt(u32, code[pc..][0..4], .little);
+                pc += 4;
+                if (sp == 0) continue;
+                sp -= 1;
+                const env_val = stack[sp];
+                if (env_val.tag != .ptr) continue;
+                const env_addr = Value.ptrTo(env_val);
+                const env_base = @as([*]const u8, @ptrFromInt(env_addr));
+                if (env_base[0] != RECORD_KIND) continue;
+                const closure_mem = gc.allocObject(gc_mod.CLOSURE_HEADER) catch continue;
+                @memset(closure_mem, 0);
+                closure_mem[0] = CLOSURE_KIND;
+                closure_mem[1] = 0;
+                std.mem.writeInt(u32, closure_mem[4..8], current_module.module_index, .little);
+                std.mem.writeInt(u32, closure_mem[8..12], fn_idx, .little);
+                std.mem.writeInt(usize, closure_mem[16..24], env_addr, .little);
+                const closure_addr = @intFromPtr(closure_mem.ptr);
+                stack[sp] = Value.ptr(closure_addr);
                 sp += 1;
             },
             STORE_LOCAL => {
@@ -506,12 +529,37 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
 
                 if (sp < arity + 1 or frame_sp >= max_frames) continue;
                 const fn_val = stack[sp - arity - 1];
-                if (fn_val.tag != .fn_ref) continue;
-                const target_mod_idx = Value.fnRefModule(fn_val);
-                const fn_id = Value.fnRefIndex(fn_val);
+                const target_mod_idx: u16 = blk: {
+                    if (fn_val.tag == .fn_ref) {
+                        break :blk Value.fnRefModule(fn_val);
+                    } else if (fn_val.tag == .ptr) {
+                        const addr = Value.ptrTo(fn_val);
+                        const base = @as([*]const u8, @ptrFromInt(addr));
+                        if (base[0] != CLOSURE_KIND) continue;
+                        const mod_idx = std.mem.readInt(u32, base[4..8], .little);
+                        break :blk @intCast(mod_idx);
+                    } else continue;
+                };
+                const fn_id: u32 = blk: {
+                    if (fn_val.tag == .fn_ref) {
+                        break :blk Value.fnRefIndex(fn_val);
+                    } else {
+                        const addr = Value.ptrTo(fn_val);
+                        const base = @as([*]const u8, @ptrFromInt(addr));
+                        break :blk std.mem.readInt(u32, base[8..12], .little);
+                    }
+                };
                 const target_module: *load_mod.Module = if (target_mod_idx < module_ptrs.items.len) @constCast(module_ptrs.items[target_mod_idx]) else continue;
                 if (fn_id >= target_module.functions.len) continue;
                 const entry = target_module.functions[fn_id];
+                var call_arity = arity;
+                if (fn_val.tag == .ptr) {
+                    const addr = Value.ptrTo(fn_val);
+                    const base = @as([*]const u8, @ptrFromInt(addr));
+                    const env_addr = std.mem.readInt(usize, base[16..24], .little);
+                    stack[sp - arity - 1] = Value.ptr(env_addr);
+                    call_arity = arity + 1;
+                }
                 call_frames[frame_sp] = .{ .pc = pc, .module = current_module, .saved_sp = sp - arity - 1 };
                 for (0..max_locals) |ci| {
                     saved_locals[frame_sp][ci] = if (ci < current_locals.len) current_locals[ci] else Value.unit();
@@ -519,8 +567,8 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 frame_sp += 1;
                 current_locals = saved_locals[frame_sp][0..];
                 var i: usize = 0;
-                while (i < arity) : (i += 1) {
-                    current_locals[i] = stack[sp - arity + i];
+                while (i < call_arity) : (i += 1) {
+                    current_locals[i] = stack[sp - call_arity + i];
                 }
                 sp -= arity + 1;
                 current_module = target_module;
