@@ -14,17 +14,17 @@ describe('compile', () => {
     }
   });
 
-  it('returns ok: false and errors for parse error', () => {
+  it('returns ok: false and diagnostics for parse error', () => {
     const result = compile('val x =');
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.errors.length).toBeGreaterThan(0);
+    if (!result.ok) expect(result.diagnostics.length).toBeGreaterThan(0);
   });
 
   it('returns ok: false for typecheck error (unknown variable)', () => {
     const result = compile('val x = y');
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errors.some((e) => e.includes('Unknown variable') && e.includes('y'))).toBe(true);
+      expect(result.diagnostics.some((d) => d.message.includes('Unknown variable') && d.message.includes('y'))).toBe(true);
     }
   });
 
@@ -89,7 +89,7 @@ describe('compile', () => {
     const result = compile('val r = { x = 1 }\nr.x := 2');
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errors.some((e) => e.includes('immutable field') || e.includes('Cannot assign'))).toBe(true);
+      expect(result.diagnostics.some((d) => d.message.includes('immutable field') || d.message.includes('Cannot assign'))).toBe(true);
     }
   });
 

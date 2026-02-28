@@ -27,7 +27,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Freshness:** The script is compiled when (a) the `.kbc` binary does not exist, or (b) the `.ks` source is newer than the existing `.kbc`.
 - **Cache:** Compiled `.kbc` files are stored under `~/.kestrel/kbc/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/kbc/Users/me/proj/foo.kbc`. This avoids cluttering the project directory. Override with `KESTREL_CACHE` (e.g. `KESTREL_CACHE=/tmp/kbc kestrel run foo.ks`).
 - **Execution:** The VM ([05-runtime-model.md](05-runtime-model.md)) loads the compiled bytecode and runs it. Any additional arguments (`args...`) are passed through to the VM (VM behaviour for script arguments is implementation-defined).
-- **Errors:** Compile errors are reported on stderr; the process exits non-zero. VM errors (e.g. uncaught exception) produce non-zero exit as per the runtime model.
+- **Errors:** Compile errors are reported on stderr; the process exits non-zero. Diagnostic format and behaviour are specified in [10-compile-diagnostics.md](10-compile-diagnostics.md). VM errors (e.g. uncaught exception) produce non-zero exit as per the runtime model.
 
 ### 2.2 dis
 
@@ -76,3 +76,4 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - [06-typesystem.md](06-typesystem.md) – Type checking during compile
 - [07-modules.md](07-modules.md) – Module resolution (future multi-file support)
 - [08-tests.md](08-tests.md) – Test harnesses; `scripts/run-e2e.sh` uses compiler and VM directly for E2E
+- [10-compile-diagnostics.md](10-compile-diagnostics.md) – Compile-time diagnostics and error reporting (format, API, CLI)

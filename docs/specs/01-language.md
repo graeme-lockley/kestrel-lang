@@ -192,6 +192,8 @@ ExceptionDecl  ::= "export" "exception" UPPER_IDENT [ "{" TypeFieldList "}" ]
 
 **Program order:** **Imports** must appear first (after an optional shebang). All `ImportDecl` are parsed before any declaration or statement. Thereafter **declarations** (exports, functions, types, exceptions) and **top-level statements** may be interleaved in any order. Declarations are visible for the whole module (hoisted). Top-level statements are executed **serially** in source order when the module is run—e.g. as the body of a script. A file that begins with a shebang is typically executed as the entry point. An empty program (shebang only, or no imports, declarations, or statements) is valid and denotes a module that does nothing when run.
 
+**Top-level recursion:** Every top-level function name is in scope in the body of every top-level function. Thus a function may call itself (self-recursion) or call any other top-level function (mutual recursion); declaration order does not affect name resolution for function calls.
+
 ### 3.2 Expressions (Precedence and Associativity)
 
 Expression precedence from **lowest** to **highest** (same row = same precedence):

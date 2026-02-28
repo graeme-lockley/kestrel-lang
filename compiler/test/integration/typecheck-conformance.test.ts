@@ -46,7 +46,7 @@ describe('typecheck conformance (valid)', () => {
       const tokens = tokenize(source);
       const ast = parse(tokens);
       const tc = typecheck(ast);
-      expect(tc.ok, tc.ok ? '' : (tc as { errors: string[] }).errors.join('; ')).toBe(true);
+      expect(tc.ok, tc.ok ? '' : (tc as { diagnostics: { message: string }[] }).diagnostics.map((d) => d.message).join('; ')).toBe(true);
     });
   }
 });
@@ -67,8 +67,11 @@ describe('typecheck conformance (invalid)', () => {
       const tc = typecheck(ast);
       expect(tc.ok).toBe(false);
       if (!tc.ok && expectedSubstring != null) {
-        const hasMatch = tc.errors.some((e) => e.includes(expectedSubstring));
-        expect(hasMatch, `Expected error to contain "${expectedSubstring}". Got: ${tc.errors.join('; ')}`).toBe(true);
+        const hasMatch = tc.diagnostics.some((d) =>
+          d.message.includes(expectedSubstring) || (d.hint != null && d.hint.includes(expectedSubstring))
+        );
+        const got = tc.diagnostics.map((d) => d.hint ? `${d.message} (${d.hint})` : d.message).join('; ');
+        expect(hasMatch, `Expected error to contain "${expectedSubstring}". Got: ${got}`).toBe(true);
       }
     });
   }

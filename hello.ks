@@ -9,8 +9,8 @@ println(message2())
 hello := "hello"
 
 println({a = 1, b = hello})
-println([1, 2, 3, 4, 5])
-println(Some(10))
+println([1, 2, 3, "123", 5])
+println(Some("hello"))
 
 // --- Var captured by reference: closure and block share the same storage ---
 // inc() mutates n and returns the new value; calling inc() + inc() gives 1 + 2 = 3

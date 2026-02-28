@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve as pathResolve, dirname } from 'path';
 import { tokenize } from './lexer/index.js';
-import { parse } from './parser/index.js';
+import { parse, ParseError } from './parser/index.js';
 import { typecheck, type TypecheckOptions } from './typecheck/check.js';
 import { codegen, type CodegenResult } from './codegen/codegen.js';
 import { writeKbc, type ImportedFunctionEntry } from './bytecode/write.js';
@@ -12,6 +12,9 @@ import { resolveSpecifier } from './resolve.js';
 import { readTypesFile, writeTypesFile, isTypesFileFresh } from './types-file.js';
 import type { Program, ImportDecl, Expr } from './ast/nodes.js';
 import type { InternalType } from './types/internal.js';
+import type { Diagnostic } from './diagnostics/types.js';
+import { CODES, locationFromSpan, locationFileOnly } from './diagnostics/types.js';
+import type { Span } from './lexer/types.js';
 
 /** Count all LambdaExpr nodes in an expression tree (used to predict function table size). */
 function countLambdasInExpr(e: Expr): number {
@@ -105,10 +108,19 @@ function getRequestedImports(imp: ImportDecl): Map<string, string> {
   return m;
 }
 
+function diag(file: string, code: string, message: string, span?: Span): Diagnostic {
+  return {
+    severity: 'error',
+    code,
+    message,
+    location: span ? locationFromSpan(file, span) : locationFileOnly(file),
+  };
+}
+
 export function compileFile(
   inputPath: string,
   options?: CompileFileOptions
-): { ok: true; kbc: Uint8Array; dependencyPaths: string[] } | { ok: false; errors: string[] } {
+): { ok: true; kbc: Uint8Array; dependencyPaths: string[] } | { ok: false; diagnostics: Diagnostic[] } {
   const projectRoot = options?.projectRoot ?? process.cwd();
   const stdlibDir = options?.stdlibDir ?? pathResolve(projectRoot, 'stdlib');
   const absPath = pathResolve(inputPath);
@@ -118,9 +130,9 @@ export function compileFile(
   const onCompilingFile = options?.onCompilingFile;
   const stalePaths = options?.stalePaths;
 
-  function compileOne(filePath: string): { ok: true; program: Program; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] } | { ok: false; errors: string[] } {
+  function compileOne(filePath: string): { ok: true; program: Program; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] } | { ok: false; diagnostics: Diagnostic[] } {
     if (visited.has(filePath)) {
-      return { ok: false, errors: [`Circular import: ${filePath}`] };
+      return { ok: false, diagnostics: [diag(filePath, CODES.file.circular_import, `Circular import: ${filePath}`)] };
     }
 
     const cached = cache.get(filePath);
@@ -134,11 +146,27 @@ export function compileFile(
     try {
       source = readFileSync(filePath, 'utf-8');
     } catch {
-      return { ok: false, errors: [`Cannot read file: ${filePath}`] };
+      return { ok: false, diagnostics: [diag(filePath, CODES.file.read_error, `Cannot read file: ${filePath}`)] };
     }
 
     const tokens = tokenize(source);
-    const program = parse(tokens);
+    let program: Program;
+    try {
+      program = parse(tokens);
+    } catch (e) {
+      if (e instanceof ParseError) {
+        return {
+          ok: false,
+          diagnostics: [{
+            severity: 'error',
+            code: CODES.parse.unexpected_token,
+            message: e.message,
+            location: { file: filePath, line: e.line, column: e.column, offset: e.offset },
+          }],
+        };
+      }
+      throw e;
+    }
 
     const resolveOpts = { fromFile: filePath, projectRoot, stdlibDir };
     const specs = getDistinctSpecifiers(program);
@@ -146,7 +174,10 @@ export function compileFile(
     const resolved = new Map<string, string>();
     for (const spec of specs) {
       const r = resolveSpecifier(spec, resolveOpts);
-      if (!r.ok) return { ok: false, errors: [r.error] };
+      if (!r.ok) {
+        const imp = program.imports.find((i) => i.spec === spec);
+        return { ok: false, diagnostics: [diag(filePath, CODES.resolve.module_not_found, r.error, (imp as { span?: Span })?.span)] };
+      }
       resolved.set(spec, r.path);
     }
 
@@ -202,7 +233,8 @@ export function compileFile(
                 const exp = typesExports.get(externalName);
                 const ta = typesTypeAliases.get(externalName);
                 if (exp == null && ta == null) {
-                  return { ok: false, errors: [`Module ${spec} does not export ${externalName}`] };
+                  const imp = program.imports.find((i) => i.spec === spec);
+                  return { ok: false, diagnostics: [diag(filePath, CODES.export.not_exported, `Module ${spec} does not export ${externalName}`, (imp as { span?: Span })?.span)] };
                 }
                 if (ta != null) {
                   typeAliasBindings.set(localName, ta.type);
@@ -229,7 +261,8 @@ export function compileFile(
           for (const [localName, externalName] of requested) {
             const t = depOut.exports.get(externalName);
             if (t == null) {
-              return { ok: false, errors: [`Module ${spec} does not export ${externalName}`] };
+              const imp = program.imports.find((i) => i.spec === spec);
+              return { ok: false, diagnostics: [diag(filePath, CODES.export.not_exported, `Module ${spec} does not export ${externalName}`, (imp as { span?: Span })?.span)] };
             }
             if (depOut.exportedTypeAliases.has(externalName)) {
               typeAliasBindings.set(localName, t);
@@ -251,9 +284,10 @@ export function compileFile(
     const tcOpts: TypecheckOptions = {
       importBindings: importBindings.size > 0 ? importBindings : undefined,
       typeAliasBindings: typeAliasBindings.size > 0 ? typeAliasBindings : undefined,
+      sourceFile: filePath,
     };
     const tc = typecheck(program, tcOpts);
-    if (!tc.ok) return { ok: false, errors: tc.errors };
+    if (!tc.ok) return { ok: false, diagnostics: tc.diagnostics };
 
     const funDeclCount = program.body.filter((n) => n.kind === 'FunDecl').length;
     const lambdaCount = countLambdasInProgram(program);

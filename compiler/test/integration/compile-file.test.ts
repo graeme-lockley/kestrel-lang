@@ -30,7 +30,7 @@ describe('compileFile', () => {
     const r = compileFile(p, opts);
     expect(r.ok).toBe(false);
     if (!r.ok) {
-      expect(r.errors.some((e) => e.includes('Cannot read') || e.includes('not found'))).toBe(true);
+      expect(r.diagnostics.some((d) => d.message.includes('Cannot read') || d.message.includes('not found'))).toBe(true);
     }
   });
 });

@@ -1,7 +1,7 @@
 /**
  * Recursive descent parser (spec 01 §3). Token stream -> AST.
  */
-import type { Token } from '../lexer/types.js';
+import type { Token, Span } from '../lexer/types.js';
 import type {
   Program,
   ImportDecl,
@@ -447,7 +447,20 @@ class Parser {
   }
 
   parseExpr(): Expr {
-    return this.parsePipeExpr();
+    const startIdx = this.i;
+    const expr = this.parsePipeExpr();
+    const endIdx = this.i - 1;
+    if (endIdx >= startIdx && expr && typeof expr === 'object') {
+      const startSpan = this.tokens[startIdx]!.span;
+      const endSpan = this.tokens[endIdx]!.span;
+      (expr as Expr & { span: Span }).span = {
+        start: startSpan.start,
+        end: endSpan.end,
+        line: startSpan.line,
+        column: startSpan.column,
+      };
+    }
+    return expr;
   }
 
   /** Public entry to parse a single expression (used for interpolation). */
@@ -711,13 +724,13 @@ class Parser {
       this.advance();
       const elements: (Expr | { spread: true; expr: Expr })[] = [];
       while (!this.at('rbrack')) {
+        if (elements.length > 0) this.expect('comma');
         if (this.at('op', '...')) {
           this.advance();
           elements.push({ spread: true, expr: this.parseExpr() });
         } else {
           elements.push(this.parseExpr());
         }
-        if (!this.at('rbrack')) this.expect('comma');
       }
       this.expect('rbrack');
       return { kind: 'ListExpr', elements };

@@ -34,7 +34,7 @@ describe('checkExhaustive', () => {
     `);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errors.some((e) => e.includes('Non-exhaustive') && e.includes('Nil'))).toBe(true);
+      expect(result.diagnostics.some((d) => d.message.includes('Non-exhaustive') && d.message.includes('Nil'))).toBe(true);
     }
   });
 
@@ -57,7 +57,7 @@ describe('await outside async', () => {
     `);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errors.length).toBeGreaterThan(0);
+      expect(result.diagnostics.length).toBeGreaterThan(0);
     }
   });
 });
@@ -79,7 +79,7 @@ describe('return type must match body when body type is from parameter', () => {
     `);
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errors.some((e) => e.includes('Return type must be the same as the body type'))).toBe(true);
+      expect(result.diagnostics.some((d) => d.message.includes('Return type must be the same as the body type'))).toBe(true);
     }
   });
 });

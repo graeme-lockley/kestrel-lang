@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 /**
- * CLI: kestrel-compiler <input.ks> [-o output.kbc] [--stale-file path]
+ * CLI: kestrel-compiler <input.ks> [-o output.kbc] [--stale-file path] [--format=json]
  * Parse input, resolve imports, emit .kbc. When -o is omitted, entry and deps go under KESTREL_CACHE
  * (~/.kestrel/kbc/ by default), mirroring the source path so we never write into the source tree.
  * When -o is used, the entry is written to that path and deps still go to the cache.
  * If --stale-file is given, only print "Compiling X" for paths listed in that file (one path per line).
+ * If --format=json, emit diagnostics as JSONL on failure (spec 10).
  */
 import { resolve, basename, dirname, join } from 'path';
 import { writeFileSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { compileFile } from './src/compile-file.js';
+import { report } from './src/diagnostics/index.js';
 
 const args = process.argv.slice(2);
 if (args.length < 1) {
-  process.stderr.write('Usage: kestrel-compiler <input.ks> [-o output.kbc] [--stale-file path]\n');
+  process.stderr.write('Usage: kestrel-compiler <input.ks> [-o output.kbc] [--stale-file path] [--format=json]\n');
   process.exit(1);
 }
 const inputPath = args[0]!;
@@ -32,6 +34,7 @@ function defaultEntryOutputPath(): string {
   return join(cacheRoot, relDir, base + '.kbc');
 }
 const outputPath = outIdx >= 0 ? args[outIdx + 1]! : defaultEntryOutputPath();
+const formatJson = args.includes('--format=json');
 const staleIdx = args.indexOf('--stale-file');
 const staleFilePath = staleIdx >= 0 ? args[staleIdx + 1] : undefined;
 let stalePaths: Set<string> | undefined;
@@ -63,7 +66,31 @@ const result = compileFile(resolve(inputPath), {
   },
 });
 if (!result.ok) {
-  process.stderr.write(result.errors.join('\n') + '\n');
+  const sourceByPath = new Map<string, string>();
+  for (const d of result.diagnostics) {
+    const p = d.location?.file;
+    if (p && p !== '<source>' && !sourceByPath.has(p)) {
+      try {
+        const content = readFileSync(p, 'utf-8');
+        sourceByPath.set(p, content);
+        sourceByPath.set(resolve(p), content);
+      } catch {
+        try {
+          const content = readFileSync(resolve(p), 'utf-8');
+          sourceByPath.set(p, content);
+          sourceByPath.set(resolve(p), content);
+        } catch {
+          // reporter will fall back to loc.line/column
+        }
+      }
+    }
+  }
+  report(result.diagnostics, {
+    format: formatJson ? 'json' : 'human',
+    color: !process.env.NO_COLOR && process.stderr.isTTY,
+    stream: process.stderr,
+    sourceByPath,
+  });
   process.exit(1);
 }
 writeFileSync(outputPath, result.kbc);

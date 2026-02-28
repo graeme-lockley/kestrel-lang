@@ -6,6 +6,9 @@ import type { InternalType } from '../types/internal.js';
 import { freshVar, prim, tInt, tFloat, tBool, tString, tUnit, resetVarId, freeVars, generalize, instantiate } from '../types/internal.js';
 import { astTypeToInternal, astTypeToInternalWithScope } from '../types/from-ast.js';
 import { unify, applySubst, UnifyError } from '../types/unify.js';
+import type { Diagnostic } from '../diagnostics/types.js';
+import { CODES, locationFromSpan, locationFileOnly } from '../diagnostics/types.js';
+import type { Span } from '../lexer/types.js';
 
 const TypedExpr = Symbol('inferredType');
 declare module '../ast/nodes.js' {
@@ -36,15 +39,42 @@ export interface TypecheckOptions {
   importBindings?: Map<string, InternalType>;
   /** Imported type aliases (localName -> type) to resolve in function signatures. */
   typeAliasBindings?: Map<string, InternalType>;
+  /** Source file path for diagnostics (spec 10). */
+  sourceFile?: string;
 }
 
-export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType> } | { ok: false; errors: string[] } {
+export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType> } | { ok: false; diagnostics: Diagnostic[] } {
   resetVarId();
-  const errors: string[] = [];
+  const diagnostics: Diagnostic[] = [];
   const subst = new Map<number, InternalType>();
   const env = new Map<string, InternalType>();
   const typeAliases = new Map<string, InternalType>();
   let inAsyncContext = false; // Track if we're in an async function
+  const sourceFile = options?.sourceFile ?? '';
+  /** Current expression for UnifyError location (spec 10). */
+  let currentExpr: Expr | undefined;
+
+  function locFor(node: unknown): { file: string; line: number; column: number; offset?: number; endOffset?: number } {
+    const span = (node as { span?: Span })?.span;
+    if (span) return locationFromSpan(sourceFile, span);
+    return locationFileOnly(sourceFile);
+  }
+
+  /** Call unify; on UnifyError attach blameNode so the diagnostic gets the right location. */
+  function unifyWithBlame(
+    left: InternalType,
+    right: InternalType,
+    blameNode: unknown
+  ): void {
+    try {
+      unify(left, right, subst);
+    } catch (e) {
+      if (e instanceof UnifyError) {
+        (e as UnifyError & { blameNode?: unknown }).blameNode = blameNode;
+      }
+      throw e;
+    }
+  }
 
   // Add import bindings first (so they can be used in the module)
   const importBindings = options?.importBindings;
@@ -276,7 +306,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     if (required) {
       const missing = [...required].filter(c => !coveredCtors.has(c));
       if (missing.length > 0 && !hasCatchAll) {
-        errors.push(`Non-exhaustive match: missing constructors: ${missing.join(', ')}`);
+        diagnostics.push({
+          severity: 'error',
+          code: CODES.type.non_exhaustive_match,
+          message: `Non-exhaustive match: missing constructors: ${missing.join(', ')}`,
+          location: locFor(expr),
+        });
       }
     }
   }
@@ -287,7 +322,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
    * ends in a row variable, extends the row with the field and returns
    * the fresh field type. Returns null only if the record is closed.
    */
-  function findFieldInRecord(rec: InternalType & { kind: 'record' }, name: string): InternalType | null {
+  function findFieldInRecord(rec: InternalType & { kind: 'record' }, name: string, blame: unknown): InternalType | null {
     const field = rec.fields.find((f) => f.name === name);
     if (field != null) return field.type;
     if (rec.row == null) return null;
@@ -300,16 +335,17 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         fields: [{ name, mut: false, type: fieldType }],
         row: newRowVar,
       };
-      unify(rowApplied, extension, subst);
+      unifyWithBlame(rowApplied, extension, blame);
       return fieldType;
     }
     if (rowApplied.kind === 'record') {
-      return findFieldInRecord(rowApplied, name);
+      return findFieldInRecord(rowApplied, name, blame);
     }
     return null;
   }
 
   function inferExpr(expr: Expr): InternalType {
+    currentExpr = expr;
     let result: InternalType;
     switch (expr.kind) {
       case 'LiteralExpr':
@@ -335,14 +371,14 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       }
       case 'IfExpr': {
         const condT = inferExpr(expr.cond);
-        unify(condT, tBool, subst);
+        unifyWithBlame(condT, tBool, expr);
         const thenT = inferExpr(expr.then);
         if (expr.else !== undefined) {
           const elseT = inferExpr(expr.else);
-          unify(thenT, elseT, subst);
+          unifyWithBlame(thenT, elseT, expr);
           result = apply(thenT);
         } else {
-          unify(thenT, tUnit, subst);
+          unifyWithBlame(thenT, tUnit, expr);
           result = tUnit;
         }
         setInferredType(expr, result);
@@ -352,15 +388,15 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const l = inferExpr(expr.left);
         const r = inferExpr(expr.right);
         if (['+', '-', '*', '/', '%', '**'].includes(expr.op)) {
-          unify(l, r, subst);
-          unify(l, tInt, subst);
+          unifyWithBlame(l, r, expr);
+          unifyWithBlame(l, tInt, expr);
           result = apply(l);
         } else if (['==', '!=', '<', '>', '<=', '>='].includes(expr.op)) {
-          unify(l, r, subst);
+          unifyWithBlame(l, r, expr);
           result = tBool;
         } else if (expr.op === '|' || expr.op === '&') {
-          unify(l, tBool, subst);
-          unify(r, tBool, subst);
+          unifyWithBlame(l, tBool, expr);
+          unifyWithBlame(r, tBool, expr);
           result = tBool;
         } else {
           result = freshVar();
@@ -371,10 +407,10 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       case 'UnaryExpr': {
         const operandType = inferExpr(expr.operand);
         if (expr.op === '-' || expr.op === '+') {
-          unify(operandType, tInt, subst);
+          unifyWithBlame(operandType, tInt, expr);
           result = tInt;
         } else if (expr.op === '!') {
-          unify(operandType, tBool, subst);
+          unifyWithBlame(operandType, tBool, expr);
           result = tBool;
         } else {
           result = freshVar();
@@ -397,7 +433,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const argTs = expr.args.map(inferExpr);
         const ret = freshVar();
         const arrow = { kind: 'arrow' as const, params: argTs, return: ret };
-        unify(calleeT, arrow, subst);
+        unifyWithBlame(calleeT, arrow, expr);
         result = apply(ret);
         setInferredType(expr, result);
         return result;
@@ -420,7 +456,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
               const arrowT: InternalType = { kind: 'arrow', params: paramTs, return: returnT };
               env.set(stmt.name, arrowT);
               const inferred = apply(inferExpr(stmt.value));
-              unify(inferred, arrowT, subst);
+              unifyWithBlame(inferred, arrowT, stmt.value);
               const scheme = generalize(apply(arrowT), envFreeVars());
               env.set(stmt.name, scheme);
             } else {
@@ -438,7 +474,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           } else {
             const targetT = inferExpr(stmt.target);
             const v = inferExpr(stmt.value);
-            unify(targetT, v, subst);
+            unifyWithBlame(targetT, v, stmt.value);
           }
         }
         result = inferExpr(expr.result);
@@ -494,7 +530,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             row: rowVar
           };
           try {
-            unify(applied, recordType, subst);
+            unifyWithBlame(applied, recordType, expr);
           } catch (e) {
             if (e instanceof UnifyError) {
               throw new TypeCheckError(`Cannot access field '${expr.field}' on non-record type`, expr);
@@ -510,7 +546,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           throw new TypeCheckError(`Expected record or tuple type, got ${applied.kind}`, expr);
         }
 
-        const found = findFieldInRecord(applied, expr.field);
+        const found = findFieldInRecord(applied, expr.field, expr);
         if (found != null) {
           result = apply(found);
           setInferredType(expr, result);
@@ -574,7 +610,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             const caseVars = bindPattern(c.pattern, scrutT);
             const caseT = inferExpr(c.body);
             caseVars.forEach(v => env.delete(v));
-            unify(firstT, caseT, subst);
+            unifyWithBlame(firstT, caseT, c.body);
           }
           result = apply(firstT);
         }
@@ -615,7 +651,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           if (c.pattern.kind === 'VarPattern') {
             env.delete(c.pattern.name);
           }
-          unify(blockT, caseT, subst);
+          unifyWithBlame(blockT, caseT, c.body);
         }
         result = apply(blockT);
         setInferredType(expr, result);
@@ -640,7 +676,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
               const elem = expr.elements[i];
               if (!(typeof elem === 'object' && 'spread' in elem)) {
                 const elemT = inferExpr(elem as Expr);
-                unify(firstT, elemT, subst);
+                unifyWithBlame(firstT, elemT, elem as Expr);
               }
             }
             result = { kind: 'app', name: 'List', args: [apply(firstT)] };
@@ -655,13 +691,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const tailT = inferExpr(expr.tail);
         const applied = apply(tailT);
         if (applied.kind === 'app' && applied.name === 'List' && applied.args.length === 1) {
-          unify(headT, applied.args[0]!, subst);
+          unifyWithBlame(headT, applied.args[0]!, expr);
           result = applied;
         } else {
           // Try to unify with List<α>
           const elemT = freshVar();
-          unify(tailT, { kind: 'app', name: 'List', args: [elemT] }, subst);
-          unify(headT, elemT, subst);
+          unifyWithBlame(tailT, { kind: 'app', name: 'List', args: [elemT] }, expr);
+          unifyWithBlame(headT, elemT, expr);
           result = apply({ kind: 'app', name: 'List', args: [elemT] });
         }
         setInferredType(expr, result);
@@ -672,9 +708,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const rightT = apply(inferExpr(expr.right));
         result = freshVar();
         if (expr.op === '|>') {
-          unify(rightT, { kind: 'arrow', params: [leftT], return: result }, subst);
+          unifyWithBlame(rightT, { kind: 'arrow', params: [leftT], return: result }, expr);
         } else {
-          unify(leftT, { kind: 'arrow', params: [rightT], return: result }, subst);
+          unifyWithBlame(leftT, { kind: 'arrow', params: [rightT], return: result }, expr);
         }
         result = apply(result);
         setInferredType(expr, result);
@@ -697,8 +733,19 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     }
   }
 
+  /** Primary expression for this body node (for UnifyError location when unify runs after inferExpr returns). */
+  function mainExpr(node: TopLevelDecl | TopLevelStmt): Expr | undefined {
+    if (node.kind === 'FunDecl') return node.body;
+    if (node.kind === 'ExprStmt') return node.expr;
+    if (node.kind === 'ValStmt' || node.kind === 'VarStmt' || node.kind === 'ValDecl' || node.kind === 'VarDecl') return node.value;
+    if (node.kind === 'AssignStmt') return node.value;
+    return undefined;
+  }
+
   try {
     for (const node of program.body) {
+      const primary = mainExpr(node);
+      if (primary != null) currentExpr = primary;
       if (node.kind === 'FunDecl') {
         const sigScope = new Map<string, InternalType>();
         const paramTs = node.params.map((p) =>
@@ -710,7 +757,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         if (node.async) {
           const rt = apply(returnT);
           if (!(rt.kind === 'app' && rt.name === 'Task')) {
-            errors.push(`Async function ${node.name} must return Task<T>`);
+            diagnostics.push({
+              severity: 'error',
+              code: CODES.type.check,
+              message: `Async function ${node.name} must return Task<T>`,
+              location: locFor(node),
+            });
           }
         }
 
@@ -748,13 +800,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             );
           }
         }
-        unify(bodyT, returnT, subst);
+        unifyWithBlame(bodyT, returnT, node.body);
 
         // Restore async context
         inAsyncContext = wasAsync;
 
         const fnType = { kind: 'arrow' as const, params: paramTs, return: returnT };
-        unify(fnVar, fnType, subst);
+        unifyWithBlame(fnVar, fnType, node.body);
         // Clean up parameter bindings
         for (let i = 0; i < node.params.length; i++) {
           env.delete(node.params[i]!.name);
@@ -780,13 +832,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         env.set(node.name, t);
       } else if (node.kind === 'ValDecl') {
         const valueT = inferExpr(node.value);
-        if (node.type) unify(valueT, astTypeToInternal(node.type), subst);
+        if (node.type) unifyWithBlame(valueT, astTypeToInternal(node.type), node.value);
         const t = apply(valueT);
         const scheme = generalize(t, envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'VarDecl') {
         const valueT = inferExpr(node.value);
-        if (node.type) unify(valueT, astTypeToInternal(node.type), subst);
+        if (node.type) unifyWithBlame(valueT, astTypeToInternal(node.type), node.value);
         const t = apply(valueT);
         env.set(node.name, t);
       } else if (node.kind === 'ExprStmt') {
@@ -801,11 +853,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             const field = objT.fields.find((f) => f.name === target.field);
             if (field == null) throw new TypeCheckError(`Unknown field: ${target.field}`, target);
             if (!field.mut) throw new TypeCheckError(`Cannot assign to immutable field: ${target.field}`, target);
-            unify(valueT, field.type, subst);
+            unifyWithBlame(valueT, field.type, node.value);
           }
         } else if (target.kind === 'IdentExpr') {
           const lhs = env.get(target.name);
-          if (lhs != null) unify(valueT, lhs, subst);
+          if (lhs != null) unifyWithBlame(valueT, lhs, node.value);
         }
       }
     }
@@ -863,16 +915,34 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         }
       }
     }
+    if (diagnostics.length > 0) return { ok: false, diagnostics };
     return { ok: true, exports, exportedTypeAliases };
   } catch (e) {
     if (e instanceof UnifyError) {
-      errors.push(`${e.message}: ${typeStr(e.left)} vs ${typeStr(e.right)}`);
+      const blame = (e as UnifyError & { blameNode?: unknown }).blameNode ?? currentExpr;
+      diagnostics.push({
+        severity: 'error',
+        code: CODES.type.unify,
+        message: e.message,
+        location: locFor(blame),
+        hint: `${typeStr(e.left)} vs ${typeStr(e.right)}`,
+      });
     } else if (e instanceof TypeCheckError) {
-      errors.push(e.message);
+      diagnostics.push({
+        severity: 'error',
+        code: CODES.type.check,
+        message: e.message,
+        location: locFor(e.node),
+      });
     } else {
-      errors.push((e as Error).message);
+      diagnostics.push({
+        severity: 'error',
+        code: CODES.type.check,
+        message: (e as Error).message,
+        location: locationFileOnly(sourceFile),
+      });
     }
-    return { ok: false, errors };
+    return { ok: false, diagnostics };
   }
 }
 

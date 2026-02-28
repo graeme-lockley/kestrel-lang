@@ -119,6 +119,8 @@ Expression precedence (low to high): `|>` `<|` (pipe); `::` (cons); `|` `&` (log
 
 The block’s trailing expression is the block value. Match must be exhaustive (all constructors or catch-all covered).
 
+**Top-level recursion:** Every top-level function is in scope in the body of every top-level function. A function may call itself (self-recursion) or any other top-level function (mutual recursion); declaration order does not affect name resolution.
+
 **Nested functions and closures:** A block may contain a local function declaration: `fun name(params): Type = body`, which is desugared to `val name = (params) => body`. When the nested `fun` has a **full type signature** (all parameter types and return type), the name is in scope for the body so it may call itself recursively. The declared return type is **checked** against the body's type; a mismatch is a type error. `var` bindings are captured **by reference** (shared mutable cell). Lambdas and nested functions may **capture** variables from the enclosing block or function scope (lexical scope). The implementation uses closure conversion: an environment record holds captured values, and a closure value pairs that environment with a function index. Non-capturing lambdas are represented as a function reference only. See [01-language.md](specs/01-language.md) §3.8 and [04-bytecode-isa.md](specs/04-bytecode-isa.md) §5.1.
 
 ------------------------------------------------------------------------
