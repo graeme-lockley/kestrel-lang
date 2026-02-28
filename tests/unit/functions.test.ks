@@ -126,25 +126,13 @@ export fun run(s: Suite): Unit =
     // KNOWN LIMITATIONS (nested functions and closures)
     // -------------------------------------------------------------------------
     //
-    // 1. RECURSIVE NESTED FUNCTIONS
-    //    Full-signature nested fun (name in scope for body) is supported by
-    //    parser/typecheck; codegen uses a self-slot temp fix. The inline
-    //    recursive fac(5) test is still disabled: it can return a wrong value
-    //    (e.g. 4 instead of 120) and needs further debugging. Use a top-level
-    //    recursive function when reliable recursion is required.
+    // 1. RECURSIVE NESTED FUNCTIONS (inline block)
+    //    Full-signature nested fun (name in scope for body) is supported;
+    //    codegen uses a self-slot. The inline recursive fac(5) test is disabled
+    //    because in that context it can return a wrong value (e.g. 4 not 120).
+    //    Use a top-level recursive function when reliable recursion is required.
     //
-    // -------------------------------------------------------------------------
-    // 2. RETURN TYPE ANNOTATION ON BLOCK-LOCAL fun
-    //    The return type on a nested fun is parsed for syntax but not checked
-    //    against the body. The type of the binding is inferred from the lambda.
-    //
-    //    Example: { fun bad(): Int = True; bad() }
-    //
-    //    The ": Int" is ignored; the compiler infers ()=>Bool. A future
-    //    increment could validate that the body type matches the annotation.
-    //
-    // -------------------------------------------------------------------------
-    // Implemented: var captured by reference (ref cells in block and closure);
-    // chained call makeAdd(2)(3) works.
+    // Implemented and tested: return type of block-local fun is checked;
+    // var captured by reference (ref cells); chained call makeAdd(2)(3) works.
     // -------------------------------------------------------------------------
   })

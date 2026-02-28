@@ -352,7 +352,7 @@ The implementation uses **closure conversion**: each capturing lambda is compile
 
 **Known limitations (current implementation):**
 
-1. **Chained call of returned closure:** Patterns like `makeAdd(2)(3)` (function returns a closure, immediately called again) may have implementation-specific behaviour; binding the result to a `val` then calling is reliable.
+1. **Recursive nested function in inline block:** A nested `fun` with a full type signature may call itself by name (name is in scope for the body). In some contexts—e.g. an inline block expression that contains a recursive nested function—the implementation may return an incorrect value (e.g. factorial returning 4 instead of 120). Using a top-level (or enclosing) recursive function is reliable when correct recursion is required.
 
 ---
 
