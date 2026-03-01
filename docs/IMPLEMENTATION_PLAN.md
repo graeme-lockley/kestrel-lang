@@ -312,7 +312,7 @@ kestrel/
 
 ## Remaining gaps
 
-- **SPREAD:** Opcode 0x19 not yet implemented in VM; compiler may emit it for record spread.
+- **SPREAD:** VM implements SPREAD (0x19) per 04 §1.8. Compiler record-spread codegen (emitting SPREAD for `{ ...r, x = v }`) is a separate backlog item; unit test in `records.test.ks` (record spread group) will pass once that codegen is implemented.
 - **Float:** Float as heap value (FLOAT kind) not yet in VM; no float literal/arithmetic in runtime.
 - **Import resolution:** Path/stdlib/URL resolution and multi-file compile (07) — deferred; import table emission is done.
 - **VM linking:** Loading and linking stdlib/other .kbc when a module imports them — deferred.

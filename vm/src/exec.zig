@@ -71,6 +71,7 @@ const MATCH: u8 = 0x15;
 const ALLOC_RECORD: u8 = 0x16;
 const GET_FIELD: u8 = 0x17;
 const SET_FIELD: u8 = 0x18;
+const SPREAD: u8 = 0x19;
 const RET: u8 = 0x11;
 const THROW: u8 = 0x1A;
 const TRY: u8 = 0x1B;
@@ -663,6 +664,44 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 const field_ptr = @as(*Value, @alignCast(@ptrCast(base + field_offset)));
                 field_ptr.* = val;
                 stack[sp] = Value.unit();
+                sp += 1;
+            },
+            SPREAD => {
+                const shape_id = std.mem.readInt(u32, code[pc..][0..4], .little);
+                pc += 4;
+                if (sp < 1) continue;
+                const base_rec_val = stack[sp - 1];
+                sp -= 1;
+                if (base_rec_val.tag != .ptr) continue;
+                const base_addr = Value.ptrTo(base_rec_val);
+                const base_ptr = @as([*]const u8, @ptrFromInt(base_addr));
+                if (base_ptr[0] != RECORD_KIND) continue;
+                const base_field_count = std.mem.readInt(u32, base_ptr[12..16], .little);
+                if (shape_id >= shapes.len) continue;
+                const extended_count = shapes[shape_id].field_count;
+                if (extended_count < base_field_count) continue;
+                const n_extra = extended_count - base_field_count;
+                if (sp < n_extra) continue;
+                const rec = gc.allocObject(gc_mod.RECORD_HEADER + extended_count * 8) catch continue;
+                @memset(rec, 0);
+                rec[0] = RECORD_KIND;
+                rec[1] = 0;
+                std.mem.writeInt(u32, rec[4..8], current_module.module_index, .little);
+                std.mem.writeInt(u32, rec[8..12], shape_id, .little);
+                std.mem.writeInt(u32, rec[12..16], extended_count, .little);
+                const new_fields_ptr = @as([*]Value, @alignCast(@ptrCast(rec.ptr + gc_mod.RECORD_HEADER)));
+                const base_fields_ptr = @as([*]const Value, @alignCast(@ptrCast(base_ptr + gc_mod.RECORD_HEADER)));
+                var i: usize = 0;
+                while (i < base_field_count) : (i += 1) {
+                    new_fields_ptr[i] = base_fields_ptr[i];
+                }
+                i = 0;
+                while (i < n_extra) : (i += 1) {
+                    new_fields_ptr[base_field_count + i] = stack[sp - n_extra + i];
+                }
+                sp -= n_extra;
+                const new_addr = @intFromPtr(rec.ptr);
+                stack[sp] = Value.ptr(new_addr);
                 sp += 1;
             },
             CONSTRUCT => {

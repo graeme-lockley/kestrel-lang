@@ -45,4 +45,13 @@ export fun run(s: Suite): Unit =
       val big = { a = 1, b = 2, c = 3, d = 4, e = 5 }
       eq(mf, "sum fields", big.a + big.b + big.c + big.d + big.e, 15)
     })
+
+    group(s1, "record spread", (rs: Suite) => {
+      // Requires compiler record-spread codegen (and typecheck for spread) to compile and run.
+      val r = { x = 1 }
+      val s = { ...r, y = 2 }
+      eq(rs, "spread preserves base field", s.x, 1)
+      eq(rs, "spread adds new field", s.y, 2)
+      eq(rs, "spread override", { ...r, x = 99 }.x, 99)
+    })
   })

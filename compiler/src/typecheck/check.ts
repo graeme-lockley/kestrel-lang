@@ -519,6 +519,31 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         return result;
       }
       case 'RecordExpr': {
+        if (expr.spread != null) {
+          // Record spread: { ...r, x = e } — infer r as record, extend with new fields
+          const spreadT = inferExpr(expr.spread);
+          let spreadApplied = apply(spreadT);
+          if (spreadApplied.kind !== 'record') {
+            const rowVar = freshVar();
+            unifyWithBlame(spreadT, { kind: 'record', fields: [], row: rowVar }, expr.spread);
+            spreadApplied = apply(spreadT);
+          }
+          if (spreadApplied.kind !== 'record') {
+            throw new TypeCheckError('Spread target must be a record type', expr.spread);
+          }
+          const newFields: { name: string; mut: boolean; type: InternalType }[] = [];
+          const newNames = new Set(expr.fields.map((f) => f.name));
+          for (const f of spreadApplied.fields) {
+            if (!newNames.has(f.name)) newFields.push(f);
+          }
+          for (const f of expr.fields) {
+            const ft = inferExpr(f.value);
+            newFields.push({ name: f.name, mut: f.mut ?? false, type: ft });
+          }
+          result = apply({ kind: 'record', fields: newFields, row: spreadApplied.row ?? undefined });
+          setInferredType(expr, result);
+          return result;
+        }
         const fields: { name: string; mut: boolean; type: InternalType }[] = [];
         for (const f of expr.fields) {
           const ft = inferExpr(f.value);
