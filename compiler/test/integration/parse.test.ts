@@ -60,16 +60,16 @@ describe('parse (integration)', () => {
     expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', exported: true, name: 'Foo' });
   });
 
-  it('parses block with nested fun (desugared to val + lambda)', () => {
+  it('parses block with nested fun (emitted as FunStmt)', () => {
     const ast = parse(tokenize('fun outer(): Int = { fun inner(): Int = 42; inner() }'));
     expect(ast.kind).toBe('Program');
     expect(ast.body[0]).toMatchObject({ kind: 'FunDecl', name: 'outer' });
     const fn = ast.body[0];
     if (fn.kind === 'FunDecl' && fn.body.kind === 'BlockExpr') {
       expect(fn.body.stmts.length).toBe(1);
-      expect(fn.body.stmts[0]).toMatchObject({ kind: 'ValStmt', name: 'inner' });
+      expect(fn.body.stmts[0]).toMatchObject({ kind: 'FunStmt', name: 'inner' });
       const stmt = fn.body.stmts[0];
-      if (stmt.kind === 'ValStmt') expect(stmt.value).toMatchObject({ kind: 'LambdaExpr' });
+      if (stmt.kind === 'FunStmt') expect(stmt.body.kind).toBeDefined();
       expect(fn.body.result.kind).toBe('CallExpr');
     }
   });

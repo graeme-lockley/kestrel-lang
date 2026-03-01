@@ -281,7 +281,7 @@ Stmt           ::= "val" LOWER_IDENT "=" Expr
                  | Expr ":=" Expr
 ```
 
-A block-local **`fun`** declaration is **desugared** to `val name = (params) => body`; see §3.8 for closures. When the nested `fun` has a **full type signature** (all parameter types and return type), the name is in scope for the body so the function may call itself recursively. The trailing **Expr** in a block is the block’s value; it is required. Each statement is followed by a **statement terminator**: `;`, newline, or `}` (when the next token starts the block’s final expression). `NL` denotes a newline token (or newline codepoint) used as terminator. See §3.5.
+A block-local **`fun`** declaration is **desugared** to `val name = (params) => body`; see §3.8 for closures. When the nested `fun` has a **full type signature** (all parameter types and return type), the name is in scope for the body so the function may call itself recursively. Every such block-local `fun` is also in scope in the body of every other such `fun` in the same block, so they may call each other (mutual recursion); declaration order does not affect name resolution. The trailing **Expr** in a block is the block’s value; it is required. Each statement is followed by a **statement terminator**: `;`, newline, or `}` (when the next token starts the block’s final expression). `NL` denotes a newline token (or newline codepoint) used as terminator. See §3.5.
 
 ### 3.4 Literals (Expression-Level)
 
@@ -354,7 +354,7 @@ The implementation uses **closure conversion**: each capturing lambda is compile
 
 **Known limitations (current implementation):**
 
-1. **Recursive nested function in inline block:** A nested `fun` with a full type signature may call itself by name (name is in scope for the body). In some contexts—e.g. an inline block expression that contains a recursive nested function—the implementation may return an incorrect value (e.g. factorial returning 4 instead of 120). Using a top-level (or enclosing) recursive function is reliable when correct recursion is required.
+1. **Recursive nested function in test-runner context:** A nested `fun` with a full type signature may call itself by name and works correctly in normal execution (inline blocks, if branches, returned closures, top-level fun bodies). When the same code is run inside the test runner’s closure context, the VM may hit a bus error; this path is under investigation. For automated tests that exercise recursive nested functions, run the code via `./kestrel run` or a top-level entry point until the VM issue is fixed.
 
 ---
 

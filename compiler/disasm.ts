@@ -37,6 +37,11 @@ const OP_NAMES: Record<number, string> = {
   0x1b: 'TRY',
   0x1c: 'END_TRY',
   0x1d: 'AWAIT',
+  0x1e: 'LOAD_GLOBAL',
+  0x1f: 'STORE_GLOBAL',
+  0x20: 'CALL_INDIRECT',
+  0x21: 'LOAD_FN',
+  0x22: 'MAKE_CLOSURE',
 };
 
 function readU32(data: Uint8Array, offset: number): number {
@@ -175,6 +180,14 @@ function disasm(
       case 0x17: // GET_FIELD
       case 0x18: // SET_FIELD
       case 0x19: // SPREAD
+      case 0x1e: // LOAD_GLOBAL
+      case 0x1f: // STORE_GLOBAL
+      case 0x21: // LOAD_FN
+      case 0x22: // MAKE_CLOSURE
+        operands = ` ${readU32(data, pc)}`;
+        pc += 4;
+        break;
+      case 0x20: // CALL_INDIRECT
         operands = ` ${readU32(data, pc)}`;
         pc += 4;
         break;

@@ -66,6 +66,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     right: InternalType,
     blameNode: unknown
   ): void {
+    if (left == null || right == null) {
+      const which = left == null ? 'left' : 'right';
+      throw new TypeCheckError(
+        `Internal error: unify ${which} is null or undefined`,
+        blameNode && typeof blameNode === 'object' && 'span' in blameNode ? blameNode : undefined
+      );
+    }
     try {
       unify(left, right, subst);
     } catch (e) {
@@ -345,6 +352,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
   }
 
   function inferExpr(expr: Expr): InternalType {
+    if (expr == null) {
+      throw new TypeCheckError(
+        'Internal error: expression is null or undefined',
+        { span: { line: 1, column: 1, start: 0, end: 0 } } as unknown as Parameters<typeof locFor>[0]
+      );
+    }
     currentExpr = expr;
     let result: InternalType;
     switch (expr.kind) {
@@ -445,29 +458,40 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         return result;
       }
       case 'BlockExpr': {
+        // Phase 1: pre-bind all FunStmt names so bodies can reference each other (self- and mutual recursion)
+        for (const stmt of expr.stmts) {
+          if (stmt.kind === 'FunStmt') {
+            const scope = new Map<string, InternalType>();
+            const paramTs = stmt.params.map((p) =>
+              p.type ? astTypeToInternalWithScope(p.type, scope, typeAliases) : freshVar()
+            );
+            const returnT = astTypeToInternalWithScope(stmt.returnType, scope, typeAliases);
+            const arrowT: InternalType = { kind: 'arrow', params: paramTs, return: returnT };
+            env.set(stmt.name, arrowT);
+          }
+        }
         for (const stmt of expr.stmts) {
           if (stmt.kind === 'ValStmt') {
-            const val = stmt.value;
-            if (val.kind === 'LambdaExpr' && val.returnType != null && val.params.every((p) => p.type != null)) {
-              // Fully signed block-local fun: add name to scope before inferring (enables recursion); infer lambda then unify with declared type
-              const scope = new Map<string, InternalType>();
-              const paramTs = val.params.map((p) => astTypeToInternalWithScope(p.type!, scope, typeAliases));
-              const returnT = astTypeToInternalWithScope(val.returnType, scope, typeAliases);
-              const arrowT: InternalType = { kind: 'arrow', params: paramTs, return: returnT };
-              env.set(stmt.name, arrowT);
-              const inferred = apply(inferExpr(stmt.value));
-              unifyWithBlame(inferred, arrowT, stmt.value);
+            const t = apply(inferExpr(stmt.value));
+            const scheme = generalize(t, envFreeVars());
+            env.set(stmt.name, scheme);
+          } else if (stmt.kind === 'FunStmt') {
+            const arrowT = env.get(stmt.name) as InternalType;
+            if (arrowT?.kind === 'arrow') {
+              for (let i = 0; i < stmt.params.length; i++) {
+                env.set(stmt.params[i]!.name, arrowT.params[i]!);
+              }
+              const bodyT = inferExpr(stmt.body);
+              const inferredArrow: InternalType = { kind: 'arrow', params: arrowT.params, return: apply(bodyT) };
+              unifyWithBlame(inferredArrow, arrowT, stmt.body);
               const scheme = generalize(apply(arrowT), envFreeVars());
               env.set(stmt.name, scheme);
-            } else {
-              const t = apply(inferExpr(stmt.value));
-              // Generalize: quantify free vars not in environment
-              const scheme = generalize(t, envFreeVars());
-              env.set(stmt.name, scheme);
+              for (let i = 0; i < stmt.params.length; i++) {
+                env.delete(stmt.params[i]!.name);
+              }
             }
           } else if (stmt.kind === 'VarStmt') {
             const t = apply(inferExpr(stmt.value));
-            // Var bindings are not generalized (mutable)
             env.set(stmt.name, t);
           } else if (stmt.kind === 'ExprStmt') {
             inferExpr(stmt.expr);
@@ -602,6 +626,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           const firstCase = expr.cases[0]!;
           const boundVars = bindPattern(firstCase.pattern, scrutT);
           const firstT = inferExpr(firstCase.body);
+          if (firstT == null) {
+            throw new TypeCheckError('Match first case body inferred as null/undefined', firstCase.body);
+          }
           boundVars.forEach(v => env.delete(v));
 
           // Check remaining cases unify with first
@@ -609,10 +636,16 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             const c = expr.cases[i]!;
             const caseVars = bindPattern(c.pattern, scrutT);
             const caseT = inferExpr(c.body);
+            if (caseT == null) {
+              throw new TypeCheckError('Match case body inferred as null/undefined', c.body);
+            }
             caseVars.forEach(v => env.delete(v));
             unifyWithBlame(firstT, caseT, c.body);
           }
           result = apply(firstT);
+          if (result == null) {
+            throw new TypeCheckError('Match result type resolved to null/undefined (subst may contain undefined)', expr);
+          }
         }
         setInferredType(expr, result);
         return result;
@@ -743,7 +776,17 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
   }
 
   try {
+    // First pass: pre-bind all top-level function names so any function body can call any other (mutual recursion)
     for (const node of program.body) {
+      if (!node) continue;
+      if (node.kind === 'FunDecl') env.set(node.name, freshVar());
+      if (node.kind === 'ExportDecl' && (node as { inner?: { kind?: string; name?: string } }).inner?.kind === 'FunDecl') {
+        const inner = (node as { inner: { name: string } }).inner;
+        env.set(inner.name, freshVar());
+      }
+    }
+    for (const node of program.body) {
+      if (!node) continue;
       const primary = mainExpr(node);
       if (primary != null) currentExpr = primary;
       if (node.kind === 'FunDecl') {
@@ -766,9 +809,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           }
         }
 
-        // Pre-bind function name for recursion (will be generalized after body check)
-        const fnVar = freshVar();
-        env.set(node.name, fnVar);
+        // Use pre-bound function name from first pass (enables mutual recursion); if missing (e.g. ExportDecl not unfolded), bind now
+        let fnVar = env.get(node.name);
+        if (fnVar == null) {
+          fnVar = freshVar();
+          env.set(node.name, fnVar);
+        }
         // Check body with parameters in scope
         for (let i = 0; i < node.params.length; i++) {
           env.set(node.params[i]!.name, paramTs[i]!);
@@ -787,6 +833,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           if (pa.kind === 'arrow') {
             for (const v of freeVars(pa.return)) paramReturnVarIds.add(v);
           }
+        }
+        if (bodyT == null) {
+          throw new TypeCheckError('Function body inferred type is null or undefined', node.body);
+        }
+        if (returnT == null) {
+          throw new TypeCheckError('Function return type resolved to null or undefined', node);
         }
         const bodyApplied = apply(bodyT);
         const returnApplied = apply(returnT);
@@ -869,9 +921,10 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       if (t != null) n[TypedExpr] = apply(t);
       if ('kind' in node && node !== null) {
         const n2 = node as { kind: string; [k: string]: unknown };
-        if (n2.kind === 'Program' && Array.isArray(n2.body)) n2.body.forEach(resolveNode);
+        if (n2.kind === 'Program' && Array.isArray(n2.body)) n2.body.forEach((el) => { if (el != null) resolveNode(el); });
         if (n2.kind === 'ValStmt' || n2.kind === 'VarStmt' || n2.kind === 'ValDecl' || n2.kind === 'VarDecl') { resolveNode(n2.value); }
         if (n2.kind === 'ExprStmt') { resolveNode(n2.expr); }
+        if (n2.kind === 'FunStmt') resolveNode(n2.body);
         if (n2.kind === 'FunDecl') resolveNode(n2.body);
         if (n2.kind === 'BlockExpr') {
           (n2.stmts as unknown[]).forEach(resolveNode);
@@ -901,6 +954,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     const exports = new Map<string, InternalType>();
     const exportedTypeAliases = new Map<string, InternalType>();
     for (const node of program.body) {
+      if (!node) continue;
       if (node.kind === 'FunDecl' && node.exported) {
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));

@@ -826,7 +826,7 @@ class Parser {
         const returnType = this.parseType();
         this.expect('op', '=');
         const body = this.parseExpr();
-        stmts.push({ kind: 'ValStmt', name, value: { kind: 'LambdaExpr', params, body, returnType, bindingName: name } });
+        stmts.push({ kind: 'FunStmt', name, params, returnType, body });
       } else {
         const expr = this.parseExpr();
         if (this.at('op', ':=')) {

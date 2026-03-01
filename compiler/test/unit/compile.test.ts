@@ -130,7 +130,7 @@ describe('compile', () => {
     }
   });
 
-  it('compiles nested fun (fun inside block, desugared to val + lambda)', () => {
+  it('compiles nested fun (FunStmt inside block)', () => {
     const result = compile('fun outer(): Int = { fun inner(): Int = 42; inner() }\nval x = outer()');
     expect(result.ok).toBe(true);
     if (result.ok) {

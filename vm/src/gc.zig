@@ -126,7 +126,7 @@ pub const GC = struct {
         }
     }
 
-    pub fn markRoots(self: *GC, stack: []Value, locals: []Value) void {
+    pub fn markRoots(self: *GC, stack: []Value, all_locals: []const []const Value) void {
         // Mark from stack
         for (stack) |val| {
             if (val.tag == .ptr) {
@@ -134,10 +134,12 @@ pub const GC = struct {
             }
         }
 
-        // Mark from locals
-        for (locals) |val| {
-            if (val.tag == .ptr) {
-                self.mark(Value.ptrTo(val));
+        // Mark from every frame's locals (current + saved call frames)
+        for (all_locals) |locals| {
+            for (locals) |val| {
+                if (val.tag == .ptr) {
+                    self.mark(Value.ptrTo(val));
+                }
             }
         }
     }
@@ -177,8 +179,8 @@ pub const GC = struct {
         }
     }
 
-    pub fn collect(self: *GC, stack: []Value, locals: []Value) void {
-        self.markRoots(stack, locals);
+    pub fn collect(self: *GC, stack: []Value, all_locals: []const []const Value) void {
+        self.markRoots(stack, all_locals);
         self.sweep();
 
         // Adjust next GC threshold

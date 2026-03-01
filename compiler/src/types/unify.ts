@@ -56,11 +56,17 @@ const _applySubstExpanding = new Set<number>();
 
 /** Apply substitution map to t (all var ids in map replaced). */
 export function applySubst(t: InternalType, subst: Map<number, InternalType>): InternalType {
+  if (t == null) {
+    throw new Error('applySubst called with null or undefined type');
+  }
   if (t.kind === 'var') {
     const s = subst.get(t.id);
     if (s != null) {
       if (_applySubstExpanding.has(t.id)) return t;
       _applySubstExpanding.add(t.id);
+      if (s === undefined) {
+        throw new Error('substitution map contains undefined for var id ' + t.id);
+      }
       const result = applySubst(s, subst);
       _applySubstExpanding.delete(t.id);
       return result;
@@ -126,6 +132,9 @@ function occurs(id: number, t: InternalType): boolean {
  * Unify two types; mutates subst. On success, after return, applySubst(left, subst) === applySubst(right, subst).
  */
 export function unify(left: InternalType, right: InternalType, subst: Map<number, InternalType>): void {
+  if (left == null || right == null) {
+    throw new Error('unify called with null or undefined type');
+  }
   const l = applySubst(left, subst);
   const r = applySubst(right, subst);
 

@@ -43,6 +43,7 @@ function countLambdasInExpr(e: Expr): number {
       for (const s of e.stmts) {
         if (s.kind === 'ExprStmt') n += countLambdasInExpr(s.expr);
         else if (s.kind === 'AssignStmt') n += countLambdasInExpr(s.target) + countLambdasInExpr(s.value);
+        else if (s.kind === 'FunStmt') n += 1 + countLambdasInExpr(s.body);
         else n += countLambdasInExpr(s.value);
       }
       return n;
@@ -54,6 +55,7 @@ function countLambdasInExpr(e: Expr): number {
 function countLambdasInProgram(program: Program): number {
   let n = 0;
   for (const node of program.body) {
+    if (!node) continue;
     if ('body' in node && node.kind === 'FunDecl') n += countLambdasInExpr(node.body);
     if (node.kind === 'ValDecl' || node.kind === 'VarDecl') n += countLambdasInExpr(node.value);
     if (node.kind === 'ValStmt' || node.kind === 'VarStmt') n += countLambdasInExpr(node.value);
@@ -93,6 +95,7 @@ function getDistinctSpecifiers(program: Program): string[] {
 function getExportSet(program: Program): Set<string> {
   const names = new Set<string>();
   for (const node of program.body) {
+    if (!node) continue;
     if ((node.kind === 'FunDecl' || node.kind === 'TypeDecl') && node.exported) names.add(node.name);
     else if (node.kind === 'ValDecl' || node.kind === 'VarDecl') names.add(node.name);
   }
@@ -289,10 +292,10 @@ export function compileFile(
     const tc = typecheck(program, tcOpts);
     if (!tc.ok) return { ok: false, diagnostics: tc.diagnostics };
 
-    const funDeclCount = program.body.filter((n) => n.kind === 'FunDecl').length;
+    const funDeclCount = program.body.filter((n) => n != null && n.kind === 'FunDecl').length;
     const lambdaCount = countLambdasInProgram(program);
-    const valOrVarCount = program.body.filter((n) => n.kind === 'ValDecl' || n.kind === 'VarDecl').length;
-    const varSetterCount = program.body.filter((n) => n.kind === 'VarDecl').length;
+    const valOrVarCount = program.body.filter((n) => n != null && (n.kind === 'ValDecl' || n.kind === 'VarDecl')).length;
+    const varSetterCount = program.body.filter((n) => n != null && n.kind === 'VarDecl').length;
     const mainFuncCount = funDeclCount + lambdaCount + valOrVarCount + varSetterCount;
     const importedFuncIds = new Map<string, number>();
     const importedVarSetterIds = new Map<string, number>();
@@ -368,6 +371,7 @@ export function compileFile(
       writeFileSync(paths.kbc, kbcBytes);
       const exportKind = new Map<string, 'function' | 'val' | 'var'>();
       for (const node of program.body) {
+        if (!node) continue;
         if (node.kind === 'FunDecl' && node.exported) exportKind.set(node.name, 'function');
         if (node.kind === 'ValDecl') exportKind.set(node.name, 'val');
         if (node.kind === 'VarDecl') exportKind.set(node.name, 'var');

@@ -185,6 +185,14 @@ export interface ExprStmt extends NodeBase {
   expr: Expr;
 }
 
+export interface FunStmt extends NodeBase {
+  kind: 'FunStmt';
+  name: string;
+  params: Param[];
+  returnType: Type;
+  body: Expr;
+}
+
 export type Expr =
   | IfExpr
   | MatchExpr
@@ -236,10 +244,6 @@ export interface LambdaExpr extends NodeBase {
   kind: 'LambdaExpr';
   params: Param[];
   body: Expr;
-  /** Set when desugared from block-local `fun name(...): ReturnType = body`. */
-  returnType?: Type;
-  /** When from block-local `fun`, the name being bound (for self-reference in codegen). */
-  bindingName?: string;
 }
 
 export interface PipeExpr extends NodeBase {
@@ -329,7 +333,7 @@ export interface TupleExpr extends NodeBase {
 
 export interface BlockExpr extends NodeBase {
   kind: 'BlockExpr';
-  stmts: (ValStmt | VarStmt | AssignStmt | ExprStmt)[];
+  stmts: (ValStmt | VarStmt | AssignStmt | ExprStmt | FunStmt)[];
   result: Expr;
 }
 

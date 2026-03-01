@@ -203,9 +203,13 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
     defer gc.deinit();
 
     while (pc < code.len) {
-        // Periodic GC check
+        // Periodic GC check — mark from stack and all call frames so we don't collect objects still in saved_locals
         if (gc.bytes_allocated >= gc.next_gc) {
-            gc.collect(stack[0..sp], current_locals);
+            var local_slices: [max_frames + 1][]const Value = undefined;
+            for (0..frame_sp + 1) |i| {
+                local_slices[i] = saved_locals[i][0..];
+            }
+            gc.collect(stack[0..sp], local_slices[0 .. frame_sp + 1]);
         }
 
         const op = code[pc];
