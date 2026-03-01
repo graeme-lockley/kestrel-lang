@@ -3,7 +3,7 @@
  * Covers: module initializer, top-level val/var, fun decls, literals, locals, calls.
  */
 import type { Program, Expr, TopLevelStmt } from '../ast/nodes.js';
-import type { FunDecl, ValDecl, VarDecl } from '../ast/nodes.js';
+import type { FunDecl, FunStmt, ValDecl, VarDecl } from '../ast/nodes.js';
 import type { ConstantEntry } from '../bytecode/constants.js';
 import { ConstTag } from '../bytecode/constants.js';
 
@@ -191,15 +191,41 @@ export interface CodegenResult {
 function makeCodegenContext() {
   const stringTable: string[] = [];
   const constantPool: ConstantEntry[] = [];
+  /** Map from constant key to pool index for deduplication. */
+  const constantKeyToIndex = new Map<string, number>();
+
   function stringIndex(s: string): number {
     const i = stringTable.indexOf(s);
     if (i >= 0) return i;
     stringTable.push(s);
     return stringTable.length - 1;
   }
+
+  /** Key for constant deduplication (tag + payload). */
+  function constantKey(c: ConstantEntry): string {
+    switch (c.tag) {
+      case ConstTag.Int:
+      case ConstTag.Float:
+      case ConstTag.Char:
+        return `${c.tag}:${c.value}`;
+      case ConstTag.String:
+        return `${c.tag}:${c.stringIndex}`;
+      case ConstTag.False:
+      case ConstTag.True:
+      case ConstTag.Unit:
+        return String(c.tag);
+      default:
+        return String((c as ConstantEntry).tag);
+    }
+  }
+
   function addConstant(c: ConstantEntry): number {
+    const key = constantKey(c);
+    const existing = constantKeyToIndex.get(key);
+    if (existing !== undefined) return existing;
     const i = constantPool.length;
     constantPool.push(c);
+    constantKeyToIndex.set(key, i);
     return i;
   }
   return { stringTable, constantPool, stringIndex, addConstant };
@@ -226,6 +252,11 @@ function bodyReferencesName(expr: Expr, name: string, bound: Set<string>): boole
         if (stmt.kind === 'ValStmt' || stmt.kind === 'VarStmt') {
           blockBound.add(stmt.name);
           if (bodyReferencesName(stmt.value, name, blockBound)) return true;
+        } else if (stmt.kind === 'FunStmt') {
+          blockBound.add(stmt.name);
+          const inner = new Set(blockBound);
+          for (const p of stmt.params) inner.add(p.name);
+          if (bodyReferencesName(stmt.body, name, inner)) return true;
         } else if (stmt.kind === 'ExprStmt' && bodyReferencesName(stmt.expr, name, blockBound)) return true;
         else if (stmt.kind === 'AssignStmt') {
           if (stmt.target.kind === 'IdentExpr' && bodyReferencesName(stmt.target, name, blockBound)) return true;
@@ -314,6 +345,11 @@ function getFreeVars(
           if (stmt.kind === 'ValStmt' || stmt.kind === 'VarStmt') {
             bound.add(stmt.name);
             walk(stmt.value);
+          } else if (stmt.kind === 'FunStmt') {
+            bound.add(stmt.name);
+            for (const p of stmt.params) bound.add(p.name);
+            walk(stmt.body);
+            for (const p of stmt.params) bound.delete(p.name);
           } else if (stmt.kind === 'ExprStmt') walk(stmt.expr);
           else if (stmt.kind === 'AssignStmt') {
             if (stmt.target.kind === 'IdentExpr') walk(stmt.target);
@@ -602,7 +638,34 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       const nextVarNames = new Set(varNames ?? []);
       for (const n of blockVarNames) nextVarNames.add(n);
       const hasExprStmt = expr.stmts.some((s) => s.kind === 'ExprStmt');
-      if (hasExprStmt) blockEnv.set('$discard', blockEnv.size);
+      const hasAssignStmt = expr.stmts.some((s) => s.kind === 'AssignStmt');
+      const needsDiscard = hasExprStmt || hasAssignStmt;
+      // When inside a closure, reserve slots 0 and 1 for env and first param so block locals don't overwrite them
+      const blockLocalStart = captures != null ? Math.max(blockEnv.size, 2) : blockEnv.size;
+      if (needsDiscard) {
+        blockEnv.set('$discard', blockLocalStart);
+        // Pad so next VarStmt/ValStmt gets blockLocalStart + 1 (so $discard and first var don't collide)
+        for (let i = blockEnv.size; i < blockLocalStart + 1; i++) blockEnv.set(`\x00_${i}`, i);
+      }
+      // Bind all block-level fun names so any later statement (including ExprStmt/result) can reference them
+      const funStmts = expr.stmts.filter((s): s is FunStmt => s.kind === 'FunStmt');
+      // When there are block-level funs, never use slot 1: the enclosing closure may have param at 1 (e.g. sg);
+      // storing the closure in slot 1 would overwrite it and cause wrong env/ptr → bus error.
+      let nextSlot = funStmts.length > 0 ? Math.max(blockEnv.size, 2) : blockEnv.size;
+      for (const s of funStmts) {
+        blockEnv.set(s.name, nextSlot);
+        nextSlot++;
+      }
+/** Use the block's own sharedRecordTemp so the record slot is in block scope and doesn't collide with caller (second block in same scope was reading a caller slot when using fixed high slot). */
+      const sharedRecordTemp = nextSlot;
+      const closureTemp = nextSlot + 1;
+      const unitTemp = nextSlot + 2; // for mutual recursion: pop SET_FIELD Unit without overwriting record
+      // Reserve these slots so Phase 1 (ValStmt/VarStmt) doesn't use them
+      blockEnv.set('\x00_record', sharedRecordTemp);
+      blockEnv.set('\x00_closure', closureTemp);
+      blockEnv.set('\x00_unit', unitTemp);
+
+      // Phase 1: process only non-FunStmt (val, var, expr, assign)
       for (const stmt of expr.stmts) {
         if (stmt.kind === 'ValStmt') {
           emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
@@ -612,13 +675,11 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         } else if (stmt.kind === 'VarStmt') {
           if (!shapes) break;
           const refShapeId = getRefShapeId(shapes, stringIndex);
-          emitAllocRecord(refShapeId);
           const slot = blockEnv.size;
           blockEnv.set(stmt.name, slot);
-          emitStoreLocal(slot);
-          emitLoadLocal(slot);
           emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-          emitSetField(0);
+          emitAllocRecord(refShapeId);
+          emitStoreLocal(slot);
         } else if (stmt.kind === 'ExprStmt') {
           emitExpr(stmt.expr, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
           const discardSlot = blockEnv.get('$discard');
@@ -643,12 +704,16 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               emitGetField(cap.index);
               emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
               emitSetField(0);
+              const discardSlotCap = blockEnv.get('$discard');
+              if (discardSlotCap !== undefined) emitStoreLocal(discardSlotCap);
             } else {
               const localSlot = blockEnv.get(target.name);
               if (localSlot !== undefined && nextVarNames.has(target.name)) {
-                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
                 emitLoadLocal(localSlot);
+                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
                 emitSetField(0);
+                const discardSlot = blockEnv.get('$discard');
+                if (discardSlot !== undefined) emitStoreLocal(discardSlot);
               } else {
                 emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
                 if (localSlot !== undefined) {
@@ -663,8 +728,201 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             }
           }
         }
+        // FunStmt skipped in phase 1
       }
-      emitExpr(expr.result, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+      // Phase 2: emit FunStmt (single-fun = current behavior, 2+ funs = mutual recursion)
+      if (funStmts.length >= 2 && shapes) {
+        // Mutual recursion: one shared record, same shape for all closures
+        const funNames = funStmts.map((s) => s.name);
+        const otherFreeSet = new Set<string>();
+        for (const s of funStmts) {
+          const paramNames = new Set(s.params.map((p) => p.name));
+          const fv = getFreeVars(s.body, paramNames, blockEnv);
+          for (const n of fv) if (!funNames.includes(n)) otherFreeSet.add(n);
+        }
+        const otherFree = Array.from(otherFreeSet);
+        const shapeNames = [...funNames, ...otherFree];
+        const nameIndices = shapeNames.map((s) => stringIndex(s));
+        let shapeId = shapes.findIndex(
+          (s) =>
+            s.nameIndices.length === nameIndices.length &&
+            s.nameIndices.every((n, i) => n === nameIndices[i])
+        );
+        if (shapeId < 0) {
+          shapeId = shapes.length;
+          shapes.push({ nameIndices });
+        }
+        const captureMap = new Map<string, { index: number; isVar: boolean }>();
+        shapeNames.forEach((name, i) => captureMap.set(name, { index: i, isVar: nextVarNames?.has(name) ?? false }));
+
+        // Compile all N bodies (same captureMap; each gets __env at 0, params at 1,2,...)
+        const mutualLambdaIndices: number[] = [];
+        for (const stmt of funStmts) {
+          const liftedEnv = new Map<string, number>();
+          liftedEnv.set('__env', 0);
+          for (let i = 0; i < stmt.params.length; i++) liftedEnv.set(stmt.params[i]!.name, i + 1);
+          const saved = codeSave();
+          codeStart();
+          emitExpr(stmt.body, liftedEnv, funNameToId, shapes, adts, captureMap, undefined);
+          emitRet();
+          const lambdaCode = codeSlice();
+          codeRestore(saved);
+          const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
+          lambdaEntries.push({ arity: stmt.params.length + 1, code: lambdaCode });
+          mutualLambdaIndices.push(lambdaIndex);
+        }
+
+        // Allocate shared record: fun slots = Unit, other = load from blockEnv
+        for (const name of shapeNames) {
+          if (funNames.includes(name)) {
+            emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+          } else {
+            const localSlot = blockEnv.get(name);
+            if (localSlot !== undefined) {
+              emitLoadLocal(localSlot);
+            } else {
+              const globalSlot = moduleGlobals.get(name);
+              if (globalSlot !== undefined) {
+                emitLoadGlobal(globalSlot);
+              } else {
+                const fnId = funNameToId?.get(name);
+                if (fnId !== undefined) {
+                  emitLoadFn(fnId);
+                }
+              }
+            }
+          }
+        }
+        emitAllocRecord(shapeId);
+        emitStoreLocal(sharedRecordTemp);
+
+        // For each fun: make closure, patch record field, store in block slot
+        for (let i = 0; i < funStmts.length; i++) {
+          const stmt = funStmts[i]!;
+          const lambdaIndex = mutualLambdaIndices[i]!;
+          const slot = blockEnv.get(stmt.name)!;
+          emitLoadLocal(sharedRecordTemp);
+          emitMakeClosure(lambdaIndex);
+          emitStoreLocal(closureTemp);
+          emitLoadLocal(sharedRecordTemp);
+          emitLoadLocal(closureTemp);
+          emitSetField(i);
+          emitStoreLocal(unitTemp); // pop Unit result of SET_FIELD (do not overwrite record)
+          emitLoadLocal(closureTemp);
+          emitStoreLocal(slot);
+        }
+        // Reload closures from record into slots
+        for (let i = 0; i < funStmts.length; i++) {
+          const slot = blockEnv.get(funStmts[i]!.name)!;
+          emitLoadLocal(sharedRecordTemp);
+          emitGetField(i);
+          emitStoreLocal(slot);
+        }
+        // Emit result: if it's a call to one of our mutual-recursion funs, load callee from record
+        const result = expr.result;
+        if (
+          result.kind === 'CallExpr' &&
+          result.callee.kind === 'IdentExpr' &&
+          funNames.includes(result.callee.name)
+        ) {
+          const fieldIndex = funNames.indexOf(result.callee.name);
+          emitLoadLocal(sharedRecordTemp);
+          emitGetField(fieldIndex);
+          for (const arg of result.args) emitExpr(arg, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          emitCallIndirect(result.args.length);
+        } else {
+          emitExpr(expr.result, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+        }
+      } else {
+        // Single fun or no fun: process each FunStmt with current behavior
+        for (const stmt of expr.stmts) {
+          if (stmt.kind !== 'FunStmt') continue;
+          const paramNames = new Set(stmt.params.map((p) => p.name));
+          let freeVars = getFreeVars(stmt.body, paramNames, blockEnv);
+          const hasSelf = bodyReferencesName(stmt.body, stmt.name, new Set(paramNames));
+          if (hasSelf) {
+            freeVars = [stmt.name, ...freeVars.filter((n) => n !== stmt.name)];
+          }
+          const slot = blockEnv.get(stmt.name)!;
+          if (freeVars.length === 0) {
+            const saved = codeSave();
+            codeStart();
+            const lambdaEnv = new Map<string, number>();
+            for (let i = 0; i < stmt.params.length; i++) lambdaEnv.set(stmt.params[i]!.name, i);
+            emitExpr(stmt.body, lambdaEnv, funNameToId, shapes, adts, captures, nextVarNames);
+            emitRet();
+            const lambdaCode = codeSlice();
+            codeRestore(saved);
+            const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
+            lambdaEntries.push({ arity: stmt.params.length, code: lambdaCode });
+            emitLoadFn(lambdaIndex);
+            emitStoreLocal(slot);
+          } else {
+            if (!shapes) break;
+            const nameIndices = freeVars.map((s) => stringIndex(s));
+            let shapeId = shapes.findIndex(
+              (s) =>
+                s.nameIndices.length === nameIndices.length &&
+                s.nameIndices.every((n, i) => n === nameIndices[i])
+            );
+            if (shapeId < 0) {
+              shapeId = shapes.length;
+              shapes.push({ nameIndices });
+            }
+            const singleCaptureMap = new Map<string, { index: number; isVar: boolean }>();
+            freeVars.forEach((name, i) => singleCaptureMap.set(name, { index: i, isVar: nextVarNames?.has(name) ?? false }));
+            const liftedEnv = new Map<string, number>();
+            liftedEnv.set('__env', 0);
+            for (let i = 0; i < stmt.params.length; i++) liftedEnv.set(stmt.params[i]!.name, i + 1);
+            const saved = codeSave();
+            codeStart();
+            emitExpr(stmt.body, liftedEnv, funNameToId, shapes, adts, singleCaptureMap, undefined);
+            emitRet();
+            const lambdaCode = codeSlice();
+            codeRestore(saved);
+            const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
+            lambdaEntries.push({ arity: stmt.params.length + 1, code: lambdaCode });
+            for (const name of freeVars) {
+              if (name === stmt.name) {
+                emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+              } else {
+                const localSlot = blockEnv.get(name);
+                if (localSlot !== undefined) {
+                  emitLoadLocal(localSlot);
+                } else {
+                  const globalSlot = moduleGlobals.get(name);
+                  if (globalSlot !== undefined) {
+                    emitLoadGlobal(globalSlot);
+                  } else {
+                    const fnId = funNameToId?.get(name);
+                    if (fnId !== undefined) {
+                      emitLoadFn(fnId);
+                    }
+                  }
+                }
+              }
+            }
+            emitAllocRecord(shapeId);
+            if (hasSelf) {
+              const envTemp = slot + 1;
+              const closureTempSingle = slot + 2;
+              emitStoreLocal(envTemp);
+              emitLoadLocal(envTemp);
+              emitMakeClosure(lambdaIndex);
+              emitStoreLocal(closureTempSingle);
+              emitLoadLocal(envTemp);      // record at sp-2 for SET_FIELD
+              emitLoadLocal(closureTempSingle); // closure at sp-1 (value to store in record)
+              emitSetField(0);
+              emitStoreLocal(envTemp);          // pop Unit result of SET_FIELD (envTemp no longer needed)
+              emitLoadLocal(closureTempSingle);
+            } else {
+              emitMakeClosure(lambdaIndex);
+            }
+            emitStoreLocal(slot);
+          }
+        }
+        emitExpr(expr.result, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+      }
       break;
     }
     case 'TupleExpr': {
@@ -1112,11 +1370,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
     }
     case 'LambdaExpr': {
       const paramNames = new Set(expr.params.map((p) => p.name));
-      let freeVars = getFreeVars(expr.body, paramNames, env);
-      const hasSelf = expr.bindingName != null && bodyReferencesName(expr.body, expr.bindingName, new Set(paramNames));
-      if (hasSelf && expr.bindingName != null) {
-        freeVars = [expr.bindingName, ...freeVars.filter((n) => n !== expr.bindingName)];
-      }
+      const freeVars = getFreeVars(expr.body, paramNames, env);
       if (freeVars.length === 0) {
         const saved = codeSave();
         codeStart();
@@ -1156,43 +1410,23 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
       lambdaEntries.push({ arity: expr.params.length + 1, code: lambdaCode });
       for (const name of freeVars) {
-        if (name === expr.bindingName) {
-          emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+        const slot = env.get(name);
+        if (slot !== undefined) {
+          emitLoadLocal(slot);
         } else {
-          const slot = env.get(name);
-          if (slot !== undefined) {
-            emitLoadLocal(slot);
-            // For var, slot already holds the ref cell; push as-is for closure env
+          const globalSlot = moduleGlobals.get(name);
+          if (globalSlot !== undefined) {
+            emitLoadGlobal(globalSlot);
           } else {
-            const globalSlot = moduleGlobals.get(name);
-            if (globalSlot !== undefined) {
-              emitLoadGlobal(globalSlot);
-            } else {
-              const fnId = funNameToId?.get(name);
-              if (fnId !== undefined) {
-                emitLoadFn(fnId);
-              }
-              // If still undefined, we skip pushing (avoid corrupting stack); shape may mismatch
+            const fnId = funNameToId?.get(name);
+            if (fnId !== undefined) {
+              emitLoadFn(fnId);
             }
           }
         }
       }
       emitAllocRecord(shapeId);
-      if (hasSelf) {
-        // BlockExpr will store this ValStmt result at slot = blockEnv.size (= env.size here). Use temps above that.
-        const envTemp = env.size + 1;
-        const closureTemp = env.size + 2;
-        emitStoreLocal(envTemp);
-        emitLoadLocal(envTemp);
-        emitMakeClosure(lambdaIndex);
-        emitStoreLocal(closureTemp);
-        emitLoadLocal(closureTemp);
-        emitLoadLocal(envTemp);
-        emitSetField(0);
-        emitLoadLocal(closureTemp);
-      } else {
-        emitMakeClosure(lambdaIndex);
-      }
+      emitMakeClosure(lambdaIndex);
       break;
     }
     default:
@@ -1267,9 +1501,9 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     }
   }
 
-  const funDecls = program.body.filter((n): n is FunDecl => n.kind === 'FunDecl');
+  const funDecls = program.body.filter((n): n is FunDecl => n != null && n.kind === 'FunDecl');
   const valOrVarDecls = program.body.filter(
-    (n): n is ValDecl | VarDecl => n.kind === 'ValDecl' || n.kind === 'VarDecl'
+    (n): n is ValDecl | VarDecl => n != null && (n.kind === 'ValDecl' || n.kind === 'VarDecl')
   );
   const funNameToId = new Map<string, number>();
   // Add imported function IDs first (for cross-module calls)
@@ -1287,11 +1521,12 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   }
 
   const stmts = program.body.filter((n): n is TopLevelStmt =>
-    n.kind === 'ValStmt' || n.kind === 'VarStmt' || n.kind === 'AssignStmt' || n.kind === 'ExprStmt'
+    n != null && (n.kind === 'ValStmt' || n.kind === 'VarStmt' || n.kind === 'AssignStmt' || n.kind === 'ExprStmt')
   );
   const env = new Map<string, number>();
 
   for (const node of program.body) {
+    if (!node) continue;
     if (node.kind === 'ValStmt' || node.kind === 'VarStmt') {
       const stmt = node;
       emitExpr(stmt.value, env, funNameToId, shapes, adts);
@@ -1389,7 +1624,9 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     codeOffsetSoFar += lambda.code.length;
   }
 
-  const nGlobals = env.size;
+  // Init code may use temp slots (e.g. block-level FunStmt self-patch uses slot+1, slot+2).
+  // Ensure enough globals so STORE_LOCAL(slot+1) and STORE_LOCAL(slot+2) succeed when slot is 0.
+  const nGlobals = Math.max(env.size, 3);
 
   const varSetterIndices = new Map<string, number>();
 

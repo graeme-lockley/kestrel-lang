@@ -44,6 +44,10 @@ fun nestedAsHOF(x: Int): Int = {
 // Triple nesting: outer block -> inner block -> innermost block, each with a nested fun
 fun level1(): Int = { fun level2(): Int = { fun level3(): Int = 99; level3() }; level2() }
 
+// Top-level mutual recursion (isEven calls isOdd, isOdd calls isEven)
+fun isEven(n: Int): Bool = if (n == 0) True else isOdd(n - 1)
+fun isOdd(n: Int): Bool = if (n == 0) False else isEven(n - 1)
+
 
 export fun run(s: Suite): Unit =
   group(s, "functions", (s1: Suite) => {
@@ -68,6 +72,10 @@ export fun run(s: Suite): Unit =
       eq(sg, "fib(5) == 5", fib(5), 5)
       eq(sg, "fib(10) == 55", fib(10), 55)
       eq(sg, "sumList([1,2,3])", sumList([1, 2, 3]), 6)
+      eq(sg, "mutual recursion isEven(4)", isEven(4), True)
+      eq(sg, "mutual recursion isEven(5)", isEven(5), False)
+      eq(sg, "mutual recursion isOdd(3)", isOdd(3), True)
+      eq(sg, "mutual recursion isOdd(4)", isOdd(4), False)
     })
 
     group(s1, "composition", (sg: Suite) => {
@@ -82,9 +90,7 @@ export fun run(s: Suite): Unit =
       eq(sg, "applyTwice lambda double", applyTwice((x: Int) => x + x, 1), 4)
     })
 
-    // Nested fun: parser desugars { fun name(params): Type = body } to ValStmt(name, LambdaExpr(...)).
-    // Closures: lambdas and nested funs capture block-local and function-scope variables (closure conversion).
-    // Recursive nested fun (body calling same fun by name) unsupported.
+    // Nested fun: parser emits block-level `fun` as FunStmt. Closures and self-recursion supported.
     group(s1, "nested fun", (sg: Suite) => {
       // Basic: declare and call in same block (no params)
       eq(sg, "outerWithNested()", outerWithNested(), 1)
@@ -104,10 +110,13 @@ export fun run(s: Suite): Unit =
       eq(sg, "inline block nested", { fun id(x: Int): Int = x; id(10) }, 10)
       // Block with nested fun in if branch (nested fun in non-block expression context)
       eq(sg, "nested in if branch", if (True) { fun f(): Int = 2; f() } else 0, 2)
-      // Recursive nested fun (full type signature): temp-slot fix applied; still returns wrong value (4) — needs further debug
-      // eq(sg, "recursive nested fac(5)", { fun fac(n: Int): Int = if (n <= 1) 1 else n * fac(n - 1); fac(5) }, 120)
+      // Recursive nested fun: block-level fac(5) in nested group closure.
+      eq(sg, "recursive nested fac(5)", { fun fac(n: Int): Int = if (n <= 1) 1 else n * fac(n - 1); fac(5) }, 120)
       // Nested fun return type checked and matches body
       eq(sg, "nested fun return type ok", { fun ok(): Int = 42; ok() }, 42)
+      // Block-level mutual recursion: two nested funs calling each other (two separate blocks in same scope)
+      eq(sg, "block-level mutual recursion even(10)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); even(10) }, True)
+      eq(sg, "block-level mutual recursion odd(5)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); odd(5) }, True)
     })
 
     group(s1, "closures", (sg: Suite) => {
@@ -121,18 +130,4 @@ export fun run(s: Suite): Unit =
       // By-reference var: closure and block share same mutable cell
       eq(sg, "by-ref var inc() + inc()", { var n = 0; fun inc(): Int = { n := n + 1; n }; inc() + inc() }, 3)
     })
-
-    // -------------------------------------------------------------------------
-    // KNOWN LIMITATIONS (nested functions and closures)
-    // -------------------------------------------------------------------------
-    //
-    // 1. RECURSIVE NESTED FUNCTIONS (inline block)
-    //    Full-signature nested fun (name in scope for body) is supported;
-    //    codegen uses a self-slot. The inline recursive fac(5) test is disabled
-    //    because in that context it can return a wrong value (e.g. 4 not 120).
-    //    Use a top-level recursive function when reliable recursion is required.
-    //
-    // Implemented and tested: return type of block-local fun is checked;
-    // var captured by reference (ref cells); chained call makeAdd(2)(3) works.
-    // -------------------------------------------------------------------------
   })
