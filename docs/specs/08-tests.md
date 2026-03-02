@@ -42,7 +42,7 @@ A conforming implementation must:
 ### 2.4 Bytecode and VM
 
 - **Format:** Emitted `.kbc` files have valid header, section offsets, and section layout per [03-bytecode-format.md](03-bytecode-format.md). Invalid or truncated files are rejected by the VM.
-- **Instructions:** Each instruction in [04-bytecode-isa.md](04-bytecode-isa.md) is covered by at least one test that executes it and checks stack/result. **Record spread:** SPREAD (0x19) is exercised by the record spread literal test in `tests/unit/records.test.ks` once the compiler emits it for `{ ...r, x = v }`.
+- **Instructions:** Each instruction in [04-bytecode-isa.md](04-bytecode-isa.md) is covered by at least one test that executes it and checks stack/result. **Record spread:** SPREAD (0x19) is exercised by the record spread literal test in `tests/unit/records.test.ks`, which compiles `{ ...r, x = v }` to SPREAD and is run by the unit test harness.
 - **Calling convention:** Calls with multiple arguments and returns follow left-to-right argument order and single return value.
 
 ### 2.5 Runtime Model

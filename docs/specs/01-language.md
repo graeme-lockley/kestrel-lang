@@ -266,6 +266,8 @@ RecordSpread   ::= "..." Expr
 RecordField    ::= LOWER_IDENT "=" Expr
 ```
 
+Record spread `{ ...expr, field = value }` is implemented by compiling to the SPREAD instruction (04 §1.8) with an extended shape; the VM pops the base record and additional field values and produces a new record.
+
 Application and field access are **postfix** on an atom: parse one Atom, then zero or more Suffix (call or field). So `f(x).y` is Atom `f`, Suffix `(x)`, Suffix `.y`. **Await:** A primary expression may be prefixed with `await` (e.g. `await f()`); valid only in async context (see §5).
 
 **Pipeline semantics:** `e1 |> e2` passes the left-hand value as the **first** argument to the right-hand call: `x |> f` is equivalent to `f(x)`; `x |> f(y)` is equivalent to `f(x, y)`. Similarly, `<|` passes the right-hand value as the last argument: `f <| x` is `f(x)`; `f(y) <| x` is `f(y, x)`. The right-hand side must be an expression that denotes a function call (application).

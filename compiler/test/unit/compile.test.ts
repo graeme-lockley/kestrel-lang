@@ -139,4 +139,18 @@ describe('compile', () => {
       expect(out.functionTable.length).toBeGreaterThanOrEqual(1);
     }
   });
+
+  it('compiles record spread and emits SPREAD opcode (0x19)', () => {
+    const result = compile('val r = { a = 1 }\nval s = { ...r, b = 2 }');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const { code, shapes } = codegen(result.ast);
+      expect(Array.from(code).some((b, i) => b === 0x19 && i + 5 <= code.length)).toBe(true);
+      const spreadAt = Array.from(code).indexOf(0x19);
+      expect(spreadAt).toBeGreaterThanOrEqual(0);
+      expect(shapes.length).toBeGreaterThanOrEqual(2);
+      const extendedShape = shapes.find((s) => s.nameIndices.length === 2);
+      expect(extendedShape).toBeDefined();
+    }
+  });
 });

@@ -49,6 +49,7 @@ import {
   emitAllocRecord,
   emitGetField,
   emitSetField,
+  emitSpread,
   emitAdd,
   emitSub,
   emitMul,
@@ -938,15 +939,69 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       break;
     }
     case 'RecordExpr': {
-      if (expr.spread != null || !shapes) break;
-      const nameIndices = expr.fields.map((f) => stringIndex(f.name));
-      let shapeId = shapes.findIndex((s) => s.nameIndices.length === nameIndices.length && s.nameIndices.every((n, i) => n === nameIndices[i]));
-      if (shapeId < 0) {
-        shapeId = shapes.length;
-        shapes.push({ nameIndices: [...nameIndices] });
+      if (!shapes) break;
+      if (expr.spread == null) {
+        // Non-spread record: { x = e, y = f }
+        const nameIndices = expr.fields.map((f) => stringIndex(f.name));
+        let shapeId = shapes.findIndex((s) => s.nameIndices.length === nameIndices.length && s.nameIndices.every((n, i) => n === nameIndices[i]));
+        if (shapeId < 0) {
+          shapeId = shapes.length;
+          shapes.push({ nameIndices: [...nameIndices] });
+        }
+        for (const f of expr.fields) emitExpr(f.value, env, funNameToId, shapes, adts, captures, varNames);
+        emitAllocRecord(shapeId);
+        break;
       }
-      for (const f of expr.fields) emitExpr(f.value, env, funNameToId, shapes, adts, captures, varNames);
-      emitAllocRecord(shapeId);
+      // Record spread: { ...base, ...fields }
+      const baseType = getInferredType(expr.spread);
+      const extendedType = getInferredType(expr);
+      if (baseType?.kind !== 'record' || extendedType?.kind !== 'record') break;
+      const baseFields = baseType.fields;
+      const extendedFields = extendedType.fields;
+      const baseCount = baseFields.length;
+      const extendedCount = extendedFields.length;
+      const exprFieldsByName = new Map(expr.fields.map((f) => [f.name, f]));
+
+      // Extended shape (for both SPREAD and override path)
+      const extendedNameIndices = extendedFields.map((f) => stringIndex(f.name));
+      let extendedShapeId = shapes.findIndex(
+        (s) => s.nameIndices.length === extendedNameIndices.length && s.nameIndices.every((n, i) => n === extendedNameIndices[i])
+      );
+      if (extendedShapeId < 0) {
+        extendedShapeId = shapes.length;
+        shapes.push({ nameIndices: [...extendedNameIndices] });
+      }
+
+      if (extendedCount > baseCount) {
+        // SPREAD path: VM pops record first (top), then n_extra values (04 §1.8). So push additional values first, then record.
+        for (let i = baseCount; i < extendedCount; i++) {
+          const name = extendedFields[i]!.name;
+          const fieldExpr = exprFieldsByName.get(name);
+          if (fieldExpr) emitExpr(fieldExpr.value, env, funNameToId, shapes, adts, captures, varNames);
+        }
+        emitExpr(expr.spread, env, funNameToId, shapes, adts, captures, varNames);
+        emitSpread(extendedShapeId);
+      } else {
+        // Override-only: build record manually (base shape + overrides). Temp slot for base record.
+        const tempSlot = env.size;
+        env.set('$spreadBase', tempSlot);
+        emitExpr(expr.spread, env, funNameToId, shapes, adts, captures, varNames);
+        emitStoreLocal(tempSlot);
+        for (let i = 0; i < extendedCount; i++) {
+          const name = extendedFields[i]!.name;
+          const fieldExpr = exprFieldsByName.get(name);
+          if (fieldExpr) {
+            emitExpr(fieldExpr.value, env, funNameToId, shapes, adts, captures, varNames);
+          } else {
+            const baseSlot = baseFields.findIndex((f) => f.name === name);
+            if (baseSlot >= 0) {
+              emitLoadLocal(tempSlot);
+              emitGetField(baseSlot);
+            }
+          }
+        }
+        emitAllocRecord(extendedShapeId);
+      }
       break;
     }
     case 'FieldExpr': {

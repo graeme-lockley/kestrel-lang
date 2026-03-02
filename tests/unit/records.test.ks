@@ -47,7 +47,6 @@ export fun run(s: Suite): Unit =
     })
 
     group(s1, "record spread", (rs: Suite) => {
-      // Requires compiler record-spread codegen (and typecheck for spread) to compile and run.
       val r = { x = 1 }
       val s = { ...r, y = 2 }
       eq(rs, "spread preserves base field", s.x, 1)

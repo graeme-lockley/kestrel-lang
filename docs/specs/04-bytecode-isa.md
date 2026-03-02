@@ -100,7 +100,7 @@ Logical `&` and `|` in the language are short-circuit; the compiler emits branch
 | `SET_FIELD` | `slot` (u32) | Pop value then record; set field `slot` to the value (only valid for `mut` fields); push unit or the updated record (see [05-runtime-model.md](05-runtime-model.md)). |
 | `SPREAD` | `shape_id` (u32) | Row extension: pop a record and additional values; produce a new record with the extended shape (03 §9). Used for record literals `{ ...r, x = e }`. |
 
-**Implementor note (SPREAD):** The extended shape’s field count must be ≥ the base record’s field count. The VM pops the record first to read its field count from the header, then pops (extended_count − base_count) additional values in extended-shape field order (top of stack = last new field).
+**Implementor note (SPREAD):** The extended shape’s field count must be ≥ the base record’s field count. The VM pops the record first to read its field count from the header, then pops (extended_count − base_count) additional values in extended-shape field order (top of stack = last new field). The **compiler** emits: (1) code for each additional field value in extended-shape field order (so they are on the stack below the record), (2) code for the spread expression (base record), (3) SPREAD with the extended shape_id.
 
 **Language coverage:** Record literals `{ x = e, y = f }`, field access `e.x`, mutable field assignment `r.x := e` (01 §3.6). Tuples `(a, b)` may be compiled as records with an anonymous shape (field indices 0, 1, …).
 
