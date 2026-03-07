@@ -1,5 +1,9 @@
 # Agent Guidelines for Kestrel
 
+**Generated:** 2026-03-07
+**Commit:** 745543c
+**Branch:** main
+
 This file provides guidance for agentic coding agents working on the Kestrel project.
 
 ## Project Overview
