@@ -276,13 +276,20 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
             continue;
         }
 
-        // Periodic GC check — mark from stack and all call frames so we don't collect objects still in saved_locals
+        // Periodic GC check — mark from stack, all call frames, and all module globals as roots
         if (gc.bytes_allocated >= gc.next_gc) {
             var local_slices: [max_frames + 1][]const Value = undefined;
             for (0..frame_sp + 1) |i| {
                 local_slices[i] = saved_locals[i][0..];
             }
-            gc.collect(stack[0..sp], local_slices[0 .. frame_sp + 1]);
+            var global_slices_buf: [32][]const Value = undefined;
+            var n_global_slices: usize = 0;
+            for (module_ptrs.items) |m| {
+                if (n_global_slices >= 32) break;
+                global_slices_buf[n_global_slices] = m.globals;
+                n_global_slices += 1;
+            }
+            gc.collect(stack[0..sp], local_slices[0 .. frame_sp + 1], global_slices_buf[0..n_global_slices]);
         }
 
         const op = code[pc];

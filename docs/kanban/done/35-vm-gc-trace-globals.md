@@ -14,9 +14,17 @@ The garbage collector does not trace module globals as roots. If a module stores
 
 ## Acceptance Criteria
 
-- [ ] Pass all module globals slices to `markRoots()` alongside the stack and locals.
-- [ ] Ensure the GC can handle an arbitrary number of modules (not just the entry module).
-- [ ] Add a stress test: store a large heap object in a global, trigger GC, verify the global still points to valid data.
+- [x] Pass all module globals slices to `markRoots()` alongside the stack and locals.
+- [x] Ensure the GC can handle an arbitrary number of modules (not just the entry module).
+- [x] Add a stress test: store a large heap object in a global, trigger GC, verify the global still points to valid data.
+
+## Tasks
+
+- [x] Extend gc.zig: markRoots and collect accept all_globals
+- [x] exec.zig: build global slices from module_ptrs and pass to collect
+- [x] Zig unit test: globals traced as roots (gc.zig)
+- [x] E2E Kestrel test: global + GC stress test (tests/unit/gc_globals.test.ks)
+- [x] Doc comment in gc.zig and vm/src/AGENTS.md
 
 ## Spec References
 

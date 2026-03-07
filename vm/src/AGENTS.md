@@ -27,7 +27,7 @@ vm/src/
 | `main.zig` | CLI entry, argument parsing |
 | `exec.zig` | Virtual machine, instruction dispatch |
 | `load.zig` | Bytecode parsing, validation |
-| `gc.zig` | Mark-sweep GC with root tracking |
+| `gc.zig` | Mark-sweep GC; roots = stack + locals of all frames + all module globals (spec 05 §4) |
 | `value.zig` | 64-bit tagged values (3-bit tag + payload) |
 | `primitives.zig` | Built-in functions (print, etc.) |
 
@@ -51,4 +51,4 @@ zig test           # Run VM tests
 - 6 Zig source files
 - `exec.zig` is the core (~41KB)
 - Uses tagged 64-bit values (3-bit tag for type discrimination)
-- Mark-sweep GC with stack root scanning
+- Mark-sweep GC; roots = operand stack + locals of all call frames + all module globals

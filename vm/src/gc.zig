@@ -142,7 +142,8 @@ pub const GC = struct {
         }
     }
 
-    pub fn markRoots(self: *GC, stack: []Value, all_locals: []const []const Value) void {
+    /// Roots = operand stack + local slots of all active frames + all module globals (spec 05 §4).
+    pub fn markRoots(self: *GC, stack: []Value, all_locals: []const []const Value, all_globals: []const []const Value) void {
         // Mark from stack
         for (stack) |val| {
             if (val.tag == .ptr) {
@@ -153,6 +154,15 @@ pub const GC = struct {
         // Mark from every frame's locals (current + saved call frames)
         for (all_locals) |locals| {
             for (locals) |val| {
+                if (val.tag == .ptr) {
+                    self.mark(Value.ptrTo(val));
+                }
+            }
+        }
+
+        // Mark from every module's globals
+        for (all_globals) |globals| {
+            for (globals) |val| {
                 if (val.tag == .ptr) {
                     self.mark(Value.ptrTo(val));
                 }
@@ -195,8 +205,8 @@ pub const GC = struct {
         }
     }
 
-    pub fn collect(self: *GC, stack: []Value, all_locals: []const []const Value) void {
-        self.markRoots(stack, all_locals);
+    pub fn collect(self: *GC, stack: []Value, all_locals: []const []const Value, all_globals: []const []const Value) void {
+        self.markRoots(stack, all_locals, all_globals);
         self.sweep();
 
         // Adjust next GC threshold
@@ -220,3 +230,34 @@ pub const GC = struct {
         }
     }
 };
+
+test "GC marks module globals as roots" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var gc = GC.init(allocator);
+    defer gc.deinit();
+
+    // Allocate a heap object (float) — only reference will be in "globals"
+    const val = gc.allocFloat(3.14) catch return;
+    var globals_buf: [1]Value = .{val};
+    const all_globals: [1][]const Value = .{globals_buf[0..]};
+
+    // Mark roots from globals only (no stack, no locals); then sweep
+    gc.markRoots(&[_]Value{}, &[_][]const Value{}, &all_globals);
+    gc.sweep();
+
+    // Object must still be live (not swept)
+    const addr = Value.ptrTo(val);
+    var current = gc.objects;
+    var found = false;
+    while (current) |node| {
+        if (node.addr == addr) {
+            found = true;
+            break;
+        }
+        current = node.next;
+    }
+    try std.testing.expect(found);
+}
