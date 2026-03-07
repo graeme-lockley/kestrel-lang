@@ -42,6 +42,19 @@ fn binopCmp(stack: *[4096]Value, sp: *usize, op: CmpOp) void {
                 .ne => ab != bb,
                 else => false,
             };
+        } else if (valueToF64(a)) |af| {
+            if (valueToF64(b)) |bf| {
+                const anan = std.math.isNan(af);
+                const bnan = std.math.isNan(bf);
+                result = switch (op) {
+                    .eq => !anan and !bnan and af == bf,
+                    .ne => anan or bnan or af != bf,
+                    .lt => !anan and !bnan and af < bf,
+                    .le => !anan and !bnan and af <= bf,
+                    .gt => !anan and !bnan and af > bf,
+                    .ge => !anan and !bnan and af >= bf,
+                };
+            }
         }
         stack[sp.* - 2] = Value.boolVal(result);
         sp.* -= 1;
@@ -88,7 +101,18 @@ const ADT_KIND: u8 = 2;
 const TASK_KIND: u8 = 3;
 const STRING_KIND: u8 = 4;
 const CLOSURE_KIND: u8 = gc_mod.CLOSURE_KIND;
+const FLOAT_KIND: u8 = gc_mod.FLOAT_KIND;
 const max_frames = 32;
+
+/// If v is a PTR to a FLOAT heap object, return the f64; else null.
+fn valueToF64(v: Value) ?f64 {
+    if (v.tag != .ptr) return null;
+    const addr = Value.ptrTo(v);
+    if (addr == 0) return null;
+    const base = @as([*]const u8, @ptrFromInt(addr));
+    if (base[0] != FLOAT_KIND) return null;
+    return @as(*const f64, @alignCast(@ptrCast(base + gc_mod.FLOAT_HEADER))).*;
+}
 const max_locals = 128;
 const max_handlers = 32;
 
@@ -583,12 +607,99 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 shapes = current_module.shapes;
                 pc = entry.code_offset;
             },
-            ADD => binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a + b; } }).f),
-            SUB => binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a - b; } }).f),
-            MUL => binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a * b; } }).f),
-            DIV => binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { if (b == 0) return 0; return @divTrunc(a, b); } }).f),
-            MOD => binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { if (b == 0) return 0; return @mod(a, b); } }).f),
-            POW => binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return std.math.powi(i64, a, @intCast(b)) catch 0; } }).f),
+            ADD => {
+                if (sp >= 2) {
+                    const b_val = stack[sp - 1];
+                    const a_val = stack[sp - 2];
+                    if (valueToF64(a_val)) |af| {
+                        if (valueToF64(b_val)) |bf| {
+                            const result = gc.allocFloat(af + bf) catch continue;
+                            sp -= 1;
+                            stack[sp - 1] = result;
+                            continue;
+                        }
+                    }
+                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a + b; } }).f);
+                }
+            },
+            SUB => {
+                if (sp >= 2) {
+                    const b_val = stack[sp - 1];
+                    const a_val = stack[sp - 2];
+                    if (valueToF64(a_val)) |af| {
+                        if (valueToF64(b_val)) |bf| {
+                            const result = gc.allocFloat(af - bf) catch continue;
+                            sp -= 1;
+                            stack[sp - 1] = result;
+                            continue;
+                        }
+                    }
+                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a - b; } }).f);
+                }
+            },
+            MUL => {
+                if (sp >= 2) {
+                    const b_val = stack[sp - 1];
+                    const a_val = stack[sp - 2];
+                    if (valueToF64(a_val)) |af| {
+                        if (valueToF64(b_val)) |bf| {
+                            const result = gc.allocFloat(af * bf) catch continue;
+                            sp -= 1;
+                            stack[sp - 1] = result;
+                            continue;
+                        }
+                    }
+                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a * b; } }).f);
+                }
+            },
+            DIV => {
+                if (sp >= 2) {
+                    const b_val = stack[sp - 1];
+                    const a_val = stack[sp - 2];
+                    if (valueToF64(a_val)) |af| {
+                        if (valueToF64(b_val)) |bf| {
+                            const div_result: f64 = if (bf == 0) std.math.nan(f64) else af / bf;
+                            const result = gc.allocFloat(div_result) catch continue;
+                            sp -= 1;
+                            stack[sp - 1] = result;
+                            continue;
+                        }
+                    }
+                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { if (b == 0) return 0; return @divTrunc(a, b); } }).f);
+                }
+            },
+            MOD => {
+                if (sp >= 2) {
+                    const b_val = stack[sp - 1];
+                    const a_val = stack[sp - 2];
+                    if (valueToF64(a_val)) |af| {
+                        if (valueToF64(b_val)) |bf| {
+                            const mod_result: f64 = if (bf == 0) std.math.nan(f64) else af - @trunc(af / bf) * bf;
+                            const result = gc.allocFloat(mod_result) catch continue;
+                            sp -= 1;
+                            stack[sp - 1] = result;
+                            continue;
+                        }
+                    }
+                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { if (b == 0) return 0; return @mod(a, b); } }).f);
+                }
+            },
+            POW => {
+                if (sp >= 2) {
+                    const b_val = stack[sp - 1];
+                    const a_val = stack[sp - 2];
+                    if (valueToF64(a_val)) |af| {
+                        if (valueToF64(b_val)) |bf| {
+                            const pow_result = std.math.pow(f64, af, bf);
+                            const result = gc.allocFloat(pow_result) catch continue;
+                            sp -= 1;
+                            stack[sp - 1] = result;
+                            continue;
+                        }
+                    }
+                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return std.math.powi(i64, a, @intCast(b)) catch 0; } }).f);
+                }
+            },
             EQ => binopCmp(&stack, &sp, .eq),
             NE => binopCmp(&stack, &sp, .ne),
             LT => binopCmp(&stack, &sp, .lt),

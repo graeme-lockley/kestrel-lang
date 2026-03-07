@@ -73,6 +73,11 @@ fn formatInto(val: Value, buf: []u8, start: usize, module_cache: ?[]const *const
                 @memcpy(buf[pos..][0..str_data.len], str_data);
                 return pos + str_data.len;
             }
+            if (kind == gc_mod.FLOAT_KIND) {
+                const f = @as(*const f64, @alignCast(@ptrCast(base + gc_mod.FLOAT_HEADER))).*;
+                const written = std.fmt.bufPrint(buf[pos..], "{d}", .{f}) catch return null;
+                return pos + written.len;
+            }
             if (kind == gc_mod.RECORD_KIND) {
                 const field_count = std.mem.readInt(u32, base[12..16], .little);
                 const fields = @as([*]const Value, @alignCast(@ptrCast(base + gc_mod.RECORD_HEADER)));
@@ -275,7 +280,10 @@ fn jsonToValue(gc: *GC, j: std.json.Value, module_index: u32) !Value {
         .null => allocValueAdt(gc, module_index, VALUE_NULL, null),
         .bool => |b| allocValueAdt(gc, module_index, VALUE_BOOL, Value.boolVal(b)),
         .integer => |i| allocValueAdt(gc, module_index, VALUE_INT, Value.int(@intCast(i))),
-        .float => |f| allocValueAdt(gc, module_index, VALUE_FLOAT, Value.int(@bitCast(f))), // store f64 bits in int payload for now
+        .float => |f| blk: {
+            const float_val = gc.allocFloat(f) catch break :blk try allocValueAdt(gc, module_index, VALUE_NULL, null);
+            break :blk try allocValueAdt(gc, module_index, VALUE_FLOAT, float_val);
+        },
         .number_string => |s| allocValueAdt(gc, module_index, VALUE_STRING, try allocString(gc, s)),
         .string => |s| allocValueAdt(gc, module_index, VALUE_STRING, try allocString(gc, s)),
         .array => |arr| blk: {
@@ -331,8 +339,12 @@ fn valueToString(gc: *GC, val: Value, out: *std.ArrayList(u8)) !void {
         },
         VALUE_FLOAT => {
             const p = valueAdtPayload(base);
-            const bits: u64 = @as(u64, p.payload);
-            const f = @as(f64, @bitCast(bits));
+            if (p.tag != .ptr) return;
+            const float_addr = Value.ptrTo(p);
+            if (float_addr == 0) return;
+            const fbase = @as([*]const u8, @ptrFromInt(float_addr));
+            if (fbase[0] != gc_mod.FLOAT_KIND) return;
+            const f = @as(*const f64, @alignCast(@ptrCast(fbase + gc_mod.FLOAT_HEADER))).*;
             try std.fmt.format(out.writer(page_alloc), "{d}", .{f});
         },
         VALUE_STRING => {
@@ -469,6 +481,11 @@ fn deepEqual(a: Value, b: Value) bool {
                 const len_b = std.mem.readInt(u32, base_b[4..8], .little);
                 if (len_a != len_b) return false;
                 return std.mem.eql(u8, base_a[8 .. 8 + len_a], base_b[8 .. 8 + len_b]);
+            }
+            if (kind_a == gc_mod.FLOAT_KIND) {
+                const fa = @as(*const f64, @alignCast(@ptrCast(base_a + gc_mod.FLOAT_HEADER))).*;
+                const fb = @as(*const f64, @alignCast(@ptrCast(base_b + gc_mod.FLOAT_HEADER))).*;
+                return fa == fb;
             }
             if (kind_a == gc_mod.RECORD_KIND) {
                 const fc_a = std.mem.readInt(u32, base_a[12..16], .little);

@@ -1,6 +1,7 @@
 // Load .kbc file (spec 03). Header, string table, constant pool, code.
 const std = @import("std");
 const Value = @import("value.zig").Value;
+const gc_mod = @import("gc.zig");
 
 const KBC1_MAGIC: [4]u8 = .{ 0x4B, 0x42, 0x43, 0x31 };
 
@@ -43,6 +44,8 @@ pub const Module = struct {
     strings: []const StringEntry,
     /// Allocated string constant heap objects (tag-6); caller must free each then this slice.
     string_slices: []const []const u8,
+    /// Allocated float constant heap objects (tag-1); caller must free each then this slice.
+    float_objects: []const []u8,
     /// Import table (03 §6.5): specifier string for each dependency (index = import_index).
     import_specifiers: []const []const u8,
     /// Imported function table (03 §6.6); fn_id in [function_count, function_count + len) uses this.
@@ -113,8 +116,9 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
     const constants = try allocator.alloc(Value, pool_count);
     errdefer allocator.free(constants);
 
-    // First pass: count string constants (tag 6)
+    // First pass: count string constants (tag 6) and float constants (tag 1)
     var string_count: usize = 0;
+    var float_count: usize = 0;
     if (pool_count > 0 and pool_start + 4 <= data.len) {
         var o: usize = pool_start + 4;
         for (constants) |_| {
@@ -126,7 +130,10 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
             var entry_size: usize = 4;
             switch (tag) {
                 0 => entry_size = 12,
-                1 => entry_size = 12,
+                1 => {
+                    float_count += 1;
+                    entry_size = 12;
+                },
                 2, 3, 4 => {},
                 5 => entry_size = 8,
                 6 => {
@@ -148,6 +155,11 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
     var string_idx: usize = 0;
     errdefer for (string_slices[0..string_idx]) |s| allocator.free(s);
 
+    const float_objects = try allocator.alloc([]u8, float_count);
+    errdefer allocator.free(float_objects);
+    var float_idx: usize = 0;
+    errdefer for (float_objects[0..float_idx]) |f| allocator.free(f);
+
     if (pool_count > 0 and pool_start + 4 <= data.len) {
         var o: usize = pool_start + 4;
         for (constants) |*out| {
@@ -163,7 +175,18 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
                     out.* = Value.int(std.mem.readInt(i64, data[o..][0..8], .little));
                     entry_size = 12;
                 },
-                1 => { entry_size = 12; out.* = Value.unit(); },
+                1 => {
+                    if (o + 8 > data.len) return error.InvalidKbc;
+                    const f64_val: f64 = @bitCast(std.mem.readInt(u64, data[o..][0..8], .little));
+                    const float_block = try allocator.alloc(u8, 16);
+                    float_block[0] = gc_mod.FLOAT_KIND;
+                    float_block[1] = 0;
+                    @as(*f64, @alignCast(@ptrCast(float_block[gc_mod.FLOAT_HEADER..].ptr))).* = f64_val;
+                    float_objects[float_idx] = float_block;
+                    float_idx += 1;
+                    out.* = Value.ptr(@intFromPtr(float_block.ptr));
+                    entry_size = 12;
+                },
                 2 => { out.* = Value.boolVal(false); },
                 3 => { out.* = Value.boolVal(true); },
                 4 => { out.* = Value.unit(); },
@@ -336,6 +359,7 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
         .adts = adts,
         .strings = strings,
         .string_slices = string_slices,
+        .float_objects = float_objects,
         .import_specifiers = import_specifiers,
         .imported_functions = imported_functions,
         .globals = globals,
@@ -350,6 +374,8 @@ pub fn freeModule(allocator: std.mem.Allocator, m: *const Module) void {
     allocator.free(m.constants);
     for (m.string_slices) |s| allocator.free(s);
     allocator.free(m.string_slices);
+    for (m.float_objects) |f| allocator.free(f);
+    allocator.free(m.float_objects);
     if (m.functions.len > 0) allocator.free(m.functions);
     for (m.shapes) |s| allocator.free(s.field_names);
     if (m.shapes.len > 0) allocator.free(m.shapes);
@@ -373,6 +399,10 @@ test "load minimal kbc" {
     defer {
         for (m.string_slices) |s| a.free(s);
         a.free(m.string_slices);
+    }
+    defer {
+        for (m.float_objects) |f| a.free(f);
+        a.free(m.float_objects);
     }
     if (m.functions.len > 0) a.free(m.functions);
     for (m.shapes) |s| a.free(s.field_names);

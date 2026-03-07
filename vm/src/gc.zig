@@ -8,13 +8,16 @@ pub const ADT_KIND: u8 = 2;
 pub const TASK_KIND: u8 = 3;
 pub const STRING_KIND: u8 = 4;
 pub const CLOSURE_KIND: u8 = 5;
+pub const FLOAT_KIND: u8 = 6;
 
 // Heap object layout:
 // - RECORD: kind(1)+mark(1)+pad(2)+module_index(4)+shape_id(4)+field_count(4)+pad(4)=16, then field_count*8 bytes
 // - ADT: kind(1)+mark(1)+pad(2)+module_index(4)+adt_id(4)+ctor(4)+arity(4)+pad(4)=24, then arity*8 bytes
 // - CLOSURE: kind(1)+mark(1)+pad(2)+module_index(4)+fn_index(4)+pad(4)+env(8)=24
+// - FLOAT: kind(1)+mark(1)+pad(6)+f64(8)=16
 // Objects are 8-byte aligned
 pub const RECORD_HEADER: usize = 16;
+pub const FLOAT_HEADER: usize = 8;
 pub const ADT_HEADER: usize = 24;
 pub const CLOSURE_HEADER: usize = 24;
 
@@ -65,6 +68,16 @@ pub const GC = struct {
         self.bytes_allocated += size;
 
         return mem;
+    }
+
+    /// Allocate a FLOAT heap object (kind FLOAT, f64 at offset 8). Returns Value.ptr to it.
+    pub fn allocFloat(self: *GC, value: f64) !Value {
+        const size: usize = 16; // FLOAT_HEADER + 8
+        const mem = try self.allocObject(size);
+        mem[0] = FLOAT_KIND;
+        mem[1] = 0; // mark
+        @as(*f64, @alignCast(@ptrCast(mem.ptr + FLOAT_HEADER))).* = value;
+        return Value.ptr(@intFromPtr(mem.ptr));
     }
 
     pub fn mark(self: *GC, addr: usize) void {
@@ -120,8 +133,11 @@ pub const GC = struct {
                 const env_addr = std.mem.readInt(usize, base[16..24], .little);
                 if (env_addr != 0) self.mark(env_addr);
             },
+            FLOAT_KIND => {
+                // FLOAT: no pointers to trace
+            },
             else => {
-                // Other kinds (FLOAT, etc.) have no pointers to trace
+                // Other kinds have no pointers to trace
             },
         }
     }

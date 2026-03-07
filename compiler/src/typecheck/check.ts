@@ -426,8 +426,14 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const r = inferExpr(expr.right);
         if (['+', '-', '*', '/', '%', '**'].includes(expr.op)) {
           unifyWithBlame(l, r, expr);
-          unifyWithBlame(l, tInt, expr);
-          result = apply(l);
+          const numType = apply(l);
+          if (numType.kind === 'prim' && numType.name !== 'Int' && numType.name !== 'Float') {
+            throw new TypeCheckError(
+              `Arithmetic operands must have type Int or Float, not ${typeStr(numType)}`,
+              expr
+            );
+          }
+          result = numType;
         } else if (['==', '!=', '<', '>', '<=', '>='].includes(expr.op)) {
           unifyWithBlame(l, r, expr);
           result = tBool;
