@@ -9,23 +9,28 @@ fun colorToInt(c: Color): Int = match (c) {
   Blue => 2
 }
 
-// Non-generic Option type (Kestrel doesn't support type parameters on type decls)
-type Opt = None | Some(Int)
+// Generic Option type
+type Opt<T> = None | Some(T)
 
-fun unwrap(o: Opt): Int = match (o) {
-  None => 0
+fun unwrap<T>(o: Opt<T>, default: T): T = match (o) {
+  None => default
   Some { field_0 = x } => x
 }
 
-// Multi-arg constructors - using record-style with numbered fields
-type Tree = Leaf(Int) | Node(Tree, Tree)
+// Generic Tree type
+type Tree<T> = Leaf(T) | Node(Tree<T>, Tree<T>)
 
-fun treeSum(t: Tree): Int = match (t) {
+fun treeMap<T, R>(t: Tree<T>, f: (T) -> R): Tree<R> = match (t) {
+  Leaf { field_0 = x } => Leaf(f(x))
+  Node { field_0 = l, field_1 = r } => Node(treeMap(l, f), treeMap(r, f))
+}
+
+fun treeSum(t: Tree<Int>): Int = match (t) {
   Leaf { field_0 = x } => x
   Node { field_0 = l, field_1 = r } => treeSum(l) + treeSum(r)
 }
 
-// Single constructor
+// Single constructor - non-generic
 type Point = MkPoint(Int, Int)
 
 fun pointX(p: Point): Int = match (p) {
@@ -44,9 +49,13 @@ export fun run(s: Suite): Unit =
       eq(sg, "Blue to int", colorToInt(Blue), 2)
     })
 
-    group(s1, "unary constructors", (sg: Suite) => {
-      eq(sg, "unwrap Some(5)", unwrap(Some(5)), 5)
-      eq(sg, "unwrap Some(42)", unwrap(Some(42)), 42)
+    group(s1, "generic ADTs", (sg: Suite) => {
+      eq(sg, "unwrap Some(5)", unwrap(Some(5), 0), 5)
+      eq(sg, "unwrap Some(42)", unwrap(Some(42), 0), 42)
+      eq(sg, "unwrap None Int", unwrap(None, 100), 100)
+      eq(sg, "unwrap None String", unwrap(None, "default"), "default")
+      eq(sg, "treeMap double", treeMap(Leaf(3), (x) => x * 2), Leaf(6))
+      eq(sg, "treeMap toString", treeMap(Leaf(5), (x) => x), Leaf(5))
     })
 
     group(s1, "multi-arg constructors", (sg: Suite) => {

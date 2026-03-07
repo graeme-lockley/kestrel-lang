@@ -971,7 +971,8 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             const ctorType = paramTypes.length === 0 
               ? adtType 
               : { kind: 'arrow' as const, params: paramTypes, return: adtType };
-            env.set(ctor.name, ctorType);
+            const ctorScheme = generalize(apply(ctorType), new Set());
+            env.set(ctor.name, ctorScheme);
           }
           
           adtConstructors.set(node.name, node.body.constructors.map(c => ({ name: c.name, arity: c.params.length })));
