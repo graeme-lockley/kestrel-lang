@@ -96,7 +96,8 @@ function getExportSet(program: Program): Set<string> {
   const names = new Set<string>();
   for (const node of program.body) {
     if (!node) continue;
-    if ((node.kind === 'FunDecl' || node.kind === 'TypeDecl') && node.exported) names.add(node.name);
+    if (node.kind === 'FunDecl' && node.exported) names.add(node.name);
+    else if (node.kind === 'TypeDecl' && node.visibility === 'export') names.add(node.name);
     else if (node.kind === 'ValDecl' || node.kind === 'VarDecl') names.add(node.name);
   }
   return names;
@@ -133,7 +134,7 @@ export function compileFile(
   const onCompilingFile = options?.onCompilingFile;
   const stalePaths = options?.stalePaths;
 
-  function compileOne(filePath: string): { ok: true; program: Program; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] } | { ok: false; diagnostics: Diagnostic[] } {
+  function compileOne(filePath: string): { ok: true; program: Program; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>; codegenResult: CodegenResult; dependencyPaths: string[] } | { ok: false; diagnostics: Diagnostic[] } {
     if (visited.has(filePath)) {
       return { ok: false, diagnostics: [diag(filePath, CODES.file.circular_import, `Circular import: ${filePath}`)] };
     }
@@ -187,6 +188,7 @@ export function compileFile(
     const getOutputPaths = options?.getOutputPaths;
     const importBindings = new Map<string, InternalType>();
     const typeAliasBindings = new Map<string, InternalType>();
+    const importOpaqueTypes = new Set<string>();
     type DepResult =
       | { spec: string; path: string; result: CodegenResult; exportSet: Set<string>; dependencyPaths: string[]; fromTypesFile?: false }
       | { spec: string; path: string; exportSet: Set<string>; nameToExport: Map<string, { function_index: number; arity: number; type: InternalType; setter_index?: number }>; fromTypesFile: true };
@@ -241,6 +243,9 @@ export function compileFile(
                 }
                 if (ta != null) {
                   typeAliasBindings.set(localName, ta.type);
+                  if (ta.opaque) {
+                    importOpaqueTypes.add(localName);
+                  }
                 } else if (exp != null && (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var')) {
                   importBindings.set(localName, exp.type);
                 }
@@ -269,6 +274,9 @@ export function compileFile(
             }
             if (depOut.exportedTypeAliases.has(externalName)) {
               typeAliasBindings.set(localName, t);
+              if (depOut.exportedTypeVisibility?.get(externalName) === 'opaque') {
+                importOpaqueTypes.add(localName);
+              }
             } else {
               importBindings.set(localName, t);
             }
@@ -287,6 +295,7 @@ export function compileFile(
     const tcOpts: TypecheckOptions = {
       importBindings: importBindings.size > 0 ? importBindings : undefined,
       typeAliasBindings: typeAliasBindings.size > 0 ? typeAliasBindings : undefined,
+      importOpaqueTypes: importOpaqueTypes.size > 0 ? importOpaqueTypes : undefined,
       sourceFile: filePath,
     };
     const tc = typecheck(program, tcOpts);
@@ -392,7 +401,7 @@ export function compileFile(
           typeExports.set(name, entry);
         }
       }
-      writeTypesFile(paths.kti, typeExports, tc.exportedTypeAliases);
+      writeTypesFile(paths.kti, typeExports, tc.exportedTypeAliases, tc.exportedTypeVisibility);
     }
 
     const dependencyPaths = [
@@ -427,7 +436,7 @@ export function compileFile(
     const durationMs = Math.round(performance.now() - compileStart);
     // Report every file we compile (so incremental runs show full chain: e.g. m3, m2, hello)
     onCompilingFile?.(filePath, durationMs);
-    return { ok: true, program, exports: tc.exports, exportedTypeAliases: tc.exportedTypeAliases, codegenResult: mainResult, dependencyPaths };
+    return { ok: true, program, exports: tc.exports, exportedTypeAliases: tc.exportedTypeAliases, exportedTypeVisibility: tc.exportedTypeVisibility, codegenResult: mainResult, dependencyPaths };
   }
 
   const out = compileOne(absPath);

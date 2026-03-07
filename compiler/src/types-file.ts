@@ -185,6 +185,7 @@ export interface TypesFileVarExport {
 export interface TypesFileTypeAliasExport {
   kind: 'type';
   type: SerType;
+  opaque?: boolean;
 }
 
 export type TypesFileExportEntry = TypesFileFunctionExport | TypesFileValExport | TypesFileVarExport | TypesFileTypeAliasExport;
@@ -205,6 +206,7 @@ export interface ResolvedTypesFileExport {
 export interface ResolvedTypeAliasExport {
   kind: 'type';
   type: InternalType;
+  opaque?: boolean;
 }
 
 export type TypesFileExportInput = {
@@ -219,7 +221,12 @@ export type TypesFileExportInput = {
 /**
  * Write a types file for a package. Call after codegen; exports include kind ('function' | 'val' | 'var').
  */
-export function writeTypesFile(path: string, exports: Map<string, TypesFileExportInput>, typeAliasExports?: Map<string, InternalType>): void {
+export function writeTypesFile(
+  path: string, 
+  exports: Map<string, TypesFileExportInput>, 
+  typeAliasExports?: Map<string, InternalType>,
+  typeVisibility?: Map<string, 'local' | 'opaque' | 'export'>
+): void {
   const functions: Record<string, TypesFileExportEntry> = {};
   for (const [name, exp] of exports) {
     const serType = serializeType(exp.type);
@@ -241,7 +248,16 @@ export function writeTypesFile(path: string, exports: Map<string, TypesFileExpor
   }
   if (typeAliasExports) {
     for (const [name, t] of typeAliasExports) {
-      functions[name] = { kind: 'type', type: serializeType(t) };
+      const isOpaque = typeVisibility?.get(name) === 'opaque';
+      if (isOpaque) {
+        functions[name] = { 
+          kind: 'type', 
+          type: serializeType({ kind: 'app' as const, name, args: [] }), 
+          opaque: true 
+        };
+      } else {
+        functions[name] = { kind: 'type', type: serializeType(t), opaque: false };
+      }
     }
   }
   const payload: TypesFileExport = { functions };
@@ -266,7 +282,12 @@ export function readTypesFile(path: string): { exports: Map<string, ResolvedType
   for (const [name, exp] of Object.entries(functions)) {
     const kind = exp.kind ?? 'function';
     if (kind === 'type') {
-      typeAliases.set(name, { kind: 'type', type: deserializeType(exp.type) });
+      const typeExp = exp as TypesFileTypeAliasExport;
+      typeAliases.set(name, { 
+        kind: 'type', 
+        type: deserializeType(typeExp.type),
+        opaque: typeExp.opaque 
+      });
       continue;
     }
     const arity = kind === 'function' ? (exp as TypesFileFunctionExport).arity : 0;

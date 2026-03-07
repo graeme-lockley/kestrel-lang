@@ -51,13 +51,35 @@ describe('parse (integration)', () => {
   it('parses type decl as non-exported', () => {
     const ast = parse(tokenize('type Foo = Int'));
     expect(ast.kind).toBe('Program');
-    expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', exported: false, name: 'Foo' });
+    expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', visibility: 'local', name: 'Foo' });
   });
 
   it('parses export type decl', () => {
     const ast = parse(tokenize('export type Foo = Int'));
     expect(ast.kind).toBe('Program');
-    expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', exported: true, name: 'Foo' });
+    expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', visibility: 'export', name: 'Foo' });
+  });
+
+  it('parses opaque type decl (ADT)', () => {
+    const ast = parse(tokenize('opaque type Token = Num(Int) | Op(String)'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', visibility: 'opaque', name: 'Token' });
+  });
+
+  it('parses opaque type decl (alias)', () => {
+    const ast = parse(tokenize('opaque type UserId = Int'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', visibility: 'opaque', name: 'UserId' });
+  });
+
+  it('parses opaque type decl with generic params', () => {
+    const ast = parse(tokenize('opaque type Result<T, E> = Ok(T) | Err(E)'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', visibility: 'opaque', name: 'Result' });
+  });
+
+  it('errors on export opaque type (both cannot be used together)', () => {
+    expect(() => parse(tokenize('export opaque type Foo = Int'))).toThrow('Cannot use both "export" and "opaque"');
   });
 
   it('parses block with nested fun (emitted as FunStmt)', () => {

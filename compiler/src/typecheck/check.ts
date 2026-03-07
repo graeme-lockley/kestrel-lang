@@ -39,17 +39,21 @@ export interface TypecheckOptions {
   importBindings?: Map<string, InternalType>;
   /** Imported type aliases (localName -> type) to resolve in function signatures. */
   typeAliasBindings?: Map<string, InternalType>;
+  /** Names of imported types that are opaque (cannot construct or pattern-match). */
+  importOpaqueTypes?: Set<string>;
   /** Source file path for diagnostics (spec 10). */
   sourceFile?: string;
 }
 
-export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType> } | { ok: false; diagnostics: Diagnostic[] } {
+export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; exportedTypeVisibility: Map<string, 'local' | 'opaque' | 'export'> } | { ok: false; diagnostics: Diagnostic[] } {
   resetVarId();
   const diagnostics: Diagnostic[] = [];
   const subst = new Map<number, InternalType>();
   const env = new Map<string, InternalType>();
   const typeAliases = new Map<string, InternalType>();
   const adtConstructors = new Map<string, { name: string; arity: number }[]>();
+  const opaqueTypes = new Set<string>();
+  const exportedTypeVisibility = new Map<string, 'local' | 'opaque' | 'export'>();
   let inAsyncContext = false; // Track if we're in an async function
   const sourceFile = options?.sourceFile ?? '';
   /** Current expression for UnifyError location (spec 10). */
@@ -96,6 +100,14 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     for (const [name, t] of typeAliasBindings) {
       typeAliases.set(name, t);
       env.set(name, t);
+    }
+  }
+
+  // Add imported opaque types - these restrict constructor access from other modules
+  const importOpaqueTypes = options?.importOpaqueTypes;
+  if (importOpaqueTypes) {
+    for (const name of importOpaqueTypes) {
+      opaqueTypes.add(name);
     }
   }
 
@@ -630,6 +642,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       }
       case 'MatchExpr': {
         const scrutT = inferExpr(expr.scrutinee);
+        // Check if we're matching on an opaque type from another module
+        const appliedScrutT = apply(scrutT);
+        if (appliedScrutT.kind === 'app' && opaqueTypes.has(appliedScrutT.name)) {
+          throw new TypeCheckError(`Cannot pattern-match on opaque type ${appliedScrutT.name}`, expr);
+        }
         checkExhaustive(scrutT, expr.cases, expr);
 
         // Helper to bind pattern variables
@@ -951,7 +968,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const scheme = generalize(appliedFnType, envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'TypeDecl') {
+        // Opaque types from the current module are fully accessible within that module
+        // (no need to add to opaqueTypes - that's only for imported opaque types)
         if (node.body.kind === 'TypeAliasBody') {
+          // Treat opaque alias same as regular alias within the module
+          // The opacity is enforced at export/import boundary
           const aliasType = astTypeToInternal(node.body.type);
           env.set(node.name, aliasType);
           typeAliases.set(node.name, aliasType);
@@ -1064,16 +1085,19 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       } else if (node.kind === 'ValDecl' || node.kind === 'VarDecl') {
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));
-      } else if (node.kind === 'TypeDecl' && node.exported) {
+      } else if (node.kind === 'TypeDecl' && (node.visibility === 'export' || node.visibility === 'opaque')) {
         const t = typeAliases.get(node.name);
         if (t != null) {
           exports.set(node.name, apply(t));
           exportedTypeAliases.set(node.name, apply(t));
         }
       }
+      if (node.kind === 'TypeDecl') {
+        exportedTypeVisibility.set(node.name, node.visibility);
+      }
     }
     if (diagnostics.length > 0) return { ok: false, diagnostics };
-    return { ok: true, exports, exportedTypeAliases };
+    return { ok: true, exports, exportedTypeAliases, exportedTypeVisibility };
   } catch (e) {
     if (e instanceof UnifyError) {
       const blame = (e as UnifyError & { blameNode?: unknown }).blameNode ?? currentExpr;

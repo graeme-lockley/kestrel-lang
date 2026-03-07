@@ -102,6 +102,7 @@ class Parser {
       } else if (
         this.at('keyword', 'fun') ||
         this.at('keyword', 'type') ||
+        this.at('keyword', 'opaque') ||
         (this.at('keyword', 'export') && this.tokens[this.i + 1]?.value === 'exception')
       ) {
         body.push(this.parseTopLevelDecl());
@@ -156,6 +157,9 @@ class Parser {
 
   private parseExport(): TopLevelDecl {
     this.expect('keyword', 'export');
+    if (this.at('keyword', 'opaque')) {
+      throw new ParseError('Cannot use both "export" and "opaque" on a type declaration', this.current().span.start, this.current().span.line, this.current().span.column);
+    }
     if (this.at('op', '*')) {
       this.advance();
       this.expect('keyword', 'from');
@@ -198,8 +202,16 @@ class Parser {
     if (this.at('keyword', 'fun')) {
       return this.parseFunDecl(exported);
     }
-    if (this.at('keyword', 'type')) {
-      this.advance();
+    if (this.at('keyword', 'type') || this.at('keyword', 'opaque')) {
+      // Determine visibility: 'local' | 'opaque' | 'export'
+      let visibility: 'local' | 'opaque' | 'export' = exported ? 'export' : 'local';
+      if (this.at('keyword', 'opaque')) {
+        this.advance();
+        this.expect('keyword', 'type');
+        visibility = 'opaque';
+      } else {
+        this.advance();
+      }
       const name = this.expect('ident').value!;
       let typeParams: string[] | undefined;
       if (this.at('op', '<')) {
@@ -214,15 +226,17 @@ class Parser {
       this.expect('op', '=');
       
       // Check if this is an ADT (multiple constructors) or type alias
-      // ADT: starts with UPPER_IDENT, possibly followed by | for more constructors
+      // ADT: starts with UPPER_IDENT that's a constructor (followed by '(' or '|')
+      // Without these markers, it's a type alias
       if (this.at('ident') && this.current().value![0] === this.current().value![0].toUpperCase()) {
-        const constructors = this.parseConstructorList();
-        return { kind: 'TypeDecl', exported, name, typeParams, body: { kind: 'ADTBody', constructors } };
-      } else {
-        // Type alias
-        const type = this.parseType();
-        return { kind: 'TypeDecl', exported, name, typeParams, body: { kind: 'TypeAliasBody', type } };
+        const nextKind = this.peek(1).kind;
+        if (nextKind === 'lparen' || nextKind === 'op') {
+          const constructors = this.parseConstructorList();
+          return { kind: 'TypeDecl', visibility, name, typeParams, body: { kind: 'ADTBody', constructors } };
+        }
       }
+      const type = this.parseType();
+      return { kind: 'TypeDecl', visibility, name, typeParams, body: { kind: 'TypeAliasBody', type } };
     }
     if (this.at('keyword', 'val')) {
       this.advance();

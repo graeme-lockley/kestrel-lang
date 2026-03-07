@@ -81,9 +81,11 @@ export interface Param extends NodeBase {
   type?: Type;
 }
 
+export type TypeVisibility = 'local' | 'opaque' | 'export';
+
 export interface TypeDecl extends NodeBase {
   kind: 'TypeDecl';
-  exported: boolean;
+  visibility: TypeVisibility;
   name: string;
   typeParams?: string[];
   body: TypeDeclBody;
