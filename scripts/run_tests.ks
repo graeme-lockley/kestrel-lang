@@ -109,7 +109,7 @@ val calls = buildCalls(testCount, 0)
 
 val summaryVal = if (summaryOnly) "True" else "False"
 
-val generatedSource = "import { printSummary } from \"kestrel:test\"\n${imports}\nval counts = { mut passed = 0, mut failed = 0 }\nval root = { depth = 1, summaryOnly = ${summaryVal}, counts = counts }\n\n${calls}\nprintSummary(counts)\n"
+val generatedSource = "import { printSummary } from \"kestrel:test\"\n${imports}\nval counts = { mut passed = 0, mut failed = 0, mut startTime = __now_ms() }\nval root = { depth = 1, summaryOnly = ${summaryVal}, counts = counts }\n\n${calls}\nprintSummary(counts)\n"
 
 val generatedPath = "/tmp/kestrel_test_runner.ks"
 writeText(generatedPath, generatedSource)

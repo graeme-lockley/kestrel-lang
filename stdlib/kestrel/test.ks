@@ -1,6 +1,6 @@
 import { GREEN, RED, DIM, RESET, CHECK, CROSS } from "kestrel:console"
 
-export type Suite = { depth: Int, summaryOnly: Bool, counts: { passed: mut Int, failed: mut Int } }
+export type Suite = { depth: Int, summaryOnly: Bool, counts: { passed: mut Int, failed: mut Int, startTime: mut Int } }
 
 fun indent(n: Int): String =
   if (n <= 0) ""
@@ -40,14 +40,15 @@ export fun eq(s: Suite, desc: String, actual: X, expected: X): Unit =
     println("${indent(s.depth)}  actual:   ${__format_one(actual)}")
   }
 
-export fun printSummary(counts: { passed: mut Int, failed: mut Int }): Unit = {
+export fun printSummary(counts: { passed: mut Int, failed: mut Int, startTime: mut Int }): Unit = {
   val p = counts.passed;
   val f = counts.failed;
+  val totalElapsed = __now_ms() - counts.startTime;
   println("");
   if (f > 0) {
-    println("${RED}${f} failed${RESET}, ${p} passed");
+    println("${RED}${f} failed${RESET}, ${p} passed (${totalElapsed}ms)");
     exit(1)
   } else {
-    println("${GREEN}${p} passed${RESET}")
+    println("${GREEN}${p} passed${RESET} (${totalElapsed}ms)")
   }
 }
