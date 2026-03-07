@@ -33,4 +33,15 @@ export fun run(s: Suite): Unit =
       eq(sg, "two-arg through val", mul(6, 7), 42)
     })
 
+    group(s1, "generic lambdas", (sg: Suite) => {
+      val genId = <T>(x: T) => x
+      eq(sg, "identity Int", genId(42), 42)
+      eq(sg, "identity String", genId("hello"), "hello")
+
+      val genSwap = <T, U>(a: T, b: U) => (b, a)
+      eq(sg, "swap types", genSwap(1, "a"), ("a", 1))
+
+      val genFirst = <T, U>(p: (T, U)) => match (p) { (x, y) => x }
+      eq(sg, "first of pair", genFirst((10, "x")), 10)
+    })
   })

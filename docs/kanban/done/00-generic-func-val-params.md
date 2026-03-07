@@ -15,11 +15,7 @@ val makePair<T>(a: T, b: T): (T, T) = (a, b)
 
 ## Current State
 
-Currently fails to parse:
-```
-fun identity<T>(x: T): T = x
-               ^ Expected lparen, got <
-```
+✅ **Complete.** Generic type parameters on functions parse, type-check, and execute correctly. Both top-level `fun` and block-level `fun` support `<TypeParamList>`. The spec (`01-language.md`) has been updated with the new `FunDecl` and block `fun` grammar. Unit tests cover identity, swap, first, second, and Option matching.
 
 ## Changes Required
 

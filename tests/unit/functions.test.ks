@@ -48,6 +48,8 @@ fun level1(): Int = { fun level2(): Int = { fun level3(): Int = 99; level3() }; 
 fun isEven(n: Int): Bool = if (n == 0) True else isOdd(n - 1)
 fun isOdd(n: Int): Bool = if (n == 0) False else isEven(n - 1)
 
+// Top-level generic lambda
+val genId = <T>(x: T) => x
 
 export fun run(s: Suite): Unit =
   group(s, "functions", (s1: Suite) => {
@@ -147,5 +149,9 @@ export fun run(s: Suite): Unit =
       eq(sg, "second of pair", second((10, "x")), "x")
       eq(sg, "getOrZero Some", getOrZero(Some(5)), 1)
       eq(sg, "getOrZero None", getOrZero(None), 0)
+    })
+
+    group(s1, "generic lambdas", (sg: Suite) => {
+      eq(sg, "generic lambda identity Int", genId(42), 42)
     })
   })

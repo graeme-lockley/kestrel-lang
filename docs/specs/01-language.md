@@ -183,7 +183,7 @@ ExportSpec     ::= IDENT [ "as" IDENT ]
 
 TopLevelDecl   ::= FunDecl | TypeDecl | ExceptionDecl
 
-FunDecl        ::= [ "async" ] "fun" LOWER_IDENT "(" ParamList ")" ":" Type "=" Expr
+FunDecl        ::= [ "async" ] "fun" LOWER_IDENT [ "<" TypeParamList ">" ] "(" ParamList ")" ":" Type "=" Expr
 ParamList      ::= [ Param { "," Param } ]
 Param          ::= LOWER_IDENT [ ":" Type ]
 
@@ -295,7 +295,7 @@ Block          ::= "{" { BlockItem } Expr "}"
 BlockItem      ::= Stmt [ ";" | NL ]
 Stmt           ::= "val" LOWER_IDENT "=" Expr
                  | "var" LOWER_IDENT "=" Expr
-                 | "fun" LOWER_IDENT "(" ParamList ")" ":" Type "=" Expr
+                 | "fun" LOWER_IDENT [ "<" TypeParamList ">" ] "(" ParamList ")" ":" Type "=" Expr
                  | Expr ":=" Expr
 ```
 
