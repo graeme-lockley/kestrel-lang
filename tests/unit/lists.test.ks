@@ -10,12 +10,12 @@ fun head(xs: List<Int>): Int = match (xs) {
   h :: _ => h
 }
 
-fun length(xs: List<Int>): Int = match (xs) {
+fun length<T>(xs: List<T>): Int = match (xs) {
   [] => 0,
   _ :: tl => 1 + length(tl)
 }
 
-fun isEmpty(xs: List<Int>): Int = match (xs) { [] => 1, h :: t => 0 }
+fun isEmpty<T>(xs: List<T>): Int = match (xs) { [] => 1, h :: t => 0 }
 
 fun first(xs: List<Int>): Int = match (xs) { [] => 0, h :: t => h }
 
