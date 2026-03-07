@@ -113,7 +113,7 @@ Logical `&` and `|` in the language are short-circuit; the compiler emits branch
 | `END_TRY` | — | Pop try scope (reached when try block completes normally). |
 | `AWAIT` | — | Pop `Task<T>`; if complete, push result; else suspend current frame (01 §5). |
 
-**Language coverage:** `throw e`, `try { ... } catch (e) { ... }`, `await e`.
+**Language coverage:** `throw e`, `try { ... } catch (e) { ... }` or `try { ... } catch { ... }` (01 §4), `await e`.
 
 **Node-style async I/O:** No extra instructions are required. Async I/O (e.g. stdlib `readText`, `get`, `listen`) is expressed as **CALL** to a function that returns `Task<T>` (often a native/runtime function that starts non-blocking I/O and returns a suspended TASK), followed by **AWAIT** to suspend the current frame until the task completes. The runtime (05) completes the task when I/O finishes and resumes the frame. The ISA does not define how I/O or the event loop work—only that AWAIT suspends and the runtime later resumes.
 

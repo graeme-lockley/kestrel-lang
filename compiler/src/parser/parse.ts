@@ -199,6 +199,18 @@ class Parser {
       }
       return { kind: 'ExceptionDecl', name, fields };
     }
+    // After parseExport() consumes 'export', we are at 'exception'
+    if (this.at('keyword', 'exception')) {
+      this.advance();
+      const name = this.expect('ident').value!;
+      let fields: TypeField[] | undefined;
+      if (this.at('lbrace')) {
+        this.advance();
+        fields = this.parseTypeFieldList();
+        this.expect('rbrace');
+      }
+      return { kind: 'ExceptionDecl', name, fields };
+    }
     if (this.at('keyword', 'fun')) {
       return this.parseFunDecl(exported);
     }
@@ -745,12 +757,18 @@ class Parser {
       this.advance();
       const body = this.parseBlock();
       this.expect('keyword', 'catch');
-      this.expect('lparen');
-      const catchVar = this.expect('ident').value!;
-      this.expect('rparen');
+      let catchVar: string | null = null;
+      if (this.at('lparen')) {
+        this.advance();
+        catchVar = this.expect('ident').value!;
+        this.expect('rparen');
+      }
       this.expect('lbrace');
       const cases: Case[] = [];
-      while (!this.at('rbrace')) cases.push(this.parseCase());
+      while (!this.at('rbrace')) {
+        cases.push(this.parseCase());
+        if (this.at('comma')) this.advance();
+      }
       this.expect('rbrace');
       return { kind: 'TryExpr', body, catchVar, cases };
     }

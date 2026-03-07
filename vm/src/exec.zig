@@ -6,6 +6,30 @@ const gc_mod = @import("gc.zig");
 const load_mod = @import("load.zig");
 const primitives = @import("primitives.zig");
 
+/// 61-bit signed integer range (spec 05 §1): payload is 61 bits, so value must fit.
+const INT61_MIN: i64 = -(1 << 60);
+const INT61_MAX: i64 = (1 << 60) - 1;
+
+/// Allocate a 0-ary runtime exception ADT by type name (e.g. "DivideByZero", "ArithmeticOverflow").
+/// Returns null if the current module does not define an ADT with that name.
+fn allocRuntimeException(gc: *GC, module: *const load_mod.Module, name: []const u8) ?Value {
+    for (module.adts, 0..) |adt, adt_id| {
+        if (std.mem.eql(u8, adt.name, name)) {
+            const adt_obj = gc.allocObject(gc_mod.ADT_HEADER) catch return null;
+            @memset(adt_obj, 0);
+            adt_obj[0] = ADT_KIND;
+            adt_obj[1] = 0;
+            adt_obj[2] = 1;
+            std.mem.writeInt(u32, adt_obj[4..8], module.module_index, .little);
+            std.mem.writeInt(u32, adt_obj[8..12], @as(u32, @intCast(adt_id)), .little);
+            std.mem.writeInt(u32, adt_obj[12..16], 0, .little); // ctor 0
+            std.mem.writeInt(u32, adt_obj[16..20], 0, .little); // arity 0
+            return Value.ptr(@intFromPtr(adt_obj.ptr));
+        }
+    }
+    return null;
+}
+
 fn binopInt(stack: *[4096]Value, sp: *usize, op: *const fn (i64, i64) i64) void {
     if (sp.* >= 2) {
         const b = stack[sp.* - 1];
@@ -223,11 +247,35 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
     for (&handlers) |*h| h.* = .{ .handler_pc = 0, .stack_sp = 0, .frame_depth = 0 };
     var handler_sp: usize = 0;
 
+    // Pending runtime exception (overflow, divide-by-zero) to throw at next loop iteration
+    var pending_exception: ?Value = null;
+
     // Initialize GC
     var gc = GC.init(allocator);
     defer gc.deinit();
 
     while (pc < code.len) {
+        // Handle pending runtime exception (same semantics as THROW)
+        if (pending_exception) |exception| {
+            pending_exception = null;
+            if (handler_sp == 0) return;
+            handler_sp -= 1;
+            const handler = handlers[handler_sp];
+            frame_sp = handler.frame_depth;
+            const frame = call_frames[frame_sp];
+            current_module = frame.module;
+            code = current_module.code;
+            constants = current_module.constants;
+            functions = current_module.functions;
+            shapes = current_module.shapes;
+            current_locals = saved_locals[frame_sp][0..];
+            pc = handler.handler_pc;
+            sp = handler.stack_sp;
+            stack[sp] = exception;
+            sp += 1;
+            continue;
+        }
+
         // Periodic GC check — mark from stack and all call frames so we don't collect objects still in saved_locals
         if (gc.bytes_allocated >= gc.next_gc) {
             var local_slices: [max_frames + 1][]const Value = undefined;
@@ -619,11 +667,22 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct {
-                        fn f(a: i64, b: i64) i64 {
-                            return a + b;
+                    if (a_val.tag == .int and b_val.tag == .int) {
+                        const a = Value.intTo(a_val);
+                        const b = Value.intTo(b_val);
+                        var overflow = false;
+                        const sum = @addWithOverflow(a, b);
+                        if (sum[1] != 0 or sum[0] < INT61_MIN or sum[0] > INT61_MAX) overflow = true;
+                        if (overflow) {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                                pending_exception = exc;
+                            }
+                            sp -= 2;
+                            continue;
                         }
-                    }).f);
+                        stack[sp - 2] = Value.int(sum[0]);
+                        sp -= 1;
+                    }
                 }
             },
             SUB => {
@@ -638,11 +697,22 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct {
-                        fn f(a: i64, b: i64) i64 {
-                            return a - b;
+                    if (a_val.tag == .int and b_val.tag == .int) {
+                        const a = Value.intTo(a_val);
+                        const b = Value.intTo(b_val);
+                        var overflow = false;
+                        const diff = @subWithOverflow(a, b);
+                        if (diff[1] != 0 or diff[0] < INT61_MIN or diff[0] > INT61_MAX) overflow = true;
+                        if (overflow) {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                                pending_exception = exc;
+                            }
+                            sp -= 2;
+                            continue;
                         }
-                    }).f);
+                        stack[sp - 2] = Value.int(diff[0]);
+                        sp -= 1;
+                    }
                 }
             },
             MUL => {
@@ -657,11 +727,22 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct {
-                        fn f(a: i64, b: i64) i64 {
-                            return a * b;
+                    if (a_val.tag == .int and b_val.tag == .int) {
+                        const a = Value.intTo(a_val);
+                        const b = Value.intTo(b_val);
+                        var overflow = false;
+                        const prod = @mulWithOverflow(a, b);
+                        if (prod[1] != 0 or prod[0] < INT61_MIN or prod[0] > INT61_MAX) overflow = true;
+                        if (overflow) {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                                pending_exception = exc;
+                            }
+                            sp -= 2;
+                            continue;
                         }
-                    }).f);
+                        stack[sp - 2] = Value.int(prod[0]);
+                        sp -= 1;
+                    }
                 }
             },
             DIV => {
@@ -677,12 +758,27 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct {
-                        fn f(a: i64, b: i64) i64 {
-                            if (b == 0) return 0;
-                            return @divTrunc(a, b);
+                    if (a_val.tag == .int and b_val.tag == .int) {
+                        const b = Value.intTo(b_val);
+                        if (b == 0) {
+                            if (allocRuntimeException(&gc, current_module, "DivideByZero")) |exc| {
+                                pending_exception = exc;
+                            }
+                            sp -= 2;
+                            continue;
                         }
-                    }).f);
+                        const a = Value.intTo(a_val);
+                        const q = @divTrunc(a, b);
+                        if (q < INT61_MIN or q > INT61_MAX) {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                                pending_exception = exc;
+                            }
+                            sp -= 2;
+                            continue;
+                        }
+                        stack[sp - 2] = Value.int(q);
+                        sp -= 1;
+                    }
                 }
             },
             MOD => {
@@ -698,12 +794,27 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct {
-                        fn f(a: i64, b: i64) i64 {
-                            if (b == 0) return 0;
-                            return @mod(a, b);
+                    if (a_val.tag == .int and b_val.tag == .int) {
+                        const b = Value.intTo(b_val);
+                        if (b == 0) {
+                            if (allocRuntimeException(&gc, current_module, "DivideByZero")) |exc| {
+                                pending_exception = exc;
+                            }
+                            sp -= 2;
+                            continue;
                         }
-                    }).f);
+                        const a = Value.intTo(a_val);
+                        const r = @mod(a, b);
+                        if (r < INT61_MIN or r > INT61_MAX) {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                                pending_exception = exc;
+                            }
+                            sp -= 2;
+                            continue;
+                        }
+                        stack[sp - 2] = Value.int(r);
+                        sp -= 1;
+                    }
                 }
             },
             POW => {
@@ -719,11 +830,26 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct {
-                        fn f(a: i64, b: i64) i64 {
-                            return std.math.powi(i64, a, @intCast(b)) catch 0;
+                    if (a_val.tag == .int and b_val.tag == .int) {
+                        const a = Value.intTo(a_val);
+                        const b = Value.intTo(b_val);
+                        const pow_result = std.math.powi(i64, a, @intCast(b)) catch {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                                pending_exception = exc;
+                            }
+                            sp -= 2;
+                            continue;
+                        };
+                        if (pow_result < INT61_MIN or pow_result > INT61_MAX) {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                                pending_exception = exc;
+                            }
+                            sp -= 2;
+                            continue;
                         }
-                    }).f);
+                        stack[sp - 2] = Value.int(pow_result);
+                        sp -= 1;
+                    }
                 }
             },
             EQ => binopCmp(&stack, &sp, .eq),

@@ -401,6 +401,17 @@ catch (e) {
 }
 ```
 
+The catch variable is **optional**. You may write `catch { ... }` when the exception value is only used for pattern matching and not referred to by name:
+
+```
+try { risky() }
+catch {
+  DivideByZero => 0
+  ArithmeticOverflow => 0
+  _ => 1
+}
+```
+
 If no catch case matches the thrown value (e.g. no catch-all `_` or variable and no matching constructor pattern), the exception is **rethrown**: control leaves the catch block and the same exception propagates to the next enclosing handler (or terminates the program if none). Stack trace is accessed via the `Stack` module; see [02-stdlib.md](02-stdlib.md).
 
 ---

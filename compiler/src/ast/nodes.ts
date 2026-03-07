@@ -258,7 +258,8 @@ export interface Case extends NodeBase {
 export interface TryExpr extends NodeBase {
   kind: 'TryExpr';
   body: BlockExpr;
-  catchVar: string;
+  /** If present, the exception value is bound to this name in the catch block; if null, `catch { ... }` with no variable. */
+  catchVar: string | null;
   cases: Case[];
 }
 

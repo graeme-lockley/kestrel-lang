@@ -3,7 +3,7 @@
  * Covers: module initializer, top-level val/var, fun decls, literals, locals, calls.
  */
 import type { Program, Expr, TopLevelStmt } from '../ast/nodes.js';
-import type { FunDecl, FunStmt, ValDecl, VarDecl } from '../ast/nodes.js';
+import type { FunDecl, FunStmt, ValDecl, VarDecl, ExceptionDecl } from '../ast/nodes.js';
 import type { ConstantEntry } from '../bytecode/constants.js';
 import { ConstTag } from '../bytecode/constants.js';
 
@@ -1437,9 +1437,11 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       // Patch TRY instruction with handler offset (relative to TRY start)
       patchI32(tryPos + 1, handlerPos - tryPos);
 
-      // Exception value is on stack, bind to catch variable
+      // Exception value is on stack; store in slot for case matching; optionally bind to catch variable
       const excSlot = env.size;
-      env.set(expr.catchVar, excSlot);
+      if (expr.catchVar != null) {
+        env.set(expr.catchVar, excSlot);
+      }
       emitStoreLocal(excSlot);
 
       // Emit catch cases (similar to match)
@@ -1459,7 +1461,9 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         emitLoadConst(addConstant({ tag: ConstTag.Unit }));
       }
 
-      env.delete(expr.catchVar);
+      if (expr.catchVar != null) {
+        env.delete(expr.catchVar);
+      }
 
       // End: patch jump
       const endPos = codeOffset();
@@ -1622,6 +1626,20 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
           payloadTypeIndex: c.params.length === 0 ? 0xFFFFFFFF : 0,
         };
       }),
+    });
+  }
+
+  // Add exception declarations as single-constructor ADTs (so VM can throw by name, e.g. DivideByZero, ArithmeticOverflow)
+  const exceptionDecls = program.body.filter((n): n is ExceptionDecl => n != null && n.kind === 'ExceptionDecl');
+  for (const ed of exceptionDecls) {
+    const arity = ed.fields?.length ?? 0;
+    userCtorArityMap.set(ed.name, arity);
+    adts.push({
+      nameIndex: stringIndex(ed.name),
+      constructors: [{
+        nameIndex: stringIndex(ed.name),
+        payloadTypeIndex: arity === 0 ? 0xFFFFFFFF : 0,
+      }],
     });
   }
 
