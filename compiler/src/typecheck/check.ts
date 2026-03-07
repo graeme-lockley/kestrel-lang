@@ -523,7 +523,15 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         return result;
       }
       case 'LambdaExpr': {
-        const paramTs = expr.params.map((p) => p.type ? astTypeToInternal(p.type, typeAliases) : freshVar());
+        const scope = new Map<string, InternalType>();
+        if (expr.typeParams) {
+          for (const tp of expr.typeParams) {
+            scope.set(tp, freshVar());
+          }
+        }
+        const paramTs = expr.params.map((p) =>
+          p.type ? astTypeToInternalWithScope(p.type, scope, typeAliases) : freshVar()
+        );
         for (let i = 0; i < expr.params.length; i++) {
           env.set(expr.params[i]!.name, paramTs[i]!);
         }

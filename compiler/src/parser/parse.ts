@@ -49,6 +49,10 @@ class Parser {
     return this.i;
   }
 
+  private peek(offset = 1): Token {
+    return this.tokens[this.i + offset] ?? this.tokens[this.tokens.length - 1]!;
+  }
+
   private current(): Token {
     return this.tokens[this.i] ?? this.tokens[this.tokens.length - 1]!;
   }
@@ -610,7 +614,44 @@ class Parser {
       const operand = this.parseUnary();
       return { kind: 'UnaryExpr', op, operand };
     }
+    if (this.at('op', '<')) {
+      const pos = this.pos();
+      this.advance();
+      if (this.at('ident')) {
+        let isValid = true;
+        while (this.at('ident') || this.at('comma')) {
+          if (this.at('comma')) {
+            this.advance();
+            if (!this.at('ident')) {
+              isValid = false;
+              break;
+            }
+          } else {
+            this.advance();
+          }
+        }
+        if (isValid && this.at('op', '>') && this.peek(1).kind === 'lparen') {
+          this.i = pos;
+          return this.parseGenericLambda();
+        }
+      }
+      this.i = pos;
+    }
     return this.parsePrimary();
+  }
+
+  private parseGenericLambda(): Expr {
+    this.expect('op', '<');
+    const typeParams = [this.expect('ident').value!];
+    while (this.at('comma')) {
+      this.advance();
+      typeParams.push(this.expect('ident').value!);
+    }
+    this.expect('op', '>');
+    this.expect('lparen');
+    const params = this.parseParamList();
+    this.expect('op', '=>');
+    return { kind: 'LambdaExpr', typeParams, params, body: this.parseExpr() };
   }
 
   private parsePrimary(): Expr {
@@ -713,6 +754,21 @@ class Parser {
           this.advance();
           return { kind: 'LambdaExpr', params, body: this.parseExpr() };
         }
+      }
+      this.i = pos;
+      if (this.at('op', '<')) {
+        this.advance();
+        const typeParams = [this.expect('ident').value!];
+        while (this.at('comma')) {
+          this.advance();
+          typeParams.push(this.expect('ident').value!);
+        }
+        this.expect('op', '>');
+        this.expect('lparen');
+        const params2 = this.parseParamList();
+        this.expect('rparen');
+        this.expect('op', '=>');
+        return { kind: 'LambdaExpr', typeParams, params: params2, body: this.parseExpr() };
       }
       this.i = pos;
       const first = this.parseExpr();
