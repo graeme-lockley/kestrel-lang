@@ -262,7 +262,7 @@ ListPatInner   ::= "..." LOWER_IDENT                                            
                  | Pattern { "," Pattern } [ "," "..." LOWER_IDENT ]                 /* elements, optional rest last */
 
 TryExpr        ::= "try" Block "catch" "(" LOWER_IDENT ")" "{" Case { Case } "}"
-Lambda         ::= "(" ParamList ")" "=>" Expr
+Lambda         ::= [ "<" IDENT { "," IDENT } ">" ] "(" ParamList ")" "=>" Expr
 
 Primary        ::= [ "await" ] Atom { Suffix }
 Atom           ::= Literal
