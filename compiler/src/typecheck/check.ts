@@ -474,6 +474,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         for (const stmt of expr.stmts) {
           if (stmt.kind === 'FunStmt') {
             const scope = new Map<string, InternalType>();
+            if (stmt.typeParams) {
+              for (const tp of stmt.typeParams) {
+                scope.set(tp, freshVar());
+              }
+            }
             const paramTs = stmt.params.map((p) =>
               p.type ? astTypeToInternalWithScope(p.type, scope, typeAliases) : freshVar()
             );
@@ -625,6 +630,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           if (pattern.kind === 'VarPattern') {
             env.set(pattern.name, patternType);
             bound.push(pattern.name);
+          } else if (pattern.kind === 'TuplePattern') {
+            const applied = apply(patternType);
+            if (applied.kind === 'tuple' && applied.elements.length === pattern.elements.length) {
+              for (let i = 0; i < pattern.elements.length; i++) {
+                bound.push(...bindPattern(pattern.elements[i]!, applied.elements[i]!));
+              }
+            }
           } else if (pattern.kind === 'ConsPattern') {
             const applied = apply(patternType);
             if (applied.kind === 'app' && applied.name === 'List' && applied.args.length === 1) {
@@ -846,6 +858,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       if (primary != null) currentExpr = primary;
       if (node.kind === 'FunDecl') {
         const sigScope = new Map<string, InternalType>();
+        if (node.typeParams) {
+          for (const tp of node.typeParams) {
+            sigScope.set(tp, freshVar());
+          }
+        }
         const paramTs = node.params.map((p) =>
           p.type ? astTypeToInternalWithScope(p.type, sigScope, typeAliases) : freshVar()
         );
@@ -931,22 +948,24 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           env.set(node.name, aliasType);
           typeAliases.set(node.name, aliasType);
         } else if (node.body.kind === 'ADTBody') {
-          // Create a nominal type for the ADT (app type with no args for now)
-          const adtType = { kind: 'app' as const, name: node.name, args: [] };
+          const adtTypeParams = (node.typeParams || []).map(() => freshVar());
+          const adtType = { kind: 'app' as const, name: node.name, args: adtTypeParams };
           env.set(node.name, adtType);
           typeAliases.set(node.name, adtType);
           
-          // Register each constructor as a function (or value for nullary) in the environment
+          const adtScope = new Map<string, InternalType>();
+          for (let i = 0; i < (node.typeParams || []).length; i++) {
+            adtScope.set(node.typeParams![i], adtTypeParams[i]);
+          }
+          
           for (const ctor of node.body.constructors) {
-            const paramTypes = ctor.params.map(p => astTypeToInternal(p));
-            // Nullary constructors are values of the ADT type, not functions
+            const paramTypes = ctor.params.map(p => astTypeToInternalWithScope(p, adtScope, typeAliases));
             const ctorType = paramTypes.length === 0 
               ? adtType 
               : { kind: 'arrow' as const, params: paramTypes, return: adtType };
             env.set(ctor.name, ctorType);
           }
           
-          // Store constructor info for exhaustiveness checking
           adtConstructors.set(node.name, node.body.constructors.map(c => ({ name: c.name, arity: c.params.length })));
         }
       } else if (node.kind === 'ValStmt') {

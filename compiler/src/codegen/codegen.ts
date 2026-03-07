@@ -1365,8 +1365,28 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           emitStoreLocal(slot);
           emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
           env.delete(firstCase.pattern.name);
+        } else if (firstCase && firstCase.pattern.kind === 'TuplePattern') {
+          const scrutineeType = getInferredType(expr.scrutinee);
+          if (scrutineeType?.kind === 'tuple' && scrutineeType.elements.length === firstCase.pattern.elements.length) {
+            for (let i = 0; i < firstCase.pattern.elements.length; i++) {
+              const elemPat = firstCase.pattern.elements[i]!;
+              if (elemPat.kind === 'VarPattern') {
+                const slot = env.size;
+                env.set(elemPat.name, slot);
+                emitLoadLocal(scrutineeSlot);
+                emitGetField(i);
+                emitStoreLocal(slot);
+              }
+            }
+            emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            for (const elemPat of firstCase.pattern.elements) {
+              if (elemPat.kind === 'VarPattern') env.delete(elemPat.name);
+            }
+          } else {
+            emitExpr(firstCase?.body || { kind: 'LiteralExpr', literal: 'unit', value: { kind: 'unit' } }, env, funNameToId, shapes, adts, captures, varNames);
+          }
         } else {
-          emitExpr(firstCase?.body || { kind: 'LitExpr', value: { kind: 'unit' } }, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(firstCase?.body || { kind: 'LiteralExpr', literal: 'unit', value: { kind: 'unit' } }, env, funNameToId, shapes, adts, captures, varNames);
         }
         env.delete('$scrutinee');
       }

@@ -130,4 +130,22 @@ export fun run(s: Suite): Unit =
       // By-reference var: closure and block share same mutable cell
       eq(sg, "by-ref var inc() + inc()", { var n = 0; fun inc(): Int = { n := n + 1; n }; inc() + inc() }, 3)
     })
+
+    // Generic functions with type parameters
+    fun identity<T>(x: T): T = x
+    fun swap<T, U>(a: T, b: U): (U, T) = (b, a)
+    fun first<T, U>(p: (T, U)): T = match (p) { (x, y) => x }
+    fun second<T, U>(p: (T, U)): U = match (p) { (x, y) => y }
+
+    // Generic function with Option (built-in ADT)
+    fun getOrZero<T>(o: Option<T>): Int = match (o) { None => 0, Some(v) => 1 }
+
+    group(s1, "generic functions", (sg: Suite) => {
+      eq(sg, "identity Int", identity(42), 42)
+      eq(sg, "swap types", swap(1, "a"), ("a", 1))
+      eq(sg, "first of pair", first((10, "x")), 10)
+      eq(sg, "second of pair", second((10, "x")), "x")
+      eq(sg, "getOrZero Some", getOrZero(Some(5)), 1)
+      eq(sg, "getOrZero None", getOrZero(None), 0)
+    })
   })
