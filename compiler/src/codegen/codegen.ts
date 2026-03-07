@@ -687,75 +687,22 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       blockEnv.set('\x00_closure', closureTemp);
       blockEnv.set('\x00_unit', unitTemp);
 
-      // Phase 1: process only non-FunStmt (val, var, expr, assign)
-      for (const stmt of expr.stmts) {
-        if (stmt.kind === 'ValStmt') {
-          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-          const slot = blockEnv.size;
-          blockEnv.set(stmt.name, slot);
-          emitStoreLocal(slot);
-        } else if (stmt.kind === 'VarStmt') {
-          if (!shapes) break;
-          const refShapeId = getRefShapeId(shapes, stringIndex);
-          const slot = blockEnv.size;
-          blockEnv.set(stmt.name, slot);
-          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-          emitAllocRecord(refShapeId);
-          emitStoreLocal(slot);
-        } else if (stmt.kind === 'ExprStmt') {
-          emitExpr(stmt.expr, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-          const discardSlot = blockEnv.get('$discard');
-          if (discardSlot !== undefined) emitStoreLocal(discardSlot);
-        } else if (stmt.kind === 'AssignStmt') {
-          const target = stmt.target;
-          if (target.kind === 'FieldExpr') {
-            const objType = getInferredType(target.object);
-            let fieldSlot = -1;
-            if (objType?.kind === 'record') {
-              fieldSlot = objType.fields.findIndex((f) => f.name === target.field);
-            }
-            if (fieldSlot >= 0) {
-              emitExpr(target.object, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-              emitSetField(fieldSlot);
-            }
-          } else if (target.kind === 'IdentExpr') {
-            const cap = captures?.get(target.name);
-            if (cap?.isVar) {
-              emitLoadLocal(0);
-              emitGetField(cap.index);
-              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-              emitSetField(0);
-              const discardSlotCap = blockEnv.get('$discard');
-              if (discardSlotCap !== undefined) emitStoreLocal(discardSlotCap);
-            } else {
-              const localSlot = blockEnv.get(target.name);
-              if (localSlot !== undefined && nextVarNames.has(target.name)) {
-                emitLoadLocal(localSlot);
-                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-                emitSetField(0);
-                const discardSlot = blockEnv.get('$discard');
-                if (discardSlot !== undefined) emitStoreLocal(discardSlot);
-              } else {
-                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-                if (localSlot !== undefined) {
-                  emitStoreLocal(localSlot);
-                } else {
-                  const gSlot = moduleGlobals.get(target.name);
-                  if (gSlot !== undefined) {
-                    emitStoreGlobal(gSlot);
-                  }
-                }
-              }
-            }
-          }
-        }
-        // FunStmt skipped in phase 1
-      }
-      // Phase 2: emit FunStmt (single-fun = current behavior, 2+ funs = mutual recursion)
+      // Phase 1: iterate stmts in source order, emitting val/var/expr/assign as they appear.
+      // FunStmt closures (Phase 2) are emitted lazily: the moment the first ExprStmt or
+      // AssignStmt is reached that follows at least one FunStmt in source order, Phase 2 runs
+      // inline so FunStmt closures are ready before any stmt that might reference them.
+      // If no such stmt exists (FunStmts only precede the result expr), Phase 2 runs after the loop.
+      const mutualFunNames: string[] = [];
+      let seenFunStmtInSource = false;
+      let phase2Emitted = false;
+
+      const emitPhase2 = () => {
+        if (phase2Emitted) return;
+        phase2Emitted = true;
       if (funStmts.length >= 2 && shapes) {
         // Mutual recursion: one shared record, same shape for all closures
         const funNames = funStmts.map((s) => s.name);
+        mutualFunNames.push(...funNames);
         const otherFreeSet = new Set<string>();
         for (const s of funStmts) {
           const paramNames = new Set(s.params.map((p) => p.name));
@@ -839,21 +786,6 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           emitLoadLocal(sharedRecordTemp);
           emitGetField(i);
           emitStoreLocal(slot);
-        }
-        // Emit result: if it's a call to one of our mutual-recursion funs, load callee from record
-        const result = expr.result;
-        if (
-          result.kind === 'CallExpr' &&
-          result.callee.kind === 'IdentExpr' &&
-          funNames.includes(result.callee.name)
-        ) {
-          const fieldIndex = funNames.indexOf(result.callee.name);
-          emitLoadLocal(sharedRecordTemp);
-          emitGetField(fieldIndex);
-          for (const arg of result.args) emitExpr(arg, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-          emitCallIndirect(result.args.length);
-        } else {
-          emitExpr(expr.result, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
         }
       } else {
         // Single fun or no fun: process each FunStmt with current behavior
@@ -943,7 +875,93 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             emitStoreLocal(slot);
           }
         }
-        emitExpr(expr.result, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+      }
+      };
+
+      for (const stmt of expr.stmts) {
+        if (stmt.kind === 'ValStmt') {
+          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          const slot = blockEnv.size;
+          blockEnv.set(stmt.name, slot);
+          emitStoreLocal(slot);
+        } else if (stmt.kind === 'VarStmt') {
+          if (!shapes) break;
+          const refShapeId = getRefShapeId(shapes, stringIndex);
+          const slot = blockEnv.size;
+          blockEnv.set(stmt.name, slot);
+          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          emitAllocRecord(refShapeId);
+          emitStoreLocal(slot);
+        } else if (stmt.kind === 'ExprStmt') {
+          if (seenFunStmtInSource) emitPhase2();
+          emitExpr(stmt.expr, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          const discardSlot = blockEnv.get('$discard');
+          if (discardSlot !== undefined) emitStoreLocal(discardSlot);
+        } else if (stmt.kind === 'AssignStmt') {
+          if (seenFunStmtInSource) emitPhase2();
+          const target = stmt.target;
+          if (target.kind === 'FieldExpr') {
+            const objType = getInferredType(target.object);
+            let fieldSlot = -1;
+            if (objType?.kind === 'record') {
+              fieldSlot = objType.fields.findIndex((f) => f.name === target.field);
+            }
+            if (fieldSlot >= 0) {
+              emitExpr(target.object, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+              emitSetField(fieldSlot);
+            }
+          } else if (target.kind === 'IdentExpr') {
+            const cap = captures?.get(target.name);
+            if (cap?.isVar) {
+              emitLoadLocal(0);
+              emitGetField(cap.index);
+              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+              emitSetField(0);
+              const discardSlotCap = blockEnv.get('$discard');
+              if (discardSlotCap !== undefined) emitStoreLocal(discardSlotCap);
+            } else {
+              const localSlot = blockEnv.get(target.name);
+              if (localSlot !== undefined && nextVarNames.has(target.name)) {
+                emitLoadLocal(localSlot);
+                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+                emitSetField(0);
+                const discardSlot = blockEnv.get('$discard');
+                if (discardSlot !== undefined) emitStoreLocal(discardSlot);
+              } else {
+                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+                if (localSlot !== undefined) {
+                  emitStoreLocal(localSlot);
+                } else {
+                  const gSlot = moduleGlobals.get(target.name);
+                  if (gSlot !== undefined) {
+                    emitStoreGlobal(gSlot);
+                  }
+                }
+              }
+            }
+          }
+        } else if (stmt.kind === 'FunStmt') {
+          seenFunStmtInSource = true;
+        }
+      }
+      emitPhase2();
+      {
+        const result = expr.result;
+        if (
+          mutualFunNames.length > 0 &&
+          result.kind === 'CallExpr' &&
+          result.callee.kind === 'IdentExpr' &&
+          mutualFunNames.includes(result.callee.name)
+        ) {
+          const fieldIndex = mutualFunNames.indexOf(result.callee.name);
+          emitLoadLocal(sharedRecordTemp);
+          emitGetField(fieldIndex);
+          for (const arg of result.args) emitExpr(arg, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          emitCallIndirect(result.args.length);
+        } else {
+          emitExpr(expr.result, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+        }
       }
       break;
     }
