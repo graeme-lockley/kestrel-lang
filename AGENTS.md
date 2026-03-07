@@ -173,6 +173,29 @@ describe('tokenize', () => {
 
 ---
 
+## Quality Standards
+
+### Tests are Mandatory
+- **All Kestrel changes must update unit tests** in `tests/unit/*.test.ks`
+- Run tests with: `./scripts/kestrel test`
+- New features should include test cases in the appropriate test file
+- Bug fixes should include regression tests
+
+### Specs are Mandatory
+- **All Kestrel changes must review and update relevant specs** in `docs/specs/`
+- Before implementing: check if the feature is documented in specs
+- After implementing: update the spec to reflect the new behavior
+- Specs should be accurate at all times - they are the source of truth
+
+### Change Checklist
+Before marking a task complete:
+- [ ] Unit tests pass (`./scripts/kestrel test`)
+- [ ] Compiler tests pass (`cd compiler && npm test`)
+- [ ] VM tests pass (`cd vm && zig build test`)
+- [ ] Relevant specs updated (if applicable)
+
+---
+
 ## Kanban Workflow (from Cursor rules)
 
 Stories live in `docs/kanban/` with folders: **unplanned**, **backlog**, **doing**, **done**.
