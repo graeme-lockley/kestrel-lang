@@ -15,12 +15,12 @@ When THROW executes inside a nested CALL that is deeper than where the TRY handl
 
 ## Acceptance Criteria
 
-- [ ] When THROW finds a handler, restore `frame_sp` to `handler.frame_depth`.
-- [ ] Re-sync `current_module`, `code`, `constants`, `functions`, `shapes`, and `current_locals` from the restored frame.
-- [ ] Ensure the exception value is correctly pushed onto the stack after restoring state.
-- [ ] Add Kestrel test: throw from a deeply nested function call, catch at the outer level, verify correct value and continued execution.
-- [ ] Add Kestrel test: throw from within a closure called inside try, catch correctly.
-- [ ] Add Kestrel test: multiple nested try/catch blocks with throws at different depths.
+- [x] When THROW finds a handler, restore `frame_sp` to `handler.frame_depth`.
+- [x] Re-sync `current_module`, `code`, `constants`, `functions`, `shapes`, and `current_locals` from the restored frame.
+- [x] Ensure the exception value is correctly pushed onto the stack after restoring state.
+- [x] Add Kestrel test: throw from a deeply nested function call, catch at the outer level, verify correct value and continued execution.
+- [x] Add Kestrel test: throw from within a closure called inside try, catch correctly.
+- [x] Add Kestrel test: multiple nested try/catch blocks with throws at different depths.
 
 ## Spec References
 

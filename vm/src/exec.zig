@@ -111,7 +111,7 @@ fn valueToF64(v: Value) ?f64 {
     if (addr == 0) return null;
     const base = @as([*]const u8, @ptrFromInt(addr));
     if (base[0] != FLOAT_KIND) return null;
-    return @as(*const f64, @alignCast(@ptrCast(base + gc_mod.FLOAT_HEADER))).*;
+    return @as(*const f64, @ptrCast(@alignCast(base + gc_mod.FLOAT_HEADER))).*;
 }
 const max_locals = 128;
 const max_handlers = 32;
@@ -619,7 +619,11 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a + b; } }).f);
+                    binopInt(&stack, &sp, (struct {
+                        fn f(a: i64, b: i64) i64 {
+                            return a + b;
+                        }
+                    }).f);
                 }
             },
             SUB => {
@@ -634,7 +638,11 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a - b; } }).f);
+                    binopInt(&stack, &sp, (struct {
+                        fn f(a: i64, b: i64) i64 {
+                            return a - b;
+                        }
+                    }).f);
                 }
             },
             MUL => {
@@ -649,7 +657,11 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return a * b; } }).f);
+                    binopInt(&stack, &sp, (struct {
+                        fn f(a: i64, b: i64) i64 {
+                            return a * b;
+                        }
+                    }).f);
                 }
             },
             DIV => {
@@ -665,7 +677,12 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { if (b == 0) return 0; return @divTrunc(a, b); } }).f);
+                    binopInt(&stack, &sp, (struct {
+                        fn f(a: i64, b: i64) i64 {
+                            if (b == 0) return 0;
+                            return @divTrunc(a, b);
+                        }
+                    }).f);
                 }
             },
             MOD => {
@@ -681,7 +698,12 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { if (b == 0) return 0; return @mod(a, b); } }).f);
+                    binopInt(&stack, &sp, (struct {
+                        fn f(a: i64, b: i64) i64 {
+                            if (b == 0) return 0;
+                            return @mod(a, b);
+                        }
+                    }).f);
                 }
             },
             POW => {
@@ -697,7 +719,11 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             continue;
                         }
                     }
-                    binopInt(&stack, &sp, (struct { fn f(a: i64, b: i64) i64 { return std.math.powi(i64, a, @intCast(b)) catch 0; } }).f);
+                    binopInt(&stack, &sp, (struct {
+                        fn f(a: i64, b: i64) i64 {
+                            return std.math.powi(i64, a, @intCast(b)) catch 0;
+                        }
+                    }).f);
                 }
             },
             EQ => binopCmp(&stack, &sp, .eq),
@@ -733,7 +759,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 std.mem.writeInt(u32, rec[4..8], current_module.module_index, .little);
                 std.mem.writeInt(u32, rec[8..12], shape_id, .little);
                 std.mem.writeInt(u32, rec[12..16], n, .little);
-                const fields_ptr = @as([*]Value, @alignCast(@ptrCast(rec.ptr + gc_mod.RECORD_HEADER)));
+                const fields_ptr = @as([*]Value, @ptrCast(@alignCast(rec.ptr + gc_mod.RECORD_HEADER)));
                 var i: usize = 0;
                 while (i < n) : (i += 1) {
                     fields_ptr[i] = stack[sp - n + i];
@@ -755,7 +781,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 const kind = base[0];
                 const header_size: usize = if (kind == gc_mod.ADT_KIND) gc_mod.ADT_HEADER else gc_mod.RECORD_HEADER;
                 const field_offset = header_size + slot * 8;
-                const field_ptr = @as(*const Value, @alignCast(@ptrCast(base + field_offset)));
+                const field_ptr = @as(*const Value, @ptrCast(@alignCast(base + field_offset)));
                 stack[sp] = field_ptr.*;
                 sp += 1;
             },
@@ -772,7 +798,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 const kind = base[0];
                 const header_size: usize = if (kind == gc_mod.ADT_KIND) gc_mod.ADT_HEADER else gc_mod.RECORD_HEADER;
                 const field_offset = header_size + slot * 8;
-                const field_ptr = @as(*Value, @alignCast(@ptrCast(base + field_offset)));
+                const field_ptr = @as(*Value, @ptrCast(@alignCast(base + field_offset)));
                 field_ptr.* = val;
                 stack[sp] = Value.unit();
                 sp += 1;
@@ -800,8 +826,8 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 std.mem.writeInt(u32, rec[4..8], current_module.module_index, .little);
                 std.mem.writeInt(u32, rec[8..12], shape_id, .little);
                 std.mem.writeInt(u32, rec[12..16], extended_count, .little);
-                const new_fields_ptr = @as([*]Value, @alignCast(@ptrCast(rec.ptr + gc_mod.RECORD_HEADER)));
-                const base_fields_ptr = @as([*]const Value, @alignCast(@ptrCast(base_ptr + gc_mod.RECORD_HEADER)));
+                const new_fields_ptr = @as([*]Value, @ptrCast(@alignCast(rec.ptr + gc_mod.RECORD_HEADER)));
+                const base_fields_ptr = @as([*]const Value, @ptrCast(@alignCast(base_ptr + gc_mod.RECORD_HEADER)));
                 var i: usize = 0;
                 while (i < base_field_count) : (i += 1) {
                     new_fields_ptr[i] = base_fields_ptr[i];
@@ -830,7 +856,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 std.mem.writeInt(u32, adt[8..12], adt_id, .little);
                 std.mem.writeInt(u32, adt[12..16], ctor, .little);
                 std.mem.writeInt(u32, adt[16..20], arity, .little);
-                const fields_ptr = @as([*]Value, @alignCast(@ptrCast(adt.ptr + gc_mod.ADT_HEADER)));
+                const fields_ptr = @as([*]Value, @ptrCast(@alignCast(adt.ptr + gc_mod.ADT_HEADER)));
                 var i: usize = 0;
                 while (i < arity) : (i += 1) {
                     fields_ptr[i] = stack[sp - arity + i];
@@ -902,8 +928,21 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 // Pop handler and restore state
                 handler_sp -= 1;
                 const handler = handlers[handler_sp];
+
+                // Restore frame state to where TRY was executed
+                frame_sp = handler.frame_depth;
+                const frame = call_frames[frame_sp];
+                current_module = frame.module;
+                code = current_module.code;
+                constants = current_module.constants;
+                functions = current_module.functions;
+                shapes = current_module.shapes;
+                current_locals = saved_locals[frame_sp][0..];
+
+                // Restore stack pointer and PC
                 pc = handler.handler_pc;
                 sp = handler.stack_sp;
+
                 // Push exception value for catch block
                 stack[sp] = exception;
                 sp += 1;
@@ -963,7 +1002,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
 
                 if (status == 1) {
                     // Task completed: push result
-                    const result_ptr = @as(*const Value, @alignCast(@ptrCast(base + 8)));
+                    const result_ptr = @as(*const Value, @ptrCast(@alignCast(base + 8)));
                     stack[sp] = result_ptr.*;
                     sp += 1;
                 } else {
