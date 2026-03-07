@@ -9,7 +9,7 @@ println(message2())
 hello := "hello"
 
 println({a = 1, b = hello})
-println([1, 2, 3, "123", 5])
+println([1, 2, 3, 123, 5])
 println(Some("hello"))
 
 // --- Var captured by reference: closure and block share the same storage ---
