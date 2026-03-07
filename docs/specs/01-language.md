@@ -66,7 +66,7 @@ The following are **reserved** and may not be used as identifiers:
 
 ```
 fun type val var mut if else match try catch throw async await
-export import from exception is True False
+export import from exception is opaque True False
 ```
 
 `True` and `False` are boolean literals; the rest are syntactic keywords.
@@ -178,6 +178,7 @@ ImportSpec     ::= IDENT [ "as" IDENT ]
 ExportDecl     ::= "export" (TopLevelDecl
                      | "*" "from" STRING
                      | "{" ExportSpec { "," ExportSpec } "}" "from" STRING)
+                 | "opaque" TypeDecl
 ExportSpec     ::= IDENT [ "as" IDENT ]
 
 TopLevelDecl   ::= FunDecl | TypeDecl | ExceptionDecl
@@ -186,11 +187,27 @@ FunDecl        ::= [ "async" ] "fun" LOWER_IDENT "(" ParamList ")" ":" Type "=" 
 ParamList      ::= [ Param { "," Param } ]
 Param          ::= LOWER_IDENT [ ":" Type ]
 
-TypeDecl       ::= "type" UPPER_IDENT "=" Type
+TypeDecl       ::= [ "opaque" ] "type" UPPER_IDENT [ "<" TypeParamList ">" ] "=" TypeBody
+TypeBody       ::= Type                                         /* type alias */
+                 | Constructor { "|" Constructor }              /* ADT definition */
+Constructor    ::= UPPER_IDENT [ "(" TypeList ")" ]             /* 0 or more positional payload types */
+TypeParamList  ::= UPPER_IDENT { "," UPPER_IDENT }
 ExceptionDecl  ::= "export" "exception" UPPER_IDENT [ "{" TypeFieldList "}" ]
 ```
 
 **Program order:** **Imports** must appear first (after an optional shebang). All `ImportDecl` are parsed before any declaration or statement. Thereafter **declarations** (exports, functions, types, exceptions) and **top-level statements** may be interleaved in any order. Declarations are visible for the whole module (hoisted). Top-level statements are executed **serially** in source order when the module is run—e.g. as the body of a script. A file that begins with a shebang is typically executed as the entry point. An empty program (shebang only, or no imports, declarations, or statements) is valid and denotes a module that does nothing when run.
+
+**Type visibility:** Type declarations have three visibility levels:
+
+- **Local** (no qualifier): `type Foo = ...` — the type and its constructors are visible only within the declaring module.
+- **Opaque** (`opaque type`): `opaque type Foo = ...` — the type **name** is exported (importers can use `Foo` in type signatures and hold values), but the **structure** is hidden. Importers cannot construct values, destructure, or pattern-match on the type. The declaring module has full access.
+- **Exported** (`export type`): `export type Foo = ...` — both the type name and constructors/structure are fully exported. Importers can construct, destructure, and pattern-match.
+
+**ADT definitions:** A type body is an ADT definition when the right-hand side of `=` is one or more UPPER_IDENT constructors separated by `|`. Each constructor may take zero or more positional payload types in parentheses. Constructors are functions: a nullary constructor `Red` has type `Color`; a constructor `Some(T)` has type `(T) -> Option<T>`; a constructor `Node(Tree, Tree)` has type `(Tree, Tree) -> Tree`. Constructor application uses the standard call syntax: `Some(10)`, `Node(left, right)`. Pattern matching uses the same syntax: `Some(x) => ...`, `Node(l, r) => ...`. If named fields are desired, use a record type as the payload: `MkPerson({ name: String, age: Int })`.
+
+**Type alias vs ADT disambiguation:** If the right-hand side of `=` starts with an UPPER_IDENT followed by `|` or `(`, or is a `|`-separated list of UPPER_IDENTs (possibly with parenthesized payloads), it is parsed as an ADT definition. Otherwise it is a type alias. Examples: `type Color = Red | Green | Blue` (ADT), `type Pair = { x: Int, y: Int }` (type alias), `type Id = Int` (type alias).
+
+**Top-level recursion (types):** Every top-level type name is in scope in the body of every top-level type declaration. Thus a type may reference itself (self-recursion, e.g. `type Tree = Leaf(Int) | Node(Tree, Tree)`) or reference any other top-level type (mutual recursion, e.g. `type Expr = ... | IfExpr(BoolExpr, Expr, Expr)` where `BoolExpr` is another type in the same module). Declaration order does not affect name resolution for type references.
 
 **Top-level recursion:** Every top-level function name is in scope in the body of every top-level function. Thus a function may call itself (self-recursion) or call any other top-level function (mutual recursion); declaration order does not affect name resolution for function calls.
 
@@ -233,7 +250,7 @@ Case           ::= Pattern "=>" Expr
 Pattern        ::= ConsPattern | NonConsPattern
 ConsPattern    ::= NonConsPattern "::" Pattern                                     /* list cons; right-associative */
 NonConsPattern ::= "_"
-                 | UPPER_IDENT [ "{" [ PatternField { "," PatternField } ] "}" ]   /* constructor */
+                 | UPPER_IDENT [ "(" Pattern { "," Pattern } ")" ]                   /* constructor with positional args */
                  | ListPattern
                  | LOWER_IDENT                                                       /* variable binding */
                  | INTEGER
@@ -243,7 +260,6 @@ NonConsPattern ::= "_"
 ListPattern    ::= "[" [ ListPatInner ] "]"                                         /* list; rest only as last */
 ListPatInner   ::= "..." LOWER_IDENT                                                /* bind whole list to rest */
                  | Pattern { "," Pattern } [ "," "..." LOWER_IDENT ]                 /* elements, optional rest last */
-PatternField   ::= LOWER_IDENT [ "=" Pattern ]
 
 TryExpr        ::= "try" Block "catch" "(" LOWER_IDENT ")" "{" Case { Case } "}"
 Lambda         ::= "(" ParamList ")" "=>" Expr

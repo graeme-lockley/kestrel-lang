@@ -135,6 +135,45 @@ So `x` is treated as both its original type and `T` in that block. The grammar f
 
 Exhaustiveness is decidable for finite ADTs and union types; the compiler must check it so that no runtime tag is left unhandled (04 MATCH, 05 ADT).
 
+### 5.1 User-defined ADTs
+
+**ADT definition** (01 §3.1): `type T = C1(T1,...) | C2(T1,...) | ...` introduces a new type `T` with named constructors. Each constructor is a function:
+
+- **Nullary** constructor `C` has type `T` (a constant value of type `T`).
+- **Unary** constructor `C(A)` has type `(A) -> T`.
+- **N-ary** constructor `C(A1, ..., An)` has type `(A1, ..., An) -> T`.
+
+Constructors are in scope wherever the type name is in scope (module-level or imported; see opaque rules in §5.3).
+
+**Constructor application** uses standard call syntax: `Some(42)`, `Node(left, right)`. For nullary constructors, no parentheses: `None`, `Red`.
+
+**Pattern matching** on user-defined ADTs uses the same constructor syntax: `Some(x) => ...`, `Node(l, r) => ...`, `Red => ...`. Pattern variables bind to the positional payload values.
+
+**Exhaustiveness** for user-defined ADTs: the compiler builds a **constructor registry** from type declarations mapping each ADT name to the set of its constructors. When `match (e) { ... }` has `e` of a user-defined ADT type, every constructor must be covered by at least one case, or a catch-all (`_` or variable) must be present.
+
+### 5.2 Recursive and mutually recursive types
+
+All type names declared at the same scope level (top-level or within a block) are in scope for all type bodies at that level, regardless of declaration order. This enables:
+
+- **Self-recursive types**: `type Tree = Leaf(Int) | Node(Tree, Tree)` — the reference to `Tree` in `Node(Tree, Tree)` resolves to the type being defined.
+- **Mutually recursive types**: `type Expr = Lit(Int) | Add(Expr, Expr) | IfExpr(BoolExpr, Expr, Expr)` and `type BoolExpr = BTrue | BFalse | Eq(Expr, Expr)` — each references the other.
+
+The implementation uses a two-pass approach: (1) forward-declare all type names, (2) process all type bodies. Standard unification occurs-check is relaxed for named ADT self-references (the recursion is guarded by constructors and structurally well-founded). Infinite type aliases (e.g., `type Bad = Bad` or `type Loop = List<Loop>`) are rejected.
+
+### 5.3 Opaque types
+
+**Opaque type** (01 §3.1): `opaque type T = ...` exports the type name `T` but hides the internal structure from importers.
+
+**Within the declaring module:** Full access. Constructors are in scope, pattern matching is allowed, the underlying type (for aliases) is visible. No restrictions.
+
+**For importing modules:**
+
+- **Opaque ADT** (e.g., `opaque type Token = Num(Int) | Op(String)`): The type name `Token` is available for use in type annotations and function signatures. The constructors `Num` and `Op` are **not** in scope. Attempting to construct (`Num(42)`) or pattern-match (`Num(n) => ...`) is a **compile error**: "constructor `Num` is not accessible; type `Token` is opaque".
+- **Opaque type alias** (e.g., `opaque type UserId = Int`): The type name `UserId` is available but the underlying type `Int` is not visible. A `UserId` value cannot be implicitly used as an `Int`. The declaring module must provide explicit conversion functions.
+- **Opaque record alias** (e.g., `opaque type Config = { host: String, port: Int }`): The type name is available but field access is not allowed from outside.
+
+The types file (07 §5) represents opaque types with a placeholder (the name and arity, but not the structure) so that consuming compilers cannot bypass the restriction.
+
 ---
 
 ## 6. Async and Await
@@ -165,7 +204,7 @@ The following table summarises the main typing constraints so that implementors 
 | **Record** `{ x = e, ... }` | Row typing; see §2. Spread: if `...r` then r’s row extended or unified with new fields. |
 | **List** `[e1, ...]`, `[]` | Elements unify to T ⇒ type is List<T>. Empty list has type List<α> for fresh α. |
 | **Cons** `e1 :: e2` | e2 : List<T>, e1 : T ⇒ type is List<T>. |
-| **Application** `f(e1,...,en)` | f : (T1,...,Tn) -> R, ei : Ti ⇒ type is R. |
+| **Application** `f(e1,...,en)` | f : (T1,...,Tn) -> R, ei : Ti ⇒ type is R. Includes constructor application: `Some(42)` where `Some : (Int) -> Option<Int>`. |
 | **Field access** `e.x` | e : { x: T, ... } ⇒ type is T. |
 | **If/else** `if (e1) e2 else e3` | e1 : Bool; e2 : T, e3 : T (or T2, T3 unify to a common type) ⇒ type is T. |
 | **Match** `match (e) { cases }` | e : S; each case pattern is typed against S (pattern produces bindings; constructor/list patterns constrain S); case RHSs unify to T; exhaustiveness (§5) ⇒ type is T. |

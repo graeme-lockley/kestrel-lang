@@ -47,7 +47,7 @@ The lexer uses **longest match**. Multi-character tokens: `:=`, `==`, `!=`, `>=`
 ## 2.3 Keywords
 
     fun type val var mut if else match try catch throw async await
-    export import from exception is True False
+    export import from exception is opaque True False
 
 `True` and `False` are boolean literals; the rest are syntactic keywords.
 
@@ -98,7 +98,10 @@ Imports first; then declarations and top-level statements (executed in order whe
     TopLevelDecl   ::= FunDecl | TypeDecl | ExceptionDecl
 
     FunDecl        ::= [ "async" ] "fun" LOWER_IDENT "(" ParamList ")" ":" Type "=" Expr
-    TypeDecl       ::= "type" UPPER_IDENT "=" Type
+    TypeDecl       ::= [ "opaque" ] "type" UPPER_IDENT [ "<" TypeParamList ">" ] "=" TypeBody
+    TypeBody       ::= Type                                         /* type alias */
+                     | Constructor { "|" Constructor }              /* ADT definition */
+    Constructor    ::= UPPER_IDENT [ "(" TypeList ")" ]
     ExceptionDecl  ::= "export" "exception" UPPER_IDENT [ "{" FieldList "}" ]
 
     Expr           ::= IfExpr | MatchExpr | TryExpr | Lambda | PipeExpr | ...

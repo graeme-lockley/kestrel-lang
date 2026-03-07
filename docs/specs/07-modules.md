@@ -56,6 +56,18 @@ The grammar is in 01 §3.1 (ImportDecl, ImportClause, ImportSpec). The following
 - **Forms (01 §3.1):** `export TopLevelDecl` (export a function, type, or exception declaration), and `export exception UPPER_IDENT ...` (exception declarations are always exported).
 - **Semantics:** The declared name is added to the current module’s **export set** with source **local**. That name is a **public binding** and may be imported by other modules. The same name may not be declared twice (normal duplicate-declaration rules); if a name is both declared locally and re-exported, see §3.3 (conflicts).
 
+### 3.1.1 Type export visibility
+
+Type declarations have three visibility levels (01 §3.1):
+
+- **Local** (`type Foo = ...`): The type name and constructors are module-private. They do not appear in the export set and cannot be imported.
+- **Opaque** (`opaque type Foo = ...`): The type **name** is added to the export set. Importers can reference `Foo` in type annotations. However, the type's **constructors** (for ADTs) and **internal structure** (for aliases) are **not** exported. Importers cannot construct values, destructure, or pattern-match on the type. The declaring module retains full access.
+- **Exported** (`export type Foo = ...`): The type name **and** all constructors are added to the export set. Importers have full access: construction, destructuring, and pattern matching.
+
+For an **exported ADT** (e.g., `export type Color = Red | Green | Blue`), the export set includes the type name `Color` **and** each constructor name (`Red`, `Green`, `Blue`). Importers can use `import { Color, Red, Green, Blue } from "..."` or `import { Color } from "..."` (constructors are available when the type is imported by name).
+
+For an **opaque ADT** (e.g., `opaque type Token = Num(Int) | Op(String)`), only the type name `Token` is in the export set. The constructors `Num` and `Op` are not importable.
+
 ### 3.2 Re-export
 
 - **Export all:** `export "*" "from" STRING`. The specifier is resolved. For **every** name in that module’s export set, the current module re-exports that name (as if it had exported it itself). Each such name is added to the current module’s export set with source **re-export from &lt;specifier&gt;**.
@@ -124,6 +136,16 @@ The types file is **JSON**. Implementations must produce and consume this format
   - **var:** `kind` = `"var"`, `function_index` (number), **`setter_index`** (number), `type`. Both indices are into the **same** package’s function table (03 §6.1). `function_index` is the **getter** (0-arity); `setter_index` is the **setter** (1-arity). Writers for packages that export vars **must** emit `setter_index`. Consumers must support all three kinds; for **var**, both getter and setter indices are required so that importers can emit CALL getter (read) and CALL setter (assign). Readers that only need callable exports may use `function_index` only; writers for packages that export vars must emit `setter_index`.
 
 - **Type encoding:** The `type` field in each entry is a serialized type (structure is implementation-defined but must be sufficient for typechecking and for distinguishing primitives, arrows, records, etc.). Exact encoding is out of scope here; see the reference implementation or [export-var-setter-sketch.md](export-var-setter-sketch.md) for one implementation approach.
+
+- **Type declarations in the types file:**
+  - `types` (object, optional): map from **type name** (string) to a **type export entry** (object). Contains all exported and opaque type declarations.
+  - Each type export entry has:
+    - `visibility`: `"export"` or `"opaque"`.
+    - `kind`: `"alias"` or `"adt"`.
+    - For **alias**: `type` (serialized underlying type). For **opaque alias**, the `type` field is omitted or set to `{ "kind": "opaque" }` so that consuming compilers cannot see the underlying type.
+    - For **adt**: `constructors` (array of `{ name: string, params: Type[] }`). For **opaque ADT**, the `constructors` field is omitted so that consuming compilers cannot access constructor information.
+    - Optional: `typeParams` (array of strings) for parameterized types.
+  - **Local** types (no qualifier) are NOT included in the types file.
 
 ---
 
