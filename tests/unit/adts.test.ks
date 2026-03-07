@@ -14,31 +14,31 @@ type Opt<T> = None | Some(T)
 
 fun unwrap<T>(o: Opt<T>, default: T): T = match (o) {
   None => default
-  Some { field_0 = x } => x
+  Some(x) => x
 }
 
 // Generic Tree type
 type Tree<T> = Leaf(T) | Node(Tree<T>, Tree<T>)
 
 fun treeMap<T, R>(t: Tree<T>, f: (T) -> R): Tree<R> = match (t) {
-  Leaf { field_0 = x } => Leaf(f(x))
-  Node { field_0 = l, field_1 = r } => Node(treeMap(l, f), treeMap(r, f))
+  Leaf(x) => Leaf(f(x))
+  Node(l, r) => Node(treeMap(l, f), treeMap(r, f))
 }
 
 fun treeSum(t: Tree<Int>): Int = match (t) {
-  Leaf { field_0 = x } => x
-  Node { field_0 = l, field_1 = r } => treeSum(l) + treeSum(r)
+  Leaf(x) => x
+  Node(l, r) => treeSum(l) + treeSum(r)
 }
 
 // Single constructor - non-generic
 type Point = MkPoint(Int, Int)
 
 fun pointX(p: Point): Int = match (p) {
-  MkPoint { field_0 = x, field_1 = y } => x
+  MkPoint(x, _) => x
 }
 
 fun pointY(p: Point): Int = match (p) {
-  MkPoint { field_0 = x, field_1 = y } => y
+  MkPoint(_, y) => y
 }
 
 export fun run(s: Suite): Unit =
