@@ -252,13 +252,23 @@ class Parser {
     if (async) this.advance();
     this.expect('keyword', 'fun');
     const name = this.expect('ident').value!;
+    let typeParams: string[] | undefined;
+    if (this.at('op', '<')) {
+      this.advance();
+      typeParams = [this.expect('ident').value!];
+      while (this.at('comma')) {
+        this.advance();
+        typeParams.push(this.expect('ident').value!);
+      }
+      this.expect('op', '>');
+    }
     this.expect('lparen');
     const params = this.parseParamList(); // consumes closing )
     this.expect('colon');
     const returnType = this.parseType();
     this.expect('op', '=');
     const body = this.parseExpr();
-    return { kind: 'FunDecl', exported, async, name, params, returnType, body };
+    return { kind: 'FunDecl', exported, async, name, typeParams, params, returnType, body };
   }
 
   private parseParamList(): Param[] {
@@ -866,13 +876,23 @@ class Parser {
       } else if (this.at('keyword', 'fun')) {
         this.advance();
         const name = this.expect('ident').value!;
+        let typeParams: string[] | undefined;
+        if (this.at('op', '<')) {
+          this.advance();
+          typeParams = [this.expect('ident').value!];
+          while (this.at('comma')) {
+            this.advance();
+            typeParams.push(this.expect('ident').value!);
+          }
+          this.expect('op', '>');
+        }
         this.expect('lparen');
         const params = this.parseParamList();
         this.expect('colon');
         const returnType = this.parseType();
         this.expect('op', '=');
         const body = this.parseExpr();
-        stmts.push({ kind: 'FunStmt', name, params, returnType, body });
+        stmts.push({ kind: 'FunStmt', name, typeParams, params, returnType, body });
       } else {
         const expr = this.parseExpr();
         if (this.at('op', ':=')) {

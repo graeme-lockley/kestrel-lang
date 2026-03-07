@@ -69,6 +69,7 @@ export interface FunDecl extends NodeBase {
   exported: boolean;
   async: boolean;
   name: string;
+  typeParams?: string[];
   params: Param[];
   returnType: Type;
   body: Expr;
@@ -206,6 +207,7 @@ export interface ExprStmt extends NodeBase {
 export interface FunStmt extends NodeBase {
   kind: 'FunStmt';
   name: string;
+  typeParams?: string[];
   params: Param[];
   returnType: Type;
   body: Expr;
