@@ -197,9 +197,28 @@ class Parser {
     if (this.at('keyword', 'type')) {
       this.advance();
       const name = this.expect('ident').value!;
+      let typeParams: string[] | undefined;
+      if (this.at('op', '<')) {
+        this.advance();
+        typeParams = [this.expect('ident').value!];
+        while (this.at('comma')) {
+          this.advance();
+          typeParams.push(this.expect('ident').value!);
+        }
+        this.expect('op', '>');
+      }
       this.expect('op', '=');
-      const type = this.parseType();
-      return { kind: 'TypeDecl', exported, name, type };
+      
+      // Check if this is an ADT (multiple constructors) or type alias
+      // ADT: starts with UPPER_IDENT, possibly followed by | for more constructors
+      if (this.at('ident') && this.current().value![0] === this.current().value![0].toUpperCase()) {
+        const constructors = this.parseConstructorList();
+        return { kind: 'TypeDecl', exported, name, typeParams, body: { kind: 'ADTBody', constructors } };
+      } else {
+        // Type alias
+        const type = this.parseType();
+        return { kind: 'TypeDecl', exported, name, typeParams, body: { kind: 'TypeAliasBody', type } };
+      }
     }
     if (this.at('keyword', 'val')) {
       this.advance();
@@ -290,6 +309,33 @@ class Parser {
       if (!this.at('rbrace')) this.expect('comma');
     }
     return fields;
+  }
+
+  private parseConstructorList(): { name: string; params: Type[] }[] {
+    const constructors: { name: string; params: Type[] }[] = [];
+    constructors.push(this.parseConstructor());
+    while (this.at('op', '|')) {
+      this.advance();
+      constructors.push(this.parseConstructor());
+    }
+    return constructors;
+  }
+
+  private parseConstructor(): { name: string; params: Type[] } {
+    const name = this.expect('ident').value!;
+    let params: Type[] = [];
+    if (this.at('lparen')) {
+      this.advance();
+      if (!this.at('rparen')) {
+        params.push(this.parseType());
+        while (this.at('comma')) {
+          this.advance();
+          params.push(this.parseType());
+        }
+      }
+      this.expect('rparen');
+    }
+    return { name, params };
   }
 
   private parseType(): Type {
@@ -872,6 +918,7 @@ class Parser {
     }
     if (this.at('ident') && /[A-Z]/.test(this.current().value![0] ?? '')) {
       const name = this.advance().value!;
+      // Check for record-style pattern { field = pattern } or positional (arg)
       if (this.at('lbrace')) {
         this.advance();
         const fields: { name: string; pattern?: Pattern }[] = [];
@@ -886,6 +933,20 @@ class Parser {
           if (!this.at('rbrace')) this.expect('comma');
         }
         this.expect('rbrace');
+        return { kind: 'ConstructorPattern', name, fields };
+      }
+      // Positional constructor pattern: Some(x) or Node(left, right)
+      if (this.at('lparen')) {
+        this.advance();
+        const fields: { name: string; pattern?: Pattern }[] = [];
+        let index = 0;
+        while (!this.at('rparen')) {
+          const pattern = this.parsePattern();
+          fields.push({ name: `__field_${index}`, pattern });
+          index++;
+          if (!this.at('rparen')) this.expect('comma');
+        }
+        this.expect('rparen');
         return { kind: 'ConstructorPattern', name, fields };
       }
       return { kind: 'ConstructorPattern', name };

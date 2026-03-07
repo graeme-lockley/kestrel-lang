@@ -67,18 +67,22 @@ export function astTypeToInternalWithScope(
   }
 }
 
-export function astTypeToInternal(ast: Type): InternalType {
+export function astTypeToInternal(ast: Type, typeAliases?: Map<string, InternalType>): InternalType {
   switch (ast.kind) {
     case 'PrimType':
       return prim(ast.name as PrimName);
     case 'IdentType':
       if (ast.name === 'Value') return { kind: 'app', name: 'Value', args: [] };
+      // Look up user-defined types (including ADTs)
+      if (typeAliases && typeAliases.has(ast.name)) {
+        return typeAliases.get(ast.name)!;
+      }
       return freshVar();
     case 'ArrowType':
       return {
         kind: 'arrow',
-        params: ast.params.map(astTypeToInternal),
-        return: astTypeToInternal(ast.return),
+        params: ast.params.map((p) => astTypeToInternal(p, typeAliases)),
+        return: astTypeToInternal(ast.return, typeAliases),
       };
     case 'RecordType':
       return {
@@ -86,19 +90,19 @@ export function astTypeToInternal(ast: Type): InternalType {
         fields: ast.fields.map((f) => ({
           name: f.name,
           mut: f.mut,
-          type: astTypeToInternal(f.type),
+          type: astTypeToInternal(f.type, typeAliases),
         })),
       };
     case 'RowVarType':
       return freshVar();
     case 'AppType':
-      return { kind: 'app', name: ast.name, args: ast.args.map(astTypeToInternal) };
+      return { kind: 'app', name: ast.name, args: ast.args.map((a) => astTypeToInternal(a, typeAliases)) };
     case 'UnionType':
-      return { kind: 'union', left: astTypeToInternal(ast.left), right: astTypeToInternal(ast.right) };
+      return { kind: 'union', left: astTypeToInternal(ast.left, typeAliases), right: astTypeToInternal(ast.right, typeAliases) };
     case 'InterType':
-      return { kind: 'inter', left: astTypeToInternal(ast.left), right: astTypeToInternal(ast.right) };
+      return { kind: 'inter', left: astTypeToInternal(ast.left, typeAliases), right: astTypeToInternal(ast.right, typeAliases) };
     case 'TupleType':
-      return { kind: 'tuple', elements: ast.elements.map(astTypeToInternal) };
+      return { kind: 'tuple', elements: ast.elements.map((e) => astTypeToInternal(e, typeAliases)) };
     default:
       return freshVar();
   }

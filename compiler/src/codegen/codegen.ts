@@ -107,11 +107,24 @@ export const ADT_OPTION = 1;
 export const ADT_RESULT = 2;
 export const ADT_VALUE = 3;
 
-/** Resolve built-in constructor to (adtId, ctorIndex, arity). 0-ary: None, Null. */
-function getBuiltinConstructor(
+/** Constructor lookup: name -> (adtId, ctorIndex, arity). Built after adts array is populated. */
+let constructorLookup: Map<string, { adtId: number; ctor: number; arity: number }> | null = null;
+
+/** Resolve constructor to (adtId, ctorIndex, arity). First checks user-defined ADTs, then built-ins. */
+function getConstructor(
   name: string,
-  argCount: number
+  argCount: number,
+  adts?: AdtEntry[]
 ): { adtId: number; ctor: number; arity: number } | null {
+  // Check user-defined ADTs first (user-defined types take precedence over built-ins with same constructor names)
+  if (constructorLookup) {
+    const result = constructorLookup.get(name);
+    if (result && result.arity === argCount) {
+      return result;
+    }
+  }
+  
+  // Check built-in constructors
   switch (name) {
     case 'None':
       return argCount === 0 ? { adtId: ADT_OPTION, ctor: 0, arity: 0 } : null;
@@ -135,9 +148,9 @@ function getBuiltinConstructor(
       return argCount === 1 ? { adtId: ADT_VALUE, ctor: 5, arity: 1 } : null;
     case 'Object':
       return argCount === 1 ? { adtId: ADT_VALUE, ctor: 6, arity: 1 } : null;
-    default:
-      return null;
   }
+  
+  return null;
 }
 
 /** Match config: constructor name -> (tag index, field count for payload). */
@@ -147,7 +160,7 @@ interface MatchConfig {
   ctorArity: Record<string, number>;
 }
 
-function getMatchConfig(scrutineeType: { kind: string; name?: string } | undefined): MatchConfig | null {
+function getMatchConfig(scrutineeType: { kind: string; name?: string } | undefined, adts?: AdtEntry[], userAdtConfigs?: Map<string, MatchConfig>): MatchConfig | null {
   if (scrutineeType?.kind !== 'app' && scrutineeType?.kind !== 'prim') return null;
   const name = scrutineeType.name;
   if (name === 'List') {
@@ -169,6 +182,12 @@ function getMatchConfig(scrutineeType: { kind: string; name?: string } | undefin
   if (name === 'Bool') {
     return { size: 2, ctorToTag: { False: 0, True: 1 }, ctorArity: { False: 0, True: 0 } };
   }
+  
+  // Check user-defined ADTs using pre-built config map
+  if (userAdtConfigs && name) {
+    return userAdtConfigs.get(name) ?? null;
+  }
+  
   return null;
 }
 
@@ -438,7 +457,8 @@ function makeEmitExpr(
   shapes?: ShapeEntry[],
   adts?: AdtEntry[],
   captures?: Map<string, { index: number; isVar: boolean }>,
-  varNames?: Set<string>
+  varNames?: Set<string>,
+  userAdtConfigs?: Map<string, MatchConfig>
 ) => void; moduleGlobals: Map<string, number> } {
   const moduleGlobals = new Map<string, number>();
   return { moduleGlobals, emitExpr: function emitExpr(
@@ -448,7 +468,8 @@ function makeEmitExpr(
   shapes?: ShapeEntry[],
   adts?: AdtEntry[],
   captures?: Map<string, { index: number; isVar: boolean }>,
-  varNames?: Set<string>
+  varNames?: Set<string>,
+  userAdtConfigs?: Map<string, MatchConfig>
 ): void {
   switch (expr.kind) {
     case 'LiteralExpr': {
@@ -519,11 +540,11 @@ function makeEmitExpr(
         if (varNames?.has(expr.name)) emitGetField(0);
         break;
       }
-      // 0-ary built-in constructors: None, Null
+      // 0-ary constructors: None, Null, and user-defined nullary constructors
       if (adts != null) {
-        const builtin = getBuiltinConstructor(expr.name, 0);
-        if (builtin != null) {
-          emitConstruct(builtin.adtId, builtin.ctor, builtin.arity);
+        const ctor = getConstructor(expr.name, 0, adts);
+        if (ctor != null) {
+          emitConstruct(ctor.adtId, ctor.ctor, ctor.arity);
           break;
         }
       }
@@ -1138,11 +1159,12 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         }
 
         // Built-in ADT constructors: Some(x), Ok(x), Err(e), Null(), Bool(x), Int(x), etc.
+        // Also handles user-defined ADT constructors
         if (adts != null) {
-          const builtin = getBuiltinConstructor(expr.callee.name, expr.args.length);
-          if (builtin != null) {
+          const ctor = getConstructor(expr.callee.name, expr.args.length, adts);
+          if (ctor != null) {
             for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
-            emitConstruct(builtin.adtId, builtin.ctor, builtin.arity);
+            emitConstruct(ctor.adtId, ctor.ctor, ctor.arity);
             break;
           }
         }
@@ -1238,9 +1260,9 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             c.pattern.kind === 'ListPattern'
       );
 
-      let config = getMatchConfig(scrutineeType ?? undefined);
+      let config = getMatchConfig(scrutineeType ?? undefined, adts, userAdtConfigs);
       if (hasAdtPatterns && !config && expr.cases.some(c => c.pattern.kind === 'ListPattern' || c.pattern.kind === 'ConsPattern' || (c.pattern.kind === 'ConstructorPattern' && c.pattern.name === 'Nil'))) {
-        config = getMatchConfig({ kind: 'app', name: 'List' });
+        config = getMatchConfig({ kind: 'app', name: 'List' }, adts, userAdtConfigs);
       }
 
       if (hasAdtPatterns && config) {
@@ -1508,6 +1530,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
 
   codeStart();
   const shapes: ShapeEntry[] = [];
+  const userAdtConfigs = new Map<string, MatchConfig>();
 
   // Initialize ADT table: List(0), Option(1), Result(2), Value(3) per spec 02
   const adts: AdtEntry[] = [
@@ -1545,6 +1568,42 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
       ],
     },
   ];
+
+  // Add user-defined ADTs from the program
+  const typeDecls = program.body.filter((n): n is typeof n & { kind: 'TypeDecl'; body: { kind: 'ADTBody' } } => 
+    n != null && n.kind === 'TypeDecl' && n.body.kind === 'ADTBody'
+  );
+  const userCtorArityMap = new Map<string, number>();
+  for (const td of typeDecls) {
+    adts.push({
+      nameIndex: stringIndex(td.name),
+      constructors: td.body.constructors.map(c => {
+        userCtorArityMap.set(c.name, c.params.length);
+        return {
+          nameIndex: stringIndex(c.name),
+          payloadTypeIndex: c.params.length === 0 ? 0xFFFFFFFF : 0,
+        };
+      }),
+    });
+  }
+
+  // Build constructor lookup map for user-defined ADTs
+  constructorLookup = new Map();
+  for (let adtId = 4; adtId < adts.length; adtId++) {
+    const adt = adts[adtId]!;
+    const adtName = stringTable[adt.nameIndex]!;
+    const ctorToTag: Record<string, number> = {};
+    const ctorArity: Record<string, number> = {};
+    for (let ctor = 0; ctor < adt.constructors.length; ctor++) {
+      const ctorDef = adt.constructors[ctor]!;
+      const ctorName = stringTable[ctorDef.nameIndex]!;
+      const arity = userCtorArityMap.get(ctorName) ?? (ctorDef.payloadTypeIndex === 0xFFFFFFFF ? 0 : 1);
+      constructorLookup.set(ctorName, { adtId, ctor, arity });
+      ctorToTag[ctorName] = ctor;
+      ctorArity[ctorName] = arity;
+    }
+    userAdtConfigs.set(adtName, { size: adt.constructors.length, ctorToTag, ctorArity });
+  }
 
   const seenSpecs = new Set<string>();
   const importSpecifierIndices: number[] = [];
@@ -1584,7 +1643,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     if (!node) continue;
     if (node.kind === 'ValStmt' || node.kind === 'VarStmt') {
       const stmt = node;
-      emitExpr(stmt.value, env, funNameToId, shapes, adts);
+      emitExpr(stmt.value, env, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
       const slot = env.size;
       env.set(stmt.name, slot);
       moduleGlobals.set(stmt.name, slot);
@@ -1620,14 +1679,14 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
         }
         if (slot >= 0) {
           emitExpr(target.object, env, funNameToId, shapes, adts);
-          emitExpr(stmt.value, env, funNameToId, shapes, adts);
+          emitExpr(stmt.value, env, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
           emitSetField(slot);
         } else {
-          emitExpr(stmt.value, env, funNameToId, shapes, adts);
+          emitExpr(stmt.value, env, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
           emitStoreLocal(0);
         }
       } else {
-        emitExpr(stmt.value, env, funNameToId, shapes, adts);
+        emitExpr(stmt.value, env, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
         if (stmt.target.kind === 'IdentExpr') {
           const slot = env.get(stmt.target.name);
           if (slot !== undefined) {
@@ -1656,7 +1715,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     const arity = decl.params.length;
     const fnEnv = new Map<string, number>();
     for (let i = 0; i < arity; i++) fnEnv.set(decl.params[i]!.name, i);
-    emitExpr(decl.body, fnEnv, funNameToId, shapes, adts);
+    emitExpr(decl.body, fnEnv, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
     emitRet();
     const fnCode = codeSlice();
     functionTable.push({

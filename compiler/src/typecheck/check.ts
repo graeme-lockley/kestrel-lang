@@ -49,6 +49,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
   const subst = new Map<number, InternalType>();
   const env = new Map<string, InternalType>();
   const typeAliases = new Map<string, InternalType>();
+  const adtConstructors = new Map<string, { name: string; arity: number }[]>();
   let inAsyncContext = false; // Track if we're in an async function
   const sourceFile = options?.sourceFile ?? '';
   /** Current expression for UnifyError location (spec 10). */
@@ -303,13 +304,24 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
 
     const appType = apply(scrutineeType);
     if (appType.kind !== 'app') return;
+    
+    // Check hardcoded built-in ADTs first, then user-defined
     const requiredSets: Record<string, Set<string>> = {
       List: new Set(['Nil', 'Cons']),
       Option: new Set(['None', 'Some']),
       Result: new Set(['Err', 'Ok']),
       Value: new Set(['Null', 'Bool', 'Int', 'Float', 'String', 'Array', 'Object']),
     };
-    const required = requiredSets[appType.name];
+    
+    let required: Set<string> | undefined = requiredSets[appType.name];
+    if (!required) {
+      // Check user-defined ADTs
+      const userCtor = adtConstructors.get(appType.name);
+      if (userCtor) {
+        required = new Set(userCtor.map(c => c.name));
+      }
+    }
+    
     if (required) {
       const missing = [...required].filter(c => !coveredCtors.has(c));
       if (missing.length > 0 && !hasCatchAll) {
@@ -506,7 +518,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         return result;
       }
       case 'LambdaExpr': {
-        const paramTs = expr.params.map((p) => p.type ? astTypeToInternal(p.type) : freshVar());
+        const paramTs = expr.params.map((p) => p.type ? astTypeToInternal(p.type, typeAliases) : freshVar());
         for (let i = 0; i < expr.params.length; i++) {
           env.set(expr.params[i]!.name, paramTs[i]!);
         }
@@ -620,23 +632,41 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
               bound.push(...bindPattern(pattern.head, elemType));
               bound.push(...bindPattern(pattern.tail, patternType));
             }
-          } else if (pattern.kind === 'ConstructorPattern' && pattern.fields?.length) {
+          } else if (pattern.kind === 'ConstructorPattern') {
             const applied = apply(patternType);
-            if (applied.kind === 'app' && applied.name === 'Option' && applied.args.length === 1) {
-              const payloadT = applied.args[0]!;
-              for (const field of pattern.fields) {
-                if (field.pattern) bound.push(...bindPattern(field.pattern, payloadT));
-              }
-            } else if (applied.kind === 'app' && applied.name === 'Result' && applied.args.length === 2) {
-              const t = applied.args[0]!;
-              const e = applied.args[1]!;
-              const payloadT = pattern.name === 'Ok' ? t : e;
-              for (const field of pattern.fields) {
-                if (field.pattern) bound.push(...bindPattern(field.pattern, payloadT));
-              }
-            } else if (applied.kind === 'app' && applied.name === 'Value') {
-              for (const field of pattern.fields) {
-                if (field.pattern) bound.push(...bindPattern(field.pattern, freshVar()));
+            if (applied.kind === 'app') {
+              // Handle built-in ADTs
+              if (applied.name === 'Option' && applied.args.length === 1) {
+                const payloadT = applied.args[0]!;
+                for (const field of pattern.fields || []) {
+                  if (field.pattern) bound.push(...bindPattern(field.pattern, payloadT));
+                }
+              } else if (applied.name === 'Result' && applied.args.length === 2) {
+                const t = applied.args[0]!;
+                const e = applied.args[1]!;
+                const payloadT = pattern.name === 'Ok' ? t : e;
+                for (const field of pattern.fields || []) {
+                  if (field.pattern) bound.push(...bindPattern(field.pattern, payloadT));
+                }
+              } else if (applied.name === 'Value') {
+                for (const field of pattern.fields || []) {
+                  if (field.pattern) bound.push(...bindPattern(field.pattern, freshVar()));
+                }
+              } else {
+                // User-defined ADT - look up constructor arity
+                const adtCtors = adtConstructors.get(applied.name);
+                if (adtCtors) {
+                  const ctor = adtCtors.find(c => c.name === pattern.name);
+                  if (ctor && ctor.arity > 0) {
+                    // For positional constructors, bind variables using field names from the pattern
+                    for (const field of pattern.fields || []) {
+                      if (field.pattern && field.pattern.kind === 'VarPattern') {
+                        env.set(field.pattern.name, freshVar());
+                        bound.push(field.pattern.name);
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -896,9 +926,29 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const scheme = generalize(appliedFnType, envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'TypeDecl') {
-        const aliasType = astTypeToInternal(node.type);
-        env.set(node.name, aliasType);
-        typeAliases.set(node.name, aliasType);
+        if (node.body.kind === 'TypeAliasBody') {
+          const aliasType = astTypeToInternal(node.body.type);
+          env.set(node.name, aliasType);
+          typeAliases.set(node.name, aliasType);
+        } else if (node.body.kind === 'ADTBody') {
+          // Create a nominal type for the ADT (app type with no args for now)
+          const adtType = { kind: 'app' as const, name: node.name, args: [] };
+          env.set(node.name, adtType);
+          typeAliases.set(node.name, adtType);
+          
+          // Register each constructor as a function (or value for nullary) in the environment
+          for (const ctor of node.body.constructors) {
+            const paramTypes = ctor.params.map(p => astTypeToInternal(p));
+            // Nullary constructors are values of the ADT type, not functions
+            const ctorType = paramTypes.length === 0 
+              ? adtType 
+              : { kind: 'arrow' as const, params: paramTypes, return: adtType };
+            env.set(ctor.name, ctorType);
+          }
+          
+          // Store constructor info for exhaustiveness checking
+          adtConstructors.set(node.name, node.body.constructors.map(c => ({ name: c.name, arity: c.params.length })));
+        }
       } else if (node.kind === 'ValStmt') {
         const t = apply(inferExpr(node.value));
         const scheme = generalize(t, envFreeVars());

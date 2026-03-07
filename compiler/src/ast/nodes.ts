@@ -84,7 +84,25 @@ export interface TypeDecl extends NodeBase {
   kind: 'TypeDecl';
   exported: boolean;
   name: string;
+  typeParams?: string[];
+  body: TypeDeclBody;
+}
+
+export type TypeDeclBody = TypeAliasBody | ADTBody;
+
+export interface TypeAliasBody extends NodeBase {
+  kind: 'TypeAliasBody';
   type: Type;
+}
+
+export interface ADTBody extends NodeBase {
+  kind: 'ADTBody';
+  constructors: ConstructorDef[];
+}
+
+export interface ConstructorDef extends NodeBase {
+  name: string;
+  params: Type[];
 }
 
 export interface ExceptionDecl extends NodeBase {
