@@ -703,10 +703,12 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         // Mutual recursion: one shared record, same shape for all closures
         const funNames = funStmts.map((s) => s.name);
         mutualFunNames.push(...funNames);
+        const extendedScope = new Map(blockEnv);
+        if (captures) for (const name of captures.keys()) if (!extendedScope.has(name)) extendedScope.set(name, 0);
         const otherFreeSet = new Set<string>();
         for (const s of funStmts) {
           const paramNames = new Set(s.params.map((p) => p.name));
-          const fv = getFreeVars(s.body, paramNames, blockEnv);
+          const fv = getFreeVars(s.body, paramNames, extendedScope);
           for (const n of fv) if (!funNames.includes(n)) otherFreeSet.add(n);
         }
         const otherFree = Array.from(otherFreeSet);
@@ -722,7 +724,12 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           shapes.push({ nameIndices });
         }
         const captureMap = new Map<string, { index: number; isVar: boolean }>();
-        shapeNames.forEach((name, i) => captureMap.set(name, { index: i, isVar: nextVarNames?.has(name) ?? false }));
+        shapeNames.forEach((name, i) =>
+          captureMap.set(name, {
+            index: i,
+            isVar: (nextVarNames?.has(name) ?? false) || (captures?.get(name)?.isVar ?? false),
+          })
+        );
 
         // Compile all N bodies (same captureMap; each gets __env at 0, params at 1,2,...)
         const mutualLambdaIndices: number[] = [];
@@ -741,7 +748,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           mutualLambdaIndices.push(lambdaIndex);
         }
 
-        // Allocate shared record: fun slots = Unit, other = load from blockEnv
+        // Allocate shared record: fun slots = Unit, other = load from blockEnv or parent captures
         for (const name of shapeNames) {
           if (funNames.includes(name)) {
             emitLoadConst(addConstant({ tag: ConstTag.Unit }));
@@ -750,13 +757,19 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             if (localSlot !== undefined) {
               emitLoadLocal(localSlot);
             } else {
-              const globalSlot = moduleGlobals.get(name);
-              if (globalSlot !== undefined) {
-                emitLoadGlobal(globalSlot);
+              const cap = captures?.get(name);
+              if (cap !== undefined) {
+                emitLoadLocal(0);
+                emitGetField(cap.index);
               } else {
-                const fnId = funNameToId?.get(name);
-                if (fnId !== undefined) {
-                  emitLoadFn(fnId);
+                const globalSlot = moduleGlobals.get(name);
+                if (globalSlot !== undefined) {
+                  emitLoadGlobal(globalSlot);
+                } else {
+                  const fnId = funNameToId?.get(name);
+                  if (fnId !== undefined) {
+                    emitLoadFn(fnId);
+                  }
                 }
               }
             }
@@ -789,10 +802,12 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         }
       } else {
         // Single fun or no fun: process each FunStmt with current behavior
+        const extendedScope = new Map(blockEnv);
+        if (captures) for (const name of captures.keys()) if (!extendedScope.has(name)) extendedScope.set(name, 0);
         for (const stmt of expr.stmts) {
           if (stmt.kind !== 'FunStmt') continue;
           const paramNames = new Set(stmt.params.map((p) => p.name));
-          let freeVars = getFreeVars(stmt.body, paramNames, blockEnv);
+          let freeVars = getFreeVars(stmt.body, paramNames, extendedScope);
           const hasSelf = bodyReferencesName(stmt.body, stmt.name, new Set(paramNames));
           if (hasSelf) {
             freeVars = [stmt.name, ...freeVars.filter((n) => n !== stmt.name)];
@@ -824,7 +839,12 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               shapes.push({ nameIndices });
             }
             const singleCaptureMap = new Map<string, { index: number; isVar: boolean }>();
-            freeVars.forEach((name, i) => singleCaptureMap.set(name, { index: i, isVar: nextVarNames?.has(name) ?? false }));
+            freeVars.forEach((name, i) =>
+              singleCaptureMap.set(name, {
+                index: i,
+                isVar: (nextVarNames?.has(name) ?? false) || (captures?.get(name)?.isVar ?? false),
+              })
+            );
             const liftedEnv = new Map<string, number>();
             liftedEnv.set('__env', 0);
             for (let i = 0; i < stmt.params.length; i++) liftedEnv.set(stmt.params[i]!.name, i + 1);
@@ -844,13 +864,19 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
                 if (localSlot !== undefined) {
                   emitLoadLocal(localSlot);
                 } else {
-                  const globalSlot = moduleGlobals.get(name);
-                  if (globalSlot !== undefined) {
-                    emitLoadGlobal(globalSlot);
+                  const cap = captures?.get(name);
+                  if (cap !== undefined) {
+                    emitLoadLocal(0);
+                    emitGetField(cap.index);
                   } else {
-                    const fnId = funNameToId?.get(name);
-                    if (fnId !== undefined) {
-                      emitLoadFn(fnId);
+                    const globalSlot = moduleGlobals.get(name);
+                    if (globalSlot !== undefined) {
+                      emitLoadGlobal(globalSlot);
+                    } else {
+                      const fnId = funNameToId?.get(name);
+                      if (fnId !== undefined) {
+                        emitLoadFn(fnId);
+                      }
                     }
                   }
                 }

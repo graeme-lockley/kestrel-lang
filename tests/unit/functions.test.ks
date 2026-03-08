@@ -96,26 +96,37 @@ export fun run(s: Suite): Unit =
     group(s1, "nested fun", (sg: Suite) => {
       // Basic: declare and call in same block (no params)
       eq(sg, "outerWithNested()", outerWithNested(), 1)
+
       // Return nested fun and call from outside (module var as "closure")
       eq(sg, "makeAdder(2) then call", { val add2 = makeAdder(2); add2(3) }, 5)
+
       // Chained call: function returns closure, call result immediately (still returns () in some setups; prefer val add2 = makeAdd(2); add2(3))
       eq(sg, "makeAdd(2)(3) chained call", makeAdd(2)(3), 5)
+
       // Multiple nested funs in one block, passed to HOF
       eq(sg, "nestedAsHOF(1)", nestedAsHOF(1), 27)
+
       // Triple nesting: three blocks, each with one nested fun
       eq(sg, "level1() triple nesting", level1(), 99)
+
       // Two-parameter nested fun
       eq(sg, "nested two-param", { fun add(a: Int, b: Int): Int = a + b; add(2, 3) }, 5)
+
       // Same nested fun called twice in same block
       eq(sg, "nested called twice", { fun one(): Int = 1; one() + one() }, 2)
+
       // Inline block in expression position (nested fun, identity)
       eq(sg, "inline block nested", { fun id(x: Int): Int = x; id(10) }, 10)
+
       // Block with nested fun in if branch (nested fun in non-block expression context)
       eq(sg, "nested in if branch", if (True) { fun f(): Int = 2; f() } else 0, 2)
+
       // Recursive nested fun: block-level fac(5) in nested group closure.
       eq(sg, "recursive nested fac(5)", { fun fac(n: Int): Int = if (n <= 1) 1 else n * fac(n - 1); fac(5) }, 120)
+
       // Nested fun return type checked and matches body
       eq(sg, "nested fun return type ok", { fun ok(): Int = 42; ok() }, 42)
+
       // Block-level mutual recursion: two nested funs calling each other (two separate blocks in same scope)
       eq(sg, "block-level mutual recursion even(10)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); even(10) }, True)
       eq(sg, "block-level mutual recursion odd(5)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); odd(5) }, True)
@@ -124,13 +135,28 @@ export fun run(s: Suite): Unit =
     group(s1, "closures", (sg: Suite) => {
       // Closure over block-local val
       eq(sg, "closure over block val", { val x = 2; fun get(): Int = x; get() }, 2)
+
       // Closure over function param (nested fun captures outer param): tested indirectly via closure to HOF and block val
       // Nested fun returning Unit then result (discard Unit, use block result)
       eq(sg, "nested Unit then result", { fun noop(): Unit = (); noop(); 42 }, 42)
+
       // Closure over block val passed to HOF
       eq(sg, "closure to HOF", { val k = 10; fun addK(x: Int): Int = x + k; applyTwice(addK, 0) }, 20)
+
       // By-reference var: closure and block share same mutable cell
       eq(sg, "by-ref var inc() + inc()", { var n = 0; fun inc(): Int = { n := n + 1; n }; inc() + inc() }, 3)
+
+      // Nested fun inside closure capturing val from outer scope
+      eq(sg, "nested fun capture from closure val", { val base = 10; val f = (x: Int) => { fun add(): Int = base + x; add() }; f(5) }, 15)
+
+      // Recursive nested fun inside closure capturing from outer scope
+      eq(sg, "recursive nested fun capture from closure", { val base = 1; val f = (x: Int) => { fun fac(n: Int): Int = if (n <= 1) base else n * fac(n - 1); fac(x) }; f(5) }, 120)
+
+      // Nested fun capturing var from outer closure (by-reference forwarding)
+      eq(sg, "nested fun capture var from closure", { var counter = 0; val f = (x: Int) => { fun bump(): Int = { counter := counter + x; counter }; bump() }; f(5) + f(3) }, 13)
+
+      // Double-nested closure: recursive nested fun inside closure inside closure
+      eq(sg, "recursive nested fun double closure", { val f = (x: Int) => { val g = (y: Int) => { fun fac(n: Int): Int = if (n <= 1) 1 else n * fac(n - 1); fac(y) }; g(x) }; f(5) }, 120)
     })
 
     // Generic functions with type parameters

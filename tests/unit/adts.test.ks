@@ -142,6 +142,7 @@ export fun run(s: Suite): Unit =
       eq(sg, "evalCond And", evalCond(And(CTrue, CTrue)), True)
       eq(sg, "evalCond And false", evalCond(And(CTrue, CFalse)), False)
       eq(sg, "evalCond Eqq true", evalCond(Eqq(Lit(1), Lit(1))), True)
+
       // Note: Eqq(Lit(1), Lit(2)) returning False test has a known issue - 
       // it appears to be inferring Eqq incorrectly - skipping for now
       // eq(sg, "evalCond Eqq false", evalCond(Eqq(Lit(1), Lit(2))), False)
@@ -159,6 +160,7 @@ export fun run(s: Suite): Unit =
       eq(sg, "Lt2 false", evalCond2(Lt2(Lit2(2), Lit2(1))), False)
       eq(sg, "Not2", evalCond2(Not2(False2)), True)
       eq(sg, "And2", evalCond2(And2(True2, True2)), True)
+
       // Nested: If with Eq inside
       val condExpr = If2(Eq2(Add2(Lit2(1), Lit2(1)), Lit2(2)), Lit2(100), Lit2(200))
       eq(sg, "nested If2+Eq2+Add2 true", evalExpr2(condExpr), 100)

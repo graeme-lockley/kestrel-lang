@@ -370,9 +370,6 @@ The implementation uses **closure conversion**: each capturing lambda is compile
 
 **Return type:** The declared return type of a block-local `fun name(...): ReturnType = body` is **checked**: the body's inferred type must unify with `ReturnType`; if not, the implementation reports a type error.
 
-**Known limitations (current implementation):**
-
-1. **Recursive nested function in test-runner context:** A nested `fun` with a full type signature may call itself by name and works correctly in normal execution (inline blocks, if branches, returned closures, top-level fun bodies). When the same code is run inside the test runner’s closure context, the VM may hit a bus error; this path is under investigation. For automated tests that exercise recursive nested functions, run the code via `./kestrel run` or a top-level entry point until the VM issue is fixed.
 
 ---
 
