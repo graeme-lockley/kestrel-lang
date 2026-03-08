@@ -72,7 +72,24 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 - **export:*** — Export/import mismatch. Example: `export:not_exported`.
 - **file:*** — Package/file system. Examples: `file:read_error`, `file:circular_import`.
 
-A catalog mapping code → short description may be maintained (e.g. in this spec or a separate doc). The compiler only needs to emit the code and the message.
+**Error code catalog (representative):**
+
+| Code | Description |
+|------|-------------|
+| `parse:unexpected_token` | Unexpected token; expected another token. |
+| `parse:expected_semicolon` | Expected `;` (e.g. after statement in block). |
+| `parse:unmatched_brace` | Unmatched `{`; expected `}`. |
+| `parse:expected_expr` | Expected expression. |
+| `resolve:module_not_found` | Module could not be resolved. |
+| `type:unknown_variable` | Unknown variable (optionally with suggestion). |
+| `type:unify` | Type mismatch (unification failed). |
+| `type:non_exhaustive_match` | Match is not exhaustive. |
+| `type:check` | General type-check error. |
+| `export:not_exported` | Module does not export the requested name. |
+| `file:read_error` | Could not read file. |
+| `file:circular_import` | Circular import detected. |
+
+The compiler only needs to emit the code and the message.
 
 ---
 
@@ -80,12 +97,12 @@ A catalog mapping code → short description may be maintained (e.g. in this spe
 
 | Phase       | Emits diagnostics | Location source                          |
 |------------|--------------------|------------------------------------------|
-| Parser     | Yes (one per throw)| Token span; file from caller             |
+| Parser     | Yes (multiple)     | Token span; file from caller             |
 | Resolver   | Yes (caller builds)| Caller provides file + import decl span  |
 | Typecheck  | Yes (multiple)     | AST node span + sourceFile from options  |
 | Compile-file | Yes              | filePath; for import/export, import span |
 
-The parser may throw a single error (converted to one Diagnostic by the caller). The typechecker collects multiple diagnostics where possible. Resolver returns success/failure; the caller (e.g. compile-file) builds Diagnostic(s) with file and import span.
+The parser may collect multiple diagnostics (e.g. with error recovery for missing semicolons or unmatched braces) and return them; it may also throw a single error (converted to one Diagnostic by the caller). The typechecker collects multiple diagnostics where possible. Resolver returns success/failure; the caller (e.g. compile-file) builds Diagnostic(s) with file and import span.
 
 ---
 

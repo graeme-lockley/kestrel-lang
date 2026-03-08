@@ -7,7 +7,7 @@ import { typecheck } from './typecheck/index.js';
 import { codegen } from './codegen/codegen.js';
 import { writeKbc, writeMinimalKbc } from './bytecode/write.js';
 import type { Diagnostic } from './diagnostics/types.js';
-import { CODES, locationFileOnly } from './diagnostics/types.js';
+import { CODES, locationFileOnly, locationFromSpan } from './diagnostics/types.js';
 
 export interface CompileOptions {
   /** Source file path for diagnostics (spec 10). Default `<source>` for compile(source). */
@@ -18,8 +18,20 @@ export function compile(source: string, compileOptions?: CompileOptions): { ok: 
   const sourceFile = compileOptions?.sourceFile ?? '<source>';
   try {
     const tokens = tokenize(source);
-    const ast = parse(tokens);
-    const tc = typecheck(ast, { sourceFile });
+    const parseResult = parse(tokens);
+    if ('ok' in parseResult && !parseResult.ok) {
+      return {
+        ok: false,
+        diagnostics: parseResult.errors.map((e) => ({
+          severity: 'error' as const,
+          code: e.code,
+          message: e.message,
+          location: locationFromSpan(sourceFile, e.span, source),
+        })),
+      };
+    }
+    const ast = parseResult as import('./parser/index.js').Program;
+    const tc = typecheck(ast, { sourceFile, sourceContent: source });
     if (!tc.ok) return { ok: false, diagnostics: tc.diagnostics };
     return { ok: true, ast };
   } catch (e) {

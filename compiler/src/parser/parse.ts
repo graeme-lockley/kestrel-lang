@@ -17,6 +17,7 @@ import type {
   TypeField,
 } from '../ast/nodes.js';
 import { tokenize } from '../lexer/tokenize.js';
+import { CODES } from '../diagnostics/types.js';
 
 export class ParseError extends Error {
   constructor(
@@ -30,7 +31,15 @@ export class ParseError extends Error {
   }
 }
 
-export function parse(tokens: Token[]): Program {
+export interface ParseErrorEntry {
+  code: string;
+  message: string;
+  span: Span;
+}
+
+export type ParseResult = Program | { ok: false; errors: ParseErrorEntry[] };
+
+export function parse(tokens: Token[]): ParseResult {
   const p = new Parser(tokens);
   return p.parseProgram();
 }
@@ -43,6 +52,8 @@ export function parseExpression(tokens: Token[]): Expr {
 
 class Parser {
   private i = 0;
+  private errors: ParseErrorEntry[] = [];
+
   constructor(private readonly tokens: Token[]) {}
 
   private pos(): number {
@@ -70,18 +81,33 @@ class Parser {
     return t;
   }
 
+  private pushError(code: string, message: string, span: Span): void {
+    this.errors.push({ code, message, span });
+  }
+
   private expect(kind: Token['kind'], value?: string): Token {
     const t = this.current();
     if (t.kind !== kind || (value !== undefined && t.value !== value)) {
-      throw new ParseError(
+      this.pushError(
+        CODES.parse.unexpected_token,
         `Expected ${value ?? kind}, got ${t.value ?? t.kind}`,
-        t.span.start,
-        t.span.line,
-        t.span.column
+        t.span
       );
+      this.advance();
+      return this.current();
     }
     this.advance();
     return t;
+  }
+
+  /** Recover from missing `}`: push unmatched_brace and skip to next `}` or eof. */
+  private expectRbraceRecover(): void {
+    if (!this.at('rbrace') && !this.at('eof')) {
+      const t = this.current();
+      this.pushError(CODES.parse.unmatched_brace, 'Unmatched `{`', t.span);
+      while (!this.at('rbrace') && !this.at('eof')) this.advance();
+    }
+    if (this.at('rbrace')) this.advance();
   }
 
   private span(): { start: number; end: number; line: number; column: number } | undefined {
@@ -89,7 +115,7 @@ class Parser {
     return t.span;
   }
 
-  parseProgram(): Program {
+  parseProgram(): ParseResult {
     const start = this.pos();
     const imports: ImportDecl[] = [];
     while (this.at('keyword', 'import')) {
@@ -115,6 +141,9 @@ class Parser {
       } else {
         this.advance();
       }
+    }
+    if (this.errors.length > 0) {
+      return { ok: false, errors: this.errors };
     }
     return {
       kind: 'Program',
@@ -158,7 +187,8 @@ class Parser {
   private parseExport(): TopLevelDecl {
     this.expect('keyword', 'export');
     if (this.at('keyword', 'opaque')) {
-      throw new ParseError('Cannot use both "export" and "opaque" on a type declaration', this.current().span.start, this.current().span.line, this.current().span.column);
+      this.pushError(CODES.parse.unexpected_token, 'Cannot use both "export" and "opaque" on a type declaration', this.current().span);
+      this.advance();
     }
     if (this.at('op', '*')) {
       this.advance();
@@ -274,7 +304,10 @@ class Parser {
       const value = this.parseExpr();
       return { kind: 'VarDecl', name, type, value };
     }
-    throw new ParseError('Expected fun, type, export exception, val, or var', this.current().span.start, this.current().span.line, this.current().span.column);
+    const span = this.current().span;
+    this.pushError(CODES.parse.unexpected_token, 'Expected fun, type, export exception, val, or var', span);
+    this.advance();
+    return { kind: 'ValDecl', name: '_', type: undefined, value: { kind: 'LiteralExpr', literal: 'unit', value: '()', span } };
   }
 
   private parseFunDecl(exported = false): import('../ast/nodes.js').FunDecl {
@@ -886,7 +919,10 @@ class Parser {
       this.advance();
       return { kind: 'ThrowExpr', value: this.parseExpr() };
     }
-    throw new ParseError('Expected expression', this.current().span.start, this.current().span.line, this.current().span.column);
+    const span = this.current().span;
+    this.pushError(CODES.parse.expected_expr, 'Expected expression', span);
+    this.advance();
+    return { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
   }
 
   private parseRecordOrBlock(): Expr {
@@ -982,6 +1018,12 @@ class Parser {
         const body = this.parseExpr();
         stmts.push({ kind: 'FunStmt', name, typeParams, params, returnType, body });
       } else {
+        if (this.at('rbrace') || this.at('eof')) {
+          this.pushError(CODES.parse.unmatched_brace, 'Expected expression before `}`', this.current().span);
+          const span = this.current().span;
+          result = { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
+          break;
+        }
         const expr = this.parseExpr();
         if (this.at('op', ':=')) {
           this.advance();
@@ -993,9 +1035,18 @@ class Parser {
           stmts.push({ kind: 'ExprStmt', expr });
         }
       }
-      if (this.at('semicolon')) this.advance();
+      if (this.at('semicolon')) {
+        this.advance();
+      } else if (!this.at('rbrace') && !this.at('eof')) {
+        this.pushError(CODES.parse.expected_semicolon, 'Expected `;`', this.current().span);
+        while (!this.at('eof') && !this.at('semicolon') && !this.at('rbrace') && this.current().kind !== 'newline') {
+          this.advance();
+        }
+        if (this.at('semicolon')) this.advance();
+        else if (this.current().kind === 'newline') this.advance();
+      }
     }
-    this.expect('rbrace');
+    this.expectRbraceRecover();
     return { kind: 'BlockExpr', stmts, result: result! };
   }
 
@@ -1103,6 +1154,9 @@ class Parser {
       this.expect('rparen');
       return { kind: 'TuplePattern', elements };
     }
-    throw new ParseError('Expected pattern', this.current().span.start, this.current().span.line, this.current().span.column);
+    const span = this.current().span;
+    this.pushError(CODES.parse.expected_expr, 'Expected pattern', span);
+    this.advance();
+    return { kind: 'WildcardPattern' };
   }
 }

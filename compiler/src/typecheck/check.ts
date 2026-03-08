@@ -27,7 +27,8 @@ export function getInferredType(node: { span?: unknown }): InternalType | undefi
 export class TypeCheckError extends Error {
   constructor(
     message: string,
-    public node?: unknown
+    public node?: unknown,
+    public suggestion?: string
   ) {
     super(message);
     this.name = 'TypeCheckError';
@@ -43,6 +44,8 @@ export interface TypecheckOptions {
   importOpaqueTypes?: Set<string>;
   /** Source file path for diagnostics (spec 10). */
   sourceFile?: string;
+  /** Source content for endLine/endColumn in diagnostics. */
+  sourceContent?: string;
 }
 
 export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; exportedTypeVisibility: Map<string, 'local' | 'opaque' | 'export'> } | { ok: false; diagnostics: Diagnostic[] } {
@@ -56,20 +59,22 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
   const exportedTypeVisibility = new Map<string, 'local' | 'opaque' | 'export'>();
   let inAsyncContext = false; // Track if we're in an async function
   const sourceFile = options?.sourceFile ?? '';
+  const sourceContent = options?.sourceContent;
   /** Current expression for UnifyError location (spec 10). */
   let currentExpr: Expr | undefined;
 
-  function locFor(node: unknown): { file: string; line: number; column: number; offset?: number; endOffset?: number } {
+  function locFor(node: unknown): { file: string; line: number; column: number; offset?: number; endOffset?: number; endLine?: number; endColumn?: number } {
     const span = (node as { span?: Span })?.span;
-    if (span) return locationFromSpan(sourceFile, span);
+    if (span) return locationFromSpan(sourceFile, span, sourceContent);
     return locationFileOnly(sourceFile);
   }
 
-  /** Call unify; on UnifyError attach blameNode so the diagnostic gets the right location. */
+  /** Call unify; on UnifyError attach blameNode (and optional relatedNode) for diagnostics. */
   function unifyWithBlame(
     left: InternalType,
     right: InternalType,
-    blameNode: unknown
+    blameNode: unknown,
+    relatedNode?: unknown
   ): void {
     if (left == null || right == null) {
       const which = left == null ? 'left' : 'right';
@@ -82,7 +87,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       unify(left, right, subst);
     } catch (e) {
       if (e instanceof UnifyError) {
-        (e as UnifyError & { blameNode?: unknown }).blameNode = blameNode;
+        const err = e as UnifyError & { blameNode?: unknown; relatedNode?: unknown };
+        err.blameNode = blameNode;
+        if (relatedNode !== undefined) err.relatedNode = relatedNode;
       }
       throw e;
     }
@@ -400,7 +407,14 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         return result;
       case 'IdentExpr': {
         const t = env.get(expr.name);
-        if (t == null) throw new TypeCheckError(`Unknown variable: ${expr.name}`, expr);
+        if (t == null) {
+          const suggestion = closestName(expr.name, [...env.keys()]);
+          throw new TypeCheckError(
+            `Unknown variable: ${expr.name}`,
+            expr,
+            suggestion != null ? `Did you mean \`${suggestion}\`?` : undefined
+          );
+        }
         // Instantiate if it's a scheme (polymorphic)
         result = apply(instantiate(t));
         setInferredType(expr, result);
@@ -533,7 +547,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           } else {
             const targetT = inferExpr(stmt.target);
             const v = inferExpr(stmt.value);
-            unifyWithBlame(targetT, v, stmt.value);
+            unifyWithBlame(v, targetT, stmt.value, stmt.target);
           }
         }
         result = inferExpr(expr.result);
@@ -1035,11 +1049,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             const field = objT.fields.find((f) => f.name === target.field);
             if (field == null) throw new TypeCheckError(`Unknown field: ${target.field}`, target);
             if (!field.mut) throw new TypeCheckError(`Cannot assign to immutable field: ${target.field}`, target);
-            unifyWithBlame(valueT, field.type, node.value);
+            unifyWithBlame(valueT, field.type, node.value, target);
           }
         } else if (target.kind === 'IdentExpr') {
           const lhs = env.get(target.name);
-          if (lhs != null) unifyWithBlame(valueT, lhs, node.value);
+          if (lhs != null) unifyWithBlame(valueT, lhs, node.value, target);
         }
       }
     }
@@ -1106,20 +1120,26 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     return { ok: true, exports, exportedTypeAliases, exportedTypeVisibility };
   } catch (e) {
     if (e instanceof UnifyError) {
-      const blame = (e as UnifyError & { blameNode?: unknown }).blameNode ?? currentExpr;
+      const err = e as UnifyError & { blameNode?: unknown; relatedNode?: unknown };
+      const blame = err.blameNode ?? currentExpr;
+      const related = err.relatedNode != null
+        ? [{ message: 'expected type from here', location: locFor(err.relatedNode) }]
+        : undefined;
       diagnostics.push({
         severity: 'error',
         code: CODES.type.unify,
         message: e.message,
         location: locFor(blame),
         hint: `${typeStr(e.left)} vs ${typeStr(e.right)}`,
+        related,
       });
     } else if (e instanceof TypeCheckError) {
       diagnostics.push({
         severity: 'error',
-        code: CODES.type.check,
+        code: e.suggestion != null ? CODES.type.unknown_variable : CODES.type.check,
         message: e.message,
         location: locFor(e.node),
+        suggestion: e.suggestion,
       });
     } else {
       diagnostics.push({
@@ -1131,6 +1151,42 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     }
     return { ok: false, diagnostics };
   }
+}
+
+const MAX_SUGGESTION_DISTANCE = 2;
+
+/** Levenshtein distance between two strings. */
+function editDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  const dp: number[][] = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i]![0] = i;
+  for (let j = 0; j <= n; j++) dp[0]![j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i]![j] = Math.min(
+        dp[i - 1]![j]! + 1,
+        dp[i]![j - 1]! + 1,
+        dp[i - 1]![j - 1]! + cost
+      );
+    }
+  }
+  return dp[m]![n]!;
+}
+
+/** Return the closest name from candidates within MAX_SUGGESTION_DISTANCE, or undefined. */
+function closestName(name: string, candidates: string[]): string | undefined {
+  let best: string | undefined;
+  let bestDist = MAX_SUGGESTION_DISTANCE + 1;
+  for (const c of candidates) {
+    const d = editDistance(name, c);
+    if (d < bestDist) {
+      bestDist = d;
+      best = c;
+    }
+  }
+  return best;
 }
 
 function typeStr(t: InternalType): string {

@@ -34,7 +34,8 @@ Spec 10 defines a comprehensive diagnostic system with structured diagnostics, e
 - [ ] At least one diagnostic uses `hint` or `suggestion` -- e.g., "Did you mean `println`?" for unknown identifiers.
 - [ ] Human output format matches spec 10 &sect;6 (file:line:column, source line, caret).
 - [ ] JSON output format matches spec 10 &sect;7 (one JSON object per line on stderr).
-- [ ] Integration test: verify diagnostic output format for a known parse error and a known type error.
+- [ ] **Integration test**: verify diagnostic output format for a known parse error and a known type error.
+- [ ] **Documentation**: Update all relevent specification documents allowing the decisions and formats and rationale to be well communicated and understood.
 
 ## Spec References
 

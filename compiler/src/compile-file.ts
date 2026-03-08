@@ -4,7 +4,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve as pathResolve, dirname } from 'path';
 import { tokenize } from './lexer/index.js';
-import { parse, ParseError } from './parser/index.js';
+import { parse } from './parser/index.js';
 import { typecheck, type TypecheckOptions } from './typecheck/check.js';
 import { codegen, type CodegenResult } from './codegen/codegen.js';
 import { writeKbc, type ImportedFunctionEntry } from './bytecode/write.js';
@@ -112,12 +112,12 @@ function getRequestedImports(imp: ImportDecl): Map<string, string> {
   return m;
 }
 
-function diag(file: string, code: string, message: string, span?: Span): Diagnostic {
+function diag(file: string, code: string, message: string, span?: Span, source?: string): Diagnostic {
   return {
     severity: 'error',
     code,
     message,
-    location: span ? locationFromSpan(file, span) : locationFileOnly(file),
+    location: span ? locationFromSpan(file, span, source) : locationFileOnly(file),
   };
 }
 
@@ -154,23 +154,20 @@ export function compileFile(
     }
 
     const tokens = tokenize(source);
+    const parseResult = parse(tokens);
     let program: Program;
-    try {
-      program = parse(tokens);
-    } catch (e) {
-      if (e instanceof ParseError) {
-        return {
-          ok: false,
-          diagnostics: [{
-            severity: 'error',
-            code: CODES.parse.unexpected_token,
-            message: e.message,
-            location: { file: filePath, line: e.line, column: e.column, offset: e.offset },
-          }],
-        };
-      }
-      throw e;
+    if ('ok' in parseResult && !parseResult.ok) {
+      return {
+        ok: false,
+        diagnostics: parseResult.errors.map((e) => ({
+          severity: 'error' as const,
+          code: e.code,
+          message: e.message,
+          location: locationFromSpan(filePath, e.span, source),
+        })),
+      };
     }
+    program = parseResult as Program;
 
     const resolveOpts = { fromFile: filePath, projectRoot, stdlibDir };
     const specs = getDistinctSpecifiers(program);
@@ -180,7 +177,7 @@ export function compileFile(
       const r = resolveSpecifier(spec, resolveOpts);
       if (!r.ok) {
         const imp = program.imports.find((i) => i.spec === spec);
-        return { ok: false, diagnostics: [diag(filePath, CODES.resolve.module_not_found, r.error, (imp as { span?: Span })?.span)] };
+        return { ok: false, diagnostics: [diag(filePath, CODES.resolve.module_not_found, r.error, (imp as { span?: Span })?.span, source)] };
       }
       resolved.set(spec, r.path);
     }
@@ -239,7 +236,7 @@ export function compileFile(
                 const ta = typesTypeAliases.get(externalName);
                 if (exp == null && ta == null) {
                   const imp = program.imports.find((i) => i.spec === spec);
-                  return { ok: false, diagnostics: [diag(filePath, CODES.export.not_exported, `Module ${spec} does not export ${externalName}`, (imp as { span?: Span })?.span)] };
+                  return { ok: false, diagnostics: [diag(filePath, CODES.export.not_exported, `Module ${spec} does not export ${externalName}`, (imp as { span?: Span })?.span, source)] };
                 }
                 if (ta != null) {
                   typeAliasBindings.set(localName, ta.type);
@@ -270,7 +267,7 @@ export function compileFile(
             const t = depOut.exports.get(externalName);
             if (t == null) {
               const imp = program.imports.find((i) => i.spec === spec);
-              return { ok: false, diagnostics: [diag(filePath, CODES.export.not_exported, `Module ${spec} does not export ${externalName}`, (imp as { span?: Span })?.span)] };
+              return { ok: false, diagnostics: [diag(filePath, CODES.export.not_exported, `Module ${spec} does not export ${externalName}`, (imp as { span?: Span })?.span, source)] };
             }
             if (depOut.exportedTypeAliases.has(externalName)) {
               typeAliasBindings.set(localName, t);
@@ -297,6 +294,7 @@ export function compileFile(
       typeAliasBindings: typeAliasBindings.size > 0 ? typeAliasBindings : undefined,
       importOpaqueTypes: importOpaqueTypes.size > 0 ? importOpaqueTypes : undefined,
       sourceFile: filePath,
+      sourceContent: source,
     };
     const tc = typecheck(program, tcOpts);
     if (!tc.ok) return { ok: false, diagnostics: tc.diagnostics };

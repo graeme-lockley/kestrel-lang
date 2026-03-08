@@ -30,6 +30,9 @@ export interface Diagnostic {
 export const CODES = {
   parse: {
     unexpected_token: 'parse:unexpected_token',
+    expected_semicolon: 'parse:expected_semicolon',
+    unmatched_brace: 'parse:unmatched_brace',
+    expected_expr: 'parse:expected_expr',
   },
   resolve: {
     module_not_found: 'resolve:module_not_found',
@@ -51,15 +54,31 @@ export const CODES = {
   },
 } as const;
 
-/** Build SourceLocation from AST/token Span and file path. */
-export function locationFromSpan(file: string, span: Span): SourceLocation {
-  return {
+/** 1-based line and column for the character at offset in source. */
+export function lineColumnFromOffset(source: string, offset: number): { line: number; column: number } {
+  if (offset < 0 || offset >= source.length) return { line: 1, column: 1 };
+  const before = source.slice(0, offset);
+  const line = (before.match(/\n/g)?.length ?? 0) + 1;
+  const startOfLine = before.lastIndexOf('\n') + 1;
+  const column = offset - startOfLine + 1;
+  return { line, column };
+}
+
+/** Build SourceLocation from AST/token Span and file path. Optional source computes endLine/endColumn. */
+export function locationFromSpan(file: string, span: Span, source?: string): SourceLocation {
+  const loc: SourceLocation = {
     file,
     line: span.line,
     column: span.column,
     offset: span.start,
     endOffset: span.end,
   };
+  if (source != null && span.end != null && span.end <= source.length) {
+    const end = lineColumnFromOffset(source, span.end);
+    loc.endLine = end.line;
+    loc.endColumn = end.column;
+  }
+  return loc;
 }
 
 /** Location when only file is known (e.g. circular import). */

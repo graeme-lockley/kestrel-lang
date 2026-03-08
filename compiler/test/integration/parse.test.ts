@@ -79,7 +79,11 @@ describe('parse (integration)', () => {
   });
 
   it('errors on export opaque type (both cannot be used together)', () => {
-    expect(() => parse(tokenize('export opaque type Foo = Int'))).toThrow('Cannot use both "export" and "opaque"');
+    const result = parse(tokenize('export opaque type Foo = Int'));
+    expect('ok' in result && !result.ok).toBe(true);
+    if ('ok' in result && !result.ok) {
+      expect(result.errors.some((e) => e.message.includes('Cannot use both "export" and "opaque"'))).toBe(true);
+    }
   });
 
   it('parses block with nested fun (emitted as FunStmt)', () => {

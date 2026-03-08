@@ -53,6 +53,12 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Output:** For each test file, prints a line with PASS (green) or FAIL (red). At the end, prints a summary line: “Tests: X passed, Y failed, Z total” with colour (green for passed count, red for failed count when Y &gt; 0).
 - **Exit code:** 0 if all tests passed; 1 if any test failed or did not compile.
 
+### 2.5 Compiler options (diagnostics)
+
+When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
+
+- **`--format=json`** — Emit diagnostics in machine-readable form (JSON Lines, one JSON object per diagnostic on stderr). See [10-compile-diagnostics.md](10-compile-diagnostics.md) §7 for the exact format. When omitted, diagnostics are printed in human-readable form per §6.
+
 ---
 
 ## 3. Implementation Responsibilities

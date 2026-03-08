@@ -106,7 +106,11 @@ function formatHuman(diagnostics: Diagnostic[], options: ReportOptions): string 
         ? caretCol0FromOffset(source, loc.offset)
         : loc.column - 1;
 
-    const header = `  --> ${fileDisplay}:${displayLine}:${displayColumn}`;
+    const rangeSuffix =
+      loc.endLine != null && loc.endColumn != null && (loc.endLine !== displayLine || loc.endColumn !== displayColumn)
+        ? `-${loc.endLine}:${loc.endColumn}`
+        : '';
+    const header = `  --> ${fileDisplay}:${displayLine}:${displayColumn}${rangeSuffix}`;
     const lineNum = String(displayLine);
     const src = d.sourceLine ?? getSourceLine(loc, options);
     const caretStr = caretLine(loc, src, d.message, col0, lineNum);
@@ -118,6 +122,11 @@ function formatHuman(diagnostics: Diagnostic[], options: ReportOptions): string 
       out.push(d.severity === 'warning' ? yellow(caretStr) : red(caretStr));
       if (d.hint) out.push(dim(`   = hint: ${d.hint}`));
       if (d.suggestion) out.push(dim(`   = note: ${d.suggestion}`));
+      if (d.related?.length) {
+        for (const r of d.related) {
+          out.push(dim(`   = note: ${r.message}`));
+        }
+      }
     } else {
       out.push(header);
       out.push('   |');
@@ -125,6 +134,11 @@ function formatHuman(diagnostics: Diagnostic[], options: ReportOptions): string 
       out.push(caretStr);
       if (d.hint) out.push(`   = hint: ${d.hint}`);
       if (d.suggestion) out.push(`   = note: ${d.suggestion}`);
+      if (d.related?.length) {
+        for (const r of d.related) {
+          out.push(`   = note: ${r.message}`);
+        }
+      }
     }
     out.push('');
   }
