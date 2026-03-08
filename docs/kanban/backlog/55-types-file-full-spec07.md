@@ -24,8 +24,9 @@ The types file (`.kti`) is the compile-time artifact that allows cross-module co
 - [ ] Type serialization covers all InternalType forms: prim, arrow, record (with row), app (generics), tuple, union, intersection, scheme (quantified), type variables.
 - [ ] Exported type aliases are included in the `.kti` file.
 - [ ] Round-trip test: write a `.kti`, read it back, verify all fields are preserved.
-- [ ] Integration test: compile module A that exports a var, compile module B that imports and assigns to it, verify getter/setter indices are correct in the bytecode.
+- [ ] **Integration test**: compile module A that exports a var, compile module B that imports and assigns to it, verify getter/setter indices are correct in the bytecode.
 - [ ] Imported function table (03 &sect;6.6) entries use the correct indices from the `.kti` file.
+- [ ] **Documentation**: Update all relevent specification documents allowing the decisions and formats and rationale to be well communicated and understood.
 
 ## Spec References
 

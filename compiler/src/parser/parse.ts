@@ -1019,9 +1019,15 @@ class Parser {
         stmts.push({ kind: 'FunStmt', name, typeParams, params, returnType, body });
       } else {
         if (this.at('rbrace') || this.at('eof')) {
-          this.pushError(CODES.parse.unmatched_brace, 'Expected expression before `}`', this.current().span);
-          const span = this.current().span;
-          result = { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
+          const last = stmts[stmts.length - 1];
+          if (last?.kind === 'ExprStmt') {
+            result = last.expr;
+            stmts.pop();
+          } else {
+            this.pushError(CODES.parse.unmatched_brace, 'Expected expression before `}`', this.current().span);
+            const span = this.current().span;
+            result = { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
+          }
           break;
         }
         const expr = this.parseExpr();
@@ -1037,7 +1043,16 @@ class Parser {
       }
       if (this.at('semicolon')) {
         this.advance();
-      } else if (!this.at('rbrace') && !this.at('eof')) {
+      } else if (this.current().kind === 'newline') {
+        this.advance();
+      } else if (
+        !this.at('rbrace') &&
+        !this.at('eof') &&
+        !this.at('keyword', 'val') &&
+        !this.at('keyword', 'var') &&
+        !this.at('keyword', 'fun') &&
+        !this.isExprStart()
+      ) {
         this.pushError(CODES.parse.expected_semicolon, 'Expected `;`', this.current().span);
         while (!this.at('eof') && !this.at('semicolon') && !this.at('rbrace') && this.current().kind !== 'newline') {
           this.advance();
