@@ -23,6 +23,7 @@ Spec 07 &sect;5.1 defines that an `export var` produces two function table entri
 - [ ] Importing module: `x := expr` compiles to evaluating `expr`, then `CALL setter_index 1`.
 - [ ] Importing module: reading `x` compiles to `CALL getter_index 0`.
 - [ ] E2E test: module A exports a var, module B imports it, reads it, assigns to it, reads the new value.
+- [ ] **Documentation**: Update all relevent specification documents allowing the decisions and formats and rationale to be well communicated and understood.
 
 ## Spec References
 

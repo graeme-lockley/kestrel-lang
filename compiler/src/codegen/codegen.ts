@@ -464,6 +464,7 @@ function makeEmitExpr(
   funDeclCountRef: { value: number },
   recordDebug: (line: number | undefined) => void,
   chunkBaseRef: { value: number },
+  importedVarSetterIds?: Map<string, number>,
 ): { emitExpr: (
   expr: Expr,
   env: Map<string, number>,
@@ -986,6 +987,13 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
                   const gSlot = moduleGlobals.get(target.name);
                   if (gSlot !== undefined) {
                     emitStoreGlobal(gSlot);
+                  } else {
+                    const setterId = importedVarSetterIds?.get(target.name);
+                    if (setterId !== undefined) {
+                      emitCall(setterId, 1);
+                      const discardSlot = blockEnv.get('$discard');
+                      if (discardSlot !== undefined) emitStoreLocal(discardSlot);
+                    }
                   }
                 }
               }
@@ -1647,6 +1655,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     funDeclCountRef,
     recordDebug,
     chunkBaseRef,
+    options?.importedVarSetterIds,
   );
 
   codeStart();
@@ -1924,7 +1933,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     codeOffsetSoFar += fnCode.length;
   }
 
-  // Export var setters: 1-arity, body LOAD_LOCAL 0 → STORE_GLOBAL slot → RET
+  // Export var setters: 1-arity, body LOAD_LOCAL 0 → STORE_GLOBAL slot → LOAD_CONST unit → RET
   for (const decl of valOrVarDecls) {
     if (decl.kind !== 'VarDecl') continue;
     const slot = env.get(decl.name);
@@ -1934,6 +1943,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     recordDebug(decl.span?.line);
     emitLoadLocal(0);
     emitStoreGlobal(slot);
+    emitLoadConst(addConstant({ tag: ConstTag.Unit }));
     emitRet();
     const setterCode = codeSlice();
     functionTable.push({

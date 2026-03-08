@@ -181,7 +181,7 @@ ExportDecl     ::= "export" (TopLevelDecl
                  | "opaque" TypeDecl
 ExportSpec     ::= IDENT [ "as" IDENT ]
 
-TopLevelDecl   ::= FunDecl | TypeDecl | ExceptionDecl
+TopLevelDecl   ::= FunDecl | TypeDecl | ExceptionDecl | ValDecl | VarDecl
 
 FunDecl        ::= [ "async" ] "fun" LOWER_IDENT [ "<" TypeParamList ">" ] "(" ParamList ")" ":" Type "=" Expr
 ParamList      ::= [ Param { "," Param } ]
@@ -193,6 +193,8 @@ TypeBody       ::= Type                                         /* type alias */
 Constructor    ::= UPPER_IDENT [ "(" TypeList ")" ]             /* 0 or more positional payload types */
 TypeParamList  ::= UPPER_IDENT { "," UPPER_IDENT }
 ExceptionDecl  ::= "export" "exception" UPPER_IDENT [ "{" TypeFieldList "}" ]
+ValDecl        ::= "val" LOWER_IDENT [ ":" Type ] "=" Expr
+VarDecl        ::= "var" LOWER_IDENT [ ":" Type ] "=" Expr
 ```
 
 **Program order:** **Imports** must appear first (after an optional shebang). All `ImportDecl` are parsed before any declaration or statement. Thereafter **declarations** (exports, functions, types, exceptions) and **top-level statements** may be interleaved in any order. Declarations are visible for the whole module (hoisted). Top-level statements are executed **serially** in source order when the module is run—e.g. as the body of a script. A file that begins with a shebang is typically executed as the entry point. An empty program (shebang only, or no imports, declarations, or statements) is valid and denotes a module that does nothing when run.
