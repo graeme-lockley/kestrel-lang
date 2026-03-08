@@ -34,7 +34,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 **Usage:** `kestrel dis <script[.ks]>`
 
 - **Effect:** Compiles the named script if needed (same freshness rules as `run`; output cached under `~/.kestrel/kbc/` as for `run`), then unpacks the `.kbc` and prints the disassembled bytecode in mnemonic form.
-- **Output:** Each instruction is printed with its byte offset and mnemonic (e.g. `LOAD_CONST 0`, `ADD`, `RET`). Format follows [04-bytecode-isa.md](04-bytecode-isa.md) instruction encoding.
+- **Output:** Each instruction is printed with its byte offset and mnemonic (e.g. `LOAD_CONST 0`, `ADD`, `RET`). Format follows [04-bytecode-isa.md](04-bytecode-isa.md) instruction encoding. When the bytecode includes a non-empty debug section (03 §8), the disassembler may annotate instructions with source file and line (e.g. `; line N` or section comments `; --- file:line ---`).
 - **Purpose:** Debugging and inspection of emitted bytecode.
 
 ### 2.3 build

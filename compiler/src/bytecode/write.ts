@@ -223,6 +223,13 @@ function writeSection6(
   }
 }
 
+/** Debug entry for section 4 (spec 03 §8): code_offset, file_index, line. */
+export interface DebugEntryForWrite {
+  codeOffset: number;
+  fileIndex: number;
+  line: number;
+}
+
 /** Build full .kbc from sections. */
 export function writeKbc(
   stringTable: string[],
@@ -233,13 +240,17 @@ export function writeKbc(
   importedFunctionTable: ImportedFunctionEntry[] = [],
   shapes: { nameIndices: number[] }[] = [],
   adts: { nameIndex: number; constructors: { nameIndex: number; payloadTypeIndex: number }[] }[] = [],
-  nGlobals: number = 0
+  nGlobals: number = 0,
+  debugFileStringIndices: number[] = [],
+  debugEntries: DebugEntryForWrite[] = []
 ): Uint8Array {
   const section0Len = sizeStringTable(stringTable);
   const section1Len = sizeConstantPool(constantPool);
   const section2Len = sizeSection2(nGlobals, functionTable, importSpecifierIndices, importedFunctionTable);
   const section3Len = align4(code.length); // Code section padded per spec 03 §1 (4-byte alignment)
-  const section4Len = 8;  // debug: file_count=0, entry_count=0
+  const debugFileCount = debugFileStringIndices.length;
+  const debugEntryCount = debugEntries.length;
+  const section4Len = 4 + debugFileCount * 4 + 4 + debugEntryCount * 12;
   const section5Len = sizeSection5(shapes);
   const section6Len = sizeSection6(adts);
 
@@ -270,8 +281,21 @@ export function writeKbc(
   writeConstantPool(buf, section1Start, constantPool);
   writeSection2(buf, section2Start, nGlobals, functionTable, importSpecifierIndices, importedFunctionTable);
   new Uint8Array(buf, section3Start, code.length).set(code);
-  writeU32(dv, section4Start, 0);
-  writeU32(dv, section4Start + 4, 0);
+  let o4 = section4Start;
+  writeU32(dv, o4, debugFileCount);
+  o4 += 4;
+  for (const idx of debugFileStringIndices) {
+    writeU32(dv, o4, idx);
+    o4 += 4;
+  }
+  writeU32(dv, o4, debugEntryCount);
+  o4 += 4;
+  for (const e of debugEntries) {
+    writeU32(dv, o4, e.codeOffset);
+    writeU32(dv, o4 + 4, e.fileIndex);
+    writeU32(dv, o4 + 8, e.line);
+    o4 += 12;
+  }
   writeSection5(buf, section5Start, shapes);
   writeSection6(buf, section6Start, adts);
 

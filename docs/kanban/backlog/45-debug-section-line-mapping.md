@@ -18,8 +18,9 @@ The debug section (section 4 in .kbc) is always emitted empty (`file_count=0`, `
 - [ ] **Compiler**: During codegen, record `(code_offset, source_file, source_line)` tuples for each significant instruction (at minimum: one entry per statement/expression start).
 - [ ] **Bytecode writer**: Emit file entries and debug mapping entries per spec 03 &sect;8 (sorted by code_offset ascending).
 - [ ] **VM**: On uncaught exception or runtime error, look up the current PC in the debug entries (binary search) and print `file:line` in the error message.
-- [ ] **Disassembler**: Optionally annotate disassembly output with source line numbers from the debug section.
-- [ ] E2E test: A program that throws an uncaught exception reports the correct source file and line number.
+- [ ] **Disassembler**: Annotate disassembly output with source line numbers from the debug section.
+- [ ] **E2E test**: A program that throws an uncaught exception reports the correct source file and line number with the full stack trace of source file, and line number.
+- [ ] **Documentation**: Update all relevent specification documents allowing the decisions and formats and rationale to be well communicated and understood.
 
 ## Spec References
 

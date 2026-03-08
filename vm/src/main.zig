@@ -21,7 +21,9 @@ pub fn main() !void {
 
     var module = try load_mod.load(allocator, path);
     defer load_mod.freeModule(allocator, &module);
-    exec_mod.run(allocator, &module, path);
+    if (!exec_mod.run(allocator, &module, path)) {
+        std.process.exit(1);
+    }
 }
 
 test "vm placeholder" {

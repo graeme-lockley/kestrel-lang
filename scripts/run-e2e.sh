@@ -66,6 +66,14 @@ for f in "${files[@]}"; do
   "$ROOT/vm/zig-out/bin/kestrel" "$kbc" 2>"$out_stderr" || exit_code=$?
   if [ "$exit_code" -ne 0 ]; then
     echo "  $name.ks OK (runtime exit $exit_code as expected)"
+    if [ "$name" = "uncaught_exception" ]; then
+      if ! grep -q "Uncaught exception" "$out_stderr" || ! grep -q " at " "$out_stderr"; then
+        echo "E2E $name: expected stack trace with file:line in stderr" >&2
+        echo "stderr was:" >&2
+        cat "$out_stderr" >&2
+        exit 1
+      fi
+    fi
   else
     echo "E2E $name: expected compile or runtime failure, but program succeeded" >&2
     exit 1

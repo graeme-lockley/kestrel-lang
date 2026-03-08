@@ -50,9 +50,23 @@ export function compile(source: string, compileOptions?: CompileOptions): { ok: 
 }
 
 /** Emit .kbc from typed AST (codegen + full sections). */
-export function emitKbc(ast: import('./parser/index.js').Program): Uint8Array {
-  const { stringTable, constantPool, code, functionTable, importSpecifierIndices, shapes, adts, nGlobals } = codegen(ast);
-  return writeKbc(stringTable, constantPool, code, functionTable, importSpecifierIndices, [], shapes, adts, nGlobals ?? 0);
+export function emitKbc(ast: import('./parser/index.js').Program, compileOptions?: CompileOptions): Uint8Array {
+  const sourceFile = compileOptions?.sourceFile ?? '<source>';
+  const result = codegen(ast, { sourceFile });
+  const { stringTable, constantPool, code, functionTable, importSpecifierIndices, shapes, adts, nGlobals, debugFileStringIndices, debugEntries } = result;
+  return writeKbc(
+    stringTable,
+    constantPool,
+    code,
+    functionTable,
+    importSpecifierIndices,
+    [],
+    shapes,
+    adts,
+    nGlobals ?? 0,
+    debugFileStringIndices ?? [],
+    debugEntries ?? []
+  );
 }
 
 export { tokenize } from './lexer/index.js';

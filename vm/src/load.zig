@@ -34,6 +34,13 @@ pub const ImportedFnEntry = struct {
     function_index: u32,
 };
 
+/// Debug section (03 §8): code_offset → (file_index, line) for stack traces.
+pub const DebugEntry = struct {
+    code_offset: u32,
+    file_index: u32,
+    line: u32,
+};
+
 pub const Module = struct {
     code: []const u8,
     constants: []const Value,
@@ -56,6 +63,10 @@ pub const Module = struct {
     module_index: u32 = 0,
     /// File buffer; string table and section data point into this. Freed in freeModule.
     file_data: []const u8,
+    /// Debug section (03 §8): file paths for debug_entries file_index. Caller must free each then this slice.
+    debug_files: []const []const u8,
+    /// Debug section: entries sorted by code_offset ascending for binary search.
+    debug_entries: []const DebugEntry,
 };
 
 fn align4(n: usize) usize {
@@ -294,6 +305,44 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
         }
     }
 
+    const s4_start = section_offsets[4];
+    const s4_end = if (data.len > section_offsets[5]) section_offsets[5] else data.len;
+    var debug_files: []const []const u8 = &[_][]const u8{};
+    var debug_entries: []const DebugEntry = &[_]DebugEntry{};
+    if (s4_start + 4 <= s4_end) {
+        const file_count = std.mem.readInt(u32, data[s4_start..][0..4], .little);
+        var o: usize = s4_start + 4;
+        if (file_count > 0) {
+            const debug_files_list = try allocator.alloc([]const u8, file_count);
+            errdefer allocator.free(debug_files_list);
+            for (debug_files_list) |*file_slot| {
+                if (o + 4 > s4_end) return error.InvalidKbc;
+                const str_idx = std.mem.readInt(u32, data[o..][0..4], .little);
+                o += 4;
+                file_slot.* = if (str_idx < strings.len) try allocator.dupe(u8, strings[str_idx].data) else &[_]u8{};
+                errdefer allocator.free(file_slot.*);
+            }
+            debug_files = debug_files_list;
+        } else {
+            o += file_count * 4;
+        }
+        if (o + 4 > s4_end) return error.InvalidKbc;
+        const entry_count = std.mem.readInt(u32, data[o..][0..4], .little);
+        o += 4;
+        if (entry_count > 0) {
+            const entries_list = try allocator.alloc(DebugEntry, entry_count);
+            errdefer allocator.free(entries_list);
+            for (entries_list) |*e| {
+                if (o + 12 > s4_end) return error.InvalidKbc;
+                e.code_offset = std.mem.readInt(u32, data[o..][0..4], .little);
+                e.file_index = std.mem.readInt(u32, data[o + 4..][0..4], .little);
+                e.line = std.mem.readInt(u32, data[o + 8..][0..4], .little);
+                o += 12;
+            }
+            debug_entries = entries_list;
+        }
+    }
+
     const s5_start = section_offsets[5];
     const s5_end = if (data.len > section_offsets[6]) section_offsets[6] else data.len;
     var shapes: []const ShapeEntry = &[_]ShapeEntry{};
@@ -364,6 +413,8 @@ pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
         .imported_functions = imported_functions,
         .globals = globals,
         .file_data = data,
+        .debug_files = debug_files,
+        .debug_entries = debug_entries,
     };
 }
 
@@ -388,6 +439,11 @@ pub fn freeModule(allocator: std.mem.Allocator, m: *const Module) void {
     }
     if (m.imported_functions.len > 0) allocator.free(m.imported_functions);
     if (m.globals.len > 0) allocator.free(m.globals);
+    if (m.debug_files.len > 0) {
+        for (m.debug_files) |f| allocator.free(f);
+        allocator.free(m.debug_files);
+    }
+    if (m.debug_entries.len > 0) allocator.free(m.debug_entries);
 }
 
 test "load minimal kbc" {
@@ -412,6 +468,13 @@ test "load minimal kbc" {
     if (m.import_specifiers.len > 0) a.free(m.import_specifiers);
     if (m.imported_functions.len > 0) a.free(m.imported_functions);
     if (m.globals.len > 0) a.free(m.globals);
+    if (m.debug_files.len > 0) {
+        for (m.debug_files) |f| a.free(f);
+        a.free(m.debug_files);
+    }
+    if (m.debug_entries.len > 0) a.free(m.debug_entries);
     try std.testing.expect(m.code.len >= 1);
     try std.testing.expect(m.code[0] == 0x11);
+    try std.testing.expect(m.debug_files.len == 0);
+    try std.testing.expect(m.debug_entries.len == 0);
 }

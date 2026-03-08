@@ -101,6 +101,13 @@ export interface AdtEntry {
   constructors: ConstructorEntry[];
 }
 
+/** Debug entry: code offset → (file index, line) for stack traces (spec 03 §8). */
+export interface DebugEntry {
+  codeOffset: number;
+  fileIndex: number;
+  line: number;
+}
+
 /** Built-in ADT indices (List=0, Option=1, Result=2, Value=3). */
 export const ADT_LIST = 0;
 export const ADT_OPTION = 1;
@@ -205,6 +212,9 @@ export interface CodegenResult {
   nGlobals?: number;
   /** For each export var, the function table index of its setter (1-arity). Used for .kti and importer. */
   varSetterIndices?: Map<string, number>;
+  /** Debug section: file string indices (into string table) and code_offset → (file_index, line) entries (spec 03 §8). */
+  debugFileStringIndices?: number[];
+  debugEntries?: DebugEntry[];
 }
 
 /** Context for codegen: string table, constant pool, and helpers. */
@@ -254,6 +264,8 @@ function makeCodegenContext() {
 export interface LambdaEntry {
   arity: number;
   code: Uint8Array;
+  /** Source line of the lambda/fun (for debug section). */
+  line?: number;
 }
 
 /** Returns true if expr contains a reference to name (excluding params/bound in nested lambdas). */
@@ -450,6 +462,8 @@ function makeEmitExpr(
   addConstant: (c: ConstantEntry) => number,
   lambdaEntries: LambdaEntry[],
   funDeclCountRef: { value: number },
+  recordDebug: (line: number | undefined) => void,
+  chunkBaseRef: { value: number },
 ): { emitExpr: (
   expr: Expr,
   env: Map<string, number>,
@@ -471,6 +485,7 @@ function makeEmitExpr(
   varNames?: Set<string>,
   userAdtConfigs?: Map<string, MatchConfig>
 ): void {
+  recordDebug(expr.span?.line);
   switch (expr.kind) {
     case 'LiteralExpr': {
       switch (expr.literal) {
@@ -737,14 +752,17 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           const liftedEnv = new Map<string, number>();
           liftedEnv.set('__env', 0);
           for (let i = 0; i < stmt.params.length; i++) liftedEnv.set(stmt.params[i]!.name, i + 1);
+          const savedBase = chunkBaseRef.value;
+          chunkBaseRef.value = -1;
           const saved = codeSave();
           codeStart();
           emitExpr(stmt.body, liftedEnv, funNameToId, shapes, adts, captureMap, undefined);
           emitRet();
           const lambdaCode = codeSlice();
           codeRestore(saved);
+          chunkBaseRef.value = savedBase;
           const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
-          lambdaEntries.push({ arity: stmt.params.length + 1, code: lambdaCode });
+          lambdaEntries.push({ arity: stmt.params.length + 1, code: lambdaCode, line: stmt.span?.line });
           mutualLambdaIndices.push(lambdaIndex);
         }
 
@@ -814,6 +832,8 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           }
           const slot = blockEnv.get(stmt.name)!;
           if (freeVars.length === 0) {
+            const savedBase = chunkBaseRef.value;
+            chunkBaseRef.value = -1;
             const saved = codeSave();
             codeStart();
             const lambdaEnv = new Map<string, number>();
@@ -822,8 +842,9 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             emitRet();
             const lambdaCode = codeSlice();
             codeRestore(saved);
+            chunkBaseRef.value = savedBase;
             const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
-            lambdaEntries.push({ arity: stmt.params.length, code: lambdaCode });
+            lambdaEntries.push({ arity: stmt.params.length, code: lambdaCode, line: stmt.span?.line });
             emitLoadFn(lambdaIndex);
             emitStoreLocal(slot);
           } else {
@@ -848,14 +869,17 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             const liftedEnv = new Map<string, number>();
             liftedEnv.set('__env', 0);
             for (let i = 0; i < stmt.params.length; i++) liftedEnv.set(stmt.params[i]!.name, i + 1);
+            const savedBase = chunkBaseRef.value;
+            chunkBaseRef.value = -1;
             const saved = codeSave();
             codeStart();
             emitExpr(stmt.body, liftedEnv, funNameToId, shapes, adts, singleCaptureMap, undefined);
             emitRet();
             const lambdaCode = codeSlice();
             codeRestore(saved);
+            chunkBaseRef.value = savedBase;
             const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
-            lambdaEntries.push({ arity: stmt.params.length + 1, code: lambdaCode });
+            lambdaEntries.push({ arity: stmt.params.length + 1, code: lambdaCode, line: stmt.span?.line });
             for (const name of freeVars) {
               if (name === stmt.name) {
                 emitLoadConst(addConstant({ tag: ConstTag.Unit }));
@@ -1517,6 +1541,8 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       const paramNames = new Set(expr.params.map((p) => p.name));
       const freeVars = getFreeVars(expr.body, paramNames, env);
       if (freeVars.length === 0) {
+        const savedBase = chunkBaseRef.value;
+        chunkBaseRef.value = -1;
         const saved = codeSave();
         codeStart();
         const lambdaEnv = new Map<string, number>();
@@ -1525,8 +1551,9 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         emitRet();
         const lambdaCode = codeSlice();
         codeRestore(saved);
+        chunkBaseRef.value = savedBase;
         const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
-        lambdaEntries.push({ arity: expr.params.length, code: lambdaCode });
+        lambdaEntries.push({ arity: expr.params.length, code: lambdaCode, line: expr.span?.line });
         emitLoadFn(lambdaIndex);
         break;
       }
@@ -1546,14 +1573,17 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       const liftedEnv = new Map<string, number>();
       liftedEnv.set('__env', 0);
       for (let i = 0; i < expr.params.length; i++) liftedEnv.set(expr.params[i]!.name, i + 1);
+      const savedBase = chunkBaseRef.value;
+      chunkBaseRef.value = -1;
       const saved = codeSave();
       codeStart();
       emitExpr(expr.body, liftedEnv, funNameToId, shapes, adts, captureMap, undefined);
       emitRet();
       const lambdaCode = codeSlice();
       codeRestore(saved);
+      chunkBaseRef.value = savedBase;
       const lambdaIndex = funDeclCountRef.value + lambdaEntries.length;
-      lambdaEntries.push({ arity: expr.params.length + 1, code: lambdaCode });
+      lambdaEntries.push({ arity: expr.params.length + 1, code: lambdaCode, line: expr.span?.line });
       for (const name of freeVars) {
         const slot = env.get(name);
         if (slot !== undefined) {
@@ -1586,6 +1616,8 @@ export interface CodegenOptions {
   importedFuncIds?: Map<string, number>;
   /** Map of imported var names to the imported function table index of their setter (1-arity). */
   importedVarSetterIds?: Map<string, number>;
+  /** Source file path for debug section (file:line in stack traces). */
+  sourceFile?: string;
 }
 
 /** Generate bytecode for program. */
@@ -1594,7 +1626,28 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   const { stringTable, constantPool, stringIndex, addConstant } = ctx;
   const lambdaEntries: LambdaEntry[] = [];
   const funDeclCountRef = { value: 0 };
-  const { emitExpr, moduleGlobals } = makeEmitExpr(ctx.stringIndex, ctx.addConstant, lambdaEntries, funDeclCountRef);
+  const sourceFile = options?.sourceFile ?? '<source>';
+  const debugEntries: DebugEntry[] = [];
+  let lastDebugLine = -1;
+  const chunkBaseRef = { value: 0 };
+  const recordDebug = (line: number | undefined): void => {
+    if (line != null && line !== lastDebugLine && chunkBaseRef.value >= 0) {
+      debugEntries.push({
+        codeOffset: chunkBaseRef.value + codeOffset(),
+        fileIndex: 0,
+        line,
+      });
+      lastDebugLine = line;
+    }
+  };
+  const { emitExpr, moduleGlobals } = makeEmitExpr(
+    ctx.stringIndex,
+    ctx.addConstant,
+    lambdaEntries,
+    funDeclCountRef,
+    recordDebug,
+    chunkBaseRef,
+  );
 
   codeStart();
   const shapes: ShapeEntry[] = [];
@@ -1793,7 +1846,9 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   const functionTable: FunctionEntry[] = [];
 
   for (const decl of funDecls) {
+    chunkBaseRef.value = codeOffsetSoFar;
     codeStart();
+    recordDebug(decl.span?.line);
     const arity = decl.params.length;
     const fnEnv = new Map<string, number>();
     for (let i = 0; i < arity; i++) fnEnv.set(decl.params[i]!.name, i);
@@ -1810,7 +1865,21 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   }
 
   // Lambda functions (compiled inline during emitExpr; add them to function table after FunDecls)
+  const maxLineBeforeOffset = (offset: number) => {
+    let max = 1;
+    for (const e of debugEntries) {
+      if (e.codeOffset < offset && e.line > max) max = e.line;
+    }
+    return max;
+  };
   for (const lambda of lambdaEntries) {
+    const fallbackLine = maxLineBeforeOffset(codeOffsetSoFar);
+    const line = lambda.line ?? fallbackLine;
+    debugEntries.push({
+      codeOffset: codeOffsetSoFar,
+      fileIndex: 0,
+      line,
+    });
     functionTable.push({
       nameIndex: stringIndex('<lambda>'),
       arity: lambda.arity,
@@ -1828,16 +1897,19 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
 
   // Export val/var as 0-arity getters: LOAD_GLOBAL slot + RET
   for (const decl of valOrVarDecls) {
+    chunkBaseRef.value = codeOffsetSoFar;
     if (decl.kind === 'ValDecl') {
       const slot = env.get(decl.name);
       if (slot === undefined) throw new Error(`Codegen: export val slot missing: ${decl.name}`);
       codeStart();
+      recordDebug(decl.span?.line);
       emitLoadGlobal(slot);
       emitRet();
     } else {
       const slot = env.get(decl.name);
       if (slot === undefined) throw new Error(`Codegen: export var slot missing: ${decl.name}`);
       codeStart();
+      recordDebug(decl.span?.line);
       emitLoadGlobal(slot);
       emitRet();
     }
@@ -1857,7 +1929,9 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     if (decl.kind !== 'VarDecl') continue;
     const slot = env.get(decl.name);
     if (slot === undefined) throw new Error(`Codegen: export var slot missing: ${decl.name}`);
+    chunkBaseRef.value = codeOffsetSoFar;
     codeStart();
+    recordDebug(decl.span?.line);
     emitLoadLocal(0);
     emitStoreGlobal(slot);
     emitRet();
@@ -1880,6 +1954,12 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     off += chunk.length;
   }
 
+  const debugFileStringIndices =
+    debugEntries.length > 0 ? [stringIndex(sourceFile)] : undefined;
+  if (debugEntries.length > 0) {
+    debugEntries.sort((a, b) => a.codeOffset - b.codeOffset);
+  }
+
   return {
     stringTable: [...stringTable],
     constantPool: [...constantPool],
@@ -1890,5 +1970,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     adts,
     nGlobals: nGlobals > 0 ? nGlobals : undefined,
     varSetterIndices: varSetterIndices.size > 0 ? varSetterIndices : undefined,
+    debugFileStringIndices,
+    debugEntries: debugEntries.length > 0 ? debugEntries : undefined,
   };
 }

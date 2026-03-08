@@ -154,6 +154,52 @@ const CallFrame = struct {
     discard_return: bool = false,
 };
 
+/// Look up (file, line) for a code offset using debug section (03 §8). Binary search for last entry where code_offset <= target.
+fn lookupDebugLine(module: *const load_mod.Module, code_offset: usize) ?struct { file: []const u8, line: u32 } {
+    const entries = module.debug_entries;
+    if (entries.len == 0) return null;
+    var lo: usize = 0;
+    var hi: usize = entries.len;
+    while (lo < hi) {
+        const mid = lo + (hi - lo) / 2;
+        if (entries[mid].code_offset <= code_offset) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo == 0) return null;
+    const entry = entries[lo - 1];
+    if (entry.file_index >= module.debug_files.len) return null;
+    return .{ .file = module.debug_files[entry.file_index], .line = entry.line };
+}
+
+/// Print uncaught exception and stack trace to stderr using debug section for file:line.
+fn printUncaughtException(
+    exception: Value,
+    throw_pc: usize,
+    current_module: *const load_mod.Module,
+    call_frames: []const CallFrame,
+    frame_sp: usize,
+    module_ptrs: []const *const load_mod.Module,
+) void {
+    var buf: [512]u8 = undefined;
+    const name = primitives.formatOne(exception, &buf, module_ptrs);
+    std.debug.print("Uncaught exception: {s}\n", .{name});
+    var i: usize = frame_sp;
+    const code_offset = @as(usize, @intCast(throw_pc));
+    if (lookupDebugLine(current_module, code_offset)) |loc| {
+        std.debug.print("  at {s}:{d}\n", .{ loc.file, loc.line });
+    }
+    while (i > 0) {
+        i -= 1;
+        const frame = call_frames[i];
+        if (lookupDebugLine(frame.module, frame.pc)) |loc| {
+            std.debug.print("  at {s}:{d}\n", .{ loc.file, loc.line });
+        }
+    }
+}
+
 /// Resolve import specifier to .kbc path: same directory as entry_path, specifier with .ks replaced by .kbc (07 §9 cache mirror).
 fn resolveImportPath(allocator: std.mem.Allocator, specifier: []const u8, entry_path: []const u8) ![]const u8 {
     if (specifier.len > 8 and std.mem.eql(u8, specifier[0..8], "kestrel:")) {
@@ -200,7 +246,8 @@ fn resolveImportPath(allocator: std.mem.Allocator, specifier: []const u8, entry_
     return std.fs.path.join(allocator, &[_][]const u8{ entry_dir, kbc_name });
 }
 
-pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: []const u8) void {
+/// Returns true if execution completed normally, false if terminated by uncaught exception.
+pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: []const u8) bool {
     var current_module = module;
     var code = current_module.code;
     var constants = current_module.constants;
@@ -226,11 +273,11 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
 
     var module_ptrs = std.ArrayListUnmanaged(*const load_mod.Module){};
     defer module_ptrs.deinit(allocator);
-    module_ptrs.ensureTotalCapacity(allocator, 32) catch return;
+    module_ptrs.ensureTotalCapacity(allocator, 32) catch return false;
     module.module_index = 0;
     module_ptrs.appendAssumeCapacity(module);
     var dependency_cache = std.ArrayListUnmanaged(load_mod.Module){};
-    dependency_cache.ensureTotalCapacity(allocator, 32) catch return;
+    dependency_cache.ensureTotalCapacity(allocator, 32) catch return false;
     defer {
         for (dependency_cache.items) |*m| load_mod.freeModule(allocator, m);
         dependency_cache.deinit(allocator);
@@ -258,7 +305,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
         // Handle pending runtime exception (same semantics as THROW)
         if (pending_exception) |exception| {
             pending_exception = null;
-            if (handler_sp == 0) return;
+            if (handler_sp == 0) {
+                printUncaughtException(exception, pc, current_module, &call_frames, frame_sp, module_ptrs.items);
+                return false;
+            }
             handler_sp -= 1;
             const handler = handlers[handler_sp];
             frame_sp = handler.frame_depth;
@@ -1048,14 +1098,14 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
             },
             THROW => {
                 // Pop exception value
-                if (sp == 0) return;
+                if (sp == 0) return false;
                 const exception = stack[sp - 1];
                 sp -= 1;
 
                 // Unwind to nearest exception handler
                 if (handler_sp == 0) {
-                    // No handler: terminate execution
-                    return;
+                    printUncaughtException(exception, pc, current_module, &call_frames, frame_sp, module_ptrs.items);
+                    return false;
                 }
 
                 // Pop handler and restore state
@@ -1146,7 +1196,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 }
             },
             RET => {
-                if (frame_sp == 0) return;
+                if (frame_sp == 0) return true;
                 const ret_val = if (sp > 0) blk: {
                     sp -= 1;
                     break :blk stack[sp];
@@ -1166,7 +1216,8 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     sp += 1;
                 }
             },
-            else => return,
+            else => return false,
         }
     }
+    return true;
 }

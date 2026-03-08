@@ -140,17 +140,81 @@ function parseConstantPool(data: Uint8Array, sectionStart: number, sectionEnd: n
   return comments;
 }
 
+/** Parse section 4 (debug): return map from code_offset (relative to code section) to { file, line }. */
+function parseDebugSection(
+  data: Uint8Array,
+  section4Start: number,
+  section4End: number,
+  strings: string[]
+): Map<number, { file: string; line: number }> {
+  const map = new Map<number, { file: string; line: number }>();
+  if (section4Start + 4 > section4End) return map;
+  const fileCount = readU32(data, section4Start);
+  let o = section4Start + 4;
+  const files: string[] = [];
+  for (let i = 0; i < fileCount && o + 4 <= section4End; i++) {
+    const strIdx = readU32(data, o);
+    o += 4;
+    files.push(strIdx < strings.length ? strings[strIdx]! : '?');
+  }
+  if (o + 4 > section4End) return map;
+  const entryCount = readU32(data, o);
+  o += 4;
+  for (let i = 0; i < entryCount && o + 12 <= section4End; i++) {
+    const codeOffset = readU32(data, o);
+    const fileIndex = readU32(data, o + 4);
+    const line = readU32(data, o + 8);
+    o += 12;
+    const file = fileIndex < files.length ? files[fileIndex]! : '?';
+    map.set(codeOffset, { file, line });
+  }
+  return map;
+}
+
 function disasm(
   data: Uint8Array,
   codeStart: number,
   codeEnd: number,
-  constantComments: string[] = []
+  constantComments: string[] = [],
+  debugByOffset: Map<number, { file: string; line: number }> = new Map()
 ): string[] {
   const lines: string[] = [];
   let pc = codeStart;
+  let lastLine: { file: string; line: number } | null = null;
+
+  /** Find debug info for code offset (relative to code section): last entry with code_offset <= offset. */
+  function getDebug(codeOffset: number): { file: string; line: number } | undefined {
+    let best: { file: string; line: number } | undefined;
+    let bestOffset = -1;
+    for (const [off, loc] of debugByOffset) {
+      if (off <= codeOffset && off > bestOffset) {
+        bestOffset = off;
+        best = loc;
+      }
+    }
+    return best;
+  }
+
+  // When debug reports line 1 but we've already seen a higher line, treat as fallback (e.g. getter/lambda with no span)
+  const effectiveDebug = (debug: { file: string; line: number } | undefined, codeOffset: number) => {
+    if (!debug) return debug;
+    if (debug.line === 1 && lastLine && lastLine.line > 1 && codeOffset > 50) {
+      return { file: debug.file, line: lastLine.line };
+    }
+    return debug;
+  };
 
   while (pc < codeEnd) {
     const base = pc;
+    const codeOffset = base - codeStart;
+    const rawDebug = getDebug(codeOffset);
+    const debug = effectiveDebug(rawDebug ?? undefined, codeOffset);
+    if (debug && (!lastLine || lastLine.line !== debug.line || lastLine.file !== debug.file)) {
+      if (lastLine) lines.push('');
+      lines.push(`; --- ${debug.file}:${debug.line} ---`);
+      lastLine = debug;
+    } else if (!rawDebug) lastLine = null;
+
     const op = data[pc];
     pc += 1;
 
@@ -222,7 +286,9 @@ function disasm(
         break;
     }
 
-    lines.push(`  ${String(base).padStart(6)}  ${name}${operands}${constComment}`);
+    let lineComment = '';
+    if (debug && lastLine && debug.line !== lastLine.line) lineComment = `  ; line ${debug.line}`;
+    lines.push(`  ${String(base).padStart(6)}  ${name}${operands}${constComment}${lineComment}`);
   }
 
   return lines;
@@ -264,7 +330,9 @@ function main(): void {
   const section2 = readU32(data, 16);
   const section3 = readU32(data, 20);
   const section4 = readU32(data, 24);
+  const section5 = readU32(data, 28);
   const codeEnd = Math.min(section4, data.length);
+  const section4End = Math.min(section5, data.length);
 
   const strings =
     section0 < data.length && section1 > section0
@@ -274,8 +342,12 @@ function main(): void {
     section1 < data.length && section2 > section1
       ? parseConstantPool(data, section1, section2, strings)
       : [];
+  const debugByOffset =
+    section4 < data.length && section4End > section4
+      ? parseDebugSection(data, section4, section4End, strings)
+      : new Map<number, { file: string; line: number }>();
 
-  const lines = disasm(data, section3, codeEnd, constantComments);
+  const lines = disasm(data, section3, codeEnd, constantComments, debugByOffset);
   process.stdout.write(`; Code section (offset ${section3}, ${codeEnd - section3} bytes)\n`);
   for (const line of lines) {
     process.stdout.write(line + '\n');

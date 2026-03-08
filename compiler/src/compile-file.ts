@@ -360,7 +360,11 @@ export function compileFile(
       }
     }
 
-    const mainResult = codegen(program, { importedFuncIds, importedVarSetterIds: importedVarSetterIds.size > 0 ? importedVarSetterIds : undefined });
+    const mainResult = codegen(program, {
+      importedFuncIds,
+      importedVarSetterIds: importedVarSetterIds.size > 0 ? importedVarSetterIds : undefined,
+      sourceFile: filePath,
+    });
     mainResult.importedFunctionTable = importedFunctionTable;
 
     if (getOutputPaths) {
@@ -375,7 +379,9 @@ export function compileFile(
         mainResult.importedFunctionTable ?? [],
         mainResult.shapes,
         mainResult.adts,
-        mainResult.nGlobals ?? 0
+        mainResult.nGlobals ?? 0,
+        mainResult.debugFileStringIndices ?? [],
+        mainResult.debugEntries ?? []
       );
       writeFileSync(paths.kbc, kbcBytes);
       const exportKind = new Map<string, 'function' | 'val' | 'var'>();
@@ -451,7 +457,9 @@ export function compileFile(
     out.codegenResult.importedFunctionTable ?? [],
     out.codegenResult.shapes,
     out.codegenResult.adts,
-    out.codegenResult.nGlobals ?? 0
+    out.codegenResult.nGlobals ?? 0,
+    out.codegenResult.debugFileStringIndices ?? [],
+    out.codegenResult.debugEntries ?? []
   );
 
   return { ok: true, kbc, dependencyPaths: out.dependencyPaths };

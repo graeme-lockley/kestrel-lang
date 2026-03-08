@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { compile, tokenize, parse } from '../../src/index.js';
+import { compile, tokenize, parse, emitKbc } from '../../src/index.js';
 import { codegen } from '../../src/codegen/codegen.js';
 import { ConstTag } from '../../src/bytecode/constants.js';
+import { writeKbc } from '../../src/bytecode/write.js';
+import { readU32 } from '../../src/bytecode/readwrite.js';
 
 describe('compile', () => {
   it('returns ok: true and AST for valid program', () => {
@@ -151,6 +153,37 @@ describe('compile', () => {
       expect(shapes.length).toBeGreaterThanOrEqual(2);
       const extendedShape = shapes.find((s) => s.nameIndices.length === 2);
       expect(extendedShape).toBeDefined();
+    }
+  });
+
+  it('codegen returns debugEntries and debugFileStringIndices for multi-line program', () => {
+    const result = compile('val a = 1\nval b = 2\nval c = a + b');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const out = codegen(result.ast, { sourceFile: 'test.ks' });
+      expect(out.debugEntries).toBeDefined();
+      expect(out.debugFileStringIndices).toBeDefined();
+      expect(out.debugEntries!.length).toBeGreaterThan(0);
+      expect(out.debugFileStringIndices!.length).toBe(1);
+      for (let i = 1; i < out.debugEntries!.length; i++) {
+        expect(out.debugEntries![i]!.codeOffset).toBeGreaterThanOrEqual(out.debugEntries![i - 1]!.codeOffset);
+      }
+      expect(out.debugEntries!.every((e) => e.fileIndex === 0 && e.line >= 1)).toBe(true);
+    }
+  });
+
+  it('writeKbc emits debug section with file_count and entries', () => {
+    const result = compile('val a = 1\nval b = 2');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const kbc = emitKbc(result.ast, { sourceFile: 'two.ks' });
+      expect(kbc.length).toBeGreaterThan(36);
+      const section4Start = readU32(kbc, 24);
+      expect(section4Start).toBeLessThan(kbc.length);
+      const fileCount = readU32(kbc, section4Start);
+      const entryCount = readU32(kbc, section4Start + 4 + fileCount * 4);
+      expect(fileCount).toBe(1);
+      expect(entryCount).toBeGreaterThan(0);
     }
   });
 });
