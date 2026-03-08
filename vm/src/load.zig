@@ -61,6 +61,8 @@ pub const Module = struct {
     globals: []Value,
     /// Index in the VM's module cache; set by caller when the module is registered. Used for record/ADT formatting.
     module_index: u32 = 0,
+    /// Path this module was loaded from (for resolving relative imports from this module). Set by VM; freed in freeModule.
+    source_path: ?[]const u8 = null,
     /// File buffer; string table and section data point into this. Freed in freeModule.
     file_data: []const u8,
     /// Debug section (03 §8): file paths for debug_entries file_index. Caller must free each then this slice.
@@ -74,7 +76,14 @@ fn align4(n: usize) usize {
 }
 
 pub fn load(allocator: std.mem.Allocator, path: []const u8) !Module {
-    const data = try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
+    const data = if (path.len > 0 and path[0] == '/')
+        blk: {
+            var f = try std.fs.openFileAbsolute(path, .{});
+            defer f.close();
+            break :blk try f.readToEndAlloc(allocator, 1024 * 1024);
+        }
+    else
+        try std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024);
     errdefer allocator.free(data);
 
     if (data.len < 36) return error.InvalidKbc;
@@ -439,6 +448,7 @@ pub fn freeModule(allocator: std.mem.Allocator, m: *const Module) void {
     }
     if (m.imported_functions.len > 0) allocator.free(m.imported_functions);
     if (m.globals.len > 0) allocator.free(m.globals);
+    if (m.source_path) |p| allocator.free(p);
     if (m.debug_files.len > 0) {
         for (m.debug_files) |f| allocator.free(f);
         allocator.free(m.debug_files);

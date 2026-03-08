@@ -5,6 +5,13 @@ import { drop } from "kestrel:list"
 val proc = getProcess()
 val cwd = proc.cwd
 
+fun getRootDir(args: List<String>, fallback: String): String =
+  match (drop(2, args)) {
+    [] => fallback,
+    hd :: _ => hd
+  }
+val rootDir = getRootDir(proc.args, cwd)
+
 fun hasSuffix(s: String, suffix: String): Bool = {
   val sLen = __string_length(s);
   val suffLen = __string_length(suffix);
@@ -41,7 +48,7 @@ fun excludeFlag(args: List<String>): List<String> =
     hd :: tl => if (__string_equals(hd, "--summary")) excludeFlag(tl) else hd :: excludeFlag(tl)
   }
 
-fun getPathArgs(allArgs: List<String>): List<String> = excludeFlag(drop(2, allArgs))
+fun getPathArgs(allArgs: List<String>): List<String> = excludeFlag(drop(3, allArgs))
 
 fun filterToTestFiles(paths: List<String>): List<String> =
   match (paths) {
@@ -91,8 +98,8 @@ fun append(a: List<String>, b: List<String>): List<String> =
     h :: t => h :: append(t, b)
   }
 
-val unitDir = "${cwd}/tests/unit"
-val stdlibDir = "${cwd}/stdlib/kestrel"
+val unitDir = "${rootDir}/tests/unit"
+val stdlibDir = "${rootDir}/stdlib/kestrel"
 val pathArgs = getPathArgs(proc.args)
 val summaryOnly = checkSummaryFlag(proc.args)
 val tests = if (listLength(pathArgs) == 0) {
@@ -101,7 +108,7 @@ val tests = if (listLength(pathArgs) == 0) {
   val unitTests = collectTests(unitEntries, [])
   val stdlibTests = collectTests(stdlibEntries, [])
   append(unitTests, stdlibTests)
-} else resolvePaths(proc.cwd, filterToTestFiles(pathArgs))
+} else resolvePaths(rootDir, filterToTestFiles(pathArgs))
 val testCount = listLength(tests)
 
 val imports = buildImports(tests, 0)
@@ -111,7 +118,7 @@ val summaryVal = if (summaryOnly) "True" else "False"
 
 val generatedSource = "import { printSummary } from \"kestrel:test\"\n${imports}\nval counts = { mut passed = 0, mut failed = 0, mut startTime = __now_ms() }\nval root = { depth = 1, summaryOnly = ${summaryVal}, counts = counts }\n\n${calls}\nprintSummary(counts)\n"
 
-val generatedPath = "/tmp/kestrel_test_runner.ks"
+val generatedPath = "${rootDir}/.kestrel_test_runner.ks"
 writeText(generatedPath, generatedSource)
 
 val exitCode = runProcess("./scripts/kestrel", ["run", generatedPath])

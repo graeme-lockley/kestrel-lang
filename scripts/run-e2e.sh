@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# E2E negative tests only: each tests/e2e/scenarios/negative/*.ks must fail (compile or runtime).
-# For each file: try compile; if compile fails, pass. If compile succeeds, run and require exit != 0.
-# Positive behaviour is covered by Kestrel unit tests (tests/unit/*.test.ks).
+# E2E tests: negative and positive scenarios.
+# Negative (tests/e2e/scenarios/negative/*.ks): must fail (compile or runtime).
+# Positive (tests/e2e/scenarios/positive/*.ks): must compile, run with exit 0, stdout matches *.expected.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 COMPILER="$ROOT/compiler"
 VM="$ROOT/vm"
 NEGATIVE="$ROOT/tests/e2e/scenarios/negative"
+POSITIVE="$ROOT/tests/e2e/scenarios/positive"
 
 if ! command -v node &>/dev/null; then
   echo "run-e2e: node not found" >&2
@@ -84,4 +85,37 @@ if [ "$count" -eq 0 ]; then
   echo "E2E: no negative scenarios (add .ks files to tests/e2e/scenarios/negative/)"
 else
   echo "E2E negative: $count scenario(s) passed."
+fi
+
+# Positive tests: compile, run (exit 0), stdout must match .expected
+pos_count=0
+if [ -d "$POSITIVE" ]; then
+  for f in "$POSITIVE"/*.ks; do
+    [ -f "$f" ] || continue
+    name=$(basename "$f" .ks)
+    expected="$POSITIVE/$name.expected"
+    if [ ! -f "$expected" ]; then
+      echo "E2E positive: $name.ks has no $name.expected" >&2
+      exit 1
+    fi
+    out_dir="$ROOT/out/e2e"
+    stdout_file="$out_dir/positive_${name}.stdout"
+    stderr_file="$out_dir/positive_${name}.stderr"
+    mkdir -p "$out_dir"
+    if ! (cd "$ROOT" && ./scripts/kestrel run "$f" >"$stdout_file" 2>"$stderr_file"); then
+      echo "E2E positive $name: compile or run failed" >&2
+      cat "$stderr_file" >&2
+      exit 1
+    fi
+    if ! diff -q "$expected" "$stdout_file" >/dev/null 2>&1; then
+      echo "E2E positive $name: stdout does not match $name.expected" >&2
+      diff "$expected" "$stdout_file" >&2 || true
+      exit 1
+    fi
+    pos_count=$((pos_count + 1))
+    echo "  $name.ks OK (stdout matches .expected)"
+  done
+fi
+if [ "$pos_count" -gt 0 ]; then
+  echo "E2E positive: $pos_count scenario(s) passed."
 fi

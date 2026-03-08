@@ -60,7 +60,7 @@ Sections appear in the order listed. Each section starts at the byte offset give
 
 Index validity: string table indices in [0, string_table_count); constant pool indices in [0, constant_pool_count); function table indices (local) in [0, function_count); **CALL fn_id** (04) may be in [0, function_count + imported_function_count) — local calls use [0, function_count), cross-package calls use [function_count, function_count + imported_function_count) and resolve via §6.6; type_index in [0, type_count); shape_index (Record tag) in [0, shape_count); adt_index (ADT tag) in [0, adt_count). Each kind of data lives in exactly one section (no duplication).
 
-**Determining module dependencies:** A module’s imports are recorded **only** in the **import table** (§6.5), which is a subsection of section 2. There is **no dedicated section** and **no header offset** for dependencies. To obtain the list of modules this file imports from: (1) start at `section_offsets[2]`; (2) parse section 2 in fixed order — 6.1 Function table, 6.2 Type table, 6.4 Exported type declarations, 6.5 Import table, 6.6 Imported function table — skipping or decoding each subsection until you reach 6.5; (3) read `import_count` (u32) then `import_count` × u32; each u32 is a string table index whose value is the import source (e.g. `"kestrel:string"`). Resolve each index in the string table (section 0) to get the dependency list.
+**Determining module dependencies:** A module’s imports are recorded **only** in the **import table** (§6.5), which is a subsection of section 2. There is **no dedicated section** and **no header offset** for dependencies. To obtain the list of modules this file imports from: (1) start at `section_offsets[2]`; (2) parse section 2 in fixed order — n_globals (u32), then 6.1 Function table, 6.2 Type table, 6.4 Exported type declarations, 6.5 Import table, 6.6 Imported function table — skipping or decoding each subsection until you reach 6.5; (3) read `import_count` (u32) then `import_count` × u32; each u32 is a string table index whose value is the import source (e.g. `"kestrel:string"`). Resolve each index in the string table (section 0) to get the dependency list.
 
 ---
 
@@ -113,17 +113,20 @@ Index validity: string table indices in [0, string_table_count); constant pool i
 
 **Purpose:** Holds all module-level metadata: function entries, type table, exported type aliases, import table, and imported function table (for cross-package calls). Subsection **layout** order is fixed: 6.1 Function table → 6.2 Type table (offsets + type blob; blob content format is 6.3) → 6.4 Exported type declarations → 6.5 Import table → 6.6 Imported function table. Each subsection starts at the next 4-byte-aligned offset after the previous one.
 
-**Skip distances (to reach import table without decoding type blob):** Let `S2` = start of section 2 (byte at `section_offsets[2]`). To jump to the start of the import table (6.5):
+**Skip distances (to reach import table without decoding type blob):** Let `S2` = start of section 2 (byte at `section_offsets[2]`). Section 2 begins with `n_globals` (u32) then the function table (6.1). To jump to the start of the import table (6.5):
 
-1. **After 6.1:** `S2 + 4 + function_count×24` (4-byte aligned). Read `type_count` (u32) at this offset.
-2. **After 6.2:** At offset `S2 + 4 + function_count×24`, read `type_count` (u32). The type table is: 4 bytes (type_count) + (type_count+1)×4 bytes (offsets) + `offsets[type_count]` bytes (blob). Skip to next 4-byte boundary after the blob:  
-   `skip_6_2 = 4 + (type_count+1)*4 + blob_len`, then `pad = (4 - (skip_6_2 mod 4)) mod 4`. Start of 6.4 = `S2 + 4 + function_count×24 + skip_6_2 + pad`.
+1. **After 6.1:** `S2 + 8 + function_count×24` (4-byte aligned). Read `type_count` (u32) at this offset.
+2. **After 6.2:** At offset `S2 + 8 + function_count×24`, read `type_count` (u32). The type table is: 4 bytes (type_count) + (type_count+1)×4 bytes (offsets) + `offsets[type_count]` bytes (blob). Skip to next 4-byte boundary after the blob:  
+   `skip_6_2 = 4 + (type_count+1)*4 + blob_len`, then `pad = (4 - (skip_6_2 mod 4)) mod 4`. Start of 6.4 = `S2 + 8 + function_count×24 + skip_6_2 + pad`.
 3. **After 6.4:** At start of 6.4, read `exported_type_count` (u32). Skip 4 + exported_type_count×8 bytes. Start of 6.5 = start of 6.4 + 4 + exported_type_count×8.
 
-So: **start of 6.5** = `S2 + 4 + function_count×24 + skip_6_2 + pad + 4 + exported_type_count×8`, where `blob_len = offsets[type_count]` (read from the four bytes at `S2 + 4 + function_count×24 + 4 + type_count×4`), `skip_6_2 = 4 + (type_count+1)*4 + blob_len`, and `pad = (4 - (skip_6_2 mod 4)) mod 4`.
+So: **start of 6.5** = `S2 + 8 + function_count×24 + skip_6_2 + pad + 4 + exported_type_count×8`, where `blob_len = offsets[type_count]` (read from the four bytes at `S2 + 8 + function_count×24 + 4 + type_count×4`), `skip_6_2 = 4 + (type_count+1)*4 + blob_len`, and `pad = (4 - (skip_6_2 mod 4)) mod 4`.
 
 ### 6.1 Function table
 
+Section 2 starts with:
+
+- `n_globals` (u32): number of module-level global variable slots allocated for the module initializer. Used for `export val` and `export var` (LOAD_GLOBAL / STORE_GLOBAL). When 0, the module has no globals.
 - `function_count` (u32).
 - Then `function_count` entries, each **24 bytes** (6 × u32), 4-byte aligned. **Calls and other references use the function table index only;** name lookups are not used for execution (§0).
 

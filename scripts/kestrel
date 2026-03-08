@@ -231,7 +231,7 @@ cmd_test() {
     mkdir -p "$(dirname "$kbc")"
     do_compile "$runner" "$kbc"
   fi
-  "$VM_BIN" "$kbc" "$@"
+  "$VM_BIN" "$kbc" "$ROOT" "$@"
 }
 
 # Main

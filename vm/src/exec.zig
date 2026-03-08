@@ -200,6 +200,30 @@ fn printUncaughtException(
     }
 }
 
+/// Normalize path: resolve "." and ".." so the same file has a single canonical key for the module cache.
+fn normalizePath(allocator: std.mem.Allocator, path: []const u8) ![]const u8 {
+    const is_absolute = path.len > 0 and path[0] == '/';
+    var list = std.ArrayList([]const u8).initCapacity(allocator, 32) catch return error.OutOfMemory;
+    defer list.deinit(allocator);
+    var it = std.mem.splitScalar(u8, path, '/');
+    while (it.next()) |segment| {
+        if (segment.len == 0 or std.mem.eql(u8, segment, ".")) continue;
+        if (std.mem.eql(u8, segment, "..")) {
+            if (list.items.len > 0) list.shrinkRetainingCapacity(list.items.len - 1);
+            continue;
+        }
+        list.append(allocator, segment) catch return error.OutOfMemory;
+    }
+    const rest = try std.fs.path.join(allocator, list.items);
+    errdefer allocator.free(rest);
+    if (is_absolute and list.items.len > 0) {
+        const with_root = try std.fmt.allocPrint(allocator, "/{s}", .{rest});
+        allocator.free(rest);
+        return with_root;
+    }
+    return rest;
+}
+
 /// Resolve import specifier to .kbc path: same directory as entry_path, specifier with .ks replaced by .kbc (07 §9 cache mirror).
 fn resolveImportPath(allocator: std.mem.Allocator, specifier: []const u8, entry_path: []const u8) ![]const u8 {
     if (specifier.len > 8 and std.mem.eql(u8, specifier[0..8], "kestrel:")) {
@@ -243,11 +267,16 @@ fn resolveImportPath(allocator: std.mem.Allocator, specifier: []const u8, entry_
     const entry_dir = std.fs.path.dirname(entry_path) orelse ".";
     const kbc_name = try std.fmt.allocPrint(allocator, "{s}.kbc", .{base});
     defer allocator.free(kbc_name);
-    return std.fs.path.join(allocator, &[_][]const u8{ entry_dir, kbc_name });
+    const raw = try std.fs.path.join(allocator, &[_][]const u8{ entry_dir, kbc_name });
+    errdefer allocator.free(raw);
+    const result = try normalizePath(allocator, raw);
+    allocator.free(raw);
+    return result;
 }
 
 /// Returns true if execution completed normally, false if terminated by uncaught exception.
 pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: []const u8) bool {
+    module.source_path = allocator.dupe(u8, entry_path) catch return false;
     var current_module = module;
     var code = current_module.code;
     var constants = current_module.constants;
@@ -283,9 +312,13 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
         dependency_cache.deinit(allocator);
     }
     var path_to_module = std.StringHashMap(*load_mod.Module).init(allocator);
+    var path_keys = std.ArrayList([]const u8).initCapacity(allocator, 32) catch return false;
+    var path_deps_to_free = std.ArrayList([]const u8).initCapacity(allocator, 512) catch return false;
     defer {
-        var it = path_to_module.keyIterator();
-        while (it.next()) |key_ptr| allocator.free(key_ptr.*);
+        for (path_keys.items) |k| allocator.free(k);
+        path_keys.deinit(allocator);
+        for (path_deps_to_free.items) |p| allocator.free(p);
+        path_deps_to_free.deinit(allocator);
         path_to_module.deinit();
     }
 
@@ -581,25 +614,83 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     }
                 }
 
-                // Imported function call (03 §6.6)
+                // Imported function call (03 §6.6). On any failure we pop args and push Unit to keep stack consistent.
                 if (fn_id >= functions.len) {
                     const k: usize = fn_id - functions.len;
-                    if (frame_sp >= max_frames or k >= current_module.imported_functions.len or sp < arity) continue;
+                    if (frame_sp >= max_frames or k >= current_module.imported_functions.len or sp < arity) {
+                        sp -= arity;
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    }
                     const imp_entry = current_module.imported_functions[k];
-                    if (imp_entry.import_index >= current_module.import_specifiers.len) continue;
+                    if (imp_entry.import_index >= current_module.import_specifiers.len) {
+                        sp -= arity;
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    }
                     const specifier = current_module.import_specifiers[imp_entry.import_index];
-                    const dep_path = resolveImportPath(allocator, specifier, entry_path) catch continue;
-                    defer allocator.free(dep_path);
+                    const base_path = current_module.source_path orelse entry_path;
+                    const dep_path = resolveImportPath(allocator, specifier, base_path) catch {
+                        sp -= arity;
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    };
+                    path_deps_to_free.ensureTotalCapacity(allocator, path_deps_to_free.items.len + 1) catch {
+                        allocator.free(dep_path);
+                        sp -= arity;
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    };
+                    path_deps_to_free.appendAssumeCapacity(dep_path);
                     const already_loaded = path_to_module.get(dep_path) != null;
                     const dep_module = blk: {
                         if (path_to_module.get(dep_path)) |ptr| break :blk ptr;
-                        dependency_cache.ensureTotalCapacity(allocator, dependency_cache.items.len + 1) catch continue;
-                        var loaded = load_mod.load(allocator, dep_path) catch continue;
-                        loaded.module_index = @intCast(module_ptrs.items.len);
+                        dependency_cache.ensureTotalCapacity(allocator, dependency_cache.items.len + 1) catch {
+                            sp -= arity;
+                            stack[sp] = Value.unit();
+                            sp += 1;
+                            continue;
+                        };
+                        const loaded = load_mod.load(allocator, dep_path) catch {
+                            sp -= arity;
+                            stack[sp] = Value.unit();
+                            sp += 1;
+                            continue;
+                        };
                         dependency_cache.appendAssumeCapacity(loaded);
                         const ptr = &dependency_cache.items[dependency_cache.items.len - 1];
+                        module_ptrs.ensureTotalCapacity(allocator, module_ptrs.items.len + 1) catch {
+                            sp -= arity;
+                            stack[sp] = Value.unit();
+                            sp += 1;
+                            continue;
+                        };
+                        ptr.module_index = @intCast(module_ptrs.items.len);
                         module_ptrs.appendAssumeCapacity(ptr);
-                        path_to_module.put(allocator.dupe(u8, dep_path) catch continue, ptr) catch {};
+                        ptr.source_path = allocator.dupe(u8, dep_path) catch null;
+                        const path_key = allocator.dupe(u8, dep_path) catch {
+                            sp -= arity;
+                            stack[sp] = Value.unit();
+                            sp += 1;
+                            continue;
+                        };
+                        path_keys.append(allocator, path_key) catch {
+                            allocator.free(path_key);
+                            sp -= arity;
+                            stack[sp] = Value.unit();
+                            sp += 1;
+                            continue;
+                        };
+                        path_to_module.put(path_key, ptr) catch {
+                            sp -= arity;
+                            stack[sp] = Value.unit();
+                            sp += 1;
+                            continue;
+                        };
                         break :blk ptr;
                     };
                     // When a package is first loaded, run its module initializer (top-level code at offset 0) before calling into it.
@@ -618,7 +709,12 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         pc = 0;
                         continue;
                     }
-                    if (imp_entry.function_index >= dep_module.functions.len) continue;
+                    if (imp_entry.function_index >= dep_module.functions.len) {
+                        sp -= arity;
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    }
                     const target_entry = dep_module.functions[imp_entry.function_index];
                     call_frames[frame_sp] = .{ .pc = pc, .module = current_module, .saved_sp = sp - arity };
                     for (0..max_locals) |i| {
