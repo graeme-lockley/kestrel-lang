@@ -122,3 +122,9 @@ Readers that only care about “callable” exports (getter) can keep using `fun
 - **Read-only view:** If you ever want “import hello but not allow assignment”, you could restrict that at typecheck (e.g. a different import kind or a modifier); for this sketch, any importer that imports a var can assign to it if the type matches.
 
 This sketch is enough to implement “assign to var hello outside of m3” end-to-end.
+
+---
+
+## 8. Implementation status
+
+The above is implemented. The .kti format matches §5: var entries include `function_index` (getter) and `setter_index` (setter). Round-trip and integration tests validate that all export kinds and type forms are preserved, and that the importer's bytecode includes getter and setter entries in the imported function table (03 §6.6). See compiler test: `compiler/test/unit/types-file.test.ts` (round-trip) and `compiler/test/integration/compile-file.test.ts` (export var + import and assign).

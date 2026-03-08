@@ -147,6 +147,8 @@ The types file is **JSON**. Implementations must produce and consume this format
     - Optional: `typeParams` (array of strings) for parameterized types.
   - **Local** types (no qualifier) are NOT included in the types file.
 
+- **Implementation note:** The reference implementation may use a single `functions` map that includes both value/function exports and type alias entries (with `kind` = `"type"` and optional `opaque`). Behaviour is equivalent; consumers must support `setter_index` for `kind` = `"var"` and reject unsupported `version` values. See [kti-format.md](kti-format.md) for the concrete type encoding used.
+
 ---
 
 ## 6. Bytecode Import Table (03)
