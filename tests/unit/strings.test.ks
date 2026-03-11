@@ -19,4 +19,11 @@ export fun run(s: Suite): Unit =
       eq(sg, "${1+1}", "${1 + 1}", "2")
       eq(sg, "${add(1,2)}", "${add(1, 2)}", "3")
     })
+
+    group(s1, "unicode literals", (sg: Suite) => {
+      eq(sg, "emoji", "\u{1F600}", "\u{1F600}")
+      eq(sg, "e-acute", "\u{00E9}", "\u{00E9}")
+      eq(sg, "CJK", "\u{4E2D}\u{6587}", "\u{4E2D}\u{6587}")
+      eq(sg, "accented word", "caf\u{00E9}", "caf\u{00E9}")
+    })
   })

@@ -10,15 +10,15 @@ This document defines the standard library modules that a Kestrel implementation
 
 ## kestrel:string
 
-String operations. All functions take the string as an explicit argument (no member-call syntax).
+String operations. All functions take the string as an explicit argument (no member-call syntax). Strings are UTF-8. **Character** means Unicode code point: `length` returns the number of code points; `slice` and `indexOf` use code-point indices (not byte offsets).
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `length` | `(String) -> Int` | Character length of string |
-| `slice` | `(String, Int, Int) -> String` | Substring from start (inclusive) to end (exclusive) |
-| `indexOf` | `(String, String) -> Int` | Index of first occurrence of substring, or -1 |
+| `length` | `(String) -> Int` | Character length of string (code-point count) |
+| `slice` | `(String, Int, Int) -> String` | Substring from start (inclusive) to end (exclusive); indices are code-point positions |
+| `indexOf` | `(String, String) -> Int` | Code-point index of first occurrence of substring, or -1 |
 | `equals` | `(String, String) -> Bool` | Value equality |
-| `toUpperCase` | `(String) -> String` | Uppercase copy |
+| `toUpperCase` | `(String) -> String` | Uppercase copy (Basic Latin and Latin extended; other scripts unchanged) |
 
 ---
 

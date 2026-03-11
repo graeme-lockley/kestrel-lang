@@ -225,6 +225,42 @@ pub fn getStringSlice(val: Value) ?[]const u8 {
     return base[8..8+len];
 }
 
+/// Returns true if every byte in s is < 0x80 (ASCII). Used as fast path for codepoint operations.
+fn utf8IsAscii(s: []const u8) bool {
+    for (s) |b| {
+        if (b >= 0x80) return false;
+    }
+    return true;
+}
+
+/// Count Unicode code points. Fast path: if s is all ASCII, returns s.len.
+fn utf8CountCodepoints(s: []const u8) usize {
+    if (utf8IsAscii(s)) return s.len;
+    const view = std.unicode.Utf8View.init(s) catch return s.len;
+    var count: usize = 0;
+    var iter = view.iterator();
+    while (iter.nextCodepointSlice()) |_| count += 1;
+    return count;
+}
+
+/// Returns the byte offset of the cp_index-th code point (0-based), or null if cp_index is past the end.
+fn utf8ByteOffsetForCodepoint(s: []const u8, cp_index: usize) ?usize {
+    if (utf8IsAscii(s)) {
+        if (cp_index > s.len) return null;
+        return cp_index;
+    }
+    const view = std.unicode.Utf8View.init(s) catch return null;
+    var iter = view.iterator();
+    var start: usize = 0;
+    var count: usize = 0;
+    while (iter.nextCodepointSlice()) |_| {
+        if (count == cp_index) return start;
+        start = iter.i;
+        count += 1;
+    }
+    return null;
+}
+
 /// Allocate a Value ADT (Null, Bool, Int, String, Array; Object and Float stubbed). Uses current ADT layout (layout_ver 1).
 fn allocValueAdt(gc: *GC, module_index: u32, ctor: u32, payload: ?Value) !Value {
     const arity: u32 = if (payload != null) 1 else 0;
@@ -421,32 +457,43 @@ pub fn nowMs() Value {
 
 // --- String primitives (kestrel:string) ---
 
-/// (String) -> Int: character length in UTF-8 bytes.
+/// (String) -> Int: character length (Unicode code points). ASCII fast path.
 pub fn stringLength(s_val: Value) Value {
     const s = getStringSlice(s_val) orelse return Value.int(0);
-    return Value.int(@intCast(s.len));
+    const n = if (utf8IsAscii(s)) s.len else utf8CountCodepoints(s);
+    return Value.int(@intCast(n));
 }
 
-/// (String, Int, Int) -> String: substring [start, end). Clamps to valid range.
+/// (String, Int, Int) -> String: substring [start, end) by character index. Clamps to valid range.
 pub fn stringSlice(gc: *GC, s_val: Value, start_val: Value, end_val: Value) Value {
     const s = getStringSlice(s_val) orelse return Value.ptr(0);
     var start = Value.intTo(start_val);
     var end = Value.intTo(end_val);
+    const cp_count: i64 = if (utf8IsAscii(s)) @intCast(s.len) else @intCast(utf8CountCodepoints(s));
     if (start < 0) start = 0;
-    if (end > @as(i64, @intCast(s.len))) end = @intCast(s.len);
+    if (end > cp_count) end = cp_count;
     if (start >= end) return allocString(gc, s[0..0]) catch Value.ptr(0);
     const su = @as(usize, @intCast(start));
     const eu = @as(usize, @intCast(end));
-    if (eu > s.len) return allocString(gc, s[0..0]) catch Value.ptr(0);
-    return allocString(gc, s[su..eu]) catch Value.ptr(0);
+    if (utf8IsAscii(s)) {
+        if (eu > s.len) return allocString(gc, s[0..0]) catch Value.ptr(0);
+        return allocString(gc, s[su..eu]) catch Value.ptr(0);
+    }
+    const byte_start = utf8ByteOffsetForCodepoint(s, su) orelse return allocString(gc, s[0..0]) catch Value.ptr(0);
+    const byte_end = if (eu == cp_count) s.len else (utf8ByteOffsetForCodepoint(s, eu) orelse s.len);
+    if (byte_end > s.len or byte_start >= byte_end) return allocString(gc, s[0..0]) catch Value.ptr(0);
+    return allocString(gc, s[byte_start..byte_end]) catch Value.ptr(0);
 }
 
-/// (String, String) -> Int: index of first occurrence of sub in s, or -1.
+/// (String, String) -> Int: character index of first occurrence of sub in s, or -1.
 pub fn stringIndexOf(s_val: Value, sub_val: Value) Value {
     const s = getStringSlice(s_val) orelse return Value.int(-1);
     const sub = getStringSlice(sub_val) orelse return Value.int(-1);
-    const idx = std.mem.indexOf(u8, s, sub) orelse return Value.int(-1);
-    return Value.int(@intCast(idx));
+    const byte_idx = std.mem.indexOf(u8, s, sub) orelse return Value.int(-1);
+    if (utf8IsAscii(s[0..byte_idx])) return Value.int(@intCast(byte_idx));
+    const prefix = s[0..byte_idx];
+    const cp_idx = utf8CountCodepoints(prefix);
+    return Value.int(@intCast(cp_idx));
 }
 
 /// (String, String) -> Bool: value equality.
@@ -523,14 +570,133 @@ fn deepEqual(a: Value, b: Value) bool {
     }
 }
 
-/// (String) -> String: uppercase copy (ASCII only for simplicity).
+/// Map a single Unicode code point to its simple uppercase (ASCII + Latin-1 Supplement + subset of Latin Extended-A). Returns c unchanged if no mapping.
+fn utf8ToUpper(c: u21) u21 {
+    if (c < 0x80) return @as(u21, std.ascii.toUpper(@as(u8, @intCast(c))));
+    return latinUpper(c) orelse c;
+}
+
+/// Simple uppercase for Latin-1 Supplement (U+00E0–U+00FF) and common Latin Extended-A. ß (00DF) maps to same (no SS expansion).
+fn latinUpper(c: u21) ?u21 {
+    return switch (c) {
+        0x00E0 => 0x00C0,
+        0x00E1 => 0x00C1,
+        0x00E2 => 0x00C2,
+        0x00E3 => 0x00C3,
+        0x00E4 => 0x00C4,
+        0x00E5 => 0x00C5,
+        0x00E6 => 0x00C6,
+        0x00E7 => 0x00C7,
+        0x00E8 => 0x00C8,
+        0x00E9 => 0x00C9,
+        0x00EA => 0x00CA,
+        0x00EB => 0x00CB,
+        0x00EC => 0x00CC,
+        0x00ED => 0x00CD,
+        0x00EE => 0x00CE,
+        0x00EF => 0x00CF,
+        0x00F0 => 0x00D0,
+        0x00F1 => 0x00D1,
+        0x00F2 => 0x00D2,
+        0x00F3 => 0x00D3,
+        0x00F4 => 0x00D4,
+        0x00F5 => 0x00D5,
+        0x00F6 => 0x00D6,
+        0x00F8 => 0x00D8,
+        0x00F9 => 0x00D9,
+        0x00FA => 0x00DA,
+        0x00FB => 0x00DB,
+        0x00FC => 0x00DC,
+        0x00FD => 0x00DD,
+        0x00FE => 0x00DE,
+        0x00FF => 0x0178,
+        // Latin Extended-A (common)
+        0x0101 => 0x0100,
+        0x0103 => 0x0102,
+        0x0105 => 0x0104,
+        0x0107 => 0x0106,
+        0x0109 => 0x0108,
+        0x010B => 0x010A,
+        0x010D => 0x010C,
+        0x010F => 0x010E,
+        0x0111 => 0x0110,
+        0x0113 => 0x0112,
+        0x0115 => 0x0114,
+        0x0117 => 0x0116,
+        0x0119 => 0x0118,
+        0x011B => 0x011A,
+        0x011D => 0x011C,
+        0x011F => 0x011E,
+        0x0121 => 0x0120,
+        0x0123 => 0x0122,
+        0x0125 => 0x0124,
+        0x0127 => 0x0126,
+        0x0129 => 0x0128,
+        0x012B => 0x012A,
+        0x012D => 0x012C,
+        0x012F => 0x012E,
+        0x0131 => 0x0049, // dotless i -> I
+        0x0133 => 0x0132,
+        0x0135 => 0x0134,
+        0x0137 => 0x0136,
+        0x013A => 0x0139,
+        0x013C => 0x013B,
+        0x013E => 0x013D,
+        0x0140 => 0x013F,
+        0x0142 => 0x0141,
+        0x0144 => 0x0143,
+        0x0146 => 0x0145,
+        0x0148 => 0x0147,
+        0x014B => 0x014A,
+        0x014D => 0x014C,
+        0x014F => 0x014E,
+        0x0151 => 0x0150,
+        0x0153 => 0x0152,
+        0x0155 => 0x0154,
+        0x0157 => 0x0156,
+        0x0159 => 0x0158,
+        0x015B => 0x015A,
+        0x015D => 0x015C,
+        0x015F => 0x015E,
+        0x0161 => 0x0160,
+        0x0163 => 0x0162,
+        0x0165 => 0x0164,
+        0x0167 => 0x0166,
+        0x0169 => 0x0168,
+        0x016B => 0x016A,
+        0x016D => 0x016C,
+        0x016F => 0x016E,
+        0x0171 => 0x0170,
+        0x0173 => 0x0172,
+        0x0175 => 0x0174,
+        0x0177 => 0x0176,
+        0x017A => 0x0179,
+        0x017C => 0x017B,
+        0x017E => 0x017D,
+        0x017F => 0x0053, // ſ -> S
+        else => null,
+    };
+}
+
+/// (String) -> String: uppercase copy. ASCII via std.ascii; Latin-1 Supplement and Latin Extended-A via table; rest unchanged.
 pub fn stringUpper(gc: *GC, s_val: Value) Value {
     const s = getStringSlice(s_val) orelse return Value.ptr(0);
-    var out = std.ArrayList(u8).initCapacity(page_alloc, s.len) catch return Value.ptr(0);
+    var out = std.ArrayList(u8).initCapacity(page_alloc, s.len * 2) catch return Value.ptr(0); // may grow for some mappings
     defer out.deinit(page_alloc);
-    for (s) |c| {
-        const up = if (c >= 'a' and c <= 'z') c - 32 else c;
-        out.append(page_alloc, up) catch return Value.ptr(0);
+    const view = std.unicode.Utf8View.init(s) catch {
+        // Invalid UTF-8: fall back to byte-at-a-time ASCII upper
+        for (s) |c| {
+            const up = if (c >= 'a' and c <= 'z') c - 32 else c;
+            out.append(page_alloc, up) catch return Value.ptr(0);
+        }
+        return allocString(gc, out.items) catch Value.ptr(0);
+    };
+    var iter = view.iterator();
+    while (iter.nextCodepoint()) |c| {
+        const upper = utf8ToUpper(c);
+        var buf: [4]u8 = undefined;
+        const n = std.unicode.utf8Encode(upper, &buf) catch 1;
+        out.appendSlice(page_alloc, buf[0..n]) catch return Value.ptr(0);
     }
     return allocString(gc, out.items) catch Value.ptr(0);
 }

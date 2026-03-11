@@ -7,6 +7,9 @@ export fun run(s: Suite): Unit =
       eq(sg, "empty", length(""), 0)
       eq(sg, "short", length("hi"), 2)
       eq(sg, "multi-word", length("hello world"), 11)
+      eq(sg, "single e-acute", length("\u{00E9}"), 1)
+      eq(sg, "emoji", length("\u{1F600}"), 1)
+      eq(sg, "cafe combining", length("cafe\u{0301}"), 5)
     })
 
     group(s1, "slice", (sg: Suite) => {
@@ -14,12 +17,15 @@ export fun run(s: Suite): Unit =
       eq(sg, "middle", slice("hello", 1, 4), "ell")
       eq(sg, "full", slice("ab", 0, 2), "ab")
       eq(sg, "empty slice", slice("x", 1, 1), "")
+      eq(sg, "emoji at start", slice("\u{1F600}ab", 0, 1), "\u{1F600}")
+      eq(sg, "after e-acute", slice("\u{00E9}bc", 1, 3), "bc")
     })
 
     group(s1, "indexOf", (sg: Suite) => {
       eq(sg, "found", indexOf("hello", "ll"), 2)
       eq(sg, "not found", indexOf("hello", "z"), 0 - 1)
       eq(sg, "at start", indexOf("hello", "he"), 0)
+      eq(sg, "emoji char index", indexOf("a\u{1F600}b", "\u{1F600}"), 1)
     })
 
     group(s1, "equals", (sg: Suite) => {
@@ -32,5 +38,6 @@ export fun run(s: Suite): Unit =
       eq(sg, "lowercase", toUpperCase("hello"), "HELLO")
       eq(sg, "mixed", toUpperCase("HeLLo"), "HELLO")
       eq(sg, "empty", toUpperCase(""), "")
+      eq(sg, "e-acute", toUpperCase("\u{00E9}"), "\u{00C9}")
     })
   })

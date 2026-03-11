@@ -115,7 +115,7 @@ Lexer must not treat `1.` or `.5` as integer plus dot; the longest valid float t
 
 ### 2.8 String Literals (Template Strings)
 
-Strings are delimited by `"` (U+0022). All strings support interpolation; there are no raw string literals.
+Strings are delimited by `"` (U+0022). String content is **UTF-8**. All strings support interpolation; there are no raw string literals.
 
 **Inside a string:**
 
