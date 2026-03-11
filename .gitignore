@@ -16,3 +16,4 @@ vm/.zig-cache/
 
 # OS
 .DS_Store
+.kestrel_test_runner.ks
