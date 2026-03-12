@@ -42,6 +42,8 @@ The grammar is in 01 §3.1 (ImportDecl, ImportClause, ImportSpec). The following
 - **Form:** `import "*" "as" UPPER_IDENT "from" STRING` (01). The UPPER_IDENT is the **namespace name**.
 - **Semantics:** The resolved module is loaded. The current module binds the namespace name to a **namespace object** that exposes all **public bindings** of that module. The namespace name must be a **UPPER_IDENT** (01 §2.3). Access to a binding is by the namespace name and the exported name (e.g. `M.length` for the `length` exported by the module bound to `M`). The namespace name must be unique in the current module (one namespace per specifier; two `import * as M from ...` with different specifiers would need different names, e.g. `M1` and `M2`).
 
+**Implementation notes:** The namespace name is validated at parse time to be UPPER_IDENT (e.g. start with an uppercase letter); otherwise a parse error is reported. The namespace type exposed to the type checker carries all public bindings (values, functions, type aliases) of the resolved module. At code generation, qualified access such as `M.name(args)` resolves to a static CALL instruction using the same imported function table mechanism as named imports; no name lookup is performed at load or runtime. The namespace name must be unique across all import declarations in the module (no duplicate namespace name, and no conflict with a local name from a named import).
+
 ### 2.4 Side-effect import
 
 - **Form:** `import STRING` (no bindings).

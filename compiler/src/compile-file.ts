@@ -12,6 +12,7 @@ import { resolveSpecifier } from './resolve.js';
 import { readTypesFile, writeTypesFile, isTypesFileFresh } from './types-file.js';
 import type { Program, ImportDecl, Expr } from './ast/nodes.js';
 import type { InternalType } from './types/internal.js';
+import { tUnit } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
 import { CODES, locationFromSpan, locationFileOnly } from './diagnostics/types.js';
 import type { Span } from './lexer/types.js';
@@ -182,6 +183,26 @@ export function compileFile(
       resolved.set(spec, r.path);
     }
 
+    // Validate namespace names: UPPER_IDENT uniqueness and no conflict with named import locals
+    const namespaceNames = new Set<string>();
+    for (const imp of program.imports) {
+      if (imp.kind === 'NamespaceImport') {
+        if (namespaceNames.has(imp.name)) {
+          return { ok: false, diagnostics: [diag(filePath, CODES.export.import_conflict, `Duplicate namespace name: ${imp.name}`, (imp as { span?: Span })?.span, source)] };
+        }
+        namespaceNames.add(imp.name);
+      }
+    }
+    for (const imp of program.imports) {
+      if (imp.kind === 'NamedImport') {
+        for (const s of imp.specs) {
+          if (namespaceNames.has(s.local)) {
+            return { ok: false, diagnostics: [diag(filePath, CODES.export.import_conflict, `Import name '${s.local}' conflicts with namespace name`, (imp as { span?: Span })?.span, source)] };
+          }
+        }
+      }
+    }
+
     const getOutputPaths = options?.getOutputPaths;
     const importBindings = new Map<string, InternalType>();
     const typeAliasBindings = new Map<string, InternalType>();
@@ -248,6 +269,19 @@ export function compileFile(
                 }
               }
             }
+            for (const imp of program.imports) {
+              if (imp.kind !== 'NamespaceImport' || imp.spec !== spec) continue;
+              const bindings = new Map<string, InternalType>();
+              for (const [name, exp] of typesExports) {
+                if (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var') {
+                  bindings.set(name, exp.type);
+                }
+              }
+              for (const [name, ta] of typesTypeAliases) {
+                bindings.set(name, ta.type);
+              }
+              importBindings.set(imp.name, { kind: 'namespace', bindings });
+            }
             depResults.push({ spec, path: depPath, exportSet, nameToExport, fromTypesFile: true });
             usedTypesFile = true;
             } catch {
@@ -278,6 +312,17 @@ export function compileFile(
               importBindings.set(localName, t);
             }
           }
+        }
+        for (const imp of program.imports) {
+          if (imp.kind !== 'NamespaceImport' || imp.spec !== spec) continue;
+          const bindings = new Map<string, InternalType>();
+          for (const [name, t] of depOut.exports) {
+            bindings.set(name, t);
+          }
+          for (const [name, t] of depOut.exportedTypeAliases) {
+            bindings.set(name, t);
+          }
+          importBindings.set(imp.name, { kind: 'namespace', bindings });
         }
         depResults.push({
           spec,
@@ -358,9 +403,61 @@ export function compileFile(
       }
     }
 
+    const namespaceFuncIds = new Map<string, Map<string, number>>();
+    const namespaceVarSetterIds = new Map<string, Map<string, number>>();
+    for (let specIndex = 0; specIndex < specs.length; specIndex++) {
+      const spec = specs[specIndex]!;
+      const dep = depResults.find((d) => d.spec === spec);
+      if (!dep) continue;
+      for (const imp of program.imports) {
+        if (imp.kind !== 'NamespaceImport' || imp.spec !== spec) continue;
+        const perNsFuncIds = new Map<string, number>();
+        const perNsSetterIds = new Map<string, number>();
+        if (dep.fromTypesFile) {
+          const { nameToExport } = dep;
+          for (const [name, exp] of nameToExport) {
+            if (exp.setter_index !== undefined) {
+              importedFunctionTable.push({ importIndex: specIndex, functionIndex: exp.function_index });
+              perNsFuncIds.set(name, mainFuncCount + importedFunctionTable.length - 1);
+              importedFunctionTable.push({ importIndex: specIndex, functionIndex: exp.setter_index });
+              perNsSetterIds.set(name, mainFuncCount + importedFunctionTable.length - 1);
+            } else {
+              importedFunctionTable.push({ importIndex: specIndex, functionIndex: exp.function_index });
+              perNsFuncIds.set(name, mainFuncCount + importedFunctionTable.length - 1);
+            }
+          }
+        } else {
+          const { result, exportSet } = dep;
+          const depNameToIndex = new Map<string, number>();
+          for (let i = 0; i < result.functionTable.length; i++) {
+            const fnName = result.stringTable[result.functionTable[i]!.nameIndex];
+            if (fnName && !fnName.endsWith('$set')) depNameToIndex.set(fnName, i);
+          }
+          for (const name of exportSet) {
+            const depIdx = depNameToIndex.get(name);
+            if (depIdx === undefined) continue;
+            const setterIdx = result.varSetterIndices?.get(name);
+            if (setterIdx !== undefined) {
+              importedFunctionTable.push({ importIndex: specIndex, functionIndex: depIdx });
+              perNsFuncIds.set(name, mainFuncCount + importedFunctionTable.length - 1);
+              importedFunctionTable.push({ importIndex: specIndex, functionIndex: setterIdx });
+              perNsSetterIds.set(name, mainFuncCount + importedFunctionTable.length - 1);
+            } else {
+              importedFunctionTable.push({ importIndex: specIndex, functionIndex: depIdx });
+              perNsFuncIds.set(name, mainFuncCount + importedFunctionTable.length - 1);
+            }
+          }
+        }
+        namespaceFuncIds.set(imp.name, perNsFuncIds);
+        if (perNsSetterIds.size > 0) namespaceVarSetterIds.set(imp.name, perNsSetterIds);
+      }
+    }
+
     const mainResult = codegen(program, {
       importedFuncIds,
       importedVarSetterIds: importedVarSetterIds.size > 0 ? importedVarSetterIds : undefined,
+      namespaceFuncIds: namespaceFuncIds.size > 0 ? namespaceFuncIds : undefined,
+      namespaceVarSetterIds: namespaceVarSetterIds.size > 0 ? namespaceVarSetterIds : undefined,
       sourceFile: filePath,
     });
     mainResult.importedFunctionTable = importedFunctionTable;

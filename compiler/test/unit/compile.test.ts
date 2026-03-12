@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { compile, tokenize, parse, emitKbc } from '../../src/index.js';
+import type { Program } from '../../src/ast/nodes.js';
 import { codegen } from '../../src/codegen/codegen.js';
 import { ConstTag } from '../../src/bytecode/constants.js';
 import { writeKbc } from '../../src/bytecode/write.js';
@@ -129,6 +130,24 @@ describe('compile', () => {
       const { importSpecifierIndices, stringTable } = codegen(result.ast);
       expect(importSpecifierIndices.length).toBe(1);
       expect(stringTable[importSpecifierIndices[0]!]).toBe('kestrel:string');
+    }
+  });
+
+  it('parses namespace import into NamespaceImport node', () => {
+    const tokens = tokenize('import * as Str from "kestrel:string"\nval a = 1');
+    const parseResult = parse(tokens);
+    expect('ok' in parseResult && parseResult.ok === false).toBe(false);
+    const ast = parseResult as Program;
+    expect(ast.imports.length).toBe(1);
+    expect(ast.imports[0]).toMatchObject({ kind: 'NamespaceImport', name: 'Str', spec: 'kestrel:string' });
+  });
+
+  it('rejects lowercase namespace name with parse error', () => {
+    const tokens = tokenize('import * as str from "kestrel:string"');
+    const parseResult = parse(tokens);
+    expect('ok' in parseResult && parseResult.ok === false).toBe(true);
+    if ('ok' in parseResult && !parseResult.ok) {
+      expect(parseResult.errors.some((e) => e.message.includes('UPPER_IDENT') || e.message.includes('uppercase'))).toBe(true);
     }
   });
 

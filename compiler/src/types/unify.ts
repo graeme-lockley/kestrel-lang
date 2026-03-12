@@ -49,6 +49,7 @@ export function substitute(t: InternalType, id: number, replacement: InternalTyp
     if (t.vars.includes(id)) return t;
     return { kind: 'scheme', vars: t.vars, body: substitute(t.body, id, replacement) };
   }
+  if (t.kind === 'namespace') return t;
   return t;
 }
 
@@ -104,6 +105,7 @@ export function applySubst(t: InternalType, subst: Map<number, InternalType>): I
     // Schemes should not appear in unification; they are instantiated first
     return t;
   }
+  if (t.kind === 'namespace') return t;
   return t;
 }
 
@@ -125,6 +127,7 @@ function occurs(id: number, t: InternalType): boolean {
     if (t.vars.includes(id)) return false;
     return occurs(id, t.body);
   }
+  if (t.kind === 'namespace') return false;
   return false;
 }
 
@@ -240,6 +243,10 @@ export function unify(left: InternalType, right: InternalType, subst: Map<number
     }
     // else both closed records with same fields - success
     return;
+  }
+
+  if (l.kind === 'namespace' || r.kind === 'namespace') {
+    throw new UnifyError(left, right, 'Namespace type cannot be unified with value type');
   }
 
   throw new UnifyError(left, right);

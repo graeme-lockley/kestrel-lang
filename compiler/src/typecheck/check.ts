@@ -5,6 +5,7 @@ import type { Program, Expr, TopLevelDecl, TopLevelStmt } from '../ast/nodes.js'
 import type { InternalType } from '../types/internal.js';
 import { freshVar, prim, tInt, tFloat, tBool, tString, tUnit, resetVarId, freeVars, generalize, instantiate } from '../types/internal.js';
 import { astTypeToInternal, astTypeToInternalWithScope } from '../types/from-ast.js';
+import type { ResolveQualifiedType } from '../types/from-ast.js';
 import { unify, applySubst, UnifyError } from '../types/unify.js';
 import type { Diagnostic } from '../diagnostics/types.js';
 import { CODES, locationFromSpan, locationFileOnly } from '../diagnostics/types.js';
@@ -117,6 +118,15 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       opaqueTypes.add(name);
     }
   }
+
+  const resolveQualified: ResolveQualifiedType = (ns, name) => {
+    const t = env.get(ns);
+    if (t && t.kind === 'namespace') {
+      const b = t.bindings.get(name);
+      if (b != null) return instantiate(b);
+    }
+    return undefined;
+  };
 
   // Add builtin primitives to environment (variadic: ≥1 arg, Unit)
   // print / println: typechecked at call site as (T1, T2, ...) -> Unit with args.length >= 1
@@ -512,9 +522,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
               }
             }
             const paramTs = stmt.params.map((p) =>
-              p.type ? astTypeToInternalWithScope(p.type, scope, typeAliases) : freshVar()
+              p.type ? astTypeToInternalWithScope(p.type, scope, typeAliases, resolveQualified) : freshVar()
             );
-            const returnT = astTypeToInternalWithScope(stmt.returnType, scope, typeAliases);
+            const returnT = astTypeToInternalWithScope(stmt.returnType, scope, typeAliases, resolveQualified);
             const arrowT: InternalType = { kind: 'arrow', params: paramTs, return: returnT };
             env.set(stmt.name, arrowT);
           }
@@ -522,7 +532,8 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         for (const stmt of expr.stmts) {
           if (stmt.kind === 'ValStmt') {
             const t = apply(inferExpr(stmt.value));
-            const scheme = generalize(t, envFreeVars());
+            if (stmt.type) unifyWithBlame(t, astTypeToInternal(stmt.type, typeAliases, resolveQualified), stmt.value);
+            const scheme = generalize(apply(t), envFreeVars());
             env.set(stmt.name, scheme);
           } else if (stmt.kind === 'FunStmt') {
             const arrowT = env.get(stmt.name) as InternalType;
@@ -541,7 +552,8 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             }
           } else if (stmt.kind === 'VarStmt') {
             const t = apply(inferExpr(stmt.value));
-            env.set(stmt.name, t);
+            if (stmt.type) unifyWithBlame(t, astTypeToInternal(stmt.type, typeAliases, resolveQualified), stmt.value);
+            env.set(stmt.name, apply(t));
           } else if (stmt.kind === 'ExprStmt') {
             inferExpr(stmt.expr);
           } else {
@@ -562,7 +574,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           }
         }
         const paramTs = expr.params.map((p) =>
-          p.type ? astTypeToInternalWithScope(p.type, scope, typeAliases) : freshVar()
+          p.type ? astTypeToInternalWithScope(p.type, scope, typeAliases, resolveQualified) : freshVar()
         );
         for (let i = 0; i < expr.params.length; i++) {
           env.set(expr.params[i]!.name, paramTs[i]!);
@@ -614,6 +626,16 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       case 'FieldExpr': {
         const objT = inferExpr(expr.object);
         const applied = apply(objT);
+
+        if (applied.kind === 'namespace') {
+          const fieldType = applied.bindings.get(expr.field);
+          if (fieldType == null) {
+            throw new TypeCheckError(`Namespace does not export '${expr.field}'`, expr);
+          }
+          result = apply(instantiate(fieldType));
+          setInferredType(expr, result);
+          return result;
+        }
 
         if (applied.kind === 'tuple') {
           const i = parseInt(expr.field, 10);
@@ -909,9 +931,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           }
         }
         const paramTs = node.params.map((p) =>
-          p.type ? astTypeToInternalWithScope(p.type, sigScope, typeAliases) : freshVar()
+          p.type ? astTypeToInternalWithScope(p.type, sigScope, typeAliases, resolveQualified) : freshVar()
         );
-        const returnT = astTypeToInternalWithScope(node.returnType, sigScope, typeAliases);
+        const returnT = astTypeToInternalWithScope(node.returnType, sigScope, typeAliases, resolveQualified);
 
         // Check if async function: return type must be Task<T>
         if (node.async) {
@@ -993,7 +1015,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         if (node.body.kind === 'TypeAliasBody') {
           // Treat opaque alias same as regular alias within the module
           // The opacity is enforced at export/import boundary
-          const aliasType = astTypeToInternal(node.body.type);
+          const aliasType = astTypeToInternal(node.body.type, undefined, resolveQualified);
           env.set(node.name, aliasType);
           typeAliases.set(node.name, aliasType);
         } else if (node.body.kind === 'ADTBody') {
@@ -1008,7 +1030,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           }
           
           for (const ctor of node.body.constructors) {
-            const paramTypes = ctor.params.map(p => astTypeToInternalWithScope(p, adtScope, typeAliases));
+            const paramTypes = ctor.params.map(p => astTypeToInternalWithScope(p, adtScope, typeAliases, resolveQualified));
             const ctorType = paramTypes.length === 0 
               ? adtType 
               : { kind: 'arrow' as const, params: paramTypes, return: adtType };
@@ -1028,13 +1050,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         env.set(node.name, t);
       } else if (node.kind === 'ValDecl') {
         const valueT = inferExpr(node.value);
-        if (node.type) unifyWithBlame(valueT, astTypeToInternal(node.type), node.value);
+        if (node.type) unifyWithBlame(valueT, astTypeToInternal(node.type, typeAliases, resolveQualified), node.value);
         const t = apply(valueT);
         const scheme = generalize(t, envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'VarDecl') {
         const valueT = inferExpr(node.value);
-        if (node.type) unifyWithBlame(valueT, astTypeToInternal(node.type), node.value);
+        if (node.type) unifyWithBlame(valueT, astTypeToInternal(node.type, typeAliases, resolveQualified), node.value);
         const t = apply(valueT);
         env.set(node.name, t);
       } else if (node.kind === 'ExprStmt') {

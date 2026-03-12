@@ -1,6 +1,8 @@
 // Public type - constructors available to importers
 export type PublicToken = PubNum(Int) | PubOp(String) | PubEof
 
+export fun makePubNum(n: Int): PublicToken = PubNum(n)
+
 export fun publicTokenToInt(t: PublicToken): Int = match (t) {
   PubNum(n) => n
   PubOp(s) => 0

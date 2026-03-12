@@ -105,4 +105,47 @@ describe('compileFile', () => {
       expect(r.diagnostics.some((d) => d.message.includes('Cannot read') || d.message.includes('not found'))).toBe(true);
     }
   });
+
+  it('compiles program with namespace import and emits imported function table', () => {
+    const outDir = join(tmpdir(), `kestrel-namespace-${Date.now()}`);
+    mkdirSync(outDir, { recursive: true });
+    const mainPath = join(outDir, 'main.ks');
+    const root = resolve(process.cwd(), '..');
+    const source = `import * as Str from "kestrel:string"
+val x = Str.length("hi")`;
+    writeFileSync(mainPath, source);
+    const getOutputPaths = (sourcePath: string) => {
+      const base = sourcePath.replace(/\.ks$/, '');
+      return { kbc: base + '.kbc', kti: base + '.kti' };
+    };
+    const compileOpts = { projectRoot: root, getOutputPaths };
+    const result = compileFile(mainPath, compileOpts);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.kbc.length).toBeGreaterThan(0);
+    const imported = readImportedFunctionTable(result.kbc);
+    expect(imported.length).toBeGreaterThanOrEqual(1);
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  it('reports type error when accessing nonexistent member on namespace', () => {
+    const outDir = join(tmpdir(), `kestrel-namespace-err-${Date.now()}`);
+    mkdirSync(outDir, { recursive: true });
+    const mainPath = join(outDir, 'main.ks');
+    const root = resolve(process.cwd(), '..');
+    const source = `import * as Str from "kestrel:string"
+val x = Str.nonexistent`;
+    writeFileSync(mainPath, source);
+    const getOutputPaths = (sourcePath: string) => {
+      const base = sourcePath.replace(/\.ks$/, '');
+      return { kbc: base + '.kbc', kti: base + '.kti' };
+    };
+    const compileOpts = { projectRoot: root, getOutputPaths };
+    const result = compileFile(mainPath, compileOpts);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.diagnostics.some((d) => d.message.includes('does not export') || d.message.includes('nonexistent'))).toBe(true);
+    }
+    rmSync(outDir, { recursive: true, force: true });
+  });
 });

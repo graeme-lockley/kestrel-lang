@@ -158,7 +158,15 @@ class Parser {
     if (this.at('op', '*')) {
       this.advance();
       this.expect('keyword', 'as');
-      const name = this.expect('ident').value!;
+      const nameToken = this.expect('ident');
+      const name = nameToken.value!;
+      if (!name || !/^[A-Z]/.test(name)) {
+        this.pushError(
+          CODES.parse.unexpected_token,
+          'Namespace name must be an UPPER_IDENT (start with uppercase letter)',
+          nameToken.span
+        );
+      }
       this.expect('keyword', 'from');
       const spec = this.expect('string').value!;
       return { kind: 'NamespaceImport', spec, name };
@@ -515,6 +523,11 @@ class Parser {
       }
       this.expect('op', '>');
       return { kind: 'AppType', name, args };
+    }
+    if (this.at('dot')) {
+      this.advance();
+      const name2 = this.expect('ident').value!;
+      return { kind: 'QualifiedType', namespace: name, name: name2 };
     }
     return { kind: 'IdentType', name };
   }
@@ -990,13 +1003,23 @@ class Parser {
       if (this.at('keyword', 'val')) {
         this.advance();
         const name = this.expect('ident').value!;
+        let type: Type | undefined;
+        if (this.at('colon')) {
+          this.advance();
+          type = this.parseType();
+        }
         this.expect('op', '=');
-        stmts.push({ kind: 'ValStmt', name, value: this.parseExpr() });
+        stmts.push({ kind: 'ValStmt', name, type, value: this.parseExpr() });
       } else if (this.at('keyword', 'var')) {
         this.advance();
         const name = this.expect('ident').value!;
+        let type: Type | undefined;
+        if (this.at('colon')) {
+          this.advance();
+          type = this.parseType();
+        }
         this.expect('op', '=');
-        stmts.push({ kind: 'VarStmt', name, value: this.parseExpr() });
+        stmts.push({ kind: 'VarStmt', name, type, value: this.parseExpr() });
       } else if (this.at('keyword', 'fun')) {
         this.advance();
         const name = this.expect('ident').value!;

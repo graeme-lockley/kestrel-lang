@@ -465,6 +465,8 @@ function makeEmitExpr(
   recordDebug: (line: number | undefined) => void,
   chunkBaseRef: { value: number },
   importedVarSetterIds?: Map<string, number>,
+  namespaceFuncIds?: Map<string, Map<string, number>>,
+  namespaceVarSetterIds?: Map<string, Map<string, number>>,
 ): { emitExpr: (
   expr: Expr,
   env: Map<string, number>,
@@ -961,6 +963,14 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               emitExpr(target.object, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
               emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
               emitSetField(fieldSlot);
+            } else if (objType?.kind === 'namespace' && target.object.kind === 'IdentExpr') {
+              const setterId = namespaceVarSetterIds?.get(target.object.name)?.get(target.field);
+              if (setterId !== undefined) {
+                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+                emitCall(setterId, 1);
+                const discardSlot = blockEnv.get('$discard');
+                if (discardSlot !== undefined) emitStoreLocal(discardSlot);
+              }
             }
           } else if (target.kind === 'IdentExpr') {
             const cap = captures?.get(target.name);
@@ -1103,6 +1113,14 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
     }
     case 'FieldExpr': {
       const objType = getInferredType(expr.object);
+      if (objType?.kind === 'namespace' && expr.object.kind === 'IdentExpr') {
+        const nsMap = namespaceFuncIds?.get(expr.object.name);
+        const fnId = nsMap?.get(expr.field);
+        if (fnId !== undefined) {
+          emitCall(fnId, 0);
+          break;
+        }
+      }
       let slot = -1;
       if (objType?.kind === 'tuple') {
         const i = parseInt(expr.field, 10);
@@ -1272,6 +1290,18 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
           emitCallIndirect(expr.args.length);
           break;
+        }
+      }
+      if (expr.callee.kind === 'FieldExpr' && expr.callee.object.kind === 'IdentExpr') {
+        const objType = getInferredType(expr.callee.object);
+        if (objType?.kind === 'namespace') {
+          const nsMap = namespaceFuncIds?.get(expr.callee.object.name);
+          const fnId = nsMap?.get(expr.callee.field);
+          if (fnId !== undefined) {
+            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+            emitCall(fnId, expr.args.length);
+            break;
+          }
         }
       }
       // Callee is an expression (e.g. makeAdd(2) — call that returns a closure; chained call)
@@ -1624,6 +1654,10 @@ export interface CodegenOptions {
   importedFuncIds?: Map<string, number>;
   /** Map of imported var names to the imported function table index of their setter (1-arity). */
   importedVarSetterIds?: Map<string, number>;
+  /** Map of namespace name -> (member name -> function index) for namespace import access. */
+  namespaceFuncIds?: Map<string, Map<string, number>>;
+  /** Map of namespace name -> (member name -> setter index) for namespace var assignment. */
+  namespaceVarSetterIds?: Map<string, Map<string, number>>;
   /** Source file path for debug section (file:line in stack traces). */
   sourceFile?: string;
 }
@@ -1656,6 +1690,8 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     recordDebug,
     chunkBaseRef,
     options?.importedVarSetterIds,
+    options?.namespaceFuncIds,
+    options?.namespaceVarSetterIds,
   );
 
   codeStart();
@@ -1825,6 +1861,15 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
           emitExpr(target.object, env, funNameToId, shapes, adts);
           emitExpr(stmt.value, env, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
           emitSetField(slot);
+        } else if (objType?.kind === 'namespace' && target.object.kind === 'IdentExpr') {
+          const setterId = options?.namespaceVarSetterIds?.get(target.object.name)?.get(target.field);
+          if (setterId !== undefined) {
+            emitExpr(stmt.value, env, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
+            emitCall(setterId, 1);
+          } else {
+            emitExpr(stmt.value, env, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
+            emitStoreLocal(0);
+          }
         } else {
           emitExpr(stmt.value, env, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
           emitStoreLocal(0);

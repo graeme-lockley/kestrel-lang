@@ -123,6 +123,7 @@ export interface TypeField extends NodeBase {
 
 export type Type =
   | IdentType
+  | QualifiedType
   | PrimType
   | ArrowType
   | RecordType
@@ -134,6 +135,12 @@ export type Type =
 
 export interface IdentType extends NodeBase {
   kind: 'IdentType';
+  name: string;
+}
+
+export interface QualifiedType extends NodeBase {
+  kind: 'QualifiedType';
+  namespace: string;
   name: string;
 }
 
@@ -186,12 +193,14 @@ export type TopLevelStmt = ValStmt | VarStmt | AssignStmt | ExprStmt;
 export interface ValStmt extends NodeBase {
   kind: 'ValStmt';
   name: string;
+  type?: Type;
   value: Expr;
 }
 
 export interface VarStmt extends NodeBase {
   kind: 'VarStmt';
   name: string;
+  type?: Type;
   value: Expr;
 }
 

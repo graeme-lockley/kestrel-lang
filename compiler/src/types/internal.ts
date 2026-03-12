@@ -11,7 +11,8 @@ export type InternalType =
   | { kind: 'tuple'; elements: InternalType[] }
   | { kind: 'union'; left: InternalType; right: InternalType }
   | { kind: 'inter'; left: InternalType; right: InternalType }
-  | { kind: 'scheme'; vars: number[]; body: InternalType };
+  | { kind: 'scheme'; vars: number[]; body: InternalType }
+  | { kind: 'namespace'; bindings: Map<string, InternalType> };
 
 let nextVarId = 0;
 export function freshVar(): InternalType {
@@ -82,6 +83,7 @@ export function freeVars(t: InternalType, bound: Set<number> = new Set()): Set<n
     const newBound = new Set([...bound, ...t.vars]);
     return freeVars(t.body, newBound);
   }
+  if (t.kind === 'namespace') return new Set();
   return new Set();
 }
 
@@ -142,5 +144,6 @@ function substituteMany(t: InternalType, subst: Map<number, InternalType>): Inte
   if (t.kind === 'scheme') {
     return t; // Should not happen in well-formed types
   }
+  if (t.kind === 'namespace') return t;
   return t;
 }
