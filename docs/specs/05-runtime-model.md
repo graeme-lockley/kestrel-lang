@@ -65,6 +65,8 @@ For a record with **mut** fields (01 §3.6), **SET_FIELD** (04 §1.8) mutates th
 - **Roots:** The collector must treat as roots: the **operand stack**, all **local slots** of every active frame, and any **global or static** references (e.g. module-level data). No reference to a heap object may be stored in a place invisible to the GC (e.g. raw pointers in C that the collector does not trace).
 - **Safety:** The VM must ensure that a heap object is not freed while any tagged value (on the stack, in a local, or in another heap object) still holds a PTR to it.
 
+**Implementor note (mark phase):** The constant pool may hold **PTR** to loader-allocated string/float blobs that share the same header layout as GC heap objects but are **not** managed by the collector. Roots may therefore contain **PTR** values that do not refer to GC object starts. The mark phase must only treat an address as a GC object header if it is a **known GC allocation**; it must **bound** RECORD field walks and ADT payload walks by the object’s allocation size. Otherwise an interior pointer, or a constant-pool address mis-read as RECORD/ADT (bogus `field_count` / `arity`), can walk arbitrary memory and crash.
+
 ---
 
 ## 5. Exception Handling (Throw / Try-Catch)

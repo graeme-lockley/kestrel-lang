@@ -31,6 +31,10 @@ pub const ObjectNode = struct {
 pub const GC = struct {
     allocator: std.mem.Allocator,
     objects: ?*ObjectNode,
+    /// Maps allocation start address -> size. Only these addresses are GC heap objects.
+    /// Roots may hold ptrs to bytecode constant-pool blobs (same layout tags) — those addrs are
+    /// not in this map, so mark() ignores them instead of mis-parsing payload as RECORD/ADT.
+    object_addrs: std.AutoHashMapUnmanaged(usize, usize),
     bytes_allocated: usize,
     next_gc: usize,
 
@@ -41,6 +45,7 @@ pub const GC = struct {
         return GC{
             .allocator = allocator,
             .objects = null,
+            .object_addrs = .{},
             .bytes_allocated = 0,
             .next_gc = initial_threshold,
         };
@@ -56,12 +61,18 @@ pub const GC = struct {
 
         // Allocate with 8-byte alignment (2^3 = 8)
         const mem = try self.allocator.alignedAlloc(u8, @enumFromInt(3), size);
+        errdefer self.allocator.free(mem);
 
-        // Track this allocation
         const node = try self.allocator.create(ObjectNode);
+        errdefer self.allocator.destroy(node);
+
+        const addr = @intFromPtr(mem.ptr);
+        try self.object_addrs.put(self.allocator, addr, size);
+        errdefer _ = self.object_addrs.remove(addr);
+
         node.* = ObjectNode{
             .next = self.objects,
-            .addr = @intFromPtr(mem.ptr),
+            .addr = addr,
             .size = size,
         };
         self.objects = node;
@@ -82,6 +93,7 @@ pub const GC = struct {
 
     pub fn mark(self: *GC, addr: usize) void {
         if (addr == 0) return;
+        const size = self.object_addrs.get(addr) orelse return;
 
         const base = @as([*]u8, @ptrFromInt(addr));
         const kind = base[0];
@@ -91,10 +103,13 @@ pub const GC = struct {
         if (mark_byte != 0) return;
         base[1] = 1; // Set mark bit
 
-        // Mark children based on object kind
+        // Mark children based on object kind (field/arity counts clamped to allocation size)
         switch (kind) {
             RECORD_KIND => {
-                const field_count = std.mem.readInt(u32, base[12..16], .little);
+                if (size < RECORD_HEADER + @sizeOf(Value)) return;
+                const declared = std.mem.readInt(u32, base[12..16], .little);
+                const max_fields = (size - RECORD_HEADER) / @sizeOf(Value);
+                const field_count = @min(@as(usize, @intCast(declared)), max_fields);
                 const fields_ptr = @as([*]Value, @alignCast(@ptrCast(base + RECORD_HEADER)));
                 var i: usize = 0;
                 while (i < field_count) : (i += 1) {
@@ -105,7 +120,10 @@ pub const GC = struct {
                 }
             },
             ADT_KIND => {
-                const arity = std.mem.readInt(u32, base[16..20], .little);
+                if (size < ADT_HEADER + @sizeOf(Value)) return;
+                const declared = std.mem.readInt(u32, base[16..20], .little);
+                const max_payloads = (size - ADT_HEADER) / @sizeOf(Value);
+                const arity = @min(@as(usize, @intCast(declared)), max_payloads);
                 const payloads_ptr = @as([*]Value, @alignCast(@ptrCast(base + ADT_HEADER)));
                 var i: usize = 0;
                 while (i < arity) : (i += 1) {
@@ -116,8 +134,8 @@ pub const GC = struct {
                 }
             },
             TASK_KIND => {
+                if (size < 8 + @sizeOf(Value)) return;
                 // Tasks: kind(1) + mark(1) + status(1) + pad(1) + unused(4) + result(8)
-                // Mark the result value if it's a pointer
                 const result_ptr = @as(*const Value, @alignCast(@ptrCast(base + 8)));
                 const result = result_ptr.*;
                 if (result.tag == .ptr) {
@@ -125,33 +143,26 @@ pub const GC = struct {
                 }
             },
             STRING_KIND => {
-                // Strings: kind(1) + mark(1) + pad(2) + len(4) + UTF-8 bytes
-                // No pointers to trace
+                // Strings: no pointers to trace
             },
             CLOSURE_KIND => {
-                // CLOSURE: env (PTR to RECORD) at offset 16
+                if (size < 24) return;
                 const env_addr = std.mem.readInt(usize, base[16..24], .little);
                 if (env_addr != 0) self.mark(env_addr);
             },
-            FLOAT_KIND => {
-                // FLOAT: no pointers to trace
-            },
-            else => {
-                // Other kinds have no pointers to trace
-            },
+            FLOAT_KIND => {},
+            else => {},
         }
     }
 
     /// Roots = operand stack + local slots of all active frames + all module globals (spec 05 §4).
     pub fn markRoots(self: *GC, stack: []Value, all_locals: []const []const Value, all_globals: []const []const Value) void {
-        // Mark from stack
         for (stack) |val| {
             if (val.tag == .ptr) {
                 self.mark(Value.ptrTo(val));
             }
         }
 
-        // Mark from every frame's locals (current + saved call frames)
         for (all_locals) |locals| {
             for (locals) |val| {
                 if (val.tag == .ptr) {
@@ -160,7 +171,6 @@ pub const GC = struct {
             }
         }
 
-        // Mark from every module's globals
         for (all_globals) |globals| {
             for (globals) |val| {
                 if (val.tag == .ptr) {
@@ -179,15 +189,13 @@ pub const GC = struct {
             const mark_byte = base[1];
 
             if (mark_byte == 0) {
-                // Unmarked: free this object
                 const size = node.size;
-                // Create aligned slice matching the allocation alignment (8 bytes = 2^3)
                 const aligned_base = @as([*]align(8) u8, @alignCast(base));
                 const mem: []align(8) u8 = aligned_base[0..size];
                 self.allocator.free(mem);
                 self.bytes_allocated -= size;
+                _ = self.object_addrs.remove(node.addr);
 
-                // Remove from list
                 const next = node.next;
                 if (prev) |p| {
                     p.next = next;
@@ -197,7 +205,6 @@ pub const GC = struct {
                 self.allocator.destroy(node);
                 current = next;
             } else {
-                // Marked: unmark for next cycle and keep
                 base[1] = 0;
                 prev = node;
                 current = node.next;
@@ -209,17 +216,15 @@ pub const GC = struct {
         self.markRoots(stack, all_locals, all_globals);
         self.sweep();
 
-        // Adjust next GC threshold
         self.next_gc = @max(self.bytes_allocated * growth_factor, initial_threshold);
     }
 
     pub fn deinit(self: *GC) void {
-        // Free all remaining objects
+        self.object_addrs.clearAndFree(self.allocator);
         var current = self.objects;
         while (current) |node| {
             const base = @as([*]u8, @ptrFromInt(node.addr));
             const size = node.size;
-            // Create aligned slice matching the allocation alignment (8 bytes = 2^3)
             const aligned_base = @as([*]align(8) u8, @alignCast(base));
             const mem: []align(8) u8 = aligned_base[0..size];
             self.allocator.free(mem);
@@ -228,6 +233,7 @@ pub const GC = struct {
             self.allocator.destroy(node);
             current = next;
         }
+        self.objects = null;
     }
 };
 
@@ -239,16 +245,13 @@ test "GC marks module globals as roots" {
     var gc = GC.init(allocator);
     defer gc.deinit();
 
-    // Allocate a heap object (float) — only reference will be in "globals"
     const val = gc.allocFloat(3.14) catch return;
     var globals_buf: [1]Value = .{val};
     const all_globals: [1][]const Value = .{globals_buf[0..]};
 
-    // Mark roots from globals only (no stack, no locals); then sweep
     gc.markRoots(&[_]Value{}, &[_][]const Value{}, &all_globals);
     gc.sweep();
 
-    // Object must still be live (not swept)
     const addr = Value.ptrTo(val);
     var current = gc.objects;
     var found = false;
@@ -260,4 +263,30 @@ test "GC marks module globals as roots" {
         current = node.next;
     }
     try std.testing.expect(found);
+}
+
+test "mark ignores non-GC pointers (no segfault on interior or constant-pool addrs)" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var gc = GC.init(allocator);
+    defer gc.deinit();
+
+    // Large GC string so an interior offset might accidentally match RECORD_KIND if mis-parsed
+    const payload_len: usize = 64;
+    const mem = try gc.allocObject(8 + payload_len);
+    @memset(mem, 0);
+    mem[0] = STRING_KIND;
+    std.mem.writeInt(u32, mem[4..8], @as(u32, @intCast(payload_len)), .little);
+    // Poison payload: byte 0 of "interior header" = RECORD_KIND, bogus field_count after
+    mem[12] = RECORD_KIND;
+    std.mem.writeInt(u32, mem[24..28], 999999, .little);
+
+    const base = @intFromPtr(mem.ptr);
+    // Would crash old mark() (treats offset 12 as RECORD with huge field_count)
+    gc.mark(base + 12);
+    // Real object still markable
+    gc.mark(base);
+    try std.testing.expect(mem[1] == 1);
 }
