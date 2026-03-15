@@ -825,6 +825,7 @@ class Parser {
         return { kind: 'LiteralExpr', literal: 'unit', value: '()' };
       }
       const pos = this.pos();
+      const savedErrors = this.errors.length;
       const params = this.parseParamListOptional();
       if (params && this.at('rparen')) {
         this.advance();
@@ -833,6 +834,7 @@ class Parser {
           return { kind: 'LambdaExpr', params, body: this.parseExpr() };
         }
       }
+      this.errors.length = savedErrors;
       this.i = pos;
       if (this.at('op', '<')) {
         this.advance();

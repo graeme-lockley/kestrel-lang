@@ -126,7 +126,7 @@ const TASK_KIND: u8 = 3;
 const STRING_KIND: u8 = 4;
 const CLOSURE_KIND: u8 = gc_mod.CLOSURE_KIND;
 const FLOAT_KIND: u8 = gc_mod.FLOAT_KIND;
-const max_frames = 32;
+const max_frames = 8192;
 
 /// If v is a PTR to a FLOAT heap object, return the f64; else null.
 fn valueToF64(v: Value) ?f64 {
@@ -289,12 +289,15 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
     for (&locals) |*v| v.* = Value.unit();
     // Init and export-var getters use module.globals; regular functions use saved_locals
     var current_locals: []Value = if (current_module.globals.len > 0) current_module.globals else locals[0..];
-    var call_frames: [max_frames]CallFrame = undefined;
-    for (&call_frames) |*f| {
+    const call_frames = allocator.alloc(CallFrame, max_frames) catch return false;
+    defer allocator.free(call_frames);
+    for (call_frames) |*f| {
         f.* = .{ .pc = 0, .module = module, .saved_sp = 0, .discard_return = false };
     }
-    var saved_locals: [max_frames + 1][max_locals]Value = undefined;
-    for (&saved_locals) |*frame| {
+    const SavedLocalsRow = [max_locals]Value;
+    const saved_locals = allocator.alloc(SavedLocalsRow, max_frames + 1) catch return false;
+    defer allocator.free(saved_locals);
+    for (saved_locals) |*frame| {
         for (&frame.*) |*v| v.* = Value.unit();
     }
     var frame_sp: usize = 0;
@@ -339,7 +342,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
         if (pending_exception) |exception| {
             pending_exception = null;
             if (handler_sp == 0) {
-                printUncaughtException(exception, pc, current_module, &call_frames, frame_sp, module_ptrs.items);
+                printUncaughtException(exception, pc, current_module, call_frames, frame_sp, module_ptrs.items);
                 return false;
             }
             handler_sp -= 1;
@@ -361,7 +364,8 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
 
         // Periodic GC check — mark from stack, all call frames, and all module globals as roots
         if (gc.bytes_allocated >= gc.next_gc) {
-            var local_slices: [max_frames + 1][]const Value = undefined;
+            const local_slices = allocator.alloc([]const Value, frame_sp + 1) catch continue;
+            defer allocator.free(local_slices);
             for (0..frame_sp + 1) |i| {
                 local_slices[i] = saved_locals[i][0..];
             }
@@ -617,7 +621,11 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 // Imported function call (03 §6.6). On any failure we pop args and push Unit to keep stack consistent.
                 if (fn_id >= functions.len) {
                     const k: usize = fn_id - functions.len;
-                    if (frame_sp >= max_frames or k >= current_module.imported_functions.len or sp < arity) {
+                    if (frame_sp >= max_frames) {
+                        std.debug.print("kestrel: stack overflow (exceeded {d} call frames)\n", .{max_frames});
+                        return false;
+                    }
+                    if (k >= current_module.imported_functions.len or sp < arity) {
                         sp -= arity;
                         stack[sp] = Value.unit();
                         sp += 1;
@@ -737,7 +745,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 }
 
                 // Local function call
-                if (frame_sp >= max_frames) continue;
+                if (frame_sp >= max_frames) {
+                    std.debug.print("kestrel: stack overflow (exceeded {d} call frames)\n", .{max_frames});
+                    return false;
+                }
                 const entry = functions[fn_id];
                 if (sp < arity) continue;
                 call_frames[frame_sp] = .{ .pc = pc, .module = current_module, .saved_sp = sp - arity };
@@ -757,7 +768,11 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 const arity = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
 
-                if (sp < arity + 1 or frame_sp >= max_frames) continue;
+                if (frame_sp >= max_frames) {
+                    std.debug.print("kestrel: stack overflow (exceeded {d} call frames)\n", .{max_frames});
+                    return false;
+                }
+                if (sp < arity + 1) continue;
                 const fn_val = stack[sp - arity - 1];
                 const target_mod_idx: u16 = blk: {
                     if (fn_val.tag == .fn_ref) {
@@ -1200,7 +1215,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
 
                 // Unwind to nearest exception handler
                 if (handler_sp == 0) {
-                    printUncaughtException(exception, pc, current_module, &call_frames, frame_sp, module_ptrs.items);
+                    printUncaughtException(exception, pc, current_module, call_frames, frame_sp, module_ptrs.items);
                     return false;
                 }
 
