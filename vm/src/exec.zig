@@ -66,6 +66,12 @@ fn binopCmp(stack: *[4096]Value, sp: *usize, op: CmpOp) void {
                 .ne => ab != bb,
                 else => false,
             };
+        } else if (a.tag == .unit and b.tag == .unit) {
+            result = switch (op) {
+                .eq => true,
+                .ne => false,
+                else => false,
+            };
         } else if (valueToF64(a)) |af| {
             if (valueToF64(b)) |bf| {
                 const anan = std.math.isNan(af);
@@ -77,6 +83,26 @@ fn binopCmp(stack: *[4096]Value, sp: *usize, op: CmpOp) void {
                     .le => !anan and !bnan and af <= bf,
                     .gt => !anan and !bnan and af > bf,
                     .ge => !anan and !bnan and af >= bf,
+                };
+            }
+        } else if (a.tag == .ptr and b.tag == .ptr) {
+            if (primitives.getStringSlice(a)) |sa| {
+                if (primitives.getStringSlice(b)) |sb| {
+                    result = switch (op) {
+                        .eq => std.mem.eql(u8, sa, sb),
+                        .ne => !std.mem.eql(u8, sa, sb),
+                        .lt => std.mem.lessThan(u8, sa, sb),
+                        .le => !std.mem.lessThan(u8, sb, sa),
+                        .gt => std.mem.lessThan(u8, sb, sa),
+                        .ge => !std.mem.lessThan(u8, sa, sb),
+                    };
+                }
+            } else {
+                // Non-string PTR types: only equality is defined via deep equality
+                result = switch (op) {
+                    .eq => primitives.deepEqual(a, b),
+                    .ne => !primitives.deepEqual(a, b),
+                    else => false,
                 };
             }
         }

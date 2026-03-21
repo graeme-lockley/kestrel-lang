@@ -508,7 +508,7 @@ pub fn equals(a: Value, b: Value) Value {
     return Value.boolVal(deepEqual(a, b));
 }
 
-fn deepEqual(a: Value, b: Value) bool {
+pub fn deepEqual(a: Value, b: Value) bool {
     if (a.tag != b.tag) return false;
     switch (a.tag) {
         .int, .bool, .char => return a.payload == b.payload,
