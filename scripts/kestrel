@@ -9,7 +9,10 @@ VM="$ROOT/vm"
 VM_BIN="$VM/zig-out/bin/kestrel"
 COMPILER_CLI="$COMPILER/dist/cli.js"
 DISASM="$COMPILER/dist/disasm.js"
+# Cache roots: .class files under ~/.kestrel/jvm, .kbc under ~/.kestrel/kbc (clean: rm -rf ~/.kestrel)
 KBC_CACHE="${KESTREL_CACHE:-$HOME/.kestrel/kbc}"
+JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
+RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
 
 # ANSI colours for test output
 GREEN='\033[32m'
@@ -17,12 +20,14 @@ RED='\033[31m'
 DIM='\033[2m'
 RESET='\033[0m'
 
+TARGET="${KESTREL_TARGET:-vm}"
+
 usage() {
   echo "Usage: kestrel <command> [options]" >&2
-  echo "  run   <script[.ks]> [args...]  Compile if needed, then execute via VM" >&2
+  echo "  run   [--target vm|jvm] <script[.ks]> [args...]  Compile if needed, then execute" >&2
   echo "  dis   <script[.ks]>            Compile if needed, then disassemble bytecode" >&2
-  echo "  build [script.ks]              Build compiler and VM; optionally compile script" >&2
-  echo "  test [files...]                 Run unit tests; default **/*.test.ks under tests/ and stdlib" >&2
+  echo "  build [--target vm|jvm] [script.ks]  Build compiler and VM; optionally compile script" >&2
+  echo "  test  [--target vm|jvm] [files...]   Run unit tests" >&2
   exit 1
 }
 
@@ -31,9 +36,20 @@ ensure_tools() {
     echo "kestrel: node not found" >&2
     exit 1
   fi
-  if ! command -v zig &>/dev/null; then
-    echo "kestrel: zig not found" >&2
-    exit 1
+  if [ "$TARGET" = "vm" ]; then
+    if ! command -v zig &>/dev/null; then
+      echo "kestrel: zig not found" >&2
+      exit 1
+    fi
+  else
+    if ! command -v java &>/dev/null; then
+      echo "kestrel: java not found (required for --target jvm)" >&2
+      exit 1
+    fi
+    if ! command -v javac &>/dev/null; then
+      echo "kestrel: javac not found (required for --target jvm)" >&2
+      exit 1
+    fi
   fi
 }
 
@@ -65,7 +81,6 @@ resolve_script() {
 }
 
 # Given absolute path to .ks, return path to .kbc in cache (~/.kestrel/kbc/...)
-# Strategy: mirror absolute path under KBC_CACHE for easy location (e.g. /Users/me/proj/foo.ks -> ~/.kestrel/kbc/Users/me/proj/foo.kbc)
 kbc_path_for() {
   local ks="$1"
   local abs_ks abs_dir abs_base
@@ -73,6 +88,69 @@ kbc_path_for() {
   abs_dir=$(dirname "$abs_ks")
   abs_base=$(basename "$abs_ks" .ks)
   echo "${KBC_CACHE}${abs_dir}/${abs_base}.kbc"
+}
+
+# Given absolute path to .ks, return directory for JVM .class files
+jvm_class_dir_for() {
+  local ks="$1"
+  # With stable JVM class naming, all classes live under the JVM cache root.
+  echo "${JVM_CACHE}"
+}
+
+# Java main class name from script path (e.g. mandelbrot.ks -> Mandelbrot)
+# Uses the same naming scheme as `classNameForPath` in the JVM compiler.
+main_class_for() {
+  local base first rest
+  local abs_ks
+  local rel
+  local dir
+  abs_ks=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+  rel="${abs_ks#/}"
+  dir=$(dirname "$rel")
+  base=$(basename "$rel" .ks)
+  first=$(echo "$base" | cut -c1 | tr 'a-z' 'A-Z')
+  rest=$(echo "$base" | cut -c2-)
+  if [ "$dir" = "." ]; then
+    echo "${first}${rest}"
+  else
+    echo "$(echo "$dir" | tr '/' '.').$first$rest"
+  fi
+}
+
+needs_compile_jvm() {
+  local ks="$1" class_dir="$2"
+  local abs_ks rel dir base first rest internal_last internal_name class_file deps
+  abs_ks=$(cd "$(dirname "$ks")" && pwd)/$(basename "$ks")
+  rel="${abs_ks#/}"
+  dir=$(dirname "$rel")
+  base=$(basename "$rel" .ks)
+  first=$(echo "$base" | cut -c1 | tr 'a-z' 'A-Z')
+  rest=$(echo "$base" | cut -c2-)
+  internal_last="${first}${rest}"
+  if [ "$dir" = "." ]; then
+    internal_name="$internal_last"
+  else
+    internal_name="${dir}/${internal_last}"
+  fi
+  class_file="${class_dir}/${internal_name}.class"
+  [ ! -f "$class_file" ] && return 0
+  deps="${class_file}.deps"
+  if [ -f "$deps" ]; then
+    while IFS= read -r dep || [ -n "$dep" ]; do
+      dep="${dep%$'\r'}"
+      dep="${dep#"${dep%%[![:space:]]*}"}"
+      dep="${dep%"${dep##*[![:space:]]}"}"
+      [ -z "$dep" ] && continue
+      if [ -f "$dep" ]; then
+        dep_mtime=$(stat -f '%m' "$dep" 2>/dev/null || stat -c '%Y' "$dep" 2>/dev/null)
+        class_mtime=$(stat -f '%m' "$class_file" 2>/dev/null || stat -c '%Y' "$class_file" 2>/dev/null)
+        [ -n "$dep_mtime" ] && [ -n "$class_mtime" ] && [ "$dep_mtime" -ge "$class_mtime" ] && return 0
+      fi
+    done < "$deps"
+    return 1
+  fi
+  [ "$ks" -nt "$class_file" ] 2>/dev/null && return 0
+  return 1
 }
 
 needs_compile() {
@@ -150,29 +228,77 @@ do_compile() {
 }
 
 cmd_build() {
+  TARGET="${KESTREL_TARGET:-vm}"
+  while [ "${1:-}" = '--target' ]; do
+    [ -z "${2:-}" ] && usage
+    TARGET="$2"
+    shift 2
+  done
   ensure_tools
   build_compiler_vm
+  if [ "$TARGET" = "jvm" ] && [ ! -f "$RUNTIME_JAR" ]; then
+    (cd "$ROOT/runtime/jvm" && ./build.sh 2>/dev/null) || { echo "kestrel: build runtime: cd $ROOT/runtime/jvm && ./build.sh" >&2; exit 1; }
+  fi
   if [ -n "${1:-}" ]; then
-    local resolved kbc
+    local resolved kbc class_dir
     resolved=$(resolve_script "$1")
-    if [ -n "$resolved" ]; then
+    if [ -z "$resolved" ]; then
+      echo "kestrel: script not found: $1" >&2
+      exit 1
+    fi
+    if [ "$TARGET" = "jvm" ]; then
+      class_dir=$(jvm_class_dir_for "$resolved")
+      mkdir -p "$class_dir"
+      if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"; then
+        echo "kestrel: JVM compile failed" >&2
+        exit 1
+      fi
+      echo "Built $class_dir (JVM)"
+    else
       kbc=$(kbc_path_for "$resolved")
       mkdir -p "$(dirname "$kbc")"
       do_compile "$resolved" "$kbc"
       echo "Built $kbc"
-    else
-      echo "kestrel: script not found: $1" >&2
-      exit 1
     fi
   fi
 }
 
 cmd_run() {
+  TARGET="${KESTREL_TARGET:-vm}"
+  while [ "${1:-}" = '--target' ]; do
+    [ -z "${2:-}" ] && usage
+    TARGET="$2"
+    shift 2
+  done
   if [ -z "${1:-}" ]; then
     usage
   fi
   ensure_tools
-  # Ensure compiler and VM exist
+  if [ "$TARGET" = "jvm" ]; then
+    if [ ! -f "$COMPILER_CLI" ]; then
+      build_compiler_vm
+    fi
+    if [ ! -f "$RUNTIME_JAR" ]; then
+      (cd "$ROOT/runtime/jvm" && ./build.sh 2>/dev/null) || { echo "kestrel: build runtime jar: cd $ROOT/runtime/jvm && ./build.sh" >&2; exit 1; }
+    fi
+    local resolved class_dir main_class
+    resolved=$(resolve_script "$1")
+    if [ -z "$resolved" ]; then
+      echo "kestrel: script not found: $1" >&2
+      exit 1
+    fi
+    shift
+    class_dir=$(jvm_class_dir_for "$resolved")
+    if needs_compile_jvm "$resolved" "$class_dir"; then
+      mkdir -p "$class_dir"
+      if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"; then
+        echo "kestrel: JVM compile failed for $resolved" >&2
+        exit 1
+      fi
+    fi
+    main_class=$(main_class_for "$resolved")
+    exec java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
+  fi
   if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
     build_compiler_vm
   fi
@@ -216,22 +342,51 @@ cmd_dis() {
 }
 
 cmd_test() {
+  TARGET="${KESTREL_TARGET:-vm}"
+  while [ "${1:-}" = '--target' ]; do
+    [ -z "${2:-}" ] && usage
+    TARGET="$2"
+    shift 2
+  done
   ensure_tools
-  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
-    build_compiler_vm
+  if [ "$TARGET" = "jvm" ]; then
+    if [ ! -f "$COMPILER_CLI" ]; then build_compiler_vm; fi
+    if [ ! -f "$RUNTIME_JAR" ]; then
+      (cd "$ROOT/runtime/jvm" && ./build.sh 2>/dev/null) || { echo "kestrel: build runtime jar first" >&2; exit 1; }
+    fi
+    local runner="$ROOT/scripts/run_tests.ks"
+    if [ ! -f "$runner" ]; then
+      echo "kestrel: test runner not found: $runner" >&2
+      exit 1
+    fi
+    local class_dir main_class
+    class_dir=$(jvm_class_dir_for "$runner")
+    if needs_compile_jvm "$runner" "$class_dir"; then
+      mkdir -p "$class_dir"
+      node "$COMPILER_CLI" "$runner" --target jvm -o "$class_dir" || exit 1
+    fi
+    main_class=$(main_class_for "$runner")
+    # run_tests.ks expects the same argv layout as the VM: [runner-ish, kbc-ish, ROOT, ...user].
+    # The VM passes: kestrel_vm path.kbc ROOT [tests...]. Java main() only receives args after
+    # the class name, so we pad with two placeholders so drop(3, proc.args) still yields user paths.
+    java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" "$@"
+  else
+    if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
+      build_compiler_vm
+    fi
+    local runner="$ROOT/scripts/run_tests.ks"
+    if [ ! -f "$runner" ]; then
+      echo "kestrel: test runner not found: $runner" >&2
+      exit 1
+    fi
+    local kbc
+    kbc=$(kbc_path_for "$runner")
+    if needs_compile_with_deps "$runner" "$kbc"; then
+      mkdir -p "$(dirname "$kbc")"
+      do_compile "$runner" "$kbc"
+    fi
+    "$VM_BIN" "$kbc" "$ROOT" "$@"
   fi
-  local runner="$ROOT/scripts/run_tests.ks"
-  if [ ! -f "$runner" ]; then
-    echo "kestrel: test runner not found: $runner" >&2
-    exit 1
-  fi
-  local kbc
-  kbc=$(kbc_path_for "$runner")
-  if needs_compile_with_deps "$runner" "$kbc"; then
-    mkdir -p "$(dirname "$kbc")"
-    do_compile "$runner" "$kbc"
-  fi
-  "$VM_BIN" "$kbc" "$ROOT" "$@"
 }
 
 # Main

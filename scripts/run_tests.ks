@@ -48,6 +48,7 @@ fun excludeFlag(args: List<String>): List<String> =
     hd :: tl => if (__string_equals(hd, "--summary")) excludeFlag(tl) else hd :: excludeFlag(tl)
   }
 
+// argv layout must match VM: [vm binary, .kbc path, project root, ...paths]. JVM entry pads with "" "".
 fun getPathArgs(allArgs: List<String>): List<String> = excludeFlag(drop(3, allArgs))
 
 fun filterToTestFiles(paths: List<String>): List<String> =
