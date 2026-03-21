@@ -8,6 +8,11 @@ vm/.zig-cache/
 *.kti
 *.kbc.deps
 
+# JVM
+runtime/jvm/out/
+runtime/jvm/kestrel-runtime.jar
+tests/jvm/out/
+
 # Editor
 .vscode/
 .idea/
