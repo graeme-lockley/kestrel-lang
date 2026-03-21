@@ -1,42 +1,10 @@
 import { Suite, group, eq } from "kestrel:test"
-import { length, slice, indexOf, equals } from "kestrel:string"
-import { isEmpty } from "kestrel:list"
+import { length, slice, indexOf, equals, splitWithDelimiters, parseInt, join } from "kestrel:string"
+import { isEmpty, map, filter, foldl } from "kestrel:list"
 
-// Convert a single ASCII digit character to an Int (assumes valid input).
-fun digitCharToInt(ch: String): Int =
-  if (equals(ch, "0")) 0
-  else if (equals(ch, "1")) 1
-  else if (equals(ch, "2")) 2
-  else if (equals(ch, "3")) 3
-  else if (equals(ch, "4")) 4
-  else if (equals(ch, "5")) 5
-  else if (equals(ch, "6")) 6
-  else if (equals(ch, "7")) 7
-  else if (equals(ch, "8")) 8
-  else if (equals(ch, "9")) 9
-  else 0
-
-fun parseDigits(s: String, idx: Int, acc: Int): Int =
-  if (idx >= length(s)) acc
-  else {
-    val digitStr = slice(s, idx, idx + 1)
-    parseDigits(s, idx + 1, acc * 10 + digitCharToInt(digitStr))
-  }
-
-fun parseIntToken(tok: String): Int =
-  if (length(tok) == 0) 0
-  else if (equals(slice(tok, 0, 1), "-")) 0 - parseDigits(tok, 1, 0)
-  else parseDigits(tok, 0, 0)
-
-fun reverseInts(xs: List<Int>, acc: List<Int>): List<Int> = match (xs) {
-  [] => acc
-  h :: t => reverseInts(t, h :: acc)
-}
-
-fun joinInts(xs: List<Int>): String = match (xs) {
-  [] => ""
-  h :: t => if (isEmpty(t)) "${h}" else "${h},${joinInts(t)}"
-}
+fun isNegative(n: Int): Bool = n < 0
+fun intToString(n: Int): String = "${n}"
+fun sumAcc(acc: Int, x: Int): Int = acc + x
 
 fun parseBracketDelims(spec: String, idx: Int): List<String> =
   if (idx >= length(spec)) []
@@ -55,49 +23,15 @@ fun parseDelimitersFromHeader(spec: String): List<String> =
   if (length(spec) > 0 & equals(slice(spec, 0, 1), "[")) parseBracketDelims(spec, 0)
   else [spec]
 
-fun matchDelimiterAt(s: String, delims: List<String>, i: Int): Int = match (delims) {
-  [] => 0
-  d :: rest => {
-    val dLen = length(d)
-    if (equals(slice(s, i, i + dLen), d)) dLen else matchDelimiterAt(s, rest, i)
-  }
-}
-
-fun finalizeToken(tok: String, sum: Int, negativesRev: List<Int>): (Int * List<Int>) =
-  if (length(tok) == 0) (sum, negativesRev)
-  else {
-    val n = parseIntToken(tok)
-    if (n < 0) (sum, n :: negativesRev) else (sum + n, negativesRev)
-  }
-
-fun scanAndAccumulate(
-  s: String,
-  delims: List<String>,
-  idx: Int,
-  tokenStart: Int,
-  sum: Int,
-  negativesRev: List<Int>
-): (Int * List<Int>) =
-  if (idx >= length(s)) {
-    val tok = slice(s, tokenStart, length(s))
-    finalizeToken(tok, sum, negativesRev)
-  } else {
-    val dLen = matchDelimiterAt(s, delims, idx)
-    if (dLen > 0) {
-      val tok = slice(s, tokenStart, idx)
-      val done = finalizeToken(tok, sum, negativesRev)
-      scanAndAccumulate(s, delims, idx + dLen, idx + dLen, done.0, done.1)
-    } else scanAndAccumulate(s, delims, idx + 1, tokenStart, sum, negativesRev)
-  }
-
 fun addCore(numbersPart: String, delims: List<String>): Int = {
-  val scanned = scanAndAccumulate(numbersPart, delims, 0, 0, 0, [])
-  val sum = scanned.0
-  val negativesRev = scanned.1
-  if (isEmpty(negativesRev)) sum
+  val tokens = splitWithDelimiters(numbersPart, delims)
+  val numbers = map(tokens, parseInt)
+  val negatives = filter(numbers, isNegative)
+
+  if (isEmpty(negatives)) foldl(numbers, 0, sumAcc)
   else {
-    val negatives = reverseInts(negativesRev, [])
-    val msg = "negatives not allowed: ${joinInts(negatives)}"
+    val negStrings = map(negatives, intToString)
+    val msg = "negatives not allowed: ${join(",", negStrings)}"
     // Throwing the message payload is type-checked as a bottom value, while
     // callers can catch and map it into a richer result type if needed.
     throw msg
@@ -150,4 +84,3 @@ export fun run(s: Suite): Unit =
       eq(nn, "negatives with custom delimiter", msg2, "negatives not allowed: -5,-1")
     })
   })
-

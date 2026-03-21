@@ -19,6 +19,40 @@ String operations. All functions take the string as an explicit argument (no mem
 | `indexOf` | `(String, String) -> Int` | Code-point index of first occurrence of substring, or -1 |
 | `equals` | `(String, String) -> Bool` | Value equality (same UTF-8 / code-point sequence as the `==` operator on two `String` values) |
 | `toUpperCase` | `(String) -> String` | Uppercase copy (Basic Latin and Latin extended; other scripts unchanged) |
+| `trim` | `(String) -> String` | Remove leading and trailing ASCII whitespace (space, tab, LF, CR, VT, FF) at code-point boundaries |
+| `isEmpty` | `(String) -> Bool` | True when `length(s) == 0` |
+| `codePointAt` | `(String, Int) -> Int` | Unicode code point at code-point index `i`, or `-1` if out of range |
+| `parseInt` | `(String) -> Int` | Parse signed decimal integer after `trim`; optional leading `-`; malformed or non-digit content yields `0` |
+| `split` | `(String, String) -> List<String>` | Split on delimiter string; empty delimiter yields `[s]` |
+| `splitWithDelimiters` | `(String, List<String>) -> List<String>` | Split using the first matching delimiter at each step (candidates tried in list order) |
+| `join` | `(String, List<String>) -> String` | Concatenate strings with separator between elements |
+
+---
+
+## kestrel:char
+
+Operations on `Char` / `Rune` (one Unicode code point; same type per language spec).
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `codePoint` | `(Char) -> Int` | Scalar value as a non-negative integer (VM primitive) |
+| `isDigit` | `(Char) -> Bool` | True for ASCII digits `0`–`9` (U+0030–U+0039) |
+
+---
+
+## kestrel:list
+
+Immutable list utilities (in addition to list syntax and `List<T>` in §Library types).
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `length` | `(List<X>) -> Int` | Number of elements |
+| `isEmpty` | `(List<X>) -> Bool` | True for `[]` |
+| `drop` | `(Int, List<T>) -> List<T>` | Drop first `n` elements (`n <= 0` leaves list unchanged) |
+| `map` | `(List<A>, (A) -> B) -> List<B>` | Element-wise map |
+| `filter` | `(List<A>, (A) -> Bool) -> List<A>` | Keep elements satisfying predicate |
+| `foldl` | `(List<A>, B, (B, A) -> B) -> B` | Left fold |
+| `reverse` | `(List<T>) -> List<T>` | Reverse element order |
 
 ---
 

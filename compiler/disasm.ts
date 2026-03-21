@@ -42,6 +42,7 @@ const OP_NAMES: Record<number, string> = {
   0x20: 'CALL_INDIRECT',
   0x21: 'LOAD_FN',
   0x22: 'MAKE_CLOSURE',
+  0x23: 'LOAD_IMPORTED_FN',
 };
 
 function readU32(data: Uint8Array, offset: number): number {
@@ -248,6 +249,7 @@ function disasm(
       case 0x1f: // STORE_GLOBAL
       case 0x21: // LOAD_FN
       case 0x22: // MAKE_CLOSURE
+      case 0x23: // LOAD_IMPORTED_FN
         operands = ` ${readU32(data, pc)}`;
         pc += 4;
         break;

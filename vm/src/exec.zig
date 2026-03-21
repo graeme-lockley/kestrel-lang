@@ -145,6 +145,7 @@ const STORE_GLOBAL: u8 = 0x1F;
 const CALL_INDIRECT: u8 = 0x20;
 const LOAD_FN: u8 = 0x21;
 const MAKE_CLOSURE: u8 = 0x22;
+const LOAD_IMPORTED_FN: u8 = 0x23;
 
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
@@ -446,6 +447,117 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 stack[sp] = Value.fnRef(@intCast(current_module.module_index), fn_idx);
                 sp += 1;
             },
+            LOAD_IMPORTED_FN => {
+                const instr_start = pc - 1; // start of the LOAD_IMPORTED_FN opcode byte
+                const imported_fn_idx = std.mem.readInt(u32, code[pc..][0..4], .little);
+                pc += 4;
+
+                if (imported_fn_idx >= current_module.imported_functions.len) {
+                    stack[sp] = Value.unit();
+                    sp += 1;
+                    continue;
+                }
+                if (imported_fn_idx >= current_module.imported_functions.len) continue;
+
+                const imp_entry = current_module.imported_functions[imported_fn_idx];
+                if (imp_entry.import_index >= current_module.import_specifiers.len) {
+                    stack[sp] = Value.unit();
+                    sp += 1;
+                    continue;
+                }
+
+                const specifier = current_module.import_specifiers[imp_entry.import_index];
+                const base_path = current_module.source_path orelse entry_path;
+                const dep_path = resolveImportPath(allocator, specifier, base_path) catch {
+                    stack[sp] = Value.unit();
+                    sp += 1;
+                    continue;
+                };
+
+                path_deps_to_free.ensureTotalCapacity(allocator, path_deps_to_free.items.len + 1) catch {
+                    allocator.free(dep_path);
+                    stack[sp] = Value.unit();
+                    sp += 1;
+                    continue;
+                };
+                path_deps_to_free.appendAssumeCapacity(dep_path);
+
+                const already_loaded = path_to_module.get(dep_path) != null;
+                var dep_module_ptr: *load_mod.Module = undefined;
+                if (path_to_module.get(dep_path)) |ptr| {
+                    dep_module_ptr = ptr;
+                } else {
+                    dependency_cache.ensureTotalCapacity(allocator, dependency_cache.items.len + 1) catch {
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    };
+                    const loaded = load_mod.load(allocator, dep_path) catch {
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    };
+                    dependency_cache.appendAssumeCapacity(loaded);
+                    const ptr = &dependency_cache.items[dependency_cache.items.len - 1];
+
+                    module_ptrs.ensureTotalCapacity(allocator, module_ptrs.items.len + 1) catch {
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    };
+
+                    ptr.module_index = @intCast(module_ptrs.items.len);
+                    module_ptrs.appendAssumeCapacity(ptr);
+                    ptr.source_path = allocator.dupe(u8, dep_path) catch null;
+
+                    const path_key = allocator.dupe(u8, dep_path) catch {
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    };
+                    path_keys.append(allocator, path_key) catch {
+                        allocator.free(path_key);
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    };
+                    path_to_module.put(path_key, ptr) catch {
+                        stack[sp] = Value.unit();
+                        sp += 1;
+                        continue;
+                    };
+                    dep_module_ptr = ptr;
+                }
+
+                // If a dependency is first loaded, run its module initializer before we can create a valid fn_ref.
+                if (!already_loaded) {
+                    if (frame_sp >= max_frames) {
+                        std.debug.print("kestrel: stack overflow (exceeded {d} call frames)\n", .{max_frames});
+                        return false;
+                    }
+                    call_frames[frame_sp] = .{ .pc = instr_start, .module = current_module, .saved_sp = sp, .discard_return = true };
+                    for (0..max_locals) |i| {
+                        saved_locals[frame_sp][i] = if (i < current_locals.len) current_locals[i] else Value.unit();
+                    }
+                    frame_sp += 1;
+                    current_module = dep_module_ptr;
+                    code = current_module.code;
+                    constants = current_module.constants;
+                    functions = current_module.functions;
+                    shapes = current_module.shapes;
+                    current_locals = if (dep_module_ptr.globals.len > 0) dep_module_ptr.globals else saved_locals[frame_sp][0..];
+                    pc = 0;
+                    continue;
+                }
+
+                if (imp_entry.function_index >= dep_module_ptr.functions.len) {
+                    stack[sp] = Value.unit();
+                    sp += 1;
+                    continue;
+                }
+                stack[sp] = Value.fnRef(@intCast(dep_module_ptr.module_index), imp_entry.function_index);
+                sp += 1;
+            },
             MAKE_CLOSURE => {
                 const fn_idx = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
@@ -481,7 +593,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 pc += 8;
 
                 // Check for primitive functions (0xFFFFFF00 range)
-                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF15 and sp >= arity) {
+                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF18 and sp >= arity) {
                     if (fn_id == 0xFFFFFF00 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, false, module_ptrs.items);
@@ -639,6 +751,25 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         continue;
                     } else if (fn_id == 0xFFFFFF15 and arity == 0) {
                         stack[sp] = primitives.getCwd(&gc);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF16 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.stringTrim(&gc, arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF17 and arity == 2) {
+                        const idx_v = stack[sp - 1];
+                        const s_v = stack[sp - 2];
+                        sp -= 2;
+                        stack[sp] = primitives.stringCodePointAt(s_v, idx_v);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF18 and arity == 1) {
+                        const c_v = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.charCodePoint(c_v);
                         sp += 1;
                         continue;
                     }

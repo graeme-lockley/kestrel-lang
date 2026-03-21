@@ -69,9 +69,10 @@ Logical `&` and `|` in the language are short-circuit; the compiler emits branch
 |-------------|----------|--------|
 | `CALL_INDIRECT` | `arity` (u32) | Pop `arity` arguments, then one callee value. **If callee is fn_ref** (tag fn_ref): call with (module_index, fn_index) and the given `arity`; push return value. **If callee is PTR to CLOSURE** (05 §2): load (module_index, fn_index, env) from the CLOSURE object; push env onto the stack, then the `arity` argument values (so the lifted function receives env as first param); CALL with (module_index, fn_index) and arity = 1 + `arity`; push return value. |
 | `LOAD_FN` | `fn_index` (u32) | Push **fn_ref** (current module index, `fn_index`). Used for non-capturing lambdas and nested functions. |
+| `LOAD_IMPORTED_FN` | `imported_fn_index` (u32) | Push **fn_ref** for an imported function identifier used as a first-class value. The VM resolves `imported_fn_index` via this module’s `imported_functions` table and uses the referenced import specifier to find the dependency module index and the dependency function table index. |
 | `MAKE_CLOSURE` | `fn_index` (u32) | Pop one value (must be PTR to RECORD = environment). Allocate a **CLOSURE** heap object (05 §2) containing (current module_index, fn_index, env); push PTR to it. Used when creating a capturing lambda or nested function. |
 
-**Language coverage:** First-class function values (lambdas, nested fun), closure creation, calls through a value (e.g. `f(args)` when `f` is a local or parameter). Non-capturing lambdas use LOAD_FN only; capturing lambdas use ALLOC_RECORD (env) then MAKE_CLOSURE. See §5.1.
+**Language coverage:** First-class function values (lambdas, nested fun), closure creation, calls through a value (e.g. `f(args)` when `f` is a local or parameter). Non-capturing lambdas use `LOAD_FN` only; imported function identifiers used as values compile to `LOAD_IMPORTED_FN`; capturing lambdas use `ALLOC_RECORD` (env) then `MAKE_CLOSURE`. See §5.1.
 
 ### 1.6 Control Flow
 
@@ -190,8 +191,9 @@ Each instruction has a single-byte opcode. Opcodes 0x00–0x1E are assigned as b
 | 0x20   | CALL_INDIRECT   | arity (u32) |
 | 0x21   | LOAD_FN         | fn_index (u32) |
 | 0x22   | MAKE_CLOSURE    | fn_index (u32) |
+| 0x23   | LOAD_IMPORTED_FN | imported_fn_index (u32) |
 
-**Reserved:** 0x00, 0x23–0xFF. Decoder must reject reserved or unknown opcodes.
+**Reserved:** 0x00, 0x24–0xFF. Decoder must reject reserved or unknown opcodes.
 
 ### 4.2 MATCH instruction layout
 
@@ -227,6 +229,7 @@ So the total size of a MATCH instruction is **1 + 4 + 4×count** bytes. The next
 | TRY               | 1 + 4 = 5    |
 | CALL_INDIRECT     | 1 + 4 = 5    |
 | LOAD_FN           | 1 + 4 = 5    |
+| LOAD_IMPORTED_FN  | 1 + 4 = 5    |
 | MAKE_CLOSURE      | 1 + 4 = 5    |
 
 Instruction boundaries are thus deterministic: a decoder can always compute the start of the next instruction from the current opcode and operands.

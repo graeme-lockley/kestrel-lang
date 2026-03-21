@@ -231,6 +231,21 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     params: [tString],
     return: tString,
   }, new Set()));
+  env.set('__string_trim', generalize({
+    kind: 'arrow',
+    params: [tString],
+    return: tString,
+  }, new Set()));
+  env.set('__string_code_point_at', generalize({
+    kind: 'arrow',
+    params: [tString, tInt],
+    return: tInt,
+  }, new Set()));
+  env.set('__char_code_point', generalize({
+    kind: 'arrow',
+    params: [{ kind: 'prim', name: 'Char' }],
+    return: tInt,
+  }, new Set()));
   // Stack primitives (kestrel:stack): format one value to string, print one value
   const formatArgT = freshVar();
   env.set('__format_one', generalize({

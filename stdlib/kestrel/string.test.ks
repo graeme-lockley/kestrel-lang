@@ -1,5 +1,18 @@
 import { Suite, group, eq } from "kestrel:test"
-import { length, slice, indexOf, equals, toUpperCase } from "kestrel:string"
+import {
+  length,
+  slice,
+  indexOf,
+  equals,
+  toUpperCase,
+  trim,
+  isEmpty,
+  codePointAt,
+  parseInt,
+  split,
+  splitWithDelimiters,
+  join
+} from "kestrel:string"
 
 export fun run(s: Suite): Unit =
   group(s, "string", (s1: Suite) => {
@@ -39,5 +52,47 @@ export fun run(s: Suite): Unit =
       eq(sg, "mixed", toUpperCase("HeLLo"), "HELLO")
       eq(sg, "empty", toUpperCase(""), "")
       eq(sg, "e-acute", toUpperCase("\u{00E9}"), "\u{00C9}")
+    })
+
+    group(s1, "trim", (sg: Suite) => {
+      eq(sg, "spaces", trim("  ab  "), "ab")
+      eq(sg, "already tight", trim("x"), "x")
+      eq(sg, "empty", trim(""), "")
+      eq(sg, "only ws", trim(" \t\n"), "")
+    })
+
+    group(s1, "isEmpty", (sg: Suite) => {
+      eq(sg, "empty", isEmpty(""), True)
+      eq(sg, "non-empty", isEmpty("x"), False)
+    })
+
+    group(s1, "codePointAt", (sg: Suite) => {
+      eq(sg, "a", codePointAt("a", 0), 97)
+      eq(sg, "oob", codePointAt("a", 1), 0 - 1)
+      eq(sg, "emoji", codePointAt("\u{1F600}", 0), 128512)
+    })
+
+    group(s1, "parseInt", (sg: Suite) => {
+      eq(sg, "zero", parseInt("0"), 0)
+      eq(sg, "positive", parseInt("42"), 42)
+      eq(sg, "negative", parseInt("-7"), 0 - 7)
+      eq(sg, "trimmed", parseInt("  9  "), 9)
+      eq(sg, "invalid", parseInt("12a3"), 0)
+    })
+
+    group(s1, "split", (sg: Suite) => {
+      eq(sg, "csv", split("a,b,c", ","), ["a", "b", "c"])
+      eq(sg, "empty delim", split("abc", ""), ["abc"])
+    })
+
+    group(s1, "splitWithDelimiters", (sg: Suite) => {
+      eq(sg, "two singles", splitWithDelimiters("1*2%3", ["*", "%"]), ["1", "2", "3"])
+      eq(sg, "multi-char", splitWithDelimiters("x##y", ["##"]), ["x", "y"])
+    })
+
+    group(s1, "join", (sg: Suite) => {
+      eq(sg, "csv", join(",", ["a", "b", "c"]), "a,b,c")
+      eq(sg, "empty parts", join(",", []), "")
+      eq(sg, "single", join(",", ["only"]), "only")
     })
   })

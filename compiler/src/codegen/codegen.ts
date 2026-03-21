@@ -73,6 +73,7 @@ import {
   emitCallIndirect,
   emitLoadFn,
   emitMakeClosure,
+  emitLoadImportedFn,
   codeSave,
   codeRestore,
 } from '../bytecode/instructions.js';
@@ -467,6 +468,9 @@ function makeEmitExpr(
   importedVarSetterIds?: Map<string, number>,
   namespaceFuncIds?: Map<string, Map<string, number>>,
   namespaceVarSetterIds?: Map<string, Map<string, number>>,
+  importedThunkLocals?: Set<string>,
+  localFuncCount?: number,
+  moduleTopLevelFunDeclCount?: number,
 ): { emitExpr: (
   expr: Expr,
   env: Map<string, number>,
@@ -478,6 +482,7 @@ function makeEmitExpr(
   userAdtConfigs?: Map<string, MatchConfig>
 ) => void; moduleGlobals: Map<string, number> } {
   const moduleGlobals = new Map<string, number>();
+  const topLevelFuns = moduleTopLevelFunDeclCount ?? 0;
   return { moduleGlobals, emitExpr: function emitExpr(
   expr: Expr,
   env: Map<string, number>,
@@ -574,7 +579,20 @@ function makeEmitExpr(
       // Imported value (export val/var) is a 0-arity function; call it to get the value
       const fnId = funNameToId?.get(expr.name);
       if (fnId !== undefined) {
-        emitCall(fnId, 0);
+        if (importedThunkLocals?.has(expr.name)) {
+          emitCall(fnId, 0);
+          break;
+        }
+        if (fnId < topLevelFuns) {
+          emitLoadFn(fnId);
+          break;
+        }
+        // If an imported function is used as a value, create a fn_ref instead of calling it.
+        if (localFuncCount !== undefined && fnId >= localFuncCount) {
+          emitLoadImportedFn(fnId - localFuncCount);
+          break;
+        }
+        emitCall(fnId, 0); // local lambda/val used as value (0-ary)
         break;
       }
       throw new Error(`Codegen: unknown variable ${expr.name}`);
@@ -1205,6 +1223,22 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF0D, 1);
           break;
         }
+        if (expr.callee.name === '__string_trim' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xFFFFFF16, 1);
+          break;
+        }
+        if (expr.callee.name === '__string_code_point_at' && expr.args.length === 2) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xFFFFFF17, 2);
+          break;
+        }
+        if (expr.callee.name === '__char_code_point' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xFFFFFF18, 1);
+          break;
+        }
         if (expr.callee.name === '__format_one' && expr.args.length === 1) {
           emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF03, 1);
@@ -1652,8 +1686,12 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
 export interface CodegenOptions {
   /** Map of imported function names to their indices in the (possibly merged) function table. */
   importedFuncIds?: Map<string, number>;
+  /** Named imports that are val/var getters (0-ary CALL to read the binding). */
+  importedThunkLocals?: Set<string>;
   /** Map of imported var names to the imported function table index of their setter (1-arity). */
   importedVarSetterIds?: Map<string, number>;
+  /** Number of locally-defined function table entries. Imported function ids start at this offset. */
+  localFuncCount?: number;
   /** Map of namespace name -> (member name -> function index) for namespace import access. */
   namespaceFuncIds?: Map<string, Map<string, number>>;
   /** Map of namespace name -> (member name -> setter index) for namespace var assignment. */
@@ -1666,6 +1704,7 @@ export interface CodegenOptions {
 export function codegen(program: Program, options?: CodegenOptions): CodegenResult {
   const ctx = makeCodegenContext();
   const { stringTable, constantPool, stringIndex, addConstant } = ctx;
+  const funDecls = program.body.filter((n): n is FunDecl => n != null && n.kind === 'FunDecl');
   const lambdaEntries: LambdaEntry[] = [];
   const funDeclCountRef = { value: 0 };
   const sourceFile = options?.sourceFile ?? '<source>';
@@ -1692,6 +1731,9 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     options?.importedVarSetterIds,
     options?.namespaceFuncIds,
     options?.namespaceVarSetterIds,
+    options?.importedThunkLocals,
+    options?.localFuncCount,
+    funDecls.length,
   );
 
   codeStart();
@@ -1795,7 +1837,6 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     }
   }
 
-  const funDecls = program.body.filter((n): n is FunDecl => n != null && n.kind === 'FunDecl');
   const valOrVarDecls = program.body.filter(
     (n): n is ValDecl | VarDecl => n != null && (n.kind === 'ValDecl' || n.kind === 'VarDecl')
   );

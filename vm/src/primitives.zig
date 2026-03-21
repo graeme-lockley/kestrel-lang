@@ -455,6 +455,12 @@ pub fn nowMs() Value {
     return Value.int(@intCast(ms));
 }
 
+/// (Char) -> Int: Unicode code point as signed integer.
+pub fn charCodePoint(c_val: Value) Value {
+    if (c_val.tag != .char) return Value.int(0);
+    return Value.int(@as(i64, @intCast(c_val.payload)));
+}
+
 // --- String primitives (kestrel:string) ---
 
 /// (String) -> Int: character length (Unicode code points). ASCII fast path.
@@ -699,6 +705,59 @@ pub fn stringUpper(gc: *GC, s_val: Value) Value {
         out.appendSlice(page_alloc, buf[0..n]) catch return Value.ptr(0);
     }
     return allocString(gc, out.items) catch Value.ptr(0);
+}
+
+fn isAsciiWhitespaceCp(c: u21) bool {
+    return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == 0x0b or c == 0x0c;
+}
+
+const ByteRange = struct { start: usize, end: usize };
+
+/// Leading/trailing ASCII whitespace trimmed by Unicode code point boundaries.
+fn trimAsciiWhitespaceByteRange(s: []const u8) ByteRange {
+    const view = std.unicode.Utf8View.init(s) catch return .{ .start = 0, .end = 0 };
+    var it = view.iterator();
+    var start_cp: usize = 0;
+    var end_cp_exclusive: usize = 0;
+    var seen_non_ws: bool = false;
+    var idx: usize = 0;
+    while (it.nextCodepoint()) |c| {
+        if (!isAsciiWhitespaceCp(c)) {
+            if (!seen_non_ws) start_cp = idx;
+            seen_non_ws = true;
+            end_cp_exclusive = idx + 1;
+        }
+        idx += 1;
+    }
+    if (!seen_non_ws) return .{ .start = 0, .end = 0 };
+    const b_start = utf8ByteOffsetForCodepoint(s, start_cp) orelse 0;
+    const b_end: usize = if (end_cp_exclusive == idx) s.len else (utf8ByteOffsetForCodepoint(s, end_cp_exclusive) orelse s.len);
+    return .{ .start = b_start, .end = b_end };
+}
+
+/// (String) -> String: trim leading/trailing ASCII whitespace (space, tab, LF, CR, VT, FF).
+pub fn stringTrim(gc: *GC, s_val: Value) Value {
+    const s = getStringSlice(s_val) orelse return Value.ptr(0);
+    const r = trimAsciiWhitespaceByteRange(s);
+    return allocString(gc, s[r.start..r.end]) catch Value.ptr(0);
+}
+
+/// (String, Int) -> Int: Unicode code point at character index `i`, or -1 if out of range.
+pub fn stringCodePointAt(s_val: Value, i_val: Value) Value {
+    const s = getStringSlice(s_val) orelse return Value.int(-1);
+    const i = Value.intTo(i_val);
+    if (i < 0) return Value.int(-1);
+    const ui: usize = @intCast(i);
+    const cp_count = utf8CountCodepoints(s);
+    if (ui >= cp_count) return Value.int(-1);
+    const view = std.unicode.Utf8View.init(s) catch return Value.int(-1);
+    var it = view.iterator();
+    var cur: usize = 0;
+    while (it.nextCodepoint()) |c| {
+        if (cur == ui) return Value.int(@intCast(c));
+        cur += 1;
+    }
+    return Value.int(-1);
 }
 
 // --- Process/FS primitives ---

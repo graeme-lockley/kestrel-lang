@@ -26,6 +26,7 @@ const K_ERR = 'kestrel/runtime/KErr';
 const K_OK = 'kestrel/runtime/KOk';
 const K_VNULL = 'kestrel/runtime/KVNull';
 const K_FUNCTION = 'kestrel/runtime/KFunction';
+const K_FUNCTION_REF = 'kestrel/runtime/KFunctionRef';
 const K_EXCEPTION = 'kestrel/runtime/KException';
 
 /** Build stack map frame state: objectSlots from env + optional extra (e.g. scrut 55, exn 57); numLocals to cover all; optional stackDepth. */
@@ -303,6 +304,8 @@ export interface JvmCodegenOptions {
   importedNameToClass?: Map<string, string>;
   /** Local name -> target class for imported val/var (IdentExpr: getstatic targetClass.name). */
   importedValVarToClass?: Map<string, string>;
+  /** Local name -> arity for imported function declarations (IdentExpr: build KFunctionRef). */
+  importedFunArities?: Map<string, number>;
   /** Local alias -> original exported name (for aliased imports like `import { x as y }`). */
   importedNameToOriginal?: Map<string, string>;
 }
@@ -378,12 +381,16 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   }
 
   const funNames = new Set<string>();
+  const funArities = new Map<string, number>();
   const globalSlots = new Map<string, number>();
   const globalNames = new Set<string>();
   let nextGlobalSlot = 0;
   for (const node of program.body) {
     if (!node) continue;
-    if (node.kind === 'FunDecl') funNames.add(node.name);
+    if (node.kind === 'FunDecl') {
+      funNames.add(node.name);
+      funArities.set(node.name, (node as FunDecl).params.length);
+    }
     if (node.kind === 'ValDecl' || node.kind === 'VarDecl' || node.kind === 'ValStmt' || node.kind === 'VarStmt') {
       const name = node.kind === 'ValStmt' || node.kind === 'VarStmt' ? (node as { name: string }).name : (node as ValDecl).name;
       globalSlots.set(name, nextGlobalSlot++);
@@ -528,7 +535,19 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           break;
         }
         if (funNames.has(expr.name)) {
-          mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(className, jvmMangleName(expr.name), '()Ljava/lang/Object;'));
+          const arity = funArities.get(expr.name);
+          if (arity === undefined) throw new Error(`JVM codegen: missing arity for function ${expr.name}`);
+          mb.emit1s(JvmOp.LDC_W, cf.classRef(className));
+          mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(expr.name)));
+          mb.emit1s(JvmOp.LDC_W, cf.constantInt(arity));
+          mb.emit1s(
+            JvmOp.INVOKESTATIC,
+            cf.methodref(
+              K_FUNCTION_REF,
+              'of',
+              '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';'
+            )
+          );
           break;
         }
         const importedValVarClass = options.importedValVarToClass?.get(expr.name);
@@ -536,6 +555,24 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           const originalName = options.importedNameToOriginal?.get(expr.name) ?? expr.name;
           mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedValVarClass, '$init', '()V'));
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(importedValVarClass, jvmMangleName(originalName), 'Ljava/lang/Object;'));
+          break;
+        }
+        const importedFunClass = options.importedNameToClass?.get(expr.name);
+        const importedFunArity = options.importedFunArities?.get(expr.name);
+        if (importedFunClass != null && importedFunArity !== undefined) {
+          const originalName = options.importedNameToOriginal?.get(expr.name) ?? expr.name;
+          mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedFunClass, '$init', '()V'));
+          mb.emit1s(JvmOp.LDC_W, cf.classRef(importedFunClass));
+          mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(originalName)));
+          mb.emit1s(JvmOp.LDC_W, cf.constantInt(importedFunArity));
+          mb.emit1s(
+            JvmOp.INVOKESTATIC,
+            cf.methodref(
+              K_FUNCTION_REF,
+              'of',
+              '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';'
+            )
+          );
           break;
         }
         if (expr.name === 'None') {
@@ -931,6 +968,25 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           if (name === '__string_upper' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringUpper', '(Ljava/lang/Object;)Ljava/lang/String;'));
+            break;
+          }
+          if (name === '__string_trim' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringTrim', '(Ljava/lang/Object;)Ljava/lang/String;'));
+            break;
+          }
+          if (name === '__string_code_point_at' && expr.args.length === 2) {
+            emitExpr(expr.args[0], mb);
+            emitExpr(expr.args[1], mb);
+            mb.emit1s(
+              JvmOp.INVOKESTATIC,
+              cf.methodref(RUNTIME, 'stringCodePointAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;')
+            );
+            break;
+          }
+          if (name === '__char_code_point' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charCodePoint', '(Ljava/lang/Object;)Ljava/lang/Long;'));
             break;
           }
           if (name === '__json_parse' && expr.args.length === 1) {

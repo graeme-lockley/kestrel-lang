@@ -17,6 +17,24 @@ public final class KFunctionRef implements KFunction {
         this.method.setAccessible(true);
     }
 
+    /**
+     * Build a non-capturing function reference for a static method on {@code clazz}.
+     * Kestrel VM/JVM functions are compiled with all parameters typed as {@code Object}.
+     */
+    public static KFunctionRef of(Class<?> clazz, String name, int arity) {
+        for (Method m : clazz.getDeclaredMethods()) {
+            if (m.getName().equals(name) && m.getParameterCount() == arity) {
+                return new KFunctionRef(m);
+            }
+        }
+        for (Method m : clazz.getMethods()) {
+            if (m.getName().equals(name) && m.getParameterCount() == arity) {
+                return new KFunctionRef(m);
+            }
+        }
+        throw new IllegalArgumentException("Kestrel function not found: " + clazz.getName() + "." + name + "/" + arity);
+    }
+
     @Override
     public Object apply(Object[] args) {
         try {

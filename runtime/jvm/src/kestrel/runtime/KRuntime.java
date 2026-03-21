@@ -203,6 +203,50 @@ public final class KRuntime {
         return ((String) s).toUpperCase(Locale.ROOT);
     }
 
+    private static boolean isAsciiWhitespace(int cp) {
+        return cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == 0x0B || cp == 0x0C;
+    }
+
+    /** Trim leading/trailing ASCII whitespace by Unicode code point (matches VM). */
+    public static String stringTrim(Object s) {
+        if (!(s instanceof String)) throw new IllegalArgumentException("stringTrim expects String");
+        String str = (String) s;
+        int len = str.length();
+        int start = 0;
+        while (start < len) {
+            int cp = str.codePointAt(start);
+            if (!isAsciiWhitespace(cp)) break;
+            start += Character.charCount(cp);
+        }
+        int end = len;
+        while (end > start) {
+            int cp = str.codePointBefore(end);
+            if (!isAsciiWhitespace(cp)) break;
+            end -= Character.charCount(cp);
+        }
+        return str.substring(start, end);
+    }
+
+    /** Code point at character index, or -1 if out of range. */
+    public static Long stringCodePointAt(Object s, Object index) {
+        if (!(s instanceof String)) throw new IllegalArgumentException("stringCodePointAt expects String");
+        String str = (String) s;
+        int i = intFrom(index);
+        if (i < 0) return Long.valueOf(-1L);
+        int cpCount = str.codePointCount(0, str.length());
+        if (i >= cpCount) return Long.valueOf(-1L);
+        int offset = str.offsetByCodePoints(0, i);
+        return Long.valueOf((long) str.codePointAt(offset));
+    }
+
+    /** Unicode scalar value for a Char (boxed as Long code point in Kestrel JVM). */
+    public static Long charCodePoint(Object c) {
+        if (c instanceof Long) return (Long) c;
+        if (c instanceof Integer) return Long.valueOf(((Integer) c).longValue());
+        if (c instanceof Number) return Long.valueOf(((Number) c).longValue());
+        return Long.valueOf(0L);
+    }
+
     private static int intFrom(Object o) {
         if (o instanceof Long) return ((Long) o).intValue();
         if (o instanceof Number) return ((Number) o).intValue();

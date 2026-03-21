@@ -7,6 +7,15 @@ describe('resolve', () => {
   const projectRoot = resolve(process.cwd(), '..');
   const stdlibDir = resolve(projectRoot, 'stdlib');
 
+  it('resolves kestrel:char to stdlib path', () => {
+    const fromFile = resolve(projectRoot, 'main.ks');
+    const r = resolveSpecifier('kestrel:char', { fromFile, stdlibDir });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.path).toContain('char.ks');
+    }
+  });
+
   it('resolves kestrel:string to stdlib path', () => {
     const fromFile = resolve(projectRoot, 'main.ks');
     const r = resolveSpecifier('kestrel:string', { fromFile, stdlibDir });

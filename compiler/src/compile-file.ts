@@ -104,6 +104,16 @@ function getExportSet(program: Program): Set<string> {
   return names;
 }
 
+/** Val/var exports use a 0-ary getter at runtime (CALL), not a first-class fn ref. */
+function isExportThunk(program: Program, exportName: string): boolean {
+  for (const node of program.body) {
+    if (!node) continue;
+    if (node.kind === 'ValDecl' && node.name === exportName) return true;
+    if (node.kind === 'VarDecl' && node.name === exportName) return true;
+  }
+  return false;
+}
+
 /** Build import bindings from NamedImport: localName -> must be in dep's exports. */
 function getRequestedImports(imp: ImportDecl): Map<string, string> {
   const m = new Map<string, string>();
@@ -208,8 +218,31 @@ export function compileFile(
     const typeAliasBindings = new Map<string, InternalType>();
     const importOpaqueTypes = new Set<string>();
     type DepResult =
-      | { spec: string; path: string; result: CodegenResult; exportSet: Set<string>; dependencyPaths: string[]; fromTypesFile?: false }
-      | { spec: string; path: string; exportSet: Set<string>; nameToExport: Map<string, { function_index: number; arity: number; type: InternalType; setter_index?: number }>; fromTypesFile: true };
+      | {
+          spec: string;
+          path: string;
+          result: CodegenResult;
+          exportSet: Set<string>;
+          dependencyPaths: string[];
+          program: Program;
+          fromTypesFile?: false;
+        }
+      | {
+          spec: string;
+          path: string;
+          exportSet: Set<string>;
+          nameToExport: Map<
+            string,
+            {
+              function_index: number;
+              arity: number;
+              type: InternalType;
+              setter_index?: number;
+              exportKind: 'function' | 'val' | 'var';
+            }
+          >;
+          fromTypesFile: true;
+        };
     const depResults: DepResult[] = [];
 
     for (const spec of specs) {
@@ -241,10 +274,30 @@ export function compileFile(
             try {
               const { exports: typesExports, typeAliases: typesTypeAliases } = readTypesFile(paths.kti);
             const exportSet = new Set([...typesExports.keys(), ...typesTypeAliases.keys()]);
-            const nameToExport = new Map<string, { function_index: number; arity: number; type: InternalType; setter_index?: number }>();
+            const nameToExport = new Map<
+              string,
+              {
+                function_index: number;
+                arity: number;
+                type: InternalType;
+                setter_index?: number;
+                exportKind: 'function' | 'val' | 'var';
+              }
+            >();
             for (const [name, exp] of typesExports) {
               if (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var') {
-                const entry: { function_index: number; arity: number; type: InternalType; setter_index?: number } = { function_index: exp.function_index, arity: exp.arity, type: exp.type };
+                const entry: {
+                  function_index: number;
+                  arity: number;
+                  type: InternalType;
+                  setter_index?: number;
+                  exportKind: 'function' | 'val' | 'var';
+                } = {
+                  function_index: exp.function_index,
+                  arity: exp.arity,
+                  type: exp.type,
+                  exportKind: exp.kind,
+                };
                 if (exp.kind === 'var' && exp.setter_index !== undefined) entry.setter_index = exp.setter_index;
                 nameToExport.set(name, entry);
               }
@@ -330,6 +383,7 @@ export function compileFile(
           result: depOut.codegenResult,
           exportSet: depExportSet,
           dependencyPaths: depOut.dependencyPaths,
+          program: depOut.program,
         });
       }
     }
@@ -351,6 +405,7 @@ export function compileFile(
     const mainFuncCount = funDeclCount + lambdaCount + valOrVarCount + varSetterCount;
     const importedFuncIds = new Map<string, number>();
     const importedVarSetterIds = new Map<string, number>();
+    const importedThunkLocals = new Set<string>();
     const importedFunctionTable: ImportedFunctionEntry[] = [];
     for (let specIndex = 0; specIndex < specs.length; specIndex++) {
       const spec = specs[specIndex]!;
@@ -366,17 +421,19 @@ export function compileFile(
               if (exp.setter_index !== undefined) {
                 importedFunctionTable.push({ importIndex: specIndex, functionIndex: exp.function_index });
                 importedFuncIds.set(s.local, mainFuncCount + importedFunctionTable.length - 1);
+                importedThunkLocals.add(s.local);
                 importedFunctionTable.push({ importIndex: specIndex, functionIndex: exp.setter_index });
                 importedVarSetterIds.set(s.local, mainFuncCount + importedFunctionTable.length - 1);
               } else {
                 importedFunctionTable.push({ importIndex: specIndex, functionIndex: exp.function_index });
                 importedFuncIds.set(s.local, mainFuncCount + importedFunctionTable.length - 1);
+                if (exp.exportKind === 'val' || exp.exportKind === 'var') importedThunkLocals.add(s.local);
               }
             }
           }
         }
       } else {
-        const { result, exportSet } = dep;
+        const { result, exportSet, program: depProgram } = dep;
         const depNameToIndex = new Map<string, number>();
         for (let i = 0; i < result.functionTable.length; i++) {
           const fnName = result.stringTable[result.functionTable[i]!.nameIndex];
@@ -391,11 +448,13 @@ export function compileFile(
               if (setterIdx !== undefined) {
                 importedFunctionTable.push({ importIndex: specIndex, functionIndex: depIdx });
                 importedFuncIds.set(s.local, mainFuncCount + importedFunctionTable.length - 1);
+                importedThunkLocals.add(s.local);
                 importedFunctionTable.push({ importIndex: specIndex, functionIndex: setterIdx });
                 importedVarSetterIds.set(s.local, mainFuncCount + importedFunctionTable.length - 1);
               } else {
                 importedFunctionTable.push({ importIndex: specIndex, functionIndex: depIdx });
                 importedFuncIds.set(s.local, mainFuncCount + importedFunctionTable.length - 1);
+                if (isExportThunk(depProgram, s.external)) importedThunkLocals.add(s.local);
               }
             }
           }
@@ -455,7 +514,9 @@ export function compileFile(
 
     const mainResult = codegen(program, {
       importedFuncIds,
+      importedThunkLocals: importedThunkLocals.size > 0 ? importedThunkLocals : undefined,
       importedVarSetterIds: importedVarSetterIds.size > 0 ? importedVarSetterIds : undefined,
+      localFuncCount: mainFuncCount,
       namespaceFuncIds: namespaceFuncIds.size > 0 ? namespaceFuncIds : undefined,
       namespaceVarSetterIds: namespaceVarSetterIds.size > 0 ? namespaceVarSetterIds : undefined,
       sourceFile: filePath,

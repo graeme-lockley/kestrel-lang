@@ -236,6 +236,7 @@ export function compileFileJvm(
     const namespaceClasses = new Map<string, string>();
     const importedNameToClass = new Map<string, string>();
     const importedNameToOriginal = new Map<string, string>();
+    const importedFunArities = new Map<string, number>();
     const importedValVarToClass = new Map<string, string>();
 
     function isValOrVar(prog: Program, name: string): boolean {
@@ -244,6 +245,16 @@ export function compileFileJvm(
         if ((node.kind === 'ValDecl' || node.kind === 'VarDecl') && node.name === name) return true;
       }
       return false;
+    }
+
+    function getFunArity(prog: Program, name: string): number | undefined {
+      for (const node of prog.body) {
+        if (!node) continue;
+        if (node.kind === 'FunDecl' && node.name === name) {
+          return (node as { params: unknown[] }).params.length;
+        }
+      }
+      return undefined;
     }
 
     for (const dep of depResults) {
@@ -255,6 +266,10 @@ export function compileFileJvm(
             if (dep.exportSet.has(s.external)) {
               importedNameToClass.set(s.local, dep.className);
               importedNameToOriginal.set(s.local, s.external);
+              if (depProg) {
+                const arity = getFunArity(depProg, s.external);
+                if (arity !== undefined) importedFunArities.set(s.local, arity);
+              }
               if (depProg && isValOrVar(depProg, s.external)) importedValVarToClass.set(s.local, dep.className);
             }
           }
@@ -272,6 +287,7 @@ export function compileFileJvm(
       namespaceClasses: namespaceClasses.size > 0 ? namespaceClasses : undefined,
       importedNameToClass: importedNameToClass.size > 0 ? importedNameToClass : undefined,
       importedNameToOriginal: importedNameToOriginal.size > 0 ? importedNameToOriginal : undefined,
+      importedFunArities: importedFunArities.size > 0 ? importedFunArities : undefined,
       importedValVarToClass: importedValVarToClass.size > 0 ? importedValVarToClass : undefined,
     });
 
