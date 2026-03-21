@@ -21,13 +21,17 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.1 run
 
-**Usage:** `kestrel run <script[.ks]> [args...]`
+**Usage:** `kestrel run [--target vm|jvm] <script[.ks]> [args...]`
 
-- **Effect:** Compiles the named Kestrel script (and its constituent packages) if the binary is stale or missing, then executes it via the VM.
-- **Freshness:** The script is compiled when (a) the `.kbc` binary does not exist, or (b) the `.ks` source is newer than the existing `.kbc`.
-- **Cache:** Compiled `.kbc` files are stored under `~/.kestrel/kbc/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/kbc/Users/me/proj/foo.kbc`. This avoids cluttering the project directory. Override with `KESTREL_CACHE` (e.g. `KESTREL_CACHE=/tmp/kbc kestrel run foo.ks`).
-- **Execution:** The VM ([05-runtime-model.md](05-runtime-model.md)) loads the compiled bytecode and runs it. Any additional arguments (`args...`) are passed through to the VM (VM behaviour for script arguments is implementation-defined).
-- **Errors:** Compile errors are reported on stderr; the process exits non-zero. Diagnostic format and behaviour are specified in [10-compile-diagnostics.md](10-compile-diagnostics.md). VM errors (e.g. uncaught exception) produce non-zero exit as per the runtime model.
+- **Effect:** Compiles the named Kestrel script (and its constituent packages) if the target binary is stale or missing, then executes it via the selected runtime.
+- **Target:** `vm` (default) executes via the Zig VM; `jvm` executes via the JVM using generated `.class` files.
+- **Freshness:** For `vm`, the script is compiled when (a) the `.kbc` binary does not exist, or (b) the `.ks` source is newer than the existing `.kbc`. For `jvm`, compilation is also driven by `.class` freshness using a dependency list stored alongside the class in `.class.deps`.
+- **Cache:**
+  - For `vm`, compiled `.kbc` files are stored under `~/.kestrel/kbc/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/kbc/Users/me/proj/foo.kbc`. This avoids cluttering the project directory. Override with `KESTREL_CACHE` (e.g. `KESTREL_CACHE=/tmp/kbc kestrel run foo.ks`).
+  - For `jvm`, compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run --target jvm foo.ks`).
+- **Execution (vm):** The VM ([05-runtime-model.md](05-runtime-model.md)) loads the compiled bytecode and runs it. Any additional arguments (`args...`) are passed through to the VM (VM behaviour for script arguments is implementation-defined).
+- **Execution (jvm):** `kestrel` runs `java` with a classpath containing `kestrel-runtime.jar` and the JVM cache root, and uses a main class derived from the entry source file path (strip leading `/`, remove `.ks`, capitalize the last path segment; convert `/` to `.` for the Java binary name). Entry-point discovery is implementation-defined, but the derived class name is stable for a given absolute source path.
+- **Errors:** Compile errors are reported on stderr; the process exits non-zero. Diagnostic format and behaviour are specified in [10-compile-diagnostics.md](10-compile-diagnostics.md). VM/JVM runtime errors (e.g. uncaught exception) produce non-zero exit as per the runtime model.
 
 ### 2.2 dis
 
@@ -39,17 +43,17 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.3 build
 
-**Usage:** `kestrel build [script[.ks]]`
+**Usage:** `kestrel build [--target vm|jvm] [script[.ks]]`
 
-- **Effect:** Builds the compiler and VM so that binaries are up-to-date. If a script path is provided, also compiles that script to `.kbc` (cached under `~/.kestrel/kbc/` as for `run`).
+- **Effect:** Builds the compiler and VM so that binaries are up-to-date. If a script path is provided, also compiles that script for the selected target (`vm` ⇒ `.kbc`, `jvm` ⇒ `.class`) using the same cache and freshness rules as `run`.
 - **Build steps:** (1) `cd compiler && npm run build`; (2) `cd vm && zig build -Doptimize=ReleaseSafe`. Compiler output is `compiler/dist/`; VM output is `vm/zig-out/bin/kestrel`.
-- **Optional script:** When `script[.ks]` is given, compiles it to the corresponding `.kbc` in the same directory.
+- **Optional script:** When `script[.ks]` is given, compiles it to the corresponding output for the selected target (`vm` ⇒ `.kbc`, `jvm` ⇒ `.class`) under the same cache root as `run`.
 
 ### 2.4 test
 
-**Usage:** `kestrel test [files...]`
+**Usage:** `kestrel test [--target vm|jvm] [files...]`
 
-- **Effect:** Runs the Kestrel-native unit test suite. If no arguments are given, discovers all `*.test.ks` files under `tests/unit/` and `stdlib/kestrel/`. If one or more arguments are given, runs only those files (paths are relative to the current working directory). Each file is compiled (with stdlib resolution so that `kestrel:test`, `kestrel:option`, etc. resolve), the VM runs the compiled bytecode, and pass/fail is reported per file.
+- **Effect:** Runs the Kestrel unit test suite. If no arguments are given, discovers all `*.test.ks` files under `tests/unit/` and `stdlib/kestrel/`. If one or more arguments are given, runs only those files (paths are relative to the current working directory). Each test file is compiled (with stdlib resolution so that `kestrel:test`, `kestrel:option`, etc. resolve) and executed via the selected target runtime (`vm` ⇒ Zig VM, `jvm` ⇒ JVM).
 - **Output:** For each test file, prints a line with PASS (green) or FAIL (red). At the end, prints a summary line: “Tests: X passed, Y failed, Z total” with colour (green for passed count, red for failed count when Y &gt; 0).
 - **Exit code:** 0 if all tests passed; 1 if any test failed or did not compile.
 
@@ -67,7 +71,8 @@ When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
 |-----------|----------|------|
 | **`kestrel` script** | **Bash** | Entry-point wrapper: parse subcommand and options, decide what to run, check freshness (binary older than source or missing ⇒ compile), invoke compiler, VM, or disassembler. |
 | **Compile** | **TypeScript** | `compiler` (node `dist/cli.js`): parses `.ks`, typechecks ([06-typesystem.md](06-typesystem.md)), emits `.kbc` ([03-bytecode-format.md](03-bytecode-format.md)). |
-| **Run** | **Zig** | VM (`vm/zig-out/bin/kestrel`): loads `.kbc` and executes per [04-bytecode-isa.md](04-bytecode-isa.md) and [05-runtime-model.md](05-runtime-model.md). |
+| **Run (vm)** | **Zig** | VM (`vm/zig-out/bin/kestrel`): loads `.kbc` and executes per [04-bytecode-isa.md](04-bytecode-isa.md) and [05-runtime-model.md](05-runtime-model.md). |
+| **Run (jvm)** | **Java** | JVM (`java`): loads generated `.class` files and executes the entry main class on top of `kestrel-runtime.jar`. |
 | **Disassembler** | **TypeScript** | `compiler/disasm.ts`: reads `.kbc` code section, decodes instructions per [04-bytecode-isa.md](04-bytecode-isa.md), emits mnemonic listing. Built as `dist/disasm.js`. |
 
 ---

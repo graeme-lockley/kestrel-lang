@@ -76,7 +76,7 @@ export import from exception is opaque True False
 Single- and multi-character tokens the lexer must recognize (longest match):
 
 - **Assignment:** `:=`. The left-hand side may be an identifier bound by a named import of an **export var** (07); semantics are as in 07 §9 (assignment to imported var).
-- **Comparison:** `==`, `!=`, `>=`, `<=`, `<`, `>`
+- **Comparison:** `==`, `!=`, `>=`, `<=`, `<`, `>` — see §3.2.1 for `==` / `!=` semantics
 - **Arithmetic / logic:** `+`, `-`, `*`, `/`, `%`, `**`, `|`, `&`, `|>`, `<|`, `::`
 - **Case / lambda arrow:** `=>` — single token (used in match cases and lambdas); must not be lexed as `=` followed by `>`.
 - **Delimiters:** `(`, `)`, `{`, `}`, `[`, `]`, `,`, `:`, `.`, `;`
@@ -229,6 +229,38 @@ Expression precedence from **lowest** to **highest** (same row = same precedence
 | 8     | `**`      | Right         |
 
 All binary operators are left-associative unless stated otherwise. `**` (exponentiation) and `::` (list cons) are **right-associative**. The grammar reflects this by splitting expression levels (PipeExpr through PowExpr). **Unary operators** are not specified in this version; add a UnaryExpr level if introduced.
+
+#### 3.2.1 Equality and inequality (`==`, `!=`)
+
+Both operators require operands of the **same** type (after inference); the type checker unifies the left and right operand types for the whole relational chain.
+
+**`==` — semantic (deep) equality**
+
+`==` compares values by meaning, not by object identity (where a heap representation exists). It is the same notion of equality as the runtime’s deep-equality primitive used for `__equals` / structural comparisons:
+
+| Kind | `==` is true when |
+|------|-------------------|
+| `Int`, `Bool` | Same numeric / boolean value |
+| `Float` | Same IEEE-754 value; **NaN** is never equal to itself (and never equal to any other value), consistent with IEEE |
+| `Char` / `Rune` | Same code point |
+| `Unit` | Both are `()` |
+| `String` | Same sequence of Unicode code points (UTF-8 content); same as `kestrel:string` `equals` |
+| `List` | Same length and each element is `==` (recursive) |
+| Tuple | Same arity and each component is `==` (tuples use the same structural representation as records with positional fields) |
+| Record | Same field count, same field names in the same order, and each field value is `==` (recursive) |
+| `Option` | Both `None`, or both `Some` with equal payloads |
+| `Result` | Both `Ok` with equal payloads, or both `Err` with equal payloads |
+| User-defined ADT | Same constructor tag and each payload field is `==` (recursive) |
+
+If the dynamic types of the operands differ (e.g. after an unsound cast), the implementation may treat `==` as false or report an error; well-typed programs use `==` only on a single unified type.
+
+**`!=`**
+
+`a != b` is **always** the Boolean negation of `a == b` for the same operands: it must yield `True` iff `a == b` yields `False`, and vice versa. In particular, for floats, two NaNs compare unequal under `==`, so `!=` is true for `NaN` vs `NaN`.
+
+**Ordering (`<`, `>`, `<=`, `>=`)**
+
+These operators are defined for numeric types and, where the implementation specifies, for other totally ordered types (e.g. lexicographic order on strings). For combinations where ordering is not defined, the implementation may yield `False` or reject the program at compile time; the language does not require a total order on every type.
 
 ```
 Expr           ::= IfExpr

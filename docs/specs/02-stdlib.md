@@ -17,7 +17,7 @@ String operations. All functions take the string as an explicit argument (no mem
 | `length` | `(String) -> Int` | Character length of string (code-point count) |
 | `slice` | `(String, Int, Int) -> String` | Substring from start (inclusive) to end (exclusive); indices are code-point positions |
 | `indexOf` | `(String, String) -> Int` | Code-point index of first occurrence of substring, or -1 |
-| `equals` | `(String, String) -> Bool` | Value equality |
+| `equals` | `(String, String) -> Bool` | Value equality (same UTF-8 / code-point sequence as the `==` operator on two `String` values) |
 | `toUpperCase` | `(String) -> String` | Uppercase copy (Basic Latin and Latin extended; other scripts unchanged) |
 
 ---
