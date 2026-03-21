@@ -6,6 +6,7 @@ import { parse, ParseError } from './parser/index.js';
 import { typecheck } from './typecheck/index.js';
 import { codegen } from './codegen/codegen.js';
 import { writeKbc, writeMinimalKbc } from './bytecode/write.js';
+import { jvmCodegen } from './jvm-codegen/index.js';
 import type { Diagnostic } from './diagnostics/types.js';
 import { CODES, locationFileOnly, locationFromSpan } from './diagnostics/types.js';
 
@@ -79,6 +80,12 @@ export function emitKbc(ast: import('./parser/index.js').Program, compileOptions
     debugFileStringIndices ?? [],
     debugEntries ?? []
   );
+}
+
+/** Emit JVM .class from typed AST. Returns main class bytes; inner classes in result.innerClasses. */
+export function emitJvm(ast: import('./parser/index.js').Program, compileOptions?: CompileOptions): import('./jvm-codegen/codegen.js').JvmCodegenResult {
+  const sourceFile = compileOptions?.sourceFile ?? '<source>';
+  return jvmCodegen(ast, { sourceFile });
 }
 
 export { tokenize } from './lexer/index.js';

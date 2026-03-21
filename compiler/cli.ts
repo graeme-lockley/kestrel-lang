@@ -11,17 +11,21 @@ import { resolve, basename, dirname, join } from 'path';
 import { writeFileSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { compileFile } from './src/compile-file.js';
+import { compileFileJvm } from './src/compile-file-jvm.js';
 import { report } from './src/diagnostics/index.js';
 
 const args = process.argv.slice(2);
 if (args.length < 1) {
-  process.stderr.write('Usage: kestrel-compiler <input.ks> [-o output.kbc] [--stale-file path] [--format=json]\n');
+  process.stderr.write('Usage: kestrel-compiler <input.ks> [-o output.kbc|outputDir] [--target vm|jvm] [--stale-file path] [--format=json]\n');
   process.exit(1);
 }
 const inputPath = args[0]!;
 const outIdx = args.indexOf('-o');
+const targetJvm = args.includes('--target') && args[args.indexOf('--target') + 1] === 'jvm';
 const entryResolved = resolve(inputPath);
-const cacheRoot = process.env.KESTREL_CACHE || join(homedir(), '.kestrel', 'kbc');
+const cacheRoot = targetJvm
+  ? (process.env.KESTREL_JVM_CACHE || join(homedir(), '.kestrel', 'jvm'))
+  : (process.env.KESTREL_CACHE || join(homedir(), '.kestrel', 'kbc'));
 // When -o is omitted: put entry in cache so we don't write into source dir (especially stdlib).
 function defaultEntryOutputPath(): string {
   const root = dirname(entryResolved).match(/^[A-Za-z]:[\\/]/)?.[0] ?? (entryResolved.startsWith('/') ? '/' : '');
@@ -31,6 +35,9 @@ function defaultEntryOutputPath(): string {
         : dirname(entryResolved).slice(1))
     : dirname(entryResolved);
   const base = basename(entryResolved, '.ks');
+  // For JVM, we always emit into the cache root. Stable class naming (based on absolute path)
+  // ensures collisions don't occur, and this keeps JVM output independent of cwd.
+  if (targetJvm) return cacheRoot;
   return join(cacheRoot, relDir, base + '.kbc');
 }
 const outputPath = outIdx >= 0 ? args[outIdx + 1]! : defaultEntryOutputPath();
@@ -48,6 +55,53 @@ if (staleFilePath) {
 }
 
 const entryAbs = entryResolved;
+
+if (targetJvm) {
+  const jvmCacheRoot = process.env.KESTREL_JVM_CACHE || join(homedir(), '.kestrel', 'jvm');
+  // When -o is provided, treat it as the JVM cache root override.
+  const classDir = outIdx >= 0 ? outputPath : jvmCacheRoot;
+  const getClassOutputDir = (_sourcePath: string): string => {
+    return classDir;
+  };
+  const result = compileFileJvm(resolve(inputPath), {
+    projectRoot: process.cwd(),
+    stalePaths,
+    getClassOutputDir,
+    onCompilingFile: (absolutePath, durationMs) => {
+      process.stderr.write('\x1b[90mCompiling ' + basename(absolutePath) + ' (' + durationMs + 'ms)\x1b[0m\n');
+    },
+  });
+  if (!result.ok) {
+    const sourceByPath = new Map<string, string>();
+    for (const d of result.diagnostics) {
+      const p = d.location?.file;
+      if (p && p !== '<source>' && !sourceByPath.has(p)) {
+        try {
+          const content = readFileSync(p, 'utf-8');
+          sourceByPath.set(p, content);
+          sourceByPath.set(resolve(p), content);
+        } catch {
+          try {
+            const content = readFileSync(resolve(p), 'utf-8');
+            sourceByPath.set(p, content);
+            sourceByPath.set(resolve(p), content);
+          } catch {
+            /* fall back */
+          }
+        }
+      }
+    }
+    report(result.diagnostics, {
+      format: formatJson ? 'json' : 'human',
+      color: !process.env.NO_COLOR && process.stderr.isTTY,
+      stream: process.stderr,
+      sourceByPath,
+    });
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
 function getOutputPaths(sourcePath: string): { kbc: string; kti: string } {
   const abs = resolve(sourcePath);
   if (abs === entryAbs) return { kbc: outputPath, kti: outputPath.replace(/\.kbc$/, '.kti') };
