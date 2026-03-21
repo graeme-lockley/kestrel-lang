@@ -29,4 +29,4 @@ fun printPrimes(count: Int, current: Int, printed: Int): Unit =
     printPrimes(count, current + 1, printed)
   }
 
-printPrimes(1000, 2, 0)
+printPrimes(100, 2, 0)
