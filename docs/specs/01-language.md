@@ -320,7 +320,7 @@ Record spread `{ ...expr, field = value }` is implemented by compiling to the SP
 
 Application and field access are **postfix** on an atom: parse one Atom, then zero or more Suffix (call or field). So `f(x).y` is Atom `f`, Suffix `(x)`, Suffix `.y`. **Await:** A primary expression may be prefixed with `await` (e.g. `await f()`); valid only in async context (see §5).
 
-**Pipeline semantics:** `e1 |> e2` passes the left-hand value as the **first** argument to the right-hand call: `x |> f` is equivalent to `f(x)`; `x |> f(y)` is equivalent to `f(x, y)`. Similarly, `<|` passes the right-hand value as the last argument: `f <| x` is `f(x)`; `f(y) <| x` is `f(y, x)`. The right-hand side must be an expression that denotes a function call (application).
+**Pipeline semantics:** `e1 |> e2` passes `e1` as the **first** argument when `e2` is a call `f(a, b, …)` — i.e. `x |> f(y)` ≡ `f(x, y)` (and longer argument lists prepend `x` similarly). If `e2` is not a call, it must denote a unary function: `x |> f` ≡ `f(x)`. **Backward pipe:** `f <| x` ≡ `f(x)`; `f(y) <| x` ≡ `f(y, x)` (the piped value is the **last** argument when the left side is a call).
 
 ### 3.3 Blocks and Statements
 

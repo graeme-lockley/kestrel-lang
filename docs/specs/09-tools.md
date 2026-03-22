@@ -25,7 +25,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 - **Effect:** Compiles the named Kestrel script (and its constituent packages) if the target binary is stale or missing, then executes it via the selected runtime.
 - **Target:** `vm` (default) executes via the Zig VM; `jvm` executes via the JVM using generated `.class` files.
-- **Freshness:** For `vm`, the script is compiled when (a) the `.kbc` binary does not exist, or (b) the `.ks` source is newer than the existing `.kbc`. For `jvm`, compilation is also driven by `.class` freshness using a dependency list stored alongside the class in `.class.deps`.
+- **Freshness:** For `vm`, the script is compiled when (a) the `.kbc` binary does not exist, or (b) the entry `.ks` is newer than the `.kbc`, or (c) a `.kbc.deps` file exists beside the cached bytecode and any listed path (transitive `.ks` sources and each imported module’s `.kbc`) has modification time greater than or equal to the entry `.kbc`—so consumers recompile when a dependency’s bytecode or source changes. For `jvm`, compilation is also driven by `.class` freshness using a dependency list stored alongside the class in `.class.deps`.
 - **Cache:**
   - For `vm`, compiled `.kbc` files are stored under `~/.kestrel/kbc/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/kbc/Users/me/proj/foo.kbc`. This avoids cluttering the project directory. Override with `KESTREL_CACHE` (e.g. `KESTREL_CACHE=/tmp/kbc kestrel run foo.ks`).
   - For `jvm`, compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run --target jvm foo.ks`).

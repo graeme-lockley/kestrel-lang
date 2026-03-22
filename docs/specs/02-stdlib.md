@@ -16,9 +16,14 @@ String operations. All functions take the string as an explicit argument (no mem
 |----------|-----------|-------------|
 | `length` | `(String) -> Int` | Character length of string (code-point count) |
 | `slice` | `(String, Int, Int) -> String` | Substring from start (inclusive) to end (exclusive); indices are code-point positions |
+| `left` | `(String, Int) -> String` | First `n` code points (or whole string if `n` ≥ length); empty if `n` ≤ 0 |
+| `right` | `(String, Int) -> String` | Last `n` code points (or whole string if `n` ≥ length); empty if `n` ≤ 0 |
+| `dropLeft` | `(String, Int) -> String` | Remove first `n` code points; unchanged if `n` ≤ 0; `""` if `n` ≥ length |
+| `dropRight` | `(String, Int) -> String` | Remove last `n` code points; unchanged if `n` ≤ 0; `""` if `n` ≥ length |
 | `indexOf` | `(String, String) -> Int` | Code-point index of first occurrence of substring, or -1 |
 | `equals` | `(String, String) -> Bool` | Value equality (same UTF-8 / code-point sequence as the `==` operator on two `String` values) |
 | `toUpperCase` | `(String) -> String` | Uppercase copy (Basic Latin and Latin extended; other scripts unchanged) |
+| `toLowerCase` / `toLower` | `(String) -> String` | Lowercase copy (VM: Basic Latin A–Z; JVM: `Locale.ROOT`) |
 | `trim` | `(String) -> String` | Remove leading and trailing ASCII whitespace (space, tab, LF, CR, VT, FF) at code-point boundaries |
 | `isEmpty` | `(String) -> Bool` | True when `length(s) == 0` |
 | `codePointAt` | `(String, Int) -> Int` | Unicode code point at code-point index `i`, or `-1` if out of range |
@@ -35,8 +40,69 @@ Operations on `Char` / `Rune` (one Unicode code point; same type per language sp
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `codePoint` | `(Char) -> Int` | Scalar value as a non-negative integer (VM primitive) |
+| `codePoint` | `(Char) -> Int` | Scalar value as a non-negative integer (VM primitive `__char_code_point`) |
+| `toCode` | `(Char) -> Int` | Alias for `codePoint` |
+| `fromCode` | `(Int) -> Char` | Valid Unicode scalar → `Char`; invalid code point or surrogate → `U+0000` (primitive `__char_from_code`) |
 | `isDigit` | `(Char) -> Bool` | True for ASCII digits `0`–`9` (U+0030–U+0039) |
+| `isUpper` / `isLower` | `(Char) -> Bool` | ASCII A–Z / a–z |
+| `isAlpha` | `(Char) -> Bool` | `isUpper` ∨ `isLower` |
+| `isAlphaNum` | `(Char) -> Bool` | `isAlpha` ∨ `isDigit` |
+| `isOctDigit` | `(Char) -> Bool` | `0`–`7` |
+| `isHexDigit` | `(Char) -> Bool` | Decimal digit or A–F / a–f |
+| `toUpper` / `toLower` | `(Char) -> Char` | ASCII case fold only; other code points unchanged |
+
+---
+
+## kestrel:tuple
+
+Helpers for pairs `(A, B)`. **Pipe-friendly:** the tuple is the first argument on `mapFirst` / `mapSecond` / `mapBoth` (so `t \|> mapFirst(f)` desugars to `mapFirst(t, f)`).
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `pair` | `(A, B) -> (A, B)` | `(a, b)` |
+| `first` | `((A, B)) -> A` | `t.0` |
+| `second` | `((A, B)) -> B` | `t.1` |
+| `mapFirst` | `((A, B), (A) -> X) -> (X, B)` | |
+| `mapSecond` | `((A, B), (B) -> Y) -> (A, Y)` | |
+| `mapBoth` | `((A, B), (A) -> X, (B) -> Y) -> (X, Y)` | |
+
+---
+
+## kestrel:basics
+
+Numeric, boolean, and general utilities. **Int remainder note:** `%` on `Int` follows floored division semantics in the VM; `remainderBy` and `modBy` use truncated and floored division respectively (see implementation).
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `identity` | `(A) -> A` | |
+| `always` | `(A, B) -> A` | Ignores second argument |
+| `clamp` | `(Int, Int, Int) -> Int` | Clamp `n` to `[lo, hi]` |
+| `negate` | `(Int) -> Int` | `0 - n` |
+| `modBy` | `(Int, Int) -> Int` | Floored modulo: result has sign of divisor |
+| `remainderBy` | `(Int, Int) -> Int` | Truncated remainder (sign of dividend) |
+| `xor` | `(Bool, Bool) -> Bool` | Exclusive or |
+| `not` | `(Bool) -> Bool` | Boolean negation |
+| `toFloat` | `(Int) -> Float` | Primitive `__int_to_float` |
+| `truncate` | `(Float) -> Int` | Toward zero (`__float_to_int`) |
+| `floor` / `ceiling` / `round` | `(Float) -> Int` | `__float_floor` / `__float_ceil` / `__float_round` |
+| `abs` | `(Float) -> Float` | `__float_abs` |
+| `sqrt` | `(Float) -> Float` | `__float_sqrt` (NaN for negative input) |
+| `isNaN` / `isInfinite` | `(Float) -> Bool` | `__float_is_nan` / `__float_is_infinite` |
+
+---
+
+## kestrel:option
+
+Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on `map`, `andThen`, `withDefault`, etc.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `getOrElse` | `(Option<A>, A) -> A` | |
+| `withDefault` | `(Option<A>, A) -> A` | Alias for `getOrElse` |
+| `isNone` / `isSome` | `(Option<A>) -> Bool` | |
+| `map` | `(Option<A>, (A) -> B) -> Option<B>` | |
+| `andThen` | `(Option<A>, (A) -> Option<B>) -> Option<B>` | |
+| `map2`–`map5` | … | Short-circuit on first `None` |
 
 ---
 
@@ -52,7 +118,76 @@ Immutable list utilities (in addition to list syntax and `List<T>` in §Library 
 | `map` | `(List<A>, (A) -> B) -> List<B>` | Element-wise map |
 | `filter` | `(List<A>, (A) -> Bool) -> List<A>` | Keep elements satisfying predicate |
 | `foldl` | `(List<A>, B, (B, A) -> B) -> B` | Left fold |
+| `sum` | `(List<Int>) -> Int` | Sum of elements; `[]` yields `0` |
 | `reverse` | `(List<T>) -> List<T>` | Reverse element order |
+| `append` | `(List<T>, List<T>) -> List<T>` | Concatenate (immutable) |
+| `concat` | `(List<List<T>>) -> List<T>` | Flatten one level |
+| `foldr` | `(List<A>, B, (A, B) -> B) -> B` | Right fold |
+| `intersperse` | `(A, List<A>) -> List<A>` | Insert separator between elements |
+| `repeat` | `(Int, A) -> List<A>` | `n` copies of `x` |
+| `range` | `(Int, Int) -> List<Int>` | Inclusive `lo`..`hi` |
+| `take` / `takeWhile` / `dropWhile` | … | Standard list prefixes / scanning |
+| `zip` | `(List<A>, List<B>) -> List<(A, B)>` | Pair elements while both lists non-empty |
+| `map2`–`map5` | … | Zipping maps (pairwise / triple / …) |
+| `filterMap` | `(List<A>, (A) -> Option<B>) -> List<B>` | Map and drop `None` |
+| `concatMap` | `(List<A>, (A) -> List<B>) -> List<B>` | `concat` of `map` |
+| `indexedMap` | `(List<A>, (Int, A) -> B) -> List<B>` | Map with index |
+| `member` | `(A, List<A>) -> Bool` | True if any element is `==` to the value |
+| `any` / `all` | … | Short-circuit predicates |
+| `product` | `(List<Int>) -> Int` | Product; `[]` → `1` |
+| `maximum` / `minimum` | `(List<Int>) -> Option<Int>` | |
+| `partition` | `(List<A>, (A) -> Bool) -> (List<A>, List<A>)` | |
+| `unzip` | `(List<(A, B)>) -> (List<A>, List<B>)` | |
+| `sort` | `(List<Int>) -> List<Int>` | Insertion sort |
+| `head` / `tail` | `List<A> -> Option<…>` | |
+
+---
+
+## kestrel:result
+
+Helpers for `Result<T, E>` (see §Library types). Functions are polymorphic in both type parameters. **Pipe-friendly:** the result is the first argument on transforming functions.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `getOrElse` | `(Result<T, E>, T) -> T` | `Ok` payload, or `default` when `Err` |
+| `withDefault` | `(Result<T, E>, T) -> T` | Alias for `getOrElse` |
+| `isOk` | `(Result<T, E>) -> Bool` | True for `Ok` |
+| `isErr` | `(Result<T, E>) -> Bool` | True for `Err` |
+| `map` | `(Result<T, E>, (T) -> U) -> Result<U, E>` | |
+| `mapError` | `(Result<T, E>, (E) -> F) -> Result<T, F>` | |
+| `andThen` | `(Result<T, E>, (T) -> Result<U, E>) -> Result<U, E>` | |
+| `map2`–`map5` | … | Same error type `E`; first `Err` wins |
+| `toOption` | `(Result<T, E>) -> Option<T>` | `Ok` → `Some`, `Err` → `None` |
+| `fromOption` | `(Option<T>, E) -> Result<T, E>` | `None` → `Err(err)` |
+
+---
+
+## kestrel:dict
+
+Finite maps exposed as the **opaque** type `Dict<K, V>`: clients use the functions below only and must not rely on a visible record shape. The implementation still stores a hash function, an equality function, and an association list of `(key, value)` pairs (see [05-runtime-model.md](05-runtime-model.md) for the runtime RECORD layout). **Pipe-friendly:** the dict is the first argument on `insert`, `get`, `map`, etc.
+
+Keys are compared only via the embedded `eq`; `hash` is used for potential future bucketed implementations (v1 may still scan linearly).
+
+Convenience: `hashString` / `eqString`, `hashInt` / `eqInt`, `emptyStringDict` / `emptyIntDict`, `singletonStringDict` / `singletonIntDict`, and `fromStringList` / `fromIntList` (same as `singleton` / `fromList` with the matching hash/eq) for common key types.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `empty` | `((K) -> Int, (K, K) -> Bool) -> Dict<K,V>` | |
+| `singleton` | `((K) -> Int, (K, K) -> Bool, K, V) -> Dict<K,V>` | |
+| `singletonIntDict` / `singletonStringDict` | `(Int, V) -> Dict<Int,V>` / `(String, V) -> Dict<String,V>` | Same as `singleton` with `hashInt`/`eqInt` or `hashString`/`eqString` |
+| `insert` / `remove` / `update` | … | `update` uses `Option<V>` → `Option<V>`; `None` removes |
+| `isEmpty` / `member` / `get` / `size` | … | `get` returns `Option<V>` |
+| `keys` / `values` / `toList` / `fromList` | … | `fromList`: later entries win on duplicate keys |
+| `fromIntList` / `fromStringList` | `(List<(Int,V)>) -> Dict<Int,V>` / `(List<(String,V)>) -> Dict<String,V>` | Same as `fromList` with `hashInt`/`eqInt` or `hashString`/`eqString` |
+| `map` / `filter` / `partition` | … | |
+| `foldl` / `foldr` | `(Dict<K,V>, B, (K, V, B) -> B) -> B` | |
+| `union` / `intersect` / `diff` | … | `union`: left-biased on key clash; `intersect`: value from second dict |
+
+---
+
+## kestrel:set
+
+Sets as the **opaque** type `Set<E>` (defined in the module as an alias of `Dict<E, Unit>`; keys only, values are `()`). Same pipe-friendly convention as `kestrel:dict`. Helpers `emptyStringSet` / `emptyIntSet`, `singletonStringSet` / `singletonIntSet`, and `fromStringList` / `fromIntList` for common key types. `map` requires new `hash` / `eq` for the mapped key type.
 
 ---
 

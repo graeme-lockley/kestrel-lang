@@ -59,6 +59,7 @@ A conforming implementation must:
 
 - **Presence:** Every function in [02-stdlib.md](02-stdlib.md) is present and callable with the specified signature.
 - **Contract tests:** Optional “contract” tests that check minimal behaviour (e.g. `string.length("") == 0`, `string.slice(s, 0, n)` returns a string of at most `n` characters) without overspecifying implementation.
+- **Stdlib suites:** `stdlib/kestrel/*.test.ks` (picked up by `./scripts/kestrel test`) hold broader behaviour tests for `kestrel:string`, `kestrel:list`, `kestrel:tuple`, `kestrel:char`, `kestrel:basics`, `kestrel:option`, `kestrel:result`, `kestrel:dict`, and `kestrel:set`. Empty lists in assertions may use `join`/`List.length` instead of `eq([], [])` where list equality is not reliable in the harness.
 
 ---
 

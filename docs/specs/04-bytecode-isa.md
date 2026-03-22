@@ -273,7 +273,28 @@ First-class closures (e.g. passing a lambda to a higher-order function) are thus
 
 ---
 
-## 7. Relation to Other Specs
+## 7. Built-in primitive `CALL` ids (0xFFFFFF00 range)
+
+When **`fn_id`** in **CALL** is in **`0xFFFFFF00` … `0xFFFFFF25`** (inclusive), the VM treats the call as a **host primitive** rather than a function-table index. Arity and behaviour are fixed per id. (Existing ids `0xFFFFFF00`–`0xFFFFFF1B` cover I/O, strings, process, etc.; the reference VM extends the range through **`0xFFFFFF25`**.)
+
+| `fn_id` | Builtin (compiler name) | Arity | Result (summary) |
+|---------|-------------------------|-------|------------------|
+| `0xFFFFFF1C` | `__int_to_float` | 1 | `(Int) -> Float` (boxed float) |
+| `0xFFFFFF1D` | `__float_to_int` | 1 | `(Float) -> Int` (truncate toward zero) |
+| `0xFFFFFF1E` | `__float_floor` | 1 | `(Float) -> Int` |
+| `0xFFFFFF1F` | `__float_ceil` | 1 | `(Float) -> Int` |
+| `0xFFFFFF20` | `__float_round` | 1 | `(Float) -> Int` (IEEE round, ties to even) |
+| `0xFFFFFF21` | `__float_sqrt` | 1 | `(Float) -> Float` |
+| `0xFFFFFF22` | `__float_is_nan` | 1 | `(Float) -> Bool` |
+| `0xFFFFFF23` | `__float_is_infinite` | 1 | `(Float) -> Bool` |
+| `0xFFFFFF24` | `__float_abs` | 1 | `(Float) -> Float` |
+| `0xFFFFFF25` | `__char_from_code` | 1 | `(Int) -> Char` (invalid / surrogate → `U+0000`) |
+
+The JVM backend maps these to `KRuntime` static methods with the same semantics.
+
+---
+
+## 8. Relation to Other Specs
 
 - Bytecode file layout and sections: [03-bytecode-format.md](03-bytecode-format.md)
 - Runtime representation of values (tagged words, heap objects): [05-runtime-model.md](05-runtime-model.md)
