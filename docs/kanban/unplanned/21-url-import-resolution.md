@@ -1,20 +1,21 @@
 # URL Import Resolution
 
-## Priority: 160 (Low -- deferred)
+## Sequence: 21
+## Tier: 7 — Deferred (large / dependency-heavy)
+## Former ID: 160
 
 ## Summary
 
-Spec 07 &sect;4.2 defines URL specifiers (e.g., `https://example.com/lib.ks`). The current resolver rejects all URL imports. URL imports require fetching, caching, lockfile integration, and content hashing.
+Spec 07 §4.2 defines URL specifiers (e.g., `https://example.com/lib.ks`). The current resolver rejects all URL imports. URL imports require fetching, caching, lockfile integration, and content hashing.
 
 ## Current State
 
 - `resolve.ts`: Returns `null` (resolution failure) for any specifier starting with `http://` or `https://`.
 - No URL fetching, caching, or content hashing logic.
-- No lockfile support (story 23 prerequisite).
 
 ## Dependencies
 
-- Story 23 (Lockfile) should be done first for deterministic URL resolution.
+- Sequence **22** (Lockfile) should be done first for deterministic URL resolution.
 
 ## Acceptance Criteria
 
@@ -28,5 +29,5 @@ Spec 07 &sect;4.2 defines URL specifiers (e.g., `https://example.com/lib.ks`). T
 
 ## Spec References
 
-- 07-modules &sect;4.2 (URL specifier resolution)
-- 07-modules &sect;7 (Lockfile for URL dependencies)
+- 07-modules §4.2 (URL specifier resolution)
+- 07-modules §7 (Lockfile for URL dependencies)

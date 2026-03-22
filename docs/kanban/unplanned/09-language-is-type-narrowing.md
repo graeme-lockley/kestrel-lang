@@ -1,10 +1,12 @@
 # Language: `is` Type Narrowing
 
-## Priority: 75 (Medium)
+## Sequence: 09
+## Tier: 3 — Complete the core language
+## Former ID: 75
 
 ## Summary
 
-The `is` keyword is reserved (spec 01 &sect;2.4) and used for type narrowing in conditionals (`if (x is T) { ... }`). Within the then-branch, the type of `x` is narrowed to `original_type & T` (spec 06 &sect;4). This feature is not implemented at any level (lexer, parser, type checker, or codegen).
+The `is` keyword is reserved (spec 01 §2.4) and used for type narrowing in conditionals (`if (x is T) { ... }`). Within the then-branch, the type of `x` is narrowed to `original_type & T` (spec 06 §4). This feature is not implemented at any level (lexer, parser, type checker, or codegen).
 
 ## Current State
 
@@ -25,5 +27,9 @@ The `is` keyword is reserved (spec 01 &sect;2.4) and used for type narrowing in 
 
 ## Spec References
 
-- 01-language &sect;2.4 (Keywords: `is`)
-- 06-typesystem &sect;4 (Unions and intersections; narrowing with `is`)
+- 01-language §2.4 (Keywords: `is`)
+- 06-typesystem §4 (Unions and intersections; narrowing with `is`)
+
+## Dependencies (for downstream)
+
+- Sequence **10** (union/intersection runtime) depends on this story for practical union typing.

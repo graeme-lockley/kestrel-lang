@@ -1,6 +1,8 @@
 # Conformance Test Coverage Expansion
 
-## Priority: 170 (Low)
+## Sequence: 15
+## Tier: 5 — Test coverage and quality
+## Former ID: 170
 
 ## Summary
 
@@ -9,24 +11,24 @@ Spec 08 defines comprehensive conformance test requirements. The current test su
 ## Current State
 
 ### Parse conformance (`tests/conformance/parse/`)
-- Only 2 valid files, 0 invalid files.
-- Spec 08 &sect;2.1 requires "every production in the grammar covered by at least one test."
+- Only a small number of valid files; few or no invalid files.
+- Spec 08 §2.1 requires "every production in the grammar covered by at least one test."
 
 ### Typecheck conformance (`tests/conformance/typecheck/`)
-- 17 valid, 13 invalid files. Reasonably good but gaps exist.
+- Multiple valid and invalid files; gaps remain.
 
 ### Runtime conformance (`tests/conformance/runtime/`)
-- 3 files (async_await, exception, gc_stress).
-- Spec 08 &sect;2.4-2.5 requires tests for each instruction, calling convention, tagged values, heap objects.
+- Few files (e.g. async_await, exception, gc_stress).
+- Spec 08 §2.4-2.5 requires tests for each instruction, calling convention, tagged values, heap objects.
 
 ### Kestrel unit tests (`tests/unit/`)
-- 15 test files covering major features. Good coverage but some gaps.
+- Many test files covering major features; some gaps.
 
-### Gaps
-- Parse invalid: no test files.
-- No conformance tests for: string interpolation parsing, shebang handling, record vs block disambiguation, pipeline parsing, cons operator precedence.
-- No conformance tests for: closure capture semantics (by-value vs by-reference), mutual recursion at block level, export var assignment.
-- No runtime conformance for: SPREAD, closure GC, multi-module execution.
+### Gaps (examples)
+- Parse invalid: may have no or few test files.
+- Missing conformance for: string interpolation parsing, shebang handling, record vs block disambiguation, pipeline parsing, cons operator precedence.
+- Missing conformance for: closure capture semantics (by-value vs by-reference), mutual recursion at block level, export var assignment.
+- Missing runtime conformance for: SPREAD, closure GC, multi-module execution.
 
 ## Acceptance Criteria
 
@@ -38,4 +40,4 @@ Spec 08 defines comprehensive conformance test requirements. The current test su
 
 ## Spec References
 
-- 08-tests (entire spec, especially &sect;2 test categories and &sect;3.5 coverage goals)
+- 08-tests (entire spec, especially §2 test categories and §3.5 coverage goals)

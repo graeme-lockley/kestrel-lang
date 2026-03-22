@@ -1,10 +1,12 @@
 # Re-export Conflict Checking
 
-## Priority: 95 (Medium)
+## Sequence: 08
+## Tier: 3 — Complete the core language
+## Former ID: 95
 
 ## Summary
 
-Spec 07 &sect;3.3 requires that when two exports introduce the same name from different sources, a compile error is reported. The current implementation may not fully enforce this -- particularly for `export * from` which can silently re-export conflicting names.
+Spec 07 §3.3 requires that when two exports introduce the same name from different sources, a compile error is reported. The current implementation may not fully enforce this -- particularly for `export * from` which can silently re-export conflicting names.
 
 ## Current State
 
@@ -25,5 +27,5 @@ Spec 07 &sect;3.3 requires that when two exports introduce the same name from di
 
 ## Spec References
 
-- 07-modules &sect;3.3 (Export conflicts)
-- 07-modules &sect;3.4 (Definition of export set algorithm)
+- 07-modules §3.3 (Export conflicts)
+- 07-modules §3.4 (Definition of export set algorithm)

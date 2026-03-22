@@ -1,6 +1,8 @@
 # Stdlib kestrel:stack trace() Implementation
 
-## Priority: 125 (Medium)
+## Sequence: 13
+## Tier: 4 — Stdlib and test harness
+## Former ID: 125
 
 ## Summary
 
@@ -10,11 +12,7 @@ The `kestrel:stack` module provides `format()` and `print()` but `trace()` is de
 
 - `stdlib/kestrel/stack.ks` exports `format()` (via `__format_one`) and `print()` (via `__print_one`).
 - `trace()` is not implemented -- no VM primitive, no StackTrace type.
-- The debug section (story 06) is a prerequisite: without code-offset-to-line mapping, stack traces would only show raw offsets.
-
-## Dependencies
-
-- Story 06 (Debug Section) should be completed first to provide meaningful line numbers.
+- The bytecode debug section (see completed work in `docs/kanban/done/`) provides code-offset-to-line mapping; stack traces should use it where available.
 
 ## Acceptance Criteria
 
@@ -27,5 +25,5 @@ The `kestrel:stack` module provides `format()` and `print()` but `trace()` is de
 ## Spec References
 
 - 02-stdlib (kestrel:stack: trace(T) -> StackTrace<T>)
-- 05-runtime-model &sect;5 (Stack traces: runtime may capture backtrace at throw time)
-- 03-bytecode-format &sect;8 (Debug section maps code offsets to file/line)
+- 05-runtime-model §5 (Stack traces: runtime may capture backtrace at throw time)
+- 03-bytecode-format §8 (Debug section maps code offsets to file/line)

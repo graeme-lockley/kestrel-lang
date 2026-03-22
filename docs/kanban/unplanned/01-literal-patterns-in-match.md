@@ -1,6 +1,8 @@
 # Literal Patterns in Match (Int, String)
 
-## Priority: 85 (Medium)
+## Sequence: 01
+## Tier: 1 — Fix broken language
+## Former ID: 85
 
 ## Summary
 
@@ -11,7 +13,7 @@ The parser correctly handles integer and string literal patterns in `match` case
 - **Parser** (`parse.ts` lines 922-925): Parses `int` and `string` tokens as `LiteralPattern` nodes. Working.
 - **AST** (`nodes.ts` lines 358-361): `LiteralPattern` with `literal: 'int' | 'string' | 'true' | 'false'` and `value: string`.
 - **Type checker** (`check.ts`): `bindPattern()` has no branch for `LiteralPattern`. It silently passes through without:
-  - Unifying the scrutinee type with the literal's type (e.g., `Int` for integer patterns).
+  - Unifying the scrutinee type with the literal's type (e.g., `Int` for integer literals).
   - Reporting an error if the literal type doesn't match the scrutinee type.
 - **Codegen** (`codegen.ts`): The match compilation has no case for `LiteralPattern`. Only ADT constructor patterns (via MATCH jump table), wildcard, and variable patterns are handled.
 
@@ -39,6 +41,6 @@ For Bool patterns (`True`, `False`), the existing MATCH instruction already work
 
 ## Spec References
 
-- 01-language &sect;3.2 (Pattern grammar: INTEGER and STRING as NonConsPattern)
-- 06-typesystem &sect;5 (Match exhaustiveness)
-- 06-typesystem &sect;8 (Pattern typing: literal patterns require scrutinee to unify with literal type)
+- 01-language §3.2 (Pattern grammar: INTEGER and STRING as NonConsPattern)
+- 06-typesystem §5 (Match exhaustiveness)
+- 06-typesystem §8 (Pattern typing: literal patterns require scrutinee to unify with literal type)

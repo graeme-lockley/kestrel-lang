@@ -1,21 +1,23 @@
 # Stdlib kestrel:http Full Implementation
 
-## Priority: 155 (Low -- deferred)
+## Sequence: 19
+## Tier: 7 — Deferred (large / dependency-heavy)
+## Former ID: 155
 
 ## Summary
 
-The `kestrel:http` module currently only exports `nowMs()`. The spec (02) requires `createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, and `nowMs`. Most of these require async I/O and the event loop (story 25).
+The `kestrel:http` module currently only exports `nowMs()`. The spec (02) requires `createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, and `nowMs`. Most of these require async I/O and the event loop (sequence **18**).
 
 ## Current State
 
 - `stdlib/kestrel/http.ks`: exports only `nowMs()` wrapping `__now_ms()`.
-- VM `primitives.zig`: implements `nowMs` (0xFFFFFF08) as a simple timestamp.
+- VM `primitives.zig`: implements `nowMs` as a simple timestamp.
 - No HTTP server, client, or request/response types implemented.
-- Story in `docs/kanban/done/stdlib-json-fs-http.md` notes HTTP was partially done.
+- Prior work in `docs/kanban/done/stdlib-json-fs-http.md` may note partial HTTP deferral.
 
 ## Dependencies
 
-- Story 25 (Async/Await event loop) is effectively a prerequisite for `listen`, `get`, `bodyText`.
+- Sequence **18** (Async/Await event loop) is effectively a prerequisite for `listen`, `get`, `bodyText`.
 
 ## Acceptance Criteria
 

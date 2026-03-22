@@ -1,17 +1,19 @@
 # Negative E2E Test Suite
 
-## Priority: 105 (Medium)
+## Sequence: 14
+## Tier: 5 — Test coverage and quality
+## Former ID: 105
 
 ## Summary
 
-The E2E test infrastructure (`scripts/run-e2e.sh`) supports negative tests but the `tests/e2e/scenarios/negative/` directory contains only a README -- no actual test files. Negative tests verify that programs with errors (syntax, type, runtime) fail as expected.
+The E2E test infrastructure (`scripts/run-e2e.sh`) supports negative tests but the `tests/e2e/scenarios/negative/` directory has very few actual test files. Negative tests verify that programs with errors (syntax, type, runtime) fail as expected.
 
 ## Current State
 
 - `run-e2e.sh` iterates over `tests/e2e/scenarios/negative/*.ks`, compiling each and verifying that either compilation or execution fails.
-- The `negative/` directory has only a `README.md` documenting conventions.
+- The `negative/` directory may contain only a `README.md` and one scenario; expand with many more.
 - Conformance tests (`tests/conformance/typecheck/invalid/`) cover type errors at the compiler level.
-- No E2E negative tests exist for: runtime errors (uncaught exceptions, stack overflow), compile errors caught at the .kbc level, or multi-module resolution failures.
+- Gaps: runtime errors (uncaught exceptions, stack overflow), compile errors at the full pipeline, multi-module resolution failures.
 
 ## Acceptance Criteria
 
@@ -24,7 +26,7 @@ The E2E test infrastructure (`scripts/run-e2e.sh`) supports negative tests but t
 - [ ] **Runtime failure tests** (at least 5):
   - Uncaught exception (no try/catch)
   - Explicit `exit(1)`
-  - Division by zero (once story 03 is done)
+  - Division by zero (coordinate with sequence **06** overflow/divzero unit tests)
   - Stack overflow (deeply recursive function)
   - Pattern match on unexpected ADT constructor (if possible)
 - [ ] Each test file has a clear comment explaining what error is expected.
@@ -33,4 +35,4 @@ The E2E test infrastructure (`scripts/run-e2e.sh`) supports negative tests but t
 
 ## Spec References
 
-- 08-tests &sect;3.5 (Coverage goals: errors -- golden or conformance tests for expected compile and runtime errors)
+- 08-tests §3.5 (Coverage goals: errors -- golden or conformance tests for expected compile and runtime errors)

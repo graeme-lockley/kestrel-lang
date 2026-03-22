@@ -1,6 +1,8 @@
 # Tuple Pattern Matching in Codegen
 
-## Priority: 130 (Medium)
+## Sequence: 02
+## Tier: 1 — Fix broken language
+## Former ID: 130
 
 ## Summary
 
@@ -24,5 +26,5 @@ Tuple patterns `(p1, p2, p3)` are parsed and typed but may not be fully handled 
 
 ## Spec References
 
-- 01-language &sect;3.2 (Tuple patterns: `(p1, p2)`)
-- 01-language &sect;3.4 (Tuples: comma disambiguates grouping from tuple)
+- 01-language §3.2 (Tuple patterns: `(p1, p2)`)
+- 01-language §3.4 (Tuples: comma disambiguates grouping from tuple)

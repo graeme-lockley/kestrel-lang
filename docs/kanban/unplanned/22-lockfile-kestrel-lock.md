@@ -1,10 +1,12 @@
 # Lockfile: kestrel.lock
 
-## Priority: 140 (Low)
+## Sequence: 22
+## Tier: 7 — Deferred (large / dependency-heavy)
+## Former ID: 140
 
 ## Summary
 
-Spec 07 &sect;7 defines `kestrel.lock` as a project-root file that records resolved dependency information for deterministic resolution without network access. This is primarily important for URL imports but also ensures reproducible builds for path dependencies.
+Spec 07 §7 defines `kestrel.lock` as a project-root file that records resolved dependency information for deterministic resolution without network access. This is primarily important for URL imports but also ensures reproducible builds for path dependencies.
 
 ## Current State
 
@@ -12,6 +14,10 @@ Spec 07 &sect;7 defines `kestrel.lock` as a project-root file that records resol
 - The compiler resolves imports on every compilation.
 - URL imports are rejected (`resolve.ts` returns `null` for URLs).
 - For local path imports, resolution is already deterministic (same project layout = same result).
+
+## Dependencies
+
+- Sequence **21** (URL imports) is the primary consumer. Lockfile for path-only projects is lower urgency.
 
 ## Acceptance Criteria
 
@@ -22,10 +28,6 @@ Spec 07 &sect;7 defines `kestrel.lock` as a project-root file that records resol
 - [ ] When a specifier is NOT in the lockfile, either error or resolve-and-update (implementation choice).
 - [ ] Integration test: create a lockfile, modify a dependency, verify the locked version is still used.
 
-## Dependencies
-
-- URL imports (story 27) are the primary use case. Lockfile for path imports is lower value.
-
 ## Spec References
 
-- 07-modules &sect;7 (Lockfile: format, location, behaviour)
+- 07-modules §7 (Lockfile: format, location, behaviour)

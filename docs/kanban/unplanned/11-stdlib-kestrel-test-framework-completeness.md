@@ -1,6 +1,8 @@
 # Stdlib kestrel:test Framework Completeness
 
-## Priority: 110 (Medium)
+## Sequence: 11
+## Tier: 4 — Stdlib and test harness
+## Former ID: 110
 
 ## Summary
 
@@ -28,5 +30,5 @@ The `kestrel:test` module provides a working test framework (`Suite`, `group`, `
 
 ## Spec References
 
-- 08-tests &sect;3.5 (Coverage goals: test harness)
-- 09-tools &sect;2.4 (kestrel test command)
+- 08-tests §3.5 (Coverage goals: test harness)
+- 09-tools §2.4 (kestrel test command)

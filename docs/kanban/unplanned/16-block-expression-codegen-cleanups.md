@@ -1,6 +1,8 @@
 # Block Expression Codegen Cleanups
 
-## Priority: 90 (Medium)
+## Sequence: 16
+## Tier: 6 — Polish
+## Former ID: 90
 
 ## Summary
 

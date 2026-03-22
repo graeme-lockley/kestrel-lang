@@ -1,6 +1,8 @@
 # Namespace constructor access (`M.Ctor(args)`)
 
-## Priority: 82 (Medium)
+## Sequence: 07
+## Tier: 3 — Complete the core language
+## Former ID: 82
 
 ## Summary
 
@@ -9,7 +11,7 @@ Allow calling **exported** ADT constructors through a namespace, e.g. `import * 
 ## Scope
 
 - **In scope**: For a namespace `M` and an exported (non-opaque) ADT, treat constructor names as names visible on `M`. Typecheck `M.Ctor(args)` and emit CONSTRUCT using the dependency's ADT/constructor (same as named import of the constructor would).
-- **Out of scope**: Opaque types' constructors remain inaccessible (no change to 15-opaque-types).
+- **Out of scope**: Opaque types' constructors remain inaccessible (no change to opaque-types semantics).
 
 ## Acceptance Criteria
 
@@ -21,4 +23,4 @@ Allow calling **exported** ADT constructors through a namespace, e.g. `import * 
 
 ## Notes
 
-- Namespace imports (80) already support val, var, fun, and type names (including qualified type annotations like `Lib.PublicToken`). This story adds **constructor** names to the namespace binding set and codegen for `M.Ctor(args)`.
+- Namespace imports already support val, var, fun, and type names (including qualified type annotations like `Lib.PublicToken`). This story adds **constructor** names to the namespace binding set and codegen for `M.Ctor(args)`.

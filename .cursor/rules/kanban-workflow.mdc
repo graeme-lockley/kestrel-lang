@@ -7,16 +7,22 @@ alwaysApply: true
 
 Stories live in `docs/kanban/` with folders: **unplanned**, **backlog**, **doing**, **done**.
 
+## Roadmap and priority
+
+- The **ordered roadmap** is in **`docs/kanban/unplanned/`**.
+- Filenames use **`NN-slug.md`**; **`NN`** is the **priority sequence** (01 = highest). Work through lower numbers first unless the story is verification-only or explicitly deferred (see tier in each file).
+- **`docs/kanban/backlog/`** is **optional staging** and is usually empty. Do not assume “ready work” lives only there.
+
 ## Workflow
 
-1. **unplanned** — Stories for refinement. The human moves refined stories to backlog.
-2. **backlog** — Ready for work. Pick up stories from here.
+1. **unplanned** — Full prioritized list. Pick the next story by **lowest sequence** that still needs implementation.
+2. **backlog** (optional) — Move a story here if the team uses it as a short “about to start” buffer.
 3. **doing** — Active work. When starting a story, move it here.
-4. **done** — Completed. When a story is complete, move it here.
+4. **done** — Completed. When finished, move the story here.
 
 ## When Picking Up a Story
 
-1. Move the story file from `docs/kanban/backlog/` to `docs/kanban/doing/`.
+1. Move the story file from `docs/kanban/unplanned/` or `docs/kanban/backlog/` to `docs/kanban/doing/`.
 2. Add a **Tasks** section to the story with concrete checkboxes, e.g.:
    ```markdown
    ## Tasks
@@ -32,4 +38,6 @@ Stories live in `docs/kanban/` with folders: **unplanned**, **backlog**, **doing
 
 ## Story Format
 
-Stories are markdown files. Include: title, description, acceptance criteria, and tasks (once in doing).
+Stories are markdown files. Include: title, summary, current state, acceptance criteria, spec references, and tasks (once in doing).
+
+See `docs/kanban/README.md` for the tier table and sequence meaning.

@@ -200,16 +200,18 @@ Before marking a task complete:
 
 Stories live in `docs/kanban/` with folders: **unplanned**, **backlog**, **doing**, **done**.
 
+The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named `NN-slug.md` (01 = highest priority). See `docs/kanban/README.md` for the tier table. **`backlog/`** is optional staging and is usually empty.
+
 ### Workflow
 
-1. **unplanned** — Stories for refinement. The human moves refined stories to backlog.
-2. **backlog** — Ready for work. Pick up stories from here.
+1. **unplanned** — Full ordered roadmap. Pick the lowest **sequence** number that still needs work.
+2. **backlog** — Optional “about to start” buffer; not required for picking up work.
 3. **doing** — Active work. When starting a story, move it here.
 4. **done** — Completed. When a story is complete, move it here.
 
 ### When Picking Up a Story
 
-1. Move the story file from `docs/kanban/backlog/` to `docs/kanban/doing/`.
+1. Move the story file from `docs/kanban/unplanned/` or `docs/kanban/backlog/` to `docs/kanban/doing/`.
 2. Add a **Tasks** section to the story with concrete checkboxes, e.g.:
    ```markdown
    ## Tasks

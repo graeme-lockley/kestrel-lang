@@ -1,18 +1,20 @@
 # Disassembler Improvements
 
-## Priority: 175 (Low)
+## Sequence: 17
+## Tier: 6 — Polish
+## Former ID: 175
 
 ## Summary
 
-The `kestrel dis` command provides basic bytecode disassembly but could be enhanced with more context: function boundaries, constant values inline, source line annotations (once debug section is populated), shape/ADT table dumps, and cross-references.
+The `kestrel dis` command provides basic bytecode disassembly but could be enhanced with more context: function boundaries, constant values inline, source line annotations when the debug section is populated, shape/ADT table dumps, and cross-references.
 
 ## Current State
 
-- `disasm.ts` (285 lines): Reads .kbc, parses headers, disassembles code section with mnemonic names.
+- `disasm.ts`: Reads .kbc, parses headers, disassembles code section with mnemonic names.
 - Shows constant annotations (e.g., `LOAD_CONST 0 ; Int(42)`).
 - Does not show function boundaries.
 - Does not show shape table or ADT table contents.
-- Does not annotate with source lines (debug section is empty).
+- May not annotate with source lines when debug section is empty or unmapped.
 
 ## Acceptance Criteria
 
@@ -20,9 +22,9 @@ The `kestrel dis` command provides basic bytecode disassembly but could be enhan
 - [ ] Show shape table contents: field names per shape.
 - [ ] Show ADT table contents: type names and constructor names.
 - [ ] Show import table: module specifiers.
-- [ ] If debug section is populated (story 06), annotate instructions with source file:line.
+- [ ] If debug section is populated, annotate instructions with source file:line.
 - [ ] Optional `--verbose` flag for full table dumps vs. `--code-only` for just instructions.
 
 ## Spec References
 
-- 09-tools &sect;2.2 (kestrel dis: disassemble bytecode)
+- 09-tools §2.2 (kestrel dis: disassemble bytecode)
