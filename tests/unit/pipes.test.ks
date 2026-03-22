@@ -3,6 +3,7 @@ import { Suite, group, eq } from "kestrel:test"
 fun double(x: Int): Int = x * 2
 fun add1(x: Int): Int = x + 1
 fun triple(x: Int): Int = x * 3
+fun addPair(x: Int, y: Int): Int = x + y
 
 export fun run(s: Suite): Unit =
   group(s, "pipes", (s1: Suite) => {
@@ -14,6 +15,11 @@ export fun run(s: Suite): Unit =
     group(s1, "chained", (sg: Suite) => {
       eq(sg, "3 |> double |> add1", 3 |> double |> add1, 7)
       eq(sg, "2 |> double |> add1 |> triple", 2 |> double |> add1 |> triple, 15)
+    })
+
+    group(s1, "pipe inserts first arg", (sg: Suite) => {
+      eq(sg, "1 |> addPair(2)", 1 |> addPair(2), 3)
+      eq(sg, "addPair(1) <| 2", addPair(1) <| 2, 3)
     })
 
     group(s1, "backward pipe", (sg: Suite) => {
