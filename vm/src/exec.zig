@@ -593,7 +593,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 pc += 8;
 
                 // Check for primitive functions (0xFFFFFF00 range)
-                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF18 and sp >= arity) {
+                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF25 and sp >= arity) {
                     if (fn_id == 0xFFFFFF00 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, false, module_ptrs.items);
@@ -770,6 +770,85 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const c_v = stack[sp - 1];
                         sp -= 1;
                         stack[sp] = primitives.charCodePoint(c_v);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF19 and arity == 2) {
+                        const idx_v = stack[sp - 1];
+                        const s_v = stack[sp - 2];
+                        sp -= 2;
+                        stack[sp] = primitives.stringCharAt(s_v, idx_v);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF1a and arity == 1) {
+                        const c_v = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.charToString(&gc, c_v);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF1b and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.stringLower(&gc, arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF1c and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.intToFloat(&gc, arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF1d and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.floatToInt(arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF1e and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.floatFloor(arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF1f and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.floatCeil(arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF20 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.floatRound(arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF21 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.floatSqrt(&gc, arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF22 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.floatIsNan(arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF23 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.floatIsInfinite(arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF24 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.floatAbs(&gc, arg);
+                        sp += 1;
+                        continue;
+                    } else if (fn_id == 0xFFFFFF25 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        stack[sp] = primitives.charFromCode(arg);
                         sp += 1;
                         continue;
                     }

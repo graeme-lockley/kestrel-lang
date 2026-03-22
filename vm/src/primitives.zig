@@ -707,6 +707,28 @@ pub fn stringUpper(gc: *GC, s_val: Value) Value {
     return allocString(gc, out.items) catch Value.ptr(0);
 }
 
+/// (String) -> String: lowercase copy. Basic Latin A–Z only; other code points unchanged (ASCII-focused tests).
+pub fn stringLower(gc: *GC, s_val: Value) Value {
+    const s = getStringSlice(s_val) orelse return Value.ptr(0);
+    var out = std.ArrayList(u8).initCapacity(page_alloc, s.len * 2) catch return Value.ptr(0);
+    defer out.deinit(page_alloc);
+    const view = std.unicode.Utf8View.init(s) catch {
+        for (s) |c| {
+            const lo = if (c >= 'A' and c <= 'Z') c + 32 else c;
+            out.append(page_alloc, lo) catch return Value.ptr(0);
+        }
+        return allocString(gc, out.items) catch Value.ptr(0);
+    };
+    var iter = view.iterator();
+    while (iter.nextCodepoint()) |c| {
+        const lower: u21 = if (c >= 'A' and c <= 'Z') c + 32 else c;
+        var buf: [4]u8 = undefined;
+        const n = std.unicode.utf8Encode(lower, &buf) catch 1;
+        out.appendSlice(page_alloc, buf[0..n]) catch return Value.ptr(0);
+    }
+    return allocString(gc, out.items) catch Value.ptr(0);
+}
+
 fn isAsciiWhitespaceCp(c: u21) bool {
     return c == ' ' or c == '\t' or c == '\n' or c == '\r' or c == 0x0b or c == 0x0c;
 }
@@ -758,6 +780,99 @@ pub fn stringCodePointAt(s_val: Value, i_val: Value) Value {
         cur += 1;
     }
     return Value.int(-1);
+}
+
+/// (String, Int) -> Char: code point at character index `i`, or U+0000 if out of range.
+pub fn stringCharAt(s_val: Value, i_val: Value) Value {
+    const cp = stringCodePointAt(s_val, i_val);
+    if (cp.tag != .int) return Value.char(0);
+    const n = Value.intTo(cp);
+    if (n < 0) return Value.char(0);
+    return Value.char(@truncate(@as(u64, @intCast(n))));
+}
+
+/// (Char) -> String: UTF-8 encoding of the single code point.
+pub fn charToString(gc: *GC, c_val: Value) Value {
+    if (c_val.tag != .char) return allocString(gc, "") catch Value.ptr(0);
+    const cp: u21 = @truncate(c_val.payload);
+    var buf: [4]u8 = undefined;
+    const written = std.unicode.utf8Encode(cp, &buf) catch return allocString(gc, "") catch Value.ptr(0);
+    return allocString(gc, buf[0..written]) catch Value.ptr(0);
+}
+
+fn getFloatPayload(v: Value) ?f64 {
+    if (v.tag != .ptr) return null;
+    const addr = Value.ptrTo(v);
+    if (addr == 0) return null;
+    const base = @as([*]const u8, @ptrFromInt(addr));
+    if (base[0] != gc_mod.FLOAT_KIND) return null;
+    return @as(*const f64, @alignCast(@ptrCast(base + gc_mod.FLOAT_HEADER))).*;
+}
+
+/// (Int) -> Float
+pub fn intToFloat(gc: *GC, n_val: Value) Value {
+    if (n_val.tag != .int) return gc.allocFloat(0) catch Value.ptr(0);
+    const n = Value.intTo(n_val);
+    return gc.allocFloat(@floatFromInt(n)) catch Value.ptr(0);
+}
+
+/// (Float) -> Int (truncate toward zero)
+pub fn floatToInt(f_val: Value) Value {
+    const f = getFloatPayload(f_val) orelse return Value.int(0);
+    return Value.int(@intFromFloat(@trunc(f)));
+}
+
+/// (Float) -> Int (floor)
+pub fn floatFloor(f_val: Value) Value {
+    const f = getFloatPayload(f_val) orelse return Value.int(0);
+    return Value.int(@intFromFloat(@floor(f)));
+}
+
+/// (Float) -> Int (ceil)
+pub fn floatCeil(f_val: Value) Value {
+    const f = getFloatPayload(f_val) orelse return Value.int(0);
+    return Value.int(@intFromFloat(@ceil(f)));
+}
+
+/// (Float) -> Int (round to nearest, ties to even)
+pub fn floatRound(f_val: Value) Value {
+    const f = getFloatPayload(f_val) orelse return Value.int(0);
+    return Value.int(@intFromFloat(@round(f)));
+}
+
+/// (Float) -> Float
+pub fn floatSqrt(gc: *GC, f_val: Value) Value {
+    const f = getFloatPayload(f_val) orelse return gc.allocFloat(0) catch Value.ptr(0);
+    if (std.math.isNan(f) or f < 0) return gc.allocFloat(std.math.nan(f64)) catch Value.ptr(0);
+    return gc.allocFloat(@sqrt(f)) catch Value.ptr(0);
+}
+
+/// (Float) -> Bool
+pub fn floatIsNan(f_val: Value) Value {
+    const f = getFloatPayload(f_val) orelse return Value.boolVal(false);
+    return Value.boolVal(std.math.isNan(f));
+}
+
+/// (Float) -> Bool
+pub fn floatIsInfinite(f_val: Value) Value {
+    const f = getFloatPayload(f_val) orelse return Value.boolVal(false);
+    return Value.boolVal(std.math.isInf(f));
+}
+
+/// (Float) -> Float
+pub fn floatAbs(gc: *GC, f_val: Value) Value {
+    const f = getFloatPayload(f_val) orelse return gc.allocFloat(0) catch Value.ptr(0);
+    return gc.allocFloat(@abs(f)) catch Value.ptr(0);
+}
+
+/// (Int) -> Char: valid Unicode scalar, else U+0000
+pub fn charFromCode(n_val: Value) Value {
+    if (n_val.tag != .int) return Value.char(0);
+    const n = Value.intTo(n_val);
+    if (n < 0 or n > 0x10FFFF) return Value.char(0);
+    const u: u32 = @intCast(n);
+    if (u >= 0xD800 and u <= 0xDFFF) return Value.char(0);
+    return Value.char(u);
 }
 
 // --- Process/FS primitives ---
