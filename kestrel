@@ -1,2 +1,10 @@
 #!/usr/bin/env bash
-exec "$(dirname "$0")/scripts/kestrel" "$@"
+set -euo pipefail
+SOURCE="$0"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+REAL_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+exec "$REAL_DIR/scripts/kestrel" "$@"
