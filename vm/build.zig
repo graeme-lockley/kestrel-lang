@@ -14,6 +14,8 @@ pub fn build(b: *std.Build) void {
         .name = "kestrel",
         .root_module = root_mod,
     });
+    // Required on Linux (Zig 0.15+): std.c via primitives.getProcess must link libc explicitly.
+    exe.linkLibC();
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
@@ -24,6 +26,7 @@ pub fn build(b: *std.Build) void {
     const tests = b.addTest(.{
         .root_module = root_mod,
     });
+    tests.linkLibC();
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run VM unit tests");
     test_step.dependOn(&run_tests.step);
