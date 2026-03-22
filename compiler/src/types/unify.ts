@@ -131,15 +131,50 @@ function occurs(id: number, t: InternalType): boolean {
   return false;
 }
 
+/** Generic type aliases: expand `App(name, args)` to body during unification (and field access). */
+export type GenericTypeAliasDefs = Map<string, { paramVarIds: number[]; body: InternalType }>;
+
+function expandGenericAliasAppOnce(
+  t: InternalType,
+  subst: Map<number, InternalType>,
+  defs: GenericTypeAliasDefs | undefined
+): InternalType {
+  if (defs == null || t.kind !== 'app') return t;
+  const def = defs.get(t.name);
+  if (!def || def.paramVarIds.length !== t.args.length) return t;
+  const m = new Map<number, InternalType>();
+  for (let i = 0; i < def.paramVarIds.length; i++) {
+    m.set(def.paramVarIds[i]!, applySubst(t.args[i]!, subst));
+  }
+  return applySubst(def.body, m);
+}
+
+/** Apply substitution then expand generic alias heads (up to two layers). */
+export function expandGenericAliasHead(
+  t: InternalType,
+  subst: Map<number, InternalType>,
+  defs: GenericTypeAliasDefs | undefined
+): InternalType {
+  let a = applySubst(t, subst);
+  a = expandGenericAliasAppOnce(a, subst, defs);
+  a = expandGenericAliasAppOnce(a, subst, defs);
+  return a;
+}
+
 /**
  * Unify two types; mutates subst. On success, after return, applySubst(left, subst) === applySubst(right, subst).
  */
-export function unify(left: InternalType, right: InternalType, subst: Map<number, InternalType>): void {
+export function unify(
+  left: InternalType,
+  right: InternalType,
+  subst: Map<number, InternalType>,
+  genericAliases?: GenericTypeAliasDefs
+): void {
   if (left == null || right == null) {
     throw new Error('unify called with null or undefined type');
   }
-  const l = applySubst(left, subst);
-  const r = applySubst(right, subst);
+  const l = expandGenericAliasHead(left, subst, genericAliases);
+  const r = expandGenericAliasHead(right, subst, genericAliases);
 
   if (l.kind === 'var') {
     if (r.kind === 'var' && r.id === l.id) return;
@@ -166,18 +201,18 @@ export function unify(left: InternalType, right: InternalType, subst: Map<number
   }
   if (l.kind === 'arrow' && r.kind === 'arrow') {
     if (l.params.length !== r.params.length) throw new UnifyError(left, right);
-    for (let i = 0; i < l.params.length; i++) unify(l.params[i]!, r.params[i]!, subst);
-    unify(l.return, r.return, subst);
+    for (let i = 0; i < l.params.length; i++) unify(l.params[i]!, r.params[i]!, subst, genericAliases);
+    unify(l.return, r.return, subst, genericAliases);
     return;
   }
   if (l.kind === 'tuple' && r.kind === 'tuple') {
     if (l.elements.length !== r.elements.length) throw new UnifyError(left, right);
-    for (let i = 0; i < l.elements.length; i++) unify(l.elements[i]!, r.elements[i]!, subst);
+    for (let i = 0; i < l.elements.length; i++) unify(l.elements[i]!, r.elements[i]!, subst, genericAliases);
     return;
   }
   if (l.kind === 'app' && r.kind === 'app') {
     if (l.name !== r.name || l.args.length !== r.args.length) throw new UnifyError(left, right);
-    for (let i = 0; i < l.args.length; i++) unify(l.args[i]!, r.args[i]!, subst);
+    for (let i = 0; i < l.args.length; i++) unify(l.args[i]!, r.args[i]!, subst, genericAliases);
     return;
   }
 
@@ -199,7 +234,7 @@ export function unify(left: InternalType, right: InternalType, subst: Map<number
           throw new UnifyError(left, right, `Field '${name}' mutability mismatch`);
         }
         // Unify field types
-        unify(lField.type, rField.type, subst);
+        unify(lField.type, rField.type, subst, genericAliases);
       }
     }
 
@@ -214,7 +249,7 @@ export function unify(left: InternalType, right: InternalType, subst: Map<number
       }
       // Unify r's row with a record containing l's extra fields
       const lExtra: InternalType = { kind: 'record', fields: lOnly, row: l.row };
-      unify(r.row, lExtra, subst);
+      unify(r.row, lExtra, subst, genericAliases);
       return;
     }
 
@@ -225,21 +260,21 @@ export function unify(left: InternalType, right: InternalType, subst: Map<number
       }
       // Unify l's row with a record containing r's extra fields
       const rExtra: InternalType = { kind: 'record', fields: rOnly, row: r.row };
-      unify(l.row, rExtra, subst);
+      unify(l.row, rExtra, subst, genericAliases);
       return;
     }
 
     // Both have same fields, unify row variables if present
     if (l.row && r.row) {
-      unify(l.row, r.row, subst);
+      unify(l.row, r.row, subst, genericAliases);
     } else if (l.row && !r.row) {
       // l's row must be empty (closed record)
       const emptyRow: InternalType = { kind: 'record', fields: [] };
-      unify(l.row, emptyRow, subst);
+      unify(l.row, emptyRow, subst, genericAliases);
     } else if (!l.row && r.row) {
       // r's row must be empty (closed record)
       const emptyRow: InternalType = { kind: 'record', fields: [] };
-      unify(r.row, emptyRow, subst);
+      unify(r.row, emptyRow, subst, genericAliases);
     }
     // else both closed records with same fields - success
     return;

@@ -250,7 +250,7 @@ export function compileFile(
       let usedTypesFile = false;
       if (getOutputPaths) {
         const paths = getOutputPaths(depPath);
-        if (isTypesFileFresh(paths.kti, depPath)) {
+        if (isTypesFileFresh(paths.kti, depPath, paths.kbc)) {
           // If any transitive dep is in the stale set, force recompile (so m2 recompiles when m3 is stale)
           let anyTransitiveStale = false;
           if (stalePaths?.size) {
@@ -464,6 +464,7 @@ export function compileFile(
 
     const namespaceFuncIds = new Map<string, Map<string, number>>();
     const namespaceVarSetterIds = new Map<string, Map<string, number>>();
+    const namespaceThunkFields = new Map<string, Set<string>>();
     for (let specIndex = 0; specIndex < specs.length; specIndex++) {
       const spec = specs[specIndex]!;
       const dep = depResults.find((d) => d.spec === spec);
@@ -472,9 +473,13 @@ export function compileFile(
         if (imp.kind !== 'NamespaceImport' || imp.spec !== spec) continue;
         const perNsFuncIds = new Map<string, number>();
         const perNsSetterIds = new Map<string, number>();
+        const perNsThunks = new Set<string>();
         if (dep.fromTypesFile) {
           const { nameToExport } = dep;
           for (const [name, exp] of nameToExport) {
+            if (exp.exportKind === 'val' || exp.exportKind === 'var') {
+              perNsThunks.add(name);
+            }
             if (exp.setter_index !== undefined) {
               importedFunctionTable.push({ importIndex: specIndex, functionIndex: exp.function_index });
               perNsFuncIds.set(name, mainFuncCount + importedFunctionTable.length - 1);
@@ -486,13 +491,16 @@ export function compileFile(
             }
           }
         } else {
-          const { result, exportSet } = dep;
+          const { result, exportSet, program: depProgram } = dep;
           const depNameToIndex = new Map<string, number>();
           for (let i = 0; i < result.functionTable.length; i++) {
             const fnName = result.stringTable[result.functionTable[i]!.nameIndex];
             if (fnName && !fnName.endsWith('$set')) depNameToIndex.set(fnName, i);
           }
           for (const name of exportSet) {
+            if (isExportThunk(depProgram, name)) {
+              perNsThunks.add(name);
+            }
             const depIdx = depNameToIndex.get(name);
             if (depIdx === undefined) continue;
             const setterIdx = result.varSetterIndices?.get(name);
@@ -509,6 +517,7 @@ export function compileFile(
         }
         namespaceFuncIds.set(imp.name, perNsFuncIds);
         if (perNsSetterIds.size > 0) namespaceVarSetterIds.set(imp.name, perNsSetterIds);
+        if (perNsThunks.size > 0) namespaceThunkFields.set(imp.name, perNsThunks);
       }
     }
 
@@ -519,6 +528,7 @@ export function compileFile(
       localFuncCount: mainFuncCount,
       namespaceFuncIds: namespaceFuncIds.size > 0 ? namespaceFuncIds : undefined,
       namespaceVarSetterIds: namespaceVarSetterIds.size > 0 ? namespaceVarSetterIds : undefined,
+      namespaceThunkFields: namespaceThunkFields.size > 0 ? namespaceThunkFields : undefined,
       sourceFile: filePath,
     });
     mainResult.importedFunctionTable = importedFunctionTable;
@@ -569,7 +579,13 @@ export function compileFile(
     const dependencyPaths = [
       filePath,
       ...depResults.flatMap((d) => {
-        if ('dependencyPaths' in d) return [d.path, ...d.dependencyPaths];
+        if ('dependencyPaths' in d) {
+          if (getOutputPaths) {
+            const depKbc = getOutputPaths(d.path).kbc;
+            return [d.path, depKbc, ...d.dependencyPaths];
+          }
+          return [d.path, ...d.dependencyPaths];
+        }
         const transitive: string[] = [];
         if (getOutputPaths) {
           const depPaths = getOutputPaths(d.path);
@@ -585,6 +601,7 @@ export function compileFile(
               /* ignore */
             }
           }
+          return [d.path, depPaths.kbc, ...transitive];
         }
         return [d.path, ...transitive];
       }),

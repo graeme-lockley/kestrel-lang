@@ -309,11 +309,19 @@ export function readTypesFile(path: string): { exports: Map<string, ResolvedType
 /**
  * Check if a types file exists and is not stale relative to sourcePath.
  * Returns true if typesPath exists and is newer than sourcePath (or sourcePath doesn't exist).
+ *
+ * When `bytecodePath` is set and that file exists, the types file must also be at least as new
+ * as the dependency `.kbc`; otherwise exported `function_index` values in the .kti can disagree
+ * with the actual bytecode (e.g. after a recompile that changed the function table order).
  */
-export function isTypesFileFresh(typesPath: string, sourcePath: string): boolean {
+export function isTypesFileFresh(typesPath: string, sourcePath: string, bytecodePath?: string): boolean {
   try {
     const typesStat = statSync(typesPath, { throwIfNoEntry: false });
     if (!typesStat?.isFile()) return false;
+    if (bytecodePath) {
+      const kbcStat = statSync(bytecodePath, { throwIfNoEntry: false });
+      if (kbcStat?.isFile() && typesStat.mtimeMs < kbcStat.mtimeMs) return false;
+    }
     let sourceStat: ReturnType<typeof statSync> | null = null;
     try {
       sourceStat = statSync(sourcePath, { throwIfNoEntry: false });

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { writeTypesFile, readTypesFile, isTypesFileFresh } from '../../src/types-file.js';
 import type { TypesFileExportInput } from '../../src/types-file.js';
 import type { InternalType } from '../../src/types/internal.js';
-import { writeFileSync, mkdirSync, rmSync } from 'fs';
+import { writeFileSync, mkdirSync, rmSync, statSync, utimesSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -200,6 +200,21 @@ describe('types-file', () => {
     writeFileSync(ksPath, 'export fun f(): Int = 1');
     writeTypesFile(ktiPath, new Map());
     expect(isTypesFileFresh(ktiPath, ksPath)).toBe(true);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('isTypesFileFresh returns false when .kbc is newer than .kti', () => {
+    mkdirSync(dir, { recursive: true });
+    const ktiPath = join(dir, 'm.kti');
+    const ksPath = join(dir, 'm.ks');
+    const kbcPath = join(dir, 'm.kbc');
+    writeFileSync(ksPath, 'export fun f(): Int = 1');
+    writeFileSync(kbcPath, 'KBC1');
+    writeTypesFile(ktiPath, new Map());
+    const ktiStat = statSync(ktiPath);
+    const past = new Date(ktiStat.mtimeMs - 60_000);
+    utimesSync(ktiPath, past, past);
+    expect(isTypesFileFresh(ktiPath, ksPath, kbcPath)).toBe(false);
     rmSync(dir, { recursive: true, force: true });
   });
 });

@@ -78,6 +78,18 @@ import {
   codeRestore,
 } from '../bytecode/instructions.js';
 
+/** Next local slot: max(existing slots)+1. Do not use Map.size — replacing $scrutinee does not grow the map, which caused head/scrutinee slot collisions in nested matches (e.g. zip). */
+function nextLocalSlot(env: Map<string, number>): number {
+  let m = -1;
+  for (const v of env.values()) m = Math.max(m, v);
+  return m + 1;
+}
+
+/** Slots for match pattern bindings must be strictly after the scrutinee local; nested matches reuse the `$scrutinee` map key so nextLocalSlot alone can equal scrutineeSlot (clobber list before tail getField). */
+function nextPatternBindSlot(env: Map<string, number>, scrutineeSlot: number): number {
+  return Math.max(nextLocalSlot(env), scrutineeSlot + 1);
+}
+
 export interface FunctionEntry {
   nameIndex: number;
   arity: number;
@@ -468,6 +480,7 @@ function makeEmitExpr(
   importedVarSetterIds?: Map<string, number>,
   namespaceFuncIds?: Map<string, Map<string, number>>,
   namespaceVarSetterIds?: Map<string, Map<string, number>>,
+  namespaceThunkFields?: Map<string, Set<string>>,
   importedThunkLocals?: Set<string>,
   localFuncCount?: number,
   moduleTopLevelFunDeclCount?: number,
@@ -1135,7 +1148,15 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         const nsMap = namespaceFuncIds?.get(expr.object.name);
         const fnId = nsMap?.get(expr.field);
         if (fnId !== undefined) {
-          emitCall(fnId, 0);
+          const lfc = localFuncCount ?? 0;
+          const isThunk = namespaceThunkFields?.get(expr.object.name)?.has(expr.field) ?? false;
+          if (isThunk) {
+            emitCall(fnId, 0);
+          } else if (fnId >= lfc) {
+            emitLoadImportedFn(fnId - lfc);
+          } else {
+            emitLoadFn(fnId);
+          }
           break;
         }
       }
@@ -1145,6 +1166,10 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         if (i >= 0 && i < objType.elements.length) slot = i;
       } else if (objType?.kind === 'record') {
         slot = objType.fields.findIndex((f) => f.name === expr.field);
+      } else if (objType?.kind === 'app' && objType.name === 'Dict') {
+        // kestrel:dict layout (opaque / placeholder App types may use 0 or 2 args depending on .kti)
+        const dictFieldOrder = ['hash', 'eq', 'entries'];
+        slot = dictFieldOrder.indexOf(expr.field);
       } else if (expr.object.kind === 'RecordExpr') {
         slot = expr.object.fields.findIndex((f) => f.name === expr.field);
       } else if (expr.object.kind === 'TupleExpr') {
@@ -1218,9 +1243,20 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF0C, 2);
           break;
         }
+        if (expr.callee.name === '__string_concat' && expr.args.length === 2) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff04, 2);
+          break;
+        }
         if (expr.callee.name === '__string_upper' && expr.args.length === 1) {
           emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF0D, 1);
+          break;
+        }
+        if (expr.callee.name === '__string_lower' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff1b, 1);
           break;
         }
         if (expr.callee.name === '__string_trim' && expr.args.length === 1) {
@@ -1237,6 +1273,67 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         if (expr.callee.name === '__char_code_point' && expr.args.length === 1) {
           emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
           emitCall(0xFFFFFF18, 1);
+          break;
+        }
+        if (expr.callee.name === '__string_char_at' && expr.args.length === 2) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff19, 2);
+          break;
+        }
+        if (expr.callee.name === '__char_to_string' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff1a, 1);
+          break;
+        }
+        if (expr.callee.name === '__int_to_float' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff1c, 1);
+          break;
+        }
+        if (expr.callee.name === '__float_to_int' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff1d, 1);
+          break;
+        }
+        if (expr.callee.name === '__float_floor' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff1e, 1);
+          break;
+        }
+        if (expr.callee.name === '__float_ceil' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff1f, 1);
+          break;
+        }
+        if (expr.callee.name === '__float_round' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff20, 1);
+          break;
+        }
+        if (expr.callee.name === '__float_sqrt' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff21, 1);
+          break;
+        }
+        if (expr.callee.name === '__float_is_nan' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff22, 1);
+          break;
+        }
+        if (expr.callee.name === '__float_is_infinite' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff23, 1);
+          break;
+        }
+        if (expr.callee.name === '__float_abs' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff24, 1);
+          break;
+        }
+        if (expr.callee.name === '__char_from_code' && expr.args.length === 1) {
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitCall(0xffffff25, 1);
           break;
         }
         if (expr.callee.name === '__format_one' && expr.args.length === 1) {
@@ -1389,7 +1486,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       // match (scrutinee) { Pat1 => e1; Pat2 => e2; ... }
       emitExpr(expr.scrutinee, env, funNameToId, shapes, adts, captures, varNames);
 
-      const scrutineeSlot = env.size;
+      const scrutineeSlot = nextLocalSlot(env);
       env.set('$scrutinee', scrutineeSlot);
       emitStoreLocal(scrutineeSlot);
 
@@ -1435,14 +1532,14 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             const arity = ctorName != null ? (config.ctorArity[ctorName] ?? 0) : 0;
             if (matchCase.pattern.kind === 'ConsPattern' && arity === 2) {
               if (matchCase.pattern.head.kind === 'VarPattern') {
-                const headSlot = env.size;
+                const headSlot = nextPatternBindSlot(env, scrutineeSlot);
                 env.set(matchCase.pattern.head.name, headSlot);
                 emitLoadLocal(scrutineeSlot);
                 emitGetField(0);
                 emitStoreLocal(headSlot);
               }
               if (matchCase.pattern.tail.kind === 'VarPattern') {
-                const tailSlot = env.size;
+                const tailSlot = nextPatternBindSlot(env, scrutineeSlot);
                 env.set(matchCase.pattern.tail.name, tailSlot);
                 emitLoadLocal(scrutineeSlot);
                 emitGetField(1);
@@ -1450,11 +1547,13 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               }
             } else if (matchCase.pattern.kind === 'ConstructorPattern' && matchCase.pattern.fields?.length) {
               const fieldCount = config.ctorArity[matchCase.pattern.name] ?? 0;
+              let firstCtorVarBind = true;
               for (let f = 0; f < fieldCount && f < matchCase.pattern.fields.length; f++) {
                 const field = matchCase.pattern.fields[f];
                 const pat = field?.pattern ?? (matchCase.pattern as { fields?: { pattern?: { kind: string; name?: string } }[] }).fields?.[f]?.pattern;
                 if (pat?.kind === 'VarPattern' && pat.name != null) {
-                  const slot = env.size;
+                  const slot = firstCtorVarBind ? nextPatternBindSlot(env, scrutineeSlot) : nextLocalSlot(env);
+                  firstCtorVarBind = false;
                   env.set(pat.name, slot);
                   emitLoadLocal(scrutineeSlot);
                   emitGetField(f);
@@ -1499,7 +1598,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       } else {
         const firstCase = expr.cases[0];
         if (firstCase && firstCase.pattern.kind === 'VarPattern') {
-          const slot = env.size;
+          const slot = nextLocalSlot(env);
           env.set(firstCase.pattern.name, slot);
           emitLoadLocal(scrutineeSlot);
           emitStoreLocal(slot);
@@ -1511,7 +1610,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             for (let i = 0; i < firstCase.pattern.elements.length; i++) {
               const elemPat = firstCase.pattern.elements[i]!;
               if (elemPat.kind === 'VarPattern') {
-                const slot = env.size;
+                const slot = nextLocalSlot(env);
                 env.set(elemPat.name, slot);
                 emitLoadLocal(scrutineeSlot);
                 emitGetField(i);
@@ -1601,10 +1700,16 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
     }
     case 'PipeExpr': {
       if (expr.op === '|>') {
-        const call: Expr = { kind: 'CallExpr', callee: expr.right, args: [expr.left] };
+        const call: Expr =
+          expr.right.kind === 'CallExpr'
+            ? { kind: 'CallExpr', callee: expr.right.callee, args: [expr.left, ...expr.right.args], span: expr.span }
+            : { kind: 'CallExpr', callee: expr.right, args: [expr.left], span: expr.span };
         emitExpr(call, env, funNameToId, shapes, adts, captures, varNames);
       } else {
-        const call: Expr = { kind: 'CallExpr', callee: expr.left, args: [expr.right] };
+        const call: Expr =
+          expr.left.kind === 'CallExpr'
+            ? { kind: 'CallExpr', callee: expr.left.callee, args: [...expr.left.args, expr.right], span: expr.span }
+            : { kind: 'CallExpr', callee: expr.left, args: [expr.right], span: expr.span };
         emitExpr(call, env, funNameToId, shapes, adts, captures, varNames);
       }
       break;
@@ -1696,6 +1801,8 @@ export interface CodegenOptions {
   namespaceFuncIds?: Map<string, Map<string, number>>;
   /** Map of namespace name -> (member name -> setter index) for namespace var assignment. */
   namespaceVarSetterIds?: Map<string, Map<string, number>>;
+  /** Namespace members that are export val/var getters (0-ary CALL); functions use LOAD_IMPORTED_FN. */
+  namespaceThunkFields?: Map<string, Set<string>>;
   /** Source file path for debug section (file:line in stack traces). */
   sourceFile?: string;
 }
@@ -1731,6 +1838,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     options?.importedVarSetterIds,
     options?.namespaceFuncIds,
     options?.namespaceVarSetterIds,
+    options?.namespaceThunkFields,
     options?.importedThunkLocals,
     options?.localFuncCount,
     funDecls.length,
@@ -1986,7 +2094,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
 
   // Init code may use temp slots (e.g. block-level FunStmt self-patch uses slot+1, slot+2).
   // Ensure enough globals so STORE_LOCAL(slot+1) and STORE_LOCAL(slot+2) succeed when slot is 0.
-  const nGlobals = Math.max(env.size, 3);
+  const nGlobals = Math.max(nextLocalSlot(env), 3);
 
   const varSetterIndices = new Map<string, number>();
 

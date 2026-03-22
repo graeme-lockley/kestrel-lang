@@ -6,7 +6,7 @@ import type { InternalType } from '../types/internal.js';
 import { freshVar, prim, tInt, tFloat, tBool, tString, tUnit, resetVarId, freeVars, generalize, instantiate } from '../types/internal.js';
 import { astTypeToInternal, astTypeToInternalWithScope } from '../types/from-ast.js';
 import type { ResolveQualifiedType } from '../types/from-ast.js';
-import { unify, applySubst, UnifyError } from '../types/unify.js';
+import { unify, applySubst, UnifyError, expandGenericAliasHead } from '../types/unify.js';
 import type { Diagnostic } from '../diagnostics/types.js';
 import { CODES, locationFromSpan, locationFileOnly } from '../diagnostics/types.js';
 import type { Span } from '../lexer/types.js';
@@ -55,6 +55,8 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
   const subst = new Map<number, InternalType>();
   const env = new Map<string, InternalType>();
   const typeAliases = new Map<string, InternalType>();
+  /** Generic type aliases (e.g. `type Dict<K,V> = { ... }`): expand `App` to body for unify / field access. */
+  const genericTypeAliasDefs = new Map<string, { paramVarIds: number[]; body: InternalType }>();
   const adtConstructors = new Map<string, { name: string; arity: number }[]>();
   const opaqueTypes = new Set<string>();
   const exportedTypeVisibility = new Map<string, 'local' | 'opaque' | 'export'>();
@@ -85,7 +87,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       );
     }
     try {
-      unify(left, right, subst);
+      unify(left, right, subst, genericTypeAliasDefs);
     } catch (e) {
       if (e instanceof UnifyError) {
         const err = e as UnifyError & { blameNode?: unknown; relatedNode?: unknown };
@@ -226,7 +228,17 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     params: [tString, tString],
     return: tBool,
   }, new Set()));
+  env.set('__string_concat', generalize({
+    kind: 'arrow',
+    params: [tString, tString],
+    return: tString,
+  }, new Set()));
   env.set('__string_upper', generalize({
+    kind: 'arrow',
+    params: [tString],
+    return: tString,
+  }, new Set()));
+  env.set('__string_lower', generalize({
     kind: 'arrow',
     params: [tString],
     return: tString,
@@ -245,6 +257,66 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     kind: 'arrow',
     params: [{ kind: 'prim', name: 'Char' }],
     return: tInt,
+  }, new Set()));
+  env.set('__string_char_at', generalize({
+    kind: 'arrow',
+    params: [tString, tInt],
+    return: { kind: 'prim', name: 'Char' },
+  }, new Set()));
+  env.set('__char_to_string', generalize({
+    kind: 'arrow',
+    params: [{ kind: 'prim', name: 'Char' }],
+    return: tString,
+  }, new Set()));
+  env.set('__int_to_float', generalize({
+    kind: 'arrow',
+    params: [tInt],
+    return: tFloat,
+  }, new Set()));
+  env.set('__float_to_int', generalize({
+    kind: 'arrow',
+    params: [tFloat],
+    return: tInt,
+  }, new Set()));
+  env.set('__float_floor', generalize({
+    kind: 'arrow',
+    params: [tFloat],
+    return: tInt,
+  }, new Set()));
+  env.set('__float_ceil', generalize({
+    kind: 'arrow',
+    params: [tFloat],
+    return: tInt,
+  }, new Set()));
+  env.set('__float_round', generalize({
+    kind: 'arrow',
+    params: [tFloat],
+    return: tInt,
+  }, new Set()));
+  env.set('__float_sqrt', generalize({
+    kind: 'arrow',
+    params: [tFloat],
+    return: tFloat,
+  }, new Set()));
+  env.set('__float_is_nan', generalize({
+    kind: 'arrow',
+    params: [tFloat],
+    return: tBool,
+  }, new Set()));
+  env.set('__float_is_infinite', generalize({
+    kind: 'arrow',
+    params: [tFloat],
+    return: tBool,
+  }, new Set()));
+  env.set('__float_abs', generalize({
+    kind: 'arrow',
+    params: [tFloat],
+    return: tFloat,
+  }, new Set()));
+  env.set('__char_from_code', generalize({
+    kind: 'arrow',
+    params: [tInt],
+    return: { kind: 'prim', name: 'Char' },
   }, new Set()));
   // Stack primitives (kestrel:stack): format one value to string, print one value
   const formatArgT = freshVar();
@@ -640,7 +712,15 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       }
       case 'FieldExpr': {
         const objT = inferExpr(expr.object);
-        const applied = apply(objT);
+        let applied = apply(objT);
+
+        if (applied.kind === 'app' && opaqueTypes.has(applied.name)) {
+          throw new TypeCheckError(
+            `Cannot access field '${expr.field}' on opaque type ${applied.name}`,
+            expr
+          );
+        }
+        applied = expandGenericAliasHead(objT, subst, genericTypeAliasDefs);
 
         if (applied.kind === 'namespace') {
           const fieldType = applied.bindings.get(expr.field);
@@ -886,14 +966,42 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         return result;
       }
       case 'PipeExpr': {
+        // Spec: `a |> f(x)` ≡ `f(a, x)`; `f(x) <| b` ≡ `f(x, b)` (piped value first or last arg).
+        if (expr.op === '|>') {
+          if (expr.right.kind === 'CallExpr') {
+            const merged: Expr = {
+              kind: 'CallExpr',
+              callee: expr.right.callee,
+              args: [expr.left, ...expr.right.args],
+              span: expr.span,
+            };
+            result = apply(inferExpr(merged));
+            setInferredType(expr, result);
+            return result;
+          }
+          const leftT = apply(inferExpr(expr.left));
+          const rightT = apply(inferExpr(expr.right));
+          result = freshVar();
+          unifyWithBlame(rightT, { kind: 'arrow', params: [leftT], return: result }, expr);
+          result = apply(result);
+          setInferredType(expr, result);
+          return result;
+        }
+        if (expr.left.kind === 'CallExpr') {
+          const merged: Expr = {
+            kind: 'CallExpr',
+            callee: expr.left.callee,
+            args: [...expr.left.args, expr.right],
+            span: expr.span,
+          };
+          result = apply(inferExpr(merged));
+          setInferredType(expr, result);
+          return result;
+        }
         const leftT = apply(inferExpr(expr.left));
         const rightT = apply(inferExpr(expr.right));
         result = freshVar();
-        if (expr.op === '|>') {
-          unifyWithBlame(rightT, { kind: 'arrow', params: [leftT], return: result }, expr);
-        } else {
-          unifyWithBlame(leftT, { kind: 'arrow', params: [rightT], return: result }, expr);
-        }
+        unifyWithBlame(leftT, { kind: 'arrow', params: [rightT], return: result }, expr);
         result = apply(result);
         setInferredType(expr, result);
         return result;
@@ -1022,7 +1130,16 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         // considered "in env" and get correctly quantified for polymorphism.
         env.delete(node.name);
         const appliedFnType = apply(fnType);
-        const scheme = generalize(appliedFnType, envFreeVars());
+        const envForGen = envFreeVars();
+        // Explicit function type parameters must always be quantified; they can appear in envFreeVars()
+        // via other bindings' inferred types and would otherwise leak as raw var ids into .kti exports.
+        if (node.typeParams) {
+          for (const tp of node.typeParams) {
+            const tv = sigScope.get(tp);
+            if (tv?.kind === 'var') envForGen.delete(tv.id);
+          }
+        }
+        const scheme = generalize(appliedFnType, envForGen);
         env.set(node.name, scheme);
       } else if (node.kind === 'TypeDecl') {
         // Opaque types from the current module are fully accessible within that module
@@ -1030,9 +1147,30 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         if (node.body.kind === 'TypeAliasBody') {
           // Treat opaque alias same as regular alias within the module
           // The opacity is enforced at export/import boundary
-          const aliasType = astTypeToInternal(node.body.type, undefined, resolveQualified);
-          env.set(node.name, aliasType);
-          typeAliases.set(node.name, aliasType);
+          if (node.typeParams && node.typeParams.length > 0) {
+            const paramVarIds: number[] = [];
+            const scope = new Map<string, InternalType>();
+            for (const tp of node.typeParams) {
+              const v = freshVar();
+              if (v.kind !== 'var') throw new TypeCheckError('Internal error: freshVar expected var', node);
+              paramVarIds.push(v.id);
+              scope.set(tp, v);
+            }
+            const aliasType = astTypeToInternalWithScope(node.body.type, scope, typeAliases, resolveQualified);
+            genericTypeAliasDefs.set(node.name, { paramVarIds, body: aliasType });
+            const templateApp: InternalType = {
+              kind: 'app',
+              name: node.name,
+              args: paramVarIds.map((id) => ({ kind: 'var', id })),
+            };
+            // Do not env.set the type name: template vars would pollute envFreeVars() and break
+            // generalization of functions that use this alias (e.g. diff<K,V,B>).
+            typeAliases.set(node.name, templateApp);
+          } else {
+            const aliasType = astTypeToInternal(node.body.type, undefined, resolveQualified);
+            env.set(node.name, aliasType);
+            typeAliases.set(node.name, aliasType);
+          }
         } else if (node.body.kind === 'ADTBody') {
           const adtTypeParams = (node.typeParams || []).map(() => freshVar());
           const adtType = { kind: 'app' as const, name: node.name, args: adtTypeParams };
@@ -1099,7 +1237,10 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       if (node == null || typeof node !== 'object') return;
       const n = node as Record<symbol, InternalType | undefined>;
       const t = n[TypedExpr];
-      if (t != null) n[TypedExpr] = apply(t);
+      if (t != null) {
+        // Expand generic type aliases (e.g. Dict<K,V>) to records so codegen FieldExpr can resolve slots.
+        n[TypedExpr] = apply(expandGenericAliasHead(t, subst, genericTypeAliasDefs));
+      }
       if ('kind' in node && node !== null) {
         const n2 = node as { kind: string; [k: string]: unknown };
         if (n2.kind === 'Program' && Array.isArray(n2.body)) n2.body.forEach((el) => { if (el != null) resolveNode(el); });
@@ -1143,10 +1284,18 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));
       } else if (node.kind === 'TypeDecl' && (node.visibility === 'export' || node.visibility === 'opaque')) {
-        const t = typeAliases.get(node.name);
-        if (t != null) {
-          exports.set(node.name, apply(t));
-          exportedTypeAliases.set(node.name, apply(t));
+        const genDef = genericTypeAliasDefs.get(node.name);
+        if (genDef != null) {
+          const exportArgs = genDef.paramVarIds.map((id) => ({ kind: 'var' as const, id }));
+          const exportApp: InternalType = { kind: 'app', name: node.name, args: exportArgs };
+          exports.set(node.name, apply(exportApp));
+          exportedTypeAliases.set(node.name, apply(exportApp));
+        } else {
+          const t = typeAliases.get(node.name);
+          if (t != null) {
+            exports.set(node.name, apply(t));
+            exportedTypeAliases.set(node.name, apply(t));
+          }
         }
       }
       if (node.kind === 'TypeDecl') {

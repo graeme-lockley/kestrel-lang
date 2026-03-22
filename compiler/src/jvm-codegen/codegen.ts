@@ -591,8 +591,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       }
       case 'BinaryExpr': {
         if (expr.op === '&' || expr.op === '|') {
+          // Left/right are boxed Boolean (e.g. from ==); IFEQ expects int — unbox first.
+          const unboxBool = (): void => {
+            mb.emit1s(JvmOp.CHECKCAST, cf.classRef(BOOLEAN));
+            mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
+          };
           if (expr.op === '&') {
             emitExpr(expr.left, mb);
+            unboxBool();
             const ifeqStart = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
             mb.addBranchTarget(mb.length(), frameState(env, nextLocal));
@@ -608,6 +614,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             patchShort(mb, gotoEnd + 1, afterAnd - gotoEnd);
           } else {
             emitExpr(expr.left, mb);
+            unboxBool();
             const ifeqStart = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
             mb.addBranchTarget(mb.length(), frameState(env, nextLocal));
@@ -784,6 +791,31 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                     mb.emit1b(JvmOp.ALOAD, g);
                   } else if (globalNames.has(name)) {
                     mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(className, jvmMangleName(name), 'Ljava/lang/Object;'));
+                  } else if (funNames.has(name)) {
+                    const arity = funArities.get(name);
+                    if (arity === undefined) throw new Error(`JVM codegen: missing arity for function ${name}`);
+                    mb.emit1s(JvmOp.LDC_W, cf.classRef(className));
+                    mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(name)));
+                    mb.emit1s(JvmOp.LDC_W, cf.constantInt(arity));
+                    mb.emit1s(
+                      JvmOp.INVOKESTATIC,
+                      cf.methodref(K_FUNCTION_REF, 'of', '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';')
+                    );
+                  } else if (
+                    options.importedNameToClass?.get(name) != null &&
+                    options.importedFunArities?.get(name) !== undefined
+                  ) {
+                    const importedFunClass = options.importedNameToClass.get(name)!;
+                    const importedFunArity = options.importedFunArities.get(name)!;
+                    const originalName = options.importedNameToOriginal?.get(name) ?? name;
+                    mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedFunClass, '$init', '()V'));
+                    mb.emit1s(JvmOp.LDC_W, cf.classRef(importedFunClass));
+                    mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(originalName)));
+                    mb.emit1s(JvmOp.LDC_W, cf.constantInt(importedFunArity));
+                    mb.emit1s(
+                      JvmOp.INVOKESTATIC,
+                      cf.methodref(K_FUNCTION_REF, 'of', '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';')
+                    );
                   } else {
                     throw new Error('JVM codegen: free var not in env: ' + name);
                   }
@@ -965,9 +997,20 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringEquals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
             break;
           }
+          if (name === '__string_concat' && expr.args.length === 2) {
+            emitExpr(expr.args[0], mb);
+            emitExpr(expr.args[1], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
+            break;
+          }
           if (name === '__string_upper' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringUpper', '(Ljava/lang/Object;)Ljava/lang/String;'));
+            break;
+          }
+          if (name === '__string_lower' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringLower', '(Ljava/lang/Object;)Ljava/lang/String;'));
             break;
           }
           if (name === '__string_trim' && expr.args.length === 1) {
@@ -987,6 +1030,70 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           if (name === '__char_code_point' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charCodePoint', '(Ljava/lang/Object;)Ljava/lang/Long;'));
+            break;
+          }
+          if (name === '__string_char_at' && expr.args.length === 2) {
+            emitExpr(expr.args[0], mb);
+            emitExpr(expr.args[1], mb);
+            mb.emit1s(
+              JvmOp.INVOKESTATIC,
+              cf.methodref(RUNTIME, 'stringCharAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;')
+            );
+            break;
+          }
+          if (name === '__char_to_string' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charToString', '(Ljava/lang/Object;)Ljava/lang/String;'));
+            break;
+          }
+          if (name === '__int_to_float' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'intToFloat', '(Ljava/lang/Object;)Ljava/lang/Double;'));
+            break;
+          }
+          if (name === '__float_to_int' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatToInt', '(Ljava/lang/Object;)Ljava/lang/Long;'));
+            break;
+          }
+          if (name === '__float_floor' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatFloor', '(Ljava/lang/Object;)Ljava/lang/Long;'));
+            break;
+          }
+          if (name === '__float_ceil' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatCeil', '(Ljava/lang/Object;)Ljava/lang/Long;'));
+            break;
+          }
+          if (name === '__float_round' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatRound', '(Ljava/lang/Object;)Ljava/lang/Long;'));
+            break;
+          }
+          if (name === '__float_sqrt' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatSqrt', '(Ljava/lang/Object;)Ljava/lang/Double;'));
+            break;
+          }
+          if (name === '__float_is_nan' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsNan', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
+            break;
+          }
+          if (name === '__float_is_infinite' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsInfinite', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
+            break;
+          }
+          if (name === '__float_abs' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatAbs', '(Ljava/lang/Object;)Ljava/lang/Double;'));
+            break;
+          }
+          if (name === '__char_from_code' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charFromCode', '(Ljava/lang/Object;)Ljava/lang/Long;'));
             break;
           }
           if (name === '__json_parse' && expr.args.length === 1) {
@@ -1338,17 +1445,17 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       }
       case 'PipeExpr': {
         if (expr.op === '|>') {
-          emitExpr(expr.left, mb);
-          if (expr.right.kind === 'CallExpr' && expr.right.callee.kind === 'IdentExpr') {
-            for (const a of expr.right.args) emitExpr(a, mb);
-            const arity = 1 + expr.right.args.length;
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(className, jvmMangleName(expr.right.callee.name), descriptor(arity)));
-          } else {
-            emitExpr(expr.right, mb);
-          }
+          const call: Expr =
+            expr.right.kind === 'CallExpr'
+              ? { kind: 'CallExpr', callee: expr.right.callee, args: [expr.left, ...expr.right.args], span: expr.span }
+              : { kind: 'CallExpr', callee: expr.right, args: [expr.left], span: expr.span };
+          emitExpr(call, mb);
         } else {
-          emitExpr(expr.right, mb);
-          emitExpr(expr.left, mb);
+          const call: Expr =
+            expr.left.kind === 'CallExpr'
+              ? { kind: 'CallExpr', callee: expr.left.callee, args: [...expr.left.args, expr.right], span: expr.span }
+              : { kind: 'CallExpr', callee: expr.left, args: [expr.right], span: expr.span };
+          emitExpr(call, mb);
         }
         break;
       }
@@ -1397,6 +1504,31 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1b(JvmOp.ALOAD, s);
             } else if (globalNames.has(name)) {
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(className, jvmMangleName(name), 'Ljava/lang/Object;'));
+            } else if (funNames.has(name)) {
+              const arity = funArities.get(name);
+              if (arity === undefined) throw new Error(`JVM codegen: missing arity for function ${name}`);
+              mb.emit1s(JvmOp.LDC_W, cf.classRef(className));
+              mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(name)));
+              mb.emit1s(JvmOp.LDC_W, cf.constantInt(arity));
+              mb.emit1s(
+                JvmOp.INVOKESTATIC,
+                cf.methodref(K_FUNCTION_REF, 'of', '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';')
+              );
+            } else if (
+              options.importedNameToClass?.get(name) != null &&
+              options.importedFunArities?.get(name) !== undefined
+            ) {
+              const importedFunClass = options.importedNameToClass.get(name)!;
+              const importedFunArity = options.importedFunArities.get(name)!;
+              const originalName = options.importedNameToOriginal?.get(name) ?? name;
+              mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedFunClass, '$init', '()V'));
+              mb.emit1s(JvmOp.LDC_W, cf.classRef(importedFunClass));
+              mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(originalName)));
+              mb.emit1s(JvmOp.LDC_W, cf.constantInt(importedFunArity));
+              mb.emit1s(
+                JvmOp.INVOKESTATIC,
+                cf.methodref(K_FUNCTION_REF, 'of', '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';')
+              );
             } else {
               throw new Error('JVM codegen: free var not in env/global: ' + name);
             }
@@ -1658,7 +1790,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     const mb = cf.addMethod('$lambda' + i, desc, ACC_PUBLIC | ACC_STATIC);
     emitExpr(l.body, mb);
     mb.emit1(JvmOp.ARETURN);
-    mb.setMaxs(32, nextLocal);
+    // Match top-level fun decls: emitExpr uses fixed high slots (e.g. ConsExpr 60–61); nextLocal alone is too small.
+    mb.setMaxs(32, Math.max(Math.max(lambdaNext, nextLocal) + 8, 70));
     cf.flushLastMethod();
     env.clear();
     prevEnv.forEach((v, k) => env.set(k, v));
