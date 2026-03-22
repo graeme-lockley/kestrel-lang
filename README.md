@@ -25,7 +25,7 @@ fun fibonacci(n: Int): Int =
   if (n <= 1) n else fibonacci(n - 1) + fibonacci(n - 2)
 
 val result = fibonacci(10)
-val _ = print(result)
+print(result)
 ```
 
 Run it (the CLI compiles when inputs or dependencies change):
