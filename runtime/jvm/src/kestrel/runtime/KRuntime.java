@@ -203,6 +203,11 @@ public final class KRuntime {
         return ((String) s).toUpperCase(Locale.ROOT);
     }
 
+    public static String stringLower(Object s) {
+        if (!(s instanceof String)) throw new IllegalArgumentException("stringLower expects String");
+        return ((String) s).toLowerCase(Locale.ROOT);
+    }
+
     private static boolean isAsciiWhitespace(int cp) {
         return cp == ' ' || cp == '\t' || cp == '\n' || cp == '\r' || cp == 0x0B || cp == 0x0C;
     }
@@ -245,6 +250,82 @@ public final class KRuntime {
         if (c instanceof Integer) return Long.valueOf(((Integer) c).longValue());
         if (c instanceof Number) return Long.valueOf(((Number) c).longValue());
         return Long.valueOf(0L);
+    }
+
+    /** Char at code-point index `i` (boxed Long code point), or 0 if out of range. */
+    public static Long stringCharAt(Object s, Object index) {
+        Long cp = stringCodePointAt(s, index);
+        if (cp == null || cp.longValue() < 0) return Long.valueOf(0L);
+        return cp;
+    }
+
+    /** Single-code-point string from Char (Long code point). */
+    public static String charToString(Object c) {
+        long cp = charCodePoint(c).longValue();
+        if (cp < 0 || cp > 0x10FFFFL) return "";
+        return new String(Character.toChars((int) cp));
+    }
+
+    /** Int code point to Char (Long on JVM); invalid or surrogate range -> 0. */
+    public static Long charFromCode(Object n) {
+        long code = longFrom(n);
+        if (code < 0 || code > 0x10FFFFL) return Long.valueOf(0L);
+        if (code >= 0xD800L && code <= 0xDFFFL) return Long.valueOf(0L);
+        return Long.valueOf(code);
+    }
+
+    public static Double intToFloat(Object n) {
+        return Double.valueOf((double) longFrom(n));
+    }
+
+    public static Long floatToInt(Object f) {
+        double x = doubleFrom(f);
+        return Long.valueOf((long) x);
+    }
+
+    public static Long floatFloor(Object f) {
+        return Long.valueOf((long) Math.floor(doubleFrom(f)));
+    }
+
+    public static Long floatCeil(Object f) {
+        return Long.valueOf((long) Math.ceil(doubleFrom(f)));
+    }
+
+    /** Round to nearest integer; ties to even (matches IEEE / Zig @round). */
+    public static Long floatRound(Object f) {
+        return Long.valueOf((long) Math.rint(doubleFrom(f)));
+    }
+
+    public static Double floatSqrt(Object f) {
+        double x = doubleFrom(f);
+        if (Double.isNaN(x) || x < 0.0) return Double.valueOf(Double.NaN);
+        return Double.valueOf(Math.sqrt(x));
+    }
+
+    public static Boolean floatIsNan(Object f) {
+        return Boolean.valueOf(Double.isNaN(doubleFrom(f)));
+    }
+
+    public static Boolean floatIsInfinite(Object f) {
+        return Boolean.valueOf(Double.isInfinite(doubleFrom(f)));
+    }
+
+    public static Double floatAbs(Object f) {
+        return Double.valueOf(Math.abs(doubleFrom(f)));
+    }
+
+    private static long longFrom(Object o) {
+        if (o instanceof Long) return ((Long) o).longValue();
+        if (o instanceof Integer) return ((Integer) o).longValue();
+        if (o instanceof Number) return ((Number) o).longValue();
+        throw new IllegalArgumentException("expected number");
+    }
+
+    private static double doubleFrom(Object o) {
+        if (o instanceof Double) return ((Double) o).doubleValue();
+        if (o instanceof Float) return ((Float) o).doubleValue();
+        if (o instanceof Number) return ((Number) o).doubleValue();
+        throw new IllegalArgumentException("expected float");
     }
 
     private static int intFrom(Object o) {
