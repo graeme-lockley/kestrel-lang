@@ -1,6 +1,6 @@
 # Union and Intersection Types: Full Runtime Support
 
-## Sequence: 10
+## Sequence: 14
 ## Tier: 3 — Complete the core language
 ## Former ID: 145
 

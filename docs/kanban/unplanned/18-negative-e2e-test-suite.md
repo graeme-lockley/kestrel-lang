@@ -1,6 +1,6 @@
 # Negative E2E Test Suite
 
-## Sequence: 14
+## Sequence: 18
 ## Tier: 5 — Test coverage and quality
 ## Former ID: 105
 

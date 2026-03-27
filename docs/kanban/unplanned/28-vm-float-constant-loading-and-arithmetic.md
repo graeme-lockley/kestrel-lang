@@ -1,6 +1,6 @@
 # VM: Float constant loading and arithmetic
 
-## Sequence: 24
+## Sequence: 28
 ## Tier: Verification / residual runtime (may already be done)
 ## Former ID: (unplanned)
 

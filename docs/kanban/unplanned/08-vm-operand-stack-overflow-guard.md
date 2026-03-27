@@ -1,6 +1,6 @@
 # VM Operand Stack Overflow Guard
 
-## Sequence: 04
+## Sequence: 08
 ## Tier: 2 — Harden the runtime
 ## Former ID: 86
 

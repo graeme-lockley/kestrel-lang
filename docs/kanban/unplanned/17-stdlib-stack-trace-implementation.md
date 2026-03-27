@@ -1,6 +1,6 @@
 # Stdlib kestrel:stack trace() Implementation
 
-## Sequence: 13
+## Sequence: 17
 ## Tier: 4 — Stdlib and test harness
 ## Former ID: 125
 

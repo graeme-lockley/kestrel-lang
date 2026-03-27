@@ -1,6 +1,6 @@
 # Stdlib kestrel:http Full Implementation
 
-## Sequence: 19
+## Sequence: 23
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 155
 

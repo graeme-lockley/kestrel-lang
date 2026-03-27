@@ -1,6 +1,6 @@
 # Async/Await: Real Suspension and Event Loop
 
-## Sequence: 18
+## Sequence: 22
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 150
 

@@ -1,6 +1,6 @@
 # URL Import Resolution
 
-## Sequence: 21
+## Sequence: 25
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 160
 

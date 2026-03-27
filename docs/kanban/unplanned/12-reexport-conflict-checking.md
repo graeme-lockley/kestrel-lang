@@ -1,6 +1,6 @@
 # Re-export Conflict Checking
 
-## Sequence: 08
+## Sequence: 12
 ## Tier: 3 — Complete the core language
 ## Former ID: 95
 

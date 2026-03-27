@@ -1,6 +1,6 @@
 # VM: SPREAD instruction (record spread)
 
-## Sequence: 26
+## Sequence: 30
 ## Tier: Archival / verification (feature implemented)
 ## Former ID: (unplanned)
 

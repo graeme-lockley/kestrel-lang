@@ -1,6 +1,6 @@
 # Stdlib kestrel:test Framework Completeness
 
-## Sequence: 11
+## Sequence: 15
 ## Tier: 4 — Stdlib and test harness
 ## Former ID: 110
 

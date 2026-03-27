@@ -1,6 +1,6 @@
 # Language: `is` Type Narrowing
 
-## Sequence: 09
+## Sequence: 13
 ## Tier: 3 — Complete the core language
 ## Former ID: 75
 

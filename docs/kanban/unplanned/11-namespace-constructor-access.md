@@ -1,6 +1,6 @@
 # Namespace constructor access (`M.Ctor(args)`)
 
-## Sequence: 07
+## Sequence: 11
 ## Tier: 3 — Complete the core language
 ## Former ID: 82
 

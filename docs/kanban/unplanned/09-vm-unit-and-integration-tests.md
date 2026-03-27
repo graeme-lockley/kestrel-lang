@@ -1,6 +1,6 @@
 # VM Unit and Integration Tests
 
-## Sequence: 05
+## Sequence: 09
 ## Tier: 2 — Harden the runtime
 ## Former ID: 100
 
