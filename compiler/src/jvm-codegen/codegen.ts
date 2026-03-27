@@ -1367,6 +1367,42 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.addBranchTarget(afterGoto, matchBaseState);
             continue;
           }
+          if (c.pattern.kind === 'LiteralPattern') {
+            if (c.pattern.literal === 'float' && Number.isNaN(Number.parseFloat(c.pattern.value))) {
+              mb.emit1b(JvmOp.ALOAD, scrutSlot);
+              mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsNan', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
+              mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
+              const ifeq = mb.length();
+              mb.emit1s(JvmOp.IFEQ, 0);
+              mb.addBranchTarget(ifeq + 3, matchBaseState);
+              emitExpr(c.body, mb);
+              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              endLabels.push(gotoEnd);
+              const afterGoto = gotoEnd + 3;
+              patchShort(mb, ifeq + 1, afterGoto - ifeq);
+              mb.addBranchTarget(afterGoto, matchBaseState);
+              continue;
+            }
+
+            mb.emit1b(JvmOp.ALOAD, scrutSlot);
+            emitExpr({ kind: 'LiteralExpr', literal: c.pattern.literal, value: c.pattern.value, span: undefined } as import('../ast/nodes.js').LiteralExpr, mb);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
+            mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
+            const ifeq = mb.length();
+            mb.emit1s(JvmOp.IFEQ, 0);
+            mb.addBranchTarget(ifeq + 3, matchBaseState);
+            emitExpr(c.body, mb);
+            mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+            const gotoEnd = mb.length();
+            mb.emit1s(JvmOp.GOTO, 0);
+            endLabels.push(gotoEnd);
+            const afterGoto = gotoEnd + 3;
+            patchShort(mb, ifeq + 1, afterGoto - ifeq);
+            mb.addBranchTarget(afterGoto, matchBaseState);
+            continue;
+          }
           if (c.pattern.kind === 'VarPattern') {
             const slot = nextLocal++;
             env.set(c.pattern.name, slot);

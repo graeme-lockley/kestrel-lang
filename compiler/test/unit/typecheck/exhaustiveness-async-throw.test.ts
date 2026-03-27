@@ -47,6 +47,119 @@ describe('checkExhaustive', () => {
     `);
     expect(result.ok).toBe(true);
   });
+
+  it('int literal patterns require catch-all', () => {
+    const bad = tc(`
+      val n = 1
+      val r = match (n) {
+        0 => 10
+      }
+    `);
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.diagnostics.some((d) => d.message.includes('literal patterns on Int require a catch-all'))).toBe(true);
+    }
+
+    const good = tc(`
+      val n = 1
+      val r = match (n) {
+        0 => 10,
+        _ => 20
+      }
+    `);
+    expect(good.ok).toBe(true);
+  });
+
+  it('float literal patterns require catch-all', () => {
+    const bad = tc(`
+      val x = 1.5
+      val r = match (x) {
+        1.5 => 10
+      }
+    `);
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.diagnostics.some((d) => d.message.includes('literal patterns on Float require a catch-all'))).toBe(true);
+    }
+
+    const good = tc(`
+      val x = 1.5
+      val r = match (x) {
+        1.5 => 10,
+        _ => 20
+      }
+    `);
+    expect(good.ok).toBe(true);
+  });
+
+  it('string literal patterns require catch-all', () => {
+    const bad = tc(`
+      val s = "x"
+      val r = match (s) {
+        "x" => 10
+      }
+    `);
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.diagnostics.some((d) => d.message.includes('literal patterns on String require a catch-all'))).toBe(true);
+    }
+  });
+
+  it('char literal patterns require catch-all', () => {
+    const bad = tc(`
+      val c = 'a'
+      val r = match (c) {
+        'a' => 10
+      }
+    `);
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.diagnostics.some((d) => d.message.includes('literal patterns on Char require a catch-all'))).toBe(true);
+    }
+  });
+
+  it('unit literal pattern is exhaustive by itself', () => {
+    const good = tc(`
+      val u = ()
+      val r = match (u) {
+        () => 1
+      }
+    `);
+    expect(good.ok).toBe(true);
+  });
+
+  it('rejects literal pattern type mismatch', () => {
+    const result = tc(`
+      val b = True
+      val r = match (b) {
+        0 => 10,
+        _ => 20
+      }
+    `);
+    expect(result.ok).toBe(false);
+  });
+
+  it('supports nested literal pattern in constructor record pattern', () => {
+    const ok = tc(`
+      val o = Some(42)
+      val r = match (o) {
+        Some { value = 42 } => 1,
+        _ => 0
+      }
+    `);
+    expect(ok.ok).toBe(true);
+  });
+
+  it('rejects nested literal type mismatch in constructor record pattern', () => {
+    const bad = tc(`
+      val o = Some(42)
+      val r = match (o) {
+        Some { value = "x" } => 1,
+        _ => 0
+      }
+    `);
+    expect(bad.ok).toBe(false);
+  });
 });
 
 describe('await outside async', () => {

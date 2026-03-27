@@ -99,4 +99,41 @@ describe('parse (integration)', () => {
       expect(fn.body.result.kind).toBe('CallExpr');
     }
   });
+
+  it('parses primitive literal patterns in match cases', () => {
+    const ast = parse(tokenize(`val x = match (n) { 1 => 10, 1.5 => 20, "s" => 30, 'a' => 40, () => 50, _ => 60 }`));
+    expect(ast.kind).toBe('Program');
+    const stmt = ast.body[0];
+    expect(stmt).toMatchObject({ kind: 'ValStmt', name: 'x' });
+    if (stmt.kind !== 'ValStmt' || stmt.value.kind !== 'MatchExpr') return;
+    const literals = stmt.value.cases
+      .filter((c) => c.pattern.kind === 'LiteralPattern')
+      .map((c) => (c.pattern.kind === 'LiteralPattern' ? c.pattern.literal : ''));
+    expect(literals).toEqual(['int', 'float', 'string', 'char', 'unit']);
+  });
+
+  it('parses nested literal patterns in list and record patterns', () => {
+    const ast = parse(tokenize(`
+      val y = match (xs) {
+        [1, rest] => 10,
+        Some { value = 42 } => 20,
+        _ => 30
+      }
+    `));
+    expect(ast.kind).toBe('Program');
+    const stmt = ast.body[0];
+    if (stmt.kind !== 'ValStmt' || stmt.value.kind !== 'MatchExpr') return;
+
+    const listCase = stmt.value.cases[0];
+    expect(listCase?.pattern.kind).toBe('ListPattern');
+    if (listCase?.pattern.kind === 'ListPattern') {
+      expect(listCase.pattern.elements[0]).toMatchObject({ kind: 'LiteralPattern', literal: 'int', value: '1' });
+    }
+
+    const recordCase = stmt.value.cases[1];
+    expect(recordCase?.pattern.kind).toBe('ConstructorPattern');
+    if (recordCase?.pattern.kind === 'ConstructorPattern') {
+      expect(recordCase.pattern.fields?.[0]?.pattern).toMatchObject({ kind: 'LiteralPattern', literal: 'int', value: '42' });
+    }
+  });
 });

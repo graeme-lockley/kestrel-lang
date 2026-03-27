@@ -288,7 +288,10 @@ NonConsPattern ::= "_"
                  | ListPattern
                  | LOWER_IDENT                                                       /* variable binding */
                  | INTEGER
+                 | FLOAT
                  | STRING
+                 | CHAR_LITERAL
+                 | Unit
                  | "True" | "False"
                  | "(" Pattern { "," Pattern } ")"                     /* tuple or grouping; 1+ elements, comma disambiguates */
 ListPattern    ::= "[" [ ListPatInner ] "]"                                         /* list; rest only as last */
@@ -342,7 +345,9 @@ Literal        ::= INTEGER | FLOAT | STRING | CHAR_LITERAL | "True" | "False" | 
 Unit           ::= "(" ")"
 ```
 
-**Tuples:** Syntactically, grouping and constant tuples share the same parenthesized comma-separated form `"(" Expr { "," Expr } ")"` (and the same for patterns). A single expression or pattern `(e)` or `(p)` is treated as **grouping** (same as `e` or `p`). Two or more `(e1, e2, …)` form a **constant tuple** with product type (e.g. `(Int, String)` has type `Int * String`). Tuple patterns match the same shape: `(p1, p2)` or `(p1, p2, p3, …)`. The parser disambiguates by the presence of a comma after the first element.
+**Tuples:** Syntactically, grouping and constant tuples share the same parenthesized comma-separated form `"(" Expr { "," Expr } ")"` (and the same for patterns). A single expression or pattern `(e)` or `(p)` is treated as **grouping** (same as `e` or `p`). Two or more `(e1, e2, …)` form a **constant tuple** with product type (e.g. `(Int, String)` has type `Int * String`). Tuple patterns match the same shape: `(p1, p2)` or `(p1, p2, p3, …)`. The parser disambiguates by the presence of a comma after the first element. `()` is always the **Unit** literal (expression or pattern), not a tuple.
+
+For float literal patterns, matching uses pattern semantics (not plain `==`): a float NaN pattern matches a NaN scrutinee.
 
 **No member calls:** The grammar does not allow `e.M(args)` (method call). Function and constructor calls use `e(args)`; field read uses the postfix `e.fieldName` (Suffix `"." LOWER_IDENT`).
 

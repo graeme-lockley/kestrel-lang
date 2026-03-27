@@ -401,10 +401,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
   function checkExhaustive(scrutineeType: InternalType, cases: import('../ast/nodes.js').Case[], expr: unknown): void {
     const coveredCtors = new Set<string>();
     let hasCatchAll = false;
+    const literalKinds = new Set<string>();
 
     for (const c of cases) {
       if (c.pattern.kind === 'WildcardPattern' || c.pattern.kind === 'VarPattern') {
         hasCatchAll = true;
+      } else if (c.pattern.kind === 'LiteralPattern') {
+        literalKinds.add(c.pattern.literal);
       } else if (c.pattern.kind === 'ConstructorPattern') {
         coveredCtors.add(c.pattern.name);
       } else if (c.pattern.kind === 'ListPattern') {
@@ -419,6 +422,34 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     }
 
     const appType = apply(scrutineeType);
+    if (appType.kind === 'prim' && literalKinds.size > 0) {
+      if (appType.name === 'Unit') {
+        const hasUnitPattern = cases.some(
+          c => c.pattern.kind === 'LiteralPattern' && c.pattern.literal === 'unit'
+        );
+        if (!hasUnitPattern && !hasCatchAll) {
+          diagnostics.push({
+            severity: 'error',
+            code: CODES.type.non_exhaustive_match,
+            message: 'Non-exhaustive match: missing Unit pattern `()`',
+            location: locFor(expr),
+          });
+        }
+        return;
+      }
+      if (appType.name === 'Int' || appType.name === 'Float' || appType.name === 'String' || appType.name === 'Char') {
+        if (!hasCatchAll) {
+          diagnostics.push({
+            severity: 'error',
+            code: CODES.type.non_exhaustive_match,
+            message: `Non-exhaustive match: literal patterns on ${appType.name} require a catch-all pattern`,
+            location: locFor(expr),
+          });
+        }
+        return;
+      }
+    }
+
     if (appType.kind !== 'app') return;
     
     // Check hardcoded built-in ADTs first, then user-defined
@@ -806,6 +837,32 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
               bound.push(...bindPattern(pattern.head, elemType));
               bound.push(...bindPattern(pattern.tail, patternType));
             }
+          } else if (pattern.kind === 'LiteralPattern') {
+            let literalType: InternalType;
+            switch (pattern.literal) {
+              case 'int':
+                literalType = tInt;
+                break;
+              case 'float':
+                literalType = tFloat;
+                break;
+              case 'string':
+                literalType = tString;
+                break;
+              case 'char':
+                literalType = prim('Char');
+                break;
+              case 'unit':
+                literalType = tUnit;
+                break;
+              case 'true':
+              case 'false':
+                literalType = tBool;
+                break;
+              default:
+                literalType = freshVar();
+            }
+            unifyWithBlame(patternType, literalType, pattern);
           } else if (pattern.kind === 'ConstructorPattern') {
             const applied = apply(patternType);
             if (applied.kind === 'app') {

@@ -130,6 +130,8 @@ So `x` is treated as both its original type and `T` in that block. The grammar f
 **Match** expressions (01 §3.2: `match (e) { case1 => e1 ; ... }`) must be **exhaustive** with respect to the type of `e`. The type system enforces:
 
 - If `e` has type an **ADT** (e.g. Option, List, or a user ADT), every **constructor** of that ADT must be covered by at least one case (constructor pattern or list pattern for List), or a **catch-all** pattern (`_` or a variable) must appear that covers the remainder. If a constructor is missing and there is no catch-all → **type error**.
+- If `e` has primitive type **Int**, **Float**, **String**, or **Char** and the match contains one or more primitive literal patterns, a catch-all (`_` or variable) is required (the domain is not finitely enumerable for exhaustiveness).
+- If `e` has primitive type **Unit**, the literal pattern `()` is exhaustive by itself; otherwise a catch-all is required.
 - If `e` has a **union** type `A | B`, each branch of the union must be covered (e.g. by constructor patterns for each ADT in the union, or by `_`).
 - The type of the whole match expression is the **unification** (or least upper bound) of the types of all case right-hand sides; if they do not unify, it is a type error.
 
@@ -214,6 +216,8 @@ The following table summarises the main typing constraints so that implementors 
 | **Narrowing** `if (x is T) { ... }` | In then-branch, x has type original & T (§4). |
 
 Additional constraints: **SET_FIELD** (04) applies only to records with a **mut** field at that slot; the type system must ensure that assignment to a field is only for `mut` fields (01 §3.6). **Assignment** `x := e` (01): the type of `e` must unify with the type of `x` (which must be a `var` or a mutable field). **Binary operators:** Arithmetic (+, -, *, /, %, **): both operands must have the same numeric type (**Int** or **Float**); result has that type (01 §2.6, §2.7). Comparison (==, !=, <, >, <=, >=): both operands have the same type; result is **Bool**. **Value** semantics of `==` and `!=` (deep equality, `!=` as negation of `==`) are defined in **01 §3.2.1**. Logical (&, |): both operands **Bool**; result **Bool**. The compiler emits typed bytecode (03 type table, 04) so the VM (05) receives values of the expected shapes.
+
+Pattern typing for primitive literal patterns: `INTEGER : Int`, `FLOAT : Float`, `STRING : String`, `CHAR_LITERAL : Char`, and `Unit` (`()`) : `Unit`. A literal pattern must unify with the scrutinee type. Float NaN patterns use pattern semantics: NaN literal patterns match NaN scrutinee values.
 
 ---
 

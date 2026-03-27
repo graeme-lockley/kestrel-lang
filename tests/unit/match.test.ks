@@ -6,12 +6,12 @@ fun boolToString(b: Bool): String = match (b) { False => "False", True => "True"
 
 fun fromOption(o: Option<Int>): Int = match (o) {
   None => 0,
-  Some { value = x } => x
+  Some(x) => x
 }
 
 fun fromResult(r: Result<Int, Int>): Int = match (r) {
-  Err { value = _ } => 0 - 1,
-  Ok { value = x } => x
+  Err(_) => 0 - 1,
+  Ok(x) => x
 }
 
 fun sumListMatch(xs: List<Int>): Int = match (xs) { [] => 0, h :: t => h + sumListMatch(t) }
@@ -58,5 +58,22 @@ export fun run(s: Suite): Unit =
       eq(sg, "fromResult Err(1)", fromResult(Err(1)), 0 - 1)
       eq(sg, "match Ok(5)", match (Ok(5)) { Err { value = _ } => 0, Ok { value = v } => v }, 5)
       eq(sg, "match Err(3)", match (Err(3)) { Err { value = e } => e, Ok { value = _ } => 0 }, 3)
+    })
+
+    group(s1, "primitive literal patterns", (sg: Suite) => {
+      fun classifyInt(n: Int): String = match (n) { 0 => "zero", 1 => "one", _ => "other" }
+      fun classifyFloat(x: Float): Int = match (x) { 1.5 => 15, 2.0 => 20, _ => 0 }
+      fun classifyString(s: String): Int = match (s) { "hello" => 1, "world" => 2, _ => 0 }
+      fun classifyChar(c: Char): Int = match (c) { 'a' => 1, 'b' => 2, _ => 0 }
+      fun classifyUnit(u: Unit): Int = match (u) { () => 1 }
+
+      eq(sg, "int literal 0", classifyInt(0), "zero")
+      eq(sg, "int literal fallback", classifyInt(42), "other")
+      eq(sg, "float literal 1.5", classifyFloat(1.5), 15)
+      eq(sg, "float literal fallback", classifyFloat(9.0), 0)
+      eq(sg, "string literal hello", classifyString("hello"), 1)
+      eq(sg, "string literal fallback", classifyString("z"), 0)
+      eq(sg, "char literal fallback", classifyChar('z'), 0)
+      eq(sg, "unit literal", classifyUnit(()), 1)
     })
   })

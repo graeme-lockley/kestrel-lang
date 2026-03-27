@@ -390,7 +390,7 @@ export interface VarPattern extends NodeBase {
 
 export interface LiteralPattern extends NodeBase {
   kind: 'LiteralPattern';
-  literal: 'int' | 'string' | 'true' | 'false';
+  literal: 'int' | 'float' | 'string' | 'char' | 'unit' | 'true' | 'false';
   value: string;
 }
 

@@ -15,7 +15,10 @@ echo "VM tests passed."
 echo "== E2E =="
 "$ROOT/scripts/run-e2e.sh"
 
-echo "== Kestrel unit tests =="
+echo "== Kestrel unit vm tests =="
 "$ROOT/scripts/kestrel" test || exit 1
+
+echo "== Kestrel unit jvm tests =="
+"$ROOT/scripts/kestrel" test --target jvm || exit 1
 
 echo "== All passed =="

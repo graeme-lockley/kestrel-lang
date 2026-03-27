@@ -127,3 +127,5 @@ An implementation of the runtime model must provide:
 4. **Exceptions:** On THROW, unwind stack to the nearest TRY, deliver the exception value (ADT) to the handler; optional backtrace for StackTrace (02 kestrel:stack) and debug mapping (03 §8).
 5. **Tasks:** TASK objects with state (suspended vs completed); AWAIT pops a TASK and either pushes the result or suspends the current frame; scheduling policy is implementation-defined.
 6. **Record mutation:** SET_FIELD updates the RECORD in place for `mut` fields; result may be updated record or unit (§3).
+
+Pattern-match literal chains (01 match, 04 lowering) rely on runtime value comparison for Int/String/Char/Unit. Float literal patterns additionally require NaN-aware matching semantics (NaN pattern matches NaN scrutinee) via a predicate path rather than plain equality.

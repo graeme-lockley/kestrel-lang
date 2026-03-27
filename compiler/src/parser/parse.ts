@@ -1179,13 +1179,24 @@ class Parser {
       this.advance();
       return { kind: 'ConstructorPattern', name: 'False' };
     }
-    if (this.at('int') || this.at('string')) {
-      const literal = this.current().kind === 'int' ? 'int' : 'string';
+    if (this.at('int') || this.at('float') || this.at('string') || this.at('char')) {
+      const kind = this.current().kind;
+      const literal = kind === 'int'
+        ? 'int'
+        : kind === 'float'
+          ? 'float'
+          : kind === 'string'
+            ? 'string'
+            : 'char';
       const value = this.advance().value!;
       return { kind: 'LiteralPattern', literal, value };
     }
     if (this.at('lparen')) {
       this.advance();
+      if (this.at('rparen')) {
+        this.advance();
+        return { kind: 'LiteralPattern', literal: 'unit', value: '()' };
+      }
       const elements: Pattern[] = [];
       while (!this.at('rparen')) {
         elements.push(this.parsePattern());

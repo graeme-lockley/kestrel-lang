@@ -1496,6 +1496,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             c.pattern.kind === 'ConsPattern' ||
             c.pattern.kind === 'ListPattern'
       );
+      const hasLiteralPatterns = expr.cases.some(c => c.pattern.kind === 'LiteralPattern');
 
       let config = getMatchConfig(scrutineeType ?? undefined, adts, userAdtConfigs);
       if (hasAdtPatterns && !config && expr.cases.some(c => c.pattern.kind === 'ListPattern' || c.pattern.kind === 'ConsPattern' || (c.pattern.kind === 'ConstructorPattern' && c.pattern.name === 'Nil'))) {
@@ -1593,6 +1594,99 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         const defaultOffset = endPos - matchPos;
         for (let i = 0; i < jumpTableSize; i++) {
           patchI32(matchJumpTablePos + i * 4, casePositions[i] !== undefined ? casePositions[i]! : defaultOffset);
+        }
+        env.delete('$scrutinee');
+      } else if (hasLiteralPatterns) {
+        const endJumps: number[] = [];
+        let emittedAnyCase = false;
+
+        const emitLiteralPatternTest = (pattern: Extract<import('../ast/nodes.js').Pattern, { kind: 'LiteralPattern' }>): void => {
+          // NaN literal patterns intentionally use NaN self-inequality semantics:
+          // x is NaN iff x != x, unlike normal EQ where NaN != NaN.
+          if (pattern.literal === 'float') {
+            const value = Number.parseFloat(pattern.value);
+            if (Number.isNaN(value)) {
+              emitLoadLocal(scrutineeSlot);
+              emitLoadLocal(scrutineeSlot);
+              emitNe();
+              return;
+            }
+          }
+
+          emitLoadLocal(scrutineeSlot);
+          switch (pattern.literal) {
+            case 'int':
+              emitLoadConst(addConstant({ tag: ConstTag.Int, value: Number.parseInt(pattern.value, 10) }));
+              break;
+            case 'float':
+              emitLoadConst(addConstant({ tag: ConstTag.Float, value: Number.parseFloat(pattern.value) }));
+              break;
+            case 'string':
+              emitLoadConst(addConstant({ tag: ConstTag.String, stringIndex: stringIndex(pattern.value) }));
+              break;
+            case 'char': {
+              const ch = pattern.value.length >= 2 ? pattern.value.slice(1, -1) : pattern.value;
+              const codePoint = ch.startsWith('\\u') ? Number.parseInt(ch.slice(2), 16) : ch.codePointAt(0) ?? 0;
+              emitLoadConst(addConstant({ tag: ConstTag.Char, value: codePoint }));
+              break;
+            }
+            case 'unit':
+              emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+              break;
+            case 'true':
+              emitLoadConst(addConstant({ tag: ConstTag.True }));
+              break;
+            case 'false':
+              emitLoadConst(addConstant({ tag: ConstTag.False }));
+              break;
+          }
+          emitEq();
+        };
+
+        for (const matchCase of expr.cases) {
+          if (matchCase.pattern.kind === 'LiteralPattern') {
+            emitLiteralPatternTest(matchCase.pattern);
+            const missJumpPos = codeOffset();
+            emitJumpIfFalse(0);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            const endJumpPos = codeOffset();
+            emitJump(0);
+            endJumps.push(endJumpPos);
+            emittedAnyCase = true;
+            patchI32(missJumpPos + 1, codeOffset() - (missJumpPos + 5));
+            continue;
+          }
+
+          if (matchCase.pattern.kind === 'WildcardPattern') {
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            const endJumpPos = codeOffset();
+            emitJump(0);
+            endJumps.push(endJumpPos);
+            emittedAnyCase = true;
+            continue;
+          }
+
+          if (matchCase.pattern.kind === 'VarPattern') {
+            const slot = nextLocalSlot(env);
+            env.set(matchCase.pattern.name, slot);
+            emitLoadLocal(scrutineeSlot);
+            emitStoreLocal(slot);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            env.delete(matchCase.pattern.name);
+            const endJumpPos = codeOffset();
+            emitJump(0);
+            endJumps.push(endJumpPos);
+            emittedAnyCase = true;
+          }
+        }
+
+        if (!emittedAnyCase) {
+          emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+        }
+
+        const endPos = codeOffset();
+        for (const jumpPos of endJumps) {
+          patchI32(jumpPos + 1, endPos - (jumpPos + 5));
         }
         env.delete('$scrutinee');
       } else {
