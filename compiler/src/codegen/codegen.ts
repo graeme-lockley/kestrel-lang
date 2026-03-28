@@ -121,6 +121,22 @@ export interface SelfTailTarget {
 
 export type EmitTailContext = { self: SelfTailTarget; inTail: boolean };
 
+/** Deferred patch: emitter is in function `emitterFnId` at chunk-local `jPos` (JUMP opcode); fill offset to `calleeFnId` entry + `calleeHead`. */
+interface MutualTailPatchRecord {
+  emitterFnId: number;
+  jPos: number;
+  calleeFnId: number;
+  calleeHead: number;
+}
+
+function writeI32Le(buf: Uint8Array, offset: number, value: number): void {
+  const x = value | 0;
+  buf[offset] = x & 0xff;
+  buf[offset + 1] = (x >> 8) & 0xff;
+  buf[offset + 2] = (x >> 16) & 0xff;
+  buf[offset + 3] = (x >> 24) & 0xff;
+}
+
 function subTailCtx(parent: EmitTailContext | undefined, childIsTailPosition: boolean): EmitTailContext | undefined {
   if (parent?.self == null) return undefined;
   return { self: parent.self, inTail: childIsTailPosition && parent.inTail };
@@ -515,6 +531,8 @@ function makeEmitExpr(
   importedThunkLocals?: Set<string>,
   localFuncCount?: number,
   moduleTopLevelFunDeclCount?: number,
+  topLevelFunPeers?: Map<string, { fnId: number; arity: number }>,
+  mutualTailPatches?: MutualTailPatchRecord[],
 ): { emitExpr: (
   expr: Expr,
   env: Map<string, number>,
@@ -529,6 +547,8 @@ function makeEmitExpr(
   const moduleGlobals = new Map<string, number>();
   const topLevelFuns = moduleTopLevelFunDeclCount ?? 0;
   const loopBreakStack: LoopCodegenLayer[] = [];
+  const peers = topLevelFunPeers;
+  const mutualPatches = mutualTailPatches;
   return { moduleGlobals, emitExpr: function emitExpr(
   expr: Expr,
   env: Map<string, number>,
@@ -1484,6 +1504,23 @@ function makeEmitExpr(
               patchI32(jPos + 1, st.loopHeadOffset - (jPos + 5));
               break;
             }
+            const peer = peers?.get(expr.callee.name);
+            if (
+              st != null &&
+              mutualPatches != null &&
+              peer != null &&
+              peer.fnId !== st.fnId &&
+              peer.fnId < topLevelFuns &&
+              expr.args.length === peer.arity &&
+              fnId === peer.fnId
+            ) {
+              for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+              for (let s = peer.arity - 1; s >= 0; s--) emitStoreLocal(s);
+              const jPos = codeOffset();
+              emitJump(0);
+              mutualPatches.push({ emitterFnId: st.fnId, jPos, calleeFnId: peer.fnId, calleeHead: 0 });
+              break;
+            }
             for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
             emitCall(fnId, expr.args.length);
             break;
@@ -2118,6 +2155,11 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   const ctx = makeCodegenContext();
   const { stringTable, constantPool, stringIndex, addConstant } = ctx;
   const funDecls = program.body.filter((n): n is FunDecl => n != null && n.kind === 'FunDecl');
+  const topLevelFunPeers = new Map<string, { fnId: number; arity: number }>();
+  for (let i = 0; i < funDecls.length; i++) {
+    topLevelFunPeers.set(funDecls[i]!.name, { fnId: i, arity: funDecls[i]!.params.length });
+  }
+  const mutualTailPatches: MutualTailPatchRecord[] = [];
   const lambdaEntries: LambdaEntry[] = [];
   const funDeclCountRef = { value: 0 };
   const sourceFile = options?.sourceFile ?? '<source>';
@@ -2148,6 +2190,8 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     options?.importedThunkLocals,
     options?.localFuncCount,
     funDecls.length,
+    topLevelFunPeers,
+    mutualTailPatches,
   );
 
   codeStart();
@@ -2467,6 +2511,14 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   for (const chunk of codeChunks) {
     code.set(chunk, off);
     off += chunk.length;
+  }
+
+  for (const p of mutualTailPatches) {
+    const fromEntry = functionTable[p.emitterFnId];
+    const toEntry = functionTable[p.calleeFnId];
+    if (fromEntry === undefined || toEntry === undefined) continue;
+    const rel = (toEntry.codeOffset + p.calleeHead) - (fromEntry.codeOffset + p.jPos + 5);
+    writeI32Le(code, fromEntry.codeOffset + p.jPos + 1, rel);
   }
 
   const debugFileStringIndices =

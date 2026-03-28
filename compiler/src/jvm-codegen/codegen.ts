@@ -1257,6 +1257,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             }
             const arity = expr.args.length;
             const st = tailCtx?.inTail === true ? tailCtx.self : undefined;
+            // Self tail only: Java bytecode cannot GOTO another method, so mutual tail stays INVOKESTATIC.
             if (
               st != null &&
               name === st.name &&

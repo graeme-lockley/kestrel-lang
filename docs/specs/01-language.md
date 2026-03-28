@@ -213,7 +213,7 @@ VarDecl        ::= "var" LOWER_IDENT [ ":" Type ] "=" Expr
 
 **Top-level recursion:** Every top-level function name is in scope in the body of every top-level function. Thus a function may call itself (self-recursion) or call any other top-level function (mutual recursion); declaration order does not affect name resolution for function calls.
 
-**Tail-position self calls:** The reference implementation may compile a direct call to the enclosing **top-level** function from **tail position** (same places as the value returned from the function: `if`/`match` branch bodies, block result, etc.) without growing the call stack; semantics remain those of ordinary calls (04 §1.5, 05 §1.2). Short-circuit subexpressions are not tail positions for this purpose.
+**Tail-position calls to top-level functions:** The reference implementation may compile a direct call from **tail position** to the enclosing **top-level** function (**self** tail recursion) or to **another top-level function in the same module** (**mutual** tail recursion) without growing the call stack, when the call matches the compiler’s lowering rules (04 §1.5, 05 §1.2). Tail positions are the same as the value returned from the function: `if`/`match` branch bodies, block result, etc. Short-circuit subexpressions are not tail positions for this purpose.
 
 ### 3.2 Expressions (Precedence and Associativity)
 
