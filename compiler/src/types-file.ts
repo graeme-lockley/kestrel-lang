@@ -6,7 +6,8 @@ import { readFileSync, writeFileSync, statSync } from 'fs';
 import type { InternalType } from './types/internal.js';
 import { freshVar } from './types/internal.js';
 
-const KTI_VERSION = 1;
+/** Bump when export shape changes (e.g. new `kind` values) so stale cache `.kti` files are rejected and deps recompiled. */
+const KTI_VERSION = 2;
 
 /** Serialized type for JSON (var ids in scheme body are 0-based indices into scheme vars). */
 type SerType =
@@ -160,7 +161,7 @@ function deserializeType(raw: unknown, schemeVars?: InternalType[]): InternalTyp
   return { kind: 'prim', name: 'Unit' };
 }
 
-export type TypesFileExportKind = 'function' | 'val' | 'var' | 'type';
+export type TypesFileExportKind = 'function' | 'val' | 'var' | 'type' | 'exception';
 
 export interface TypesFileFunctionExport {
   kind: 'function';
@@ -188,7 +189,18 @@ export interface TypesFileTypeAliasExport {
   opaque?: boolean;
 }
 
-export type TypesFileExportEntry = TypesFileFunctionExport | TypesFileValExport | TypesFileVarExport | TypesFileTypeAliasExport;
+/** Exported `export exception Name` (VM/runtime ADT); not a function slot. */
+export interface TypesFileExceptionExport {
+  kind: 'exception';
+  type: SerType;
+}
+
+export type TypesFileExportEntry =
+  | TypesFileFunctionExport
+  | TypesFileValExport
+  | TypesFileVarExport
+  | TypesFileTypeAliasExport
+  | TypesFileExceptionExport;
 
 export interface TypesFileExport {
   functions: Record<string, TypesFileExportEntry>;
@@ -219,7 +231,7 @@ export type TypesFileExportInput = {
 };
 
 /**
- * Write a types file for a package. Call after codegen; exports include kind ('function' | 'val' | 'var').
+ * Write a types file for a package. Call after codegen; exports include kind ('function' | 'val' | 'var' | 'exception').
  */
 export function writeTypesFile(
   path: string, 
@@ -229,8 +241,12 @@ export function writeTypesFile(
 ): void {
   const functions: Record<string, TypesFileExportEntry> = {};
   for (const [name, exp] of exports) {
-    const serType = serializeType(exp.type);
     const kind = exp.kind ?? 'function';
+    if (kind === 'exception') {
+      functions[name] = { kind: 'exception', type: serializeType(exp.type) };
+      continue;
+    }
+    const serType = serializeType(exp.type);
     if (kind === 'val') {
       functions[name] = { kind: 'val', function_index: exp.function_index, type: serType };
     } else if (kind === 'var') {
@@ -287,6 +303,16 @@ export function readTypesFile(path: string): { exports: Map<string, ResolvedType
         kind: 'type', 
         type: deserializeType(typeExp.type),
         opaque: typeExp.opaque 
+      });
+      continue;
+    }
+    if (kind === 'exception') {
+      const ex = exp as TypesFileExceptionExport;
+      out.set(name, {
+        kind: 'exception',
+        function_index: 0,
+        arity: 0,
+        type: deserializeType(ex.type),
       });
       continue;
     }

@@ -10,9 +10,8 @@ const primitives = @import("primitives.zig");
 const INT61_MIN: i64 = -(1 << 60);
 const INT61_MAX: i64 = (1 << 60) - 1;
 
-/// Allocate a 0-ary runtime exception ADT by type name (e.g. "DivideByZero", "ArithmeticOverflow").
-/// Returns null if the current module does not define an ADT with that name.
-fn allocRuntimeException(gc: *GC, module: *const load_mod.Module, name: []const u8) ?Value {
+/// Allocate a 0-ary exception ADT value from `module`'s ADT table (by type name).
+fn allocExceptionValue(gc: *GC, module: *const load_mod.Module, name: []const u8) ?Value {
     for (module.adts, 0..) |adt, adt_id| {
         if (std.mem.eql(u8, adt.name, name)) {
             const adt_obj = gc.allocObject(gc_mod.ADT_HEADER) catch return null;
@@ -30,6 +29,55 @@ fn allocRuntimeException(gc: *GC, module: *const load_mod.Module, name: []const 
     return null;
 }
 
+fn isStdlibRuntimeKbcPath(path: []const u8) bool {
+    if (std.mem.indexOf(u8, path, "kestrel/runtime.kbc") != null) return true;
+    if (std.mem.indexOf(u8, path, "kestrel\\runtime.kbc") != null) return true;
+    return false;
+}
+
+/// Integer overflow / divide-by-zero: prefer current module, then `kestrel:runtime` (stdlib).
+fn allocRuntimeException(gc: *GC, current_module: *const load_mod.Module, name: []const u8, module_ptrs: []const *const load_mod.Module) ?Value {
+    if (allocExceptionValue(gc, current_module, name)) |v| return v;
+    for (module_ptrs) |mp| {
+        const p = mp.source_path orelse continue;
+        if (!isStdlibRuntimeKbcPath(p)) continue;
+        if (allocExceptionValue(gc, mp, name)) |v| return v;
+    }
+    return null;
+}
+
+/// Load `kestrel:runtime` if `.deps` lists it so overflow/divzero can use canonical ADT ids.
+fn ensureStdlibRuntimeModule(
+    allocator: std.mem.Allocator,
+    entry_kbc_path: []const u8,
+    module_ptrs: *std.ArrayListUnmanaged(*const load_mod.Module),
+    path_to_module: *std.StringHashMap(*load_mod.Module),
+    dependency_cache: *std.ArrayListUnmanaged(load_mod.Module),
+    path_keys: *std.ArrayList([]const u8),
+) void {
+    const dep_path = resolveImportPath(allocator, "kestrel:runtime", entry_kbc_path) catch return;
+    defer allocator.free(dep_path);
+    if (path_to_module.get(dep_path)) |_| return;
+    dependency_cache.ensureTotalCapacity(allocator, dependency_cache.items.len + 1) catch return;
+    const loaded = load_mod.load(allocator, dep_path) catch return;
+    dependency_cache.appendAssumeCapacity(loaded);
+    const ptr = &dependency_cache.items[dependency_cache.items.len - 1];
+    module_ptrs.ensureTotalCapacity(allocator, module_ptrs.items.len + 1) catch return;
+    ptr.module_index = @intCast(module_ptrs.items.len);
+    module_ptrs.appendAssumeCapacity(ptr);
+    ptr.source_path = allocator.dupe(u8, dep_path) catch null;
+    const path_key = allocator.dupe(u8, dep_path) catch return;
+    path_keys.append(allocator, path_key) catch {
+        allocator.free(path_key);
+        return;
+    };
+    path_to_module.put(path_key, ptr) catch {
+        _ = path_keys.pop();
+        allocator.free(path_key);
+        return;
+    };
+}
+
 fn binopInt(stack: *[operand_stack_slots]Value, sp: *usize, op: *const fn (i64, i64) i64) void {
     if (sp.* >= 2) {
         const b = stack[sp.* - 1];
@@ -42,7 +90,7 @@ fn binopInt(stack: *[operand_stack_slots]Value, sp: *usize, op: *const fn (i64, 
 }
 
 const CmpOp = enum { eq, ne, lt, le, gt, ge };
-fn binopCmp(stack: *[operand_stack_slots]Value, sp: *usize, op: CmpOp) void {
+fn binopCmp(stack: *[operand_stack_slots]Value, sp: *usize, op: CmpOp, modules: []const *const load_mod.Module) void {
     if (sp.* >= 2) {
         const b = stack[sp.* - 1];
         const a = stack[sp.* - 2];
@@ -111,8 +159,8 @@ fn binopCmp(stack: *[operand_stack_slots]Value, sp: *usize, op: CmpOp) void {
             } else {
                 // Non-string PTR types: only equality is defined via deep equality
                 result = switch (op) {
-                    .eq => primitives.deepEqual(a, b),
-                    .ne => !primitives.deepEqual(a, b),
+                    .eq => primitives.deepEqualWithModules(a, b, modules),
+                    .ne => !primitives.deepEqualWithModules(a, b, modules),
                     else => false,
                 };
             }
@@ -184,6 +232,10 @@ const ExceptionHandler = struct {
     handler_pc: usize,
     stack_sp: usize,
     frame_depth: usize,
+    /// Module whose `code` contains `handler_pc` (the module active when TRY executed). Call frames store the *caller* module, so we must not restore from `call_frames[frame_depth].module` here.
+    handler_module: *load_mod.Module,
+    /// True when `TRY` ran with `current_locals` pointing at `handler_module.globals` (module init / top-level), not `saved_locals[frame_depth]`.
+    locals_are_globals: bool,
 };
 
 const CallFrame = struct {
@@ -397,11 +449,14 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
 
     // Exception handler stack
     var handlers: [max_handlers]ExceptionHandler = undefined;
-    for (&handlers) |*h| h.* = .{ .handler_pc = 0, .stack_sp = 0, .frame_depth = 0 };
+    for (&handlers) |*h| h.* = .{ .handler_pc = 0, .stack_sp = 0, .frame_depth = 0, .handler_module = module, .locals_are_globals = false };
     var handler_sp: usize = 0;
 
     // Pending runtime exception (overflow, divide-by-zero) to throw at next loop iteration
     var pending_exception: ?Value = null;
+
+    // Load kestrel:runtime when listed in entry .deps so VM arithmetic traps use stdlib exception ADTs.
+    ensureStdlibRuntimeModule(allocator, entry_path, &module_ptrs, &path_to_module, &dependency_cache, &path_keys);
 
     // Initialize GC
     var gc = GC.init(allocator);
@@ -418,13 +473,15 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
             handler_sp -= 1;
             const handler = handlers[handler_sp];
             frame_sp = handler.frame_depth;
-            const frame = call_frames[frame_sp];
-            current_module = frame.module;
+            current_module = handler.handler_module;
             code = current_module.code;
             constants = current_module.constants;
             functions = current_module.functions;
             shapes = current_module.shapes;
-            current_locals = saved_locals[frame_sp][0..];
+            current_locals = if (handler.locals_are_globals and current_module.globals.len > 0)
+                current_module.globals
+            else
+                saved_locals[frame_sp][0..];
             pc = handler.handler_pc;
             sp = handler.stack_sp;
             if (!pushOperand(&stack, &sp, exception)) {
@@ -822,7 +879,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const b = stack[sp - 1];
                         const a = stack[sp - 2];
                         sp -= 2;
-                        if (!pushOperand(&stack, &sp, primitives.equals(a, b))) {
+                        if (!pushOperand(&stack, &sp, primitives.equals(a, b, module_ptrs.items))) {
                             operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
                             return false;
                         }
@@ -1257,7 +1314,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const sum = @addWithOverflow(a, b);
                         if (sum[1] != 0 or sum[0] < INT61_MIN or sum[0] > INT61_MAX) overflow = true;
                         if (overflow) {
-                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow", module_ptrs.items)) |exc| {
                                 pending_exception = exc;
                             }
                             sp -= 2;
@@ -1287,7 +1344,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const diff = @subWithOverflow(a, b);
                         if (diff[1] != 0 or diff[0] < INT61_MIN or diff[0] > INT61_MAX) overflow = true;
                         if (overflow) {
-                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow", module_ptrs.items)) |exc| {
                                 pending_exception = exc;
                             }
                             sp -= 2;
@@ -1317,7 +1374,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const prod = @mulWithOverflow(a, b);
                         if (prod[1] != 0 or prod[0] < INT61_MIN or prod[0] > INT61_MAX) overflow = true;
                         if (overflow) {
-                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow", module_ptrs.items)) |exc| {
                                 pending_exception = exc;
                             }
                             sp -= 2;
@@ -1344,7 +1401,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     if (a_val.tag == .int and b_val.tag == .int) {
                         const b = Value.intTo(b_val);
                         if (b == 0) {
-                            if (allocRuntimeException(&gc, current_module, "DivideByZero")) |exc| {
+                            if (allocRuntimeException(&gc, current_module, "DivideByZero", module_ptrs.items)) |exc| {
                                 pending_exception = exc;
                             }
                             sp -= 2;
@@ -1353,7 +1410,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const a = Value.intTo(a_val);
                         const q = @divTrunc(a, b);
                         if (q < INT61_MIN or q > INT61_MAX) {
-                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow", module_ptrs.items)) |exc| {
                                 pending_exception = exc;
                             }
                             sp -= 2;
@@ -1380,7 +1437,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     if (a_val.tag == .int and b_val.tag == .int) {
                         const b = Value.intTo(b_val);
                         if (b == 0) {
-                            if (allocRuntimeException(&gc, current_module, "DivideByZero")) |exc| {
+                            if (allocRuntimeException(&gc, current_module, "DivideByZero", module_ptrs.items)) |exc| {
                                 pending_exception = exc;
                             }
                             sp -= 2;
@@ -1389,7 +1446,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const a = Value.intTo(a_val);
                         const r = @mod(a, b);
                         if (r < INT61_MIN or r > INT61_MAX) {
-                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow", module_ptrs.items)) |exc| {
                                 pending_exception = exc;
                             }
                             sp -= 2;
@@ -1417,14 +1474,14 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const a = Value.intTo(a_val);
                         const b = Value.intTo(b_val);
                         const pow_result = std.math.powi(i64, a, @intCast(b)) catch {
-                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow", module_ptrs.items)) |exc| {
                                 pending_exception = exc;
                             }
                             sp -= 2;
                             continue;
                         };
                         if (pow_result < INT61_MIN or pow_result > INT61_MAX) {
-                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow")) |exc| {
+                            if (allocRuntimeException(&gc, current_module, "ArithmeticOverflow", module_ptrs.items)) |exc| {
                                 pending_exception = exc;
                             }
                             sp -= 2;
@@ -1435,12 +1492,12 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     }
                 }
             },
-            EQ => binopCmp(&stack, &sp, .eq),
-            NE => binopCmp(&stack, &sp, .ne),
-            LT => binopCmp(&stack, &sp, .lt),
-            LE => binopCmp(&stack, &sp, .le),
-            GT => binopCmp(&stack, &sp, .gt),
-            GE => binopCmp(&stack, &sp, .ge),
+            EQ => binopCmp(&stack, &sp, .eq, module_ptrs.items),
+            NE => binopCmp(&stack, &sp, .ne, module_ptrs.items),
+            LT => binopCmp(&stack, &sp, .lt, module_ptrs.items),
+            LE => binopCmp(&stack, &sp, .le, module_ptrs.items),
+            GT => binopCmp(&stack, &sp, .gt, module_ptrs.items),
+            GE => binopCmp(&stack, &sp, .ge, module_ptrs.items),
             JUMP => {
                 const offset = std.mem.readInt(i32, code[pc..][0..4], .little);
                 pc += 4;
@@ -1650,13 +1707,15 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
 
                 // Restore frame state to where TRY was executed
                 frame_sp = handler.frame_depth;
-                const frame = call_frames[frame_sp];
-                current_module = frame.module;
+                current_module = handler.handler_module;
                 code = current_module.code;
                 constants = current_module.constants;
                 functions = current_module.functions;
                 shapes = current_module.shapes;
-                current_locals = saved_locals[frame_sp][0..];
+                current_locals = if (handler.locals_are_globals and current_module.globals.len > 0)
+                    current_module.globals
+                else
+                    saved_locals[frame_sp][0..];
 
                 // Restore stack pointer and PC
                 pc = handler.handler_pc;
@@ -1683,6 +1742,8 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     .handler_pc = handler_addr,
                     .stack_sp = sp,
                     .frame_depth = frame_sp,
+                    .handler_module = current_module,
+                    .locals_are_globals = current_module.globals.len > 0 and current_locals.ptr == current_module.globals.ptr,
                 };
                 handler_sp += 1;
             },

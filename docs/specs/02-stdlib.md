@@ -91,6 +91,17 @@ Numeric, boolean, and general utilities. **Int remainder note:** `%` on `Int` fo
 
 ---
 
+## kestrel:runtime
+
+Canonical **exception ADTs** used by the VM for arithmetic traps (see language spec §Int operations). User code should import these names to `catch` or to annotate types; implementations must not rely on a duplicate `export exception` in the entry module.
+
+| Name | Role |
+|------|------|
+| `ArithmeticOverflow` | Thrown when a fixed-width `Int` operation overflows (VM-defined width). |
+| `DivideByZero` | Thrown for `Int` division or remainder when the divisor is zero. |
+
+---
+
 ## kestrel:option
 
 Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on `map`, `andThen`, `withDefault`, etc.

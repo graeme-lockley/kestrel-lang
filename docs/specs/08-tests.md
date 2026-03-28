@@ -50,6 +50,7 @@ A conforming implementation must:
 ### 2.5 Runtime Model
 
 - **Values:** Tagged values (INT, BOOL, UNIT, CHAR, PTR) and heap objects (FLOAT, STRING, RECORD, ADT, TASK, CLOSURE) behave as in [05-runtime-model.md](05-runtime-model.md). Closure values are fn_ref (non-capturing) or PTR to CLOSURE (capturing); see 04 §1.10, 05 §2. No undefined layout assumptions that contradict the spec.
+- **Integer overflow and division by zero:** `tests/unit/overflow_divzero.test.ks` asserts that 61-bit `Int` overflow on `+`, `-`, `*` and divide/mod by zero throw catchable exceptions (`ArithmeticOverflow`, `DivideByZero`) defined in the same module, including when tests run as an imported module (see 05 §1, §5).
 - **GC:** Programs that allocate many short-lived objects complete without leaks; no use-after-free when the GC is enabled.
 
 ### 2.6 Modules

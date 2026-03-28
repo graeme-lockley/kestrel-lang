@@ -1998,37 +1998,95 @@ function makeEmitExpr(
       // Patch TRY instruction with handler offset (relative to TRY start)
       patchI32(tryPos + 1, handlerPos - tryPos);
 
-      // Exception value is on stack; store in slot for case matching; optionally bind to catch variable
-      const excSlot = env.size;
+      // Exception value is on stack; reserve a local via nextLocalSlot (not env.size — Map size ≠ max slot).
+      const excSlot = nextLocalSlot(env);
       if (expr.catchVar != null) {
         env.set(expr.catchVar, excSlot);
+      } else {
+        env.set('$tryExc', excSlot);
       }
       emitStoreLocal(excSlot);
 
-      // Emit catch cases (similar to match)
-      const firstCase = expr.cases[0];
-      if (firstCase) {
-        if (firstCase.pattern.kind === 'VarPattern') {
-          const slot = env.size;
-          env.set(firstCase.pattern.name, slot);
-          emitLoadLocal(excSlot); // Load exception
-          emitStoreLocal(slot);
-          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
-          env.delete(firstCase.pattern.name);
-        } else {
-          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
-        }
-      } else {
+      const endJumps: number[] = [];
+
+      if (expr.cases.length === 0) {
         emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+      } else {
+        for (const c of expr.cases) {
+          const pat = c.pattern;
+          switch (pat.kind) {
+            case 'ConstructorPattern': {
+              const fieldCount = pat.fields?.length ?? 0;
+              const ctor = getConstructor(pat.name, fieldCount, adts);
+              if (ctor == null) {
+                throw new Error(`Codegen: unknown constructor in catch pattern ${pat.name}(${fieldCount})`);
+              }
+              if (fieldCount > 0) {
+                throw new Error(`Codegen: catch pattern ${pat.name} with payload is not implemented yet`);
+              }
+              // Deep structural equality vs a fresh instance (distinct ADTs may share ctor tag 0; MATCH alone is insufficient).
+              emitLoadLocal(excSlot);
+              emitConstruct(ctor.adtId, ctor.ctor, ctor.arity);
+              emitEq();
+              const jfPos = codeOffset();
+              emitJumpIfFalse(0);
+              emitExpr(c.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
+              const jEnd = codeOffset();
+              emitJump(0);
+              endJumps.push(jEnd);
+              patchI32(jfPos + 1, codeOffset() - (jfPos + 5));
+              break;
+            }
+            case 'VarPattern': {
+              if (expr.catchVar !== pat.name) {
+                const vSlot = nextLocalSlot(env);
+                env.set(pat.name, vSlot);
+                emitLoadLocal(excSlot);
+                emitStoreLocal(vSlot);
+              }
+              emitExpr(c.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
+              if (expr.catchVar !== pat.name) {
+                env.delete(pat.name);
+              }
+              const jEnd = codeOffset();
+              emitJump(0);
+              endJumps.push(jEnd);
+              break;
+            }
+            case 'WildcardPattern': {
+              emitExpr(c.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
+              const jEnd = codeOffset();
+              emitJump(0);
+              endJumps.push(jEnd);
+              break;
+            }
+            default:
+              throw new Error(`Codegen: try/catch pattern ${(pat as { kind: string }).kind} not supported`);
+          }
+        }
+
+        const last = expr.cases[expr.cases.length - 1]!;
+        const exhaustive =
+          last.pattern.kind === 'VarPattern' || last.pattern.kind === 'WildcardPattern';
+        if (!exhaustive) {
+          emitLoadLocal(excSlot);
+          emitThrow();
+        }
+      }
+
+      const handlerMerge = codeOffset();
+      for (const jEnd of endJumps) {
+        patchI32(jEnd + 1, handlerMerge - (jEnd + 5));
       }
 
       if (expr.catchVar != null) {
         env.delete(expr.catchVar);
+      } else {
+        env.delete('$tryExc');
       }
 
-      // End: patch jump
       const endPos = codeOffset();
-      patchI32(jumpPos + 1, endPos - jumpPos);
+      patchI32(jumpPos + 1, endPos - (jumpPos + 5));
       break;
     }
     case 'AwaitExpr': {
@@ -2146,6 +2204,11 @@ export interface CodegenOptions {
   namespaceVarSetterIds?: Map<string, Map<string, number>>;
   /** Namespace members that are export val/var getters (0-ary CALL); functions use LOAD_IMPORTED_FN. */
   namespaceThunkFields?: Map<string, Set<string>>;
+  /**
+   * Imported exception ADTs (e.g. `kestrel:runtime`). Adds bytecode ADT rows and ctor aliases (`as` imports).
+   * VM `==` matches across modules for exception-style ADTs with the same type name.
+   */
+  importedExceptions?: { canonical: string; ctorNames: string[] }[];
   /** Source file path for debug section (file:line in stack traces). */
   sourceFile?: string;
 }
@@ -2253,7 +2316,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     });
   }
 
-  // Add exception declarations as single-constructor ADTs (so VM can throw by name, e.g. DivideByZero, ArithmeticOverflow)
+  // Add exception declarations as single-constructor ADTs (user `export exception`; VM arithmetic uses `kestrel:runtime` ADTs by name)
   const exceptionDecls = program.body.filter((n): n is ExceptionDecl => n != null && n.kind === 'ExceptionDecl');
   for (const ed of exceptionDecls) {
     const arity = ed.fields?.length ?? 0;
@@ -2263,6 +2326,19 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
       constructors: [{
         nameIndex: stringIndex(ed.name),
         payloadTypeIndex: arity === 0 ? 0xFFFFFFFF : 0,
+      }],
+    });
+  }
+
+  const localExceptionNames = new Set(exceptionDecls.map((e) => e.name));
+  for (const row of options?.importedExceptions ?? []) {
+    if (localExceptionNames.has(row.canonical)) continue;
+    userCtorArityMap.set(row.canonical, 0);
+    adts.push({
+      nameIndex: stringIndex(row.canonical),
+      constructors: [{
+        nameIndex: stringIndex(row.canonical),
+        payloadTypeIndex: 0xFFFFFFFF,
       }],
     });
   }
@@ -2283,6 +2359,16 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
       ctorArity[ctorName] = arity;
     }
     userAdtConfigs.set(adtName, { size: adt.constructors.length, ctorToTag, ctorArity });
+  }
+
+  if (options?.importedExceptions) {
+    for (const row of options.importedExceptions) {
+      const slot = constructorLookup.get(row.canonical);
+      if (slot == null) continue;
+      for (const name of row.ctorNames) {
+        if (name !== row.canonical) constructorLookup.set(name, slot);
+      }
+    }
   }
 
   const seenSpecs = new Set<string>();

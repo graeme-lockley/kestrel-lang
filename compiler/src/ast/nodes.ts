@@ -112,6 +112,8 @@ export interface ExceptionDecl extends NodeBase {
   kind: 'ExceptionDecl';
   name: string;
   fields?: TypeField[];
+  /** True when declared as `export exception` (via parseExport). */
+  exported: boolean;
 }
 
 export interface TypeField extends NodeBase {

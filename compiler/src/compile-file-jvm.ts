@@ -43,6 +43,7 @@ function getExportSet(program: Program): Set<string> {
     if (!node) continue;
     if (node.kind === 'FunDecl' && node.exported) names.add(node.name);
     else if (node.kind === 'TypeDecl' && node.visibility === 'export') names.add(node.name);
+    else if (node.kind === 'ExceptionDecl' && node.exported) names.add(node.name);
     else if (node.kind === 'ValDecl' || node.kind === 'VarDecl') names.add(node.name);
   }
   return names;
@@ -291,10 +292,28 @@ export function compileFileJvm(
       importedValVarToClass: importedValVarToClass.size > 0 ? importedValVarToClass : undefined,
     });
 
+    const runtimeKsPathForDeps = pathResolve(stdlibDir, 'kestrel/runtime.ks');
+    if (getClassOutputDir && existsSync(runtimeKsPathForDeps) && filePath !== runtimeKsPathForDeps) {
+      const rtOut = compileOne(runtimeKsPathForDeps);
+      if (!rtOut.ok) {
+        visited.delete(filePath);
+        return rtOut;
+      }
+    }
+
     const dependencyPaths = [
       filePath,
       ...depResults.flatMap((d) => [d.path, ...d.dependencyPaths]),
     ];
+    if (getClassOutputDir && existsSync(runtimeKsPathForDeps)) {
+      if (!dependencyPaths.includes(runtimeKsPathForDeps)) dependencyPaths.push(runtimeKsPathForDeps);
+      const rtClassDir = getClassOutputDir(runtimeKsPathForDeps);
+      const rtClassName = cache.get(runtimeKsPathForDeps)?.className;
+      if (rtClassName) {
+        const rtMarker = pathResolve(rtClassDir, rtClassName + '.class');
+        if (!dependencyPaths.includes(rtMarker)) dependencyPaths.push(rtMarker);
+      }
+    }
 
     if (getClassOutputDir) {
       const classDir = getClassOutputDir(filePath);

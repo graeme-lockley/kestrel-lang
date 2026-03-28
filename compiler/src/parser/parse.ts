@@ -262,7 +262,7 @@ class Parser {
         fields = this.parseTypeFieldList();
         this.expect('rbrace');
       }
-      return { kind: 'ExceptionDecl', name, fields };
+      return { kind: 'ExceptionDecl', name, fields, exported: true };
     }
     // After parseExport() consumes 'export', we are at 'exception'
     if (this.at('keyword', 'exception')) {
@@ -274,7 +274,7 @@ class Parser {
         fields = this.parseTypeFieldList();
         this.expect('rbrace');
       }
-      return { kind: 'ExceptionDecl', name, fields };
+      return { kind: 'ExceptionDecl', name, fields, exported };
     }
     if (this.at('keyword', 'fun')) {
       return this.parseFunDecl(exported);

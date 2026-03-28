@@ -1320,6 +1320,18 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           
           adtConstructors.set(node.name, node.body.constructors.map(c => ({ name: c.name, arity: c.params.length })));
         }
+      } else if (node.kind === 'ExceptionDecl') {
+        const adtType: InternalType = { kind: 'app', name: node.name, args: [] };
+        const ctorType: InternalType =
+          node.fields && node.fields.length > 0
+            ? {
+                kind: 'arrow',
+                params: node.fields.map((f) => astTypeToInternal(f.type, typeAliases, resolveQualified)),
+                return: adtType,
+              }
+            : adtType;
+        const scheme = generalize(apply(ctorType), envFreeVars());
+        env.set(node.name, scheme);
       } else if (node.kind === 'ValStmt') {
         const t = apply(inferExpr(node.value));
         const scheme = generalize(t, envFreeVars());
@@ -1425,6 +1437,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             exportedTypeAliases.set(node.name, apply(t));
           }
         }
+      } else if (node.kind === 'ExceptionDecl' && node.exported) {
+        const t = env.get(node.name);
+        if (t != null) exports.set(node.name, apply(t));
       }
       if (node.kind === 'TypeDecl') {
         exportedTypeVisibility.set(node.name, node.visibility);

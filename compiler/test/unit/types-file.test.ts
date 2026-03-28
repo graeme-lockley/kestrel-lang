@@ -139,6 +139,23 @@ describe('types-file', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('round-trips exception export kind', () => {
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, 'exn.kti');
+    const exnType: InternalType = { kind: 'app', name: 'DivideByZero', args: [] };
+    const exports = new Map<string, TypesFileExportInput>();
+    exports.set('DivideByZero', { kind: 'exception', function_index: 0, arity: 0, type: exnType });
+    writeTypesFile(path, exports);
+    const read = readTypesFile(path);
+    expect(read.exports.size).toBe(1);
+    const exp = read.exports.get('DivideByZero');
+    expect(exp?.kind).toBe('exception');
+    expect(exp?.function_index).toBe(0);
+    expect(exp?.arity).toBe(0);
+    expect(typeStructureEqual(exp!.type, exnType)).toBe(true);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('round-trips all InternalType forms (union, inter, record with row, scheme, app, tuple)', () => {
     mkdirSync(dir, { recursive: true });
     const path = join(dir, 'types.kti');

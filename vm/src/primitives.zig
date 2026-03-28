@@ -518,12 +518,22 @@ pub fn stringEquals(a_val: Value, b_val: Value) Value {
     return Value.boolVal(std.mem.eql(u8, a, b));
 }
 
-/// Deep structural equality: (T, T) -> Bool
-pub fn equals(a: Value, b: Value) Value {
-    return Value.boolVal(deepEqual(a, b));
+/// Deep structural equality: (T, T) -> Bool. Pass loaded modules so `==` on ADTs can relate
+/// exception values across modules (e.g. VM trap from `kestrel:runtime` vs catch pattern in entry).
+pub fn equals(a: Value, b: Value, modules: []const *const load_mod.Module) Value {
+    return Value.boolVal(deepEqualWithModules(a, b, modules));
 }
 
+/// Same as [deepEqualWithModules] with no module table (legacy ADT compare: ctor/arity + adt_id only).
 pub fn deepEqual(a: Value, b: Value) bool {
+    return deepEqualWithModules(a, b, &.{});
+}
+
+fn isExceptionStyleAdt(entry: load_mod.AdtEntry) bool {
+    return entry.constructor_names.len == 1 and std.mem.eql(u8, entry.name, entry.constructor_names[0]);
+}
+
+pub fn deepEqualWithModules(a: Value, b: Value, modules: []const *const load_mod.Module) bool {
     if (a.tag != b.tag) return false;
     switch (a.tag) {
         .int, .bool, .char => return a.payload == b.payload,
@@ -557,27 +567,54 @@ pub fn deepEqual(a: Value, b: Value) bool {
                 const fields_b = @as([*]const Value, @alignCast(@ptrCast(base_b + gc_mod.RECORD_HEADER)));
                 var i: usize = 0;
                 while (i < fc_a) : (i += 1) {
-                    if (!deepEqual(fields_a[i], fields_b[i])) return false;
+                    if (!deepEqualWithModules(fields_a[i], fields_b[i], modules)) return false;
                 }
                 return true;
             }
             if (kind_a == gc_mod.ADT_KIND) {
+                const mod_a = std.mem.readInt(u32, base_a[4..8], .little);
+                const mod_b = std.mem.readInt(u32, base_b[4..8], .little);
                 const adt_id_a = std.mem.readInt(u32, base_a[8..12], .little);
                 const adt_id_b = std.mem.readInt(u32, base_b[8..12], .little);
-                if (adt_id_a != adt_id_b) return false;
                 const ctor_a = std.mem.readInt(u32, base_a[12..16], .little);
                 const ctor_b = std.mem.readInt(u32, base_b[12..16], .little);
-                if (ctor_a != ctor_b) return false;
                 const arity_a = std.mem.readInt(u32, base_a[16..20], .little);
                 const arity_b = std.mem.readInt(u32, base_b[16..20], .little);
-                if (arity_a != arity_b) return false;
+                if (ctor_a != ctor_b or arity_a != arity_b) return false;
                 const payloads_a = @as([*]const Value, @alignCast(@ptrCast(base_a + gc_mod.ADT_HEADER)));
                 const payloads_b = @as([*]const Value, @alignCast(@ptrCast(base_b + gc_mod.ADT_HEADER)));
-                var i: usize = 0;
-                while (i < arity_a) : (i += 1) {
-                    if (!deepEqual(payloads_a[i], payloads_b[i])) return false;
+
+                if (mod_a == mod_b and adt_id_a == adt_id_b) {
+                    var i: usize = 0;
+                    while (i < arity_a) : (i += 1) {
+                        if (!deepEqualWithModules(payloads_a[i], payloads_b[i], modules)) return false;
+                    }
+                    return true;
                 }
-                return true;
+
+                if (mod_a < modules.len and mod_b < modules.len and
+                    adt_id_a < modules[mod_a].adts.len and adt_id_b < modules[mod_b].adts.len)
+                {
+                    const ea = modules[mod_a].adts[adt_id_a];
+                    const eb = modules[mod_b].adts[adt_id_b];
+                    if (isExceptionStyleAdt(ea) and isExceptionStyleAdt(eb) and std.mem.eql(u8, ea.name, eb.name)) {
+                        if (arity_a == 0) return true;
+                        var i: usize = 0;
+                        while (i < arity_a) : (i += 1) {
+                            if (!deepEqualWithModules(payloads_a[i], payloads_b[i], modules)) return false;
+                        }
+                        return true;
+                    }
+                }
+
+                if (adt_id_a == adt_id_b) {
+                    var i: usize = 0;
+                    while (i < arity_a) : (i += 1) {
+                        if (!deepEqualWithModules(payloads_a[i], payloads_b[i], modules)) return false;
+                    }
+                    return true;
+                }
+                return false;
             }
             return false;
         },

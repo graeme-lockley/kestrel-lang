@@ -9,8 +9,8 @@ import { typecheck, type TypecheckOptions } from './typecheck/check.js';
 import { codegen, type CodegenResult } from './codegen/codegen.js';
 import { writeKbc, type ImportedFunctionEntry } from './bytecode/write.js';
 import { resolveSpecifier } from './resolve.js';
-import { readTypesFile, writeTypesFile, isTypesFileFresh } from './types-file.js';
-import type { Program, ImportDecl, Expr } from './ast/nodes.js';
+import { readTypesFile, writeTypesFile, isTypesFileFresh, type TypesFileExportInput } from './types-file.js';
+import type { Program, ImportDecl, Expr, ExceptionDecl } from './ast/nodes.js';
 import type { InternalType } from './types/internal.js';
 import { tUnit } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
@@ -102,6 +102,7 @@ function getExportSet(program: Program): Set<string> {
     if (!node) continue;
     if (node.kind === 'FunDecl' && node.exported) names.add(node.name);
     else if (node.kind === 'TypeDecl' && node.visibility === 'export') names.add(node.name);
+    else if (node.kind === 'ExceptionDecl' && node.exported) names.add(node.name);
     else if (node.kind === 'ValDecl' || node.kind === 'VarDecl') names.add(node.name);
   }
   return names;
@@ -247,6 +248,8 @@ export function compileFile(
           fromTypesFile: true;
         };
     const depResults: DepResult[] = [];
+    /** Imported exception ADTs (e.g. `kestrel:runtime`) for codegen catch patterns + VM cross-module `==`. */
+    const exceptionImports: { canonical: string; local: string }[] = [];
 
     for (const spec of specs) {
       const depPath = resolved.get(spec)!;
@@ -320,8 +323,14 @@ export function compileFile(
                   if (ta.opaque) {
                     importOpaqueTypes.add(localName);
                   }
-                } else if (exp != null && (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var')) {
+                } else if (
+                  exp != null &&
+                  (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var' || exp.kind === 'exception')
+                ) {
                   importBindings.set(localName, exp.type);
+                  if (exp.kind === 'exception' && exp.type.kind === 'app' && exp.type.args.length === 0) {
+                    exceptionImports.push({ canonical: exp.type.name, local: localName });
+                  }
                 }
               }
             }
@@ -329,7 +338,7 @@ export function compileFile(
               if (imp.kind !== 'NamespaceImport' || imp.spec !== spec) continue;
               const bindings = new Map<string, InternalType>();
               for (const [name, exp] of typesExports) {
-                if (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var') {
+                if (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var' || exp.kind === 'exception') {
                   bindings.set(name, exp.type);
                 }
               }
@@ -366,6 +375,11 @@ export function compileFile(
               }
             } else {
               importBindings.set(localName, t);
+              const isExc = depOut.program.body.some(
+                (n): n is ExceptionDecl =>
+                  n != null && n.kind === 'ExceptionDecl' && n.exported && n.name === externalName,
+              );
+              if (isExc) exceptionImports.push({ canonical: externalName, local: localName });
             }
           }
         }
@@ -524,6 +538,24 @@ export function compileFile(
       }
     }
 
+    const importExcByCanonical = new Map<string, Set<string>>();
+    for (const row of exceptionImports) {
+      let s = importExcByCanonical.get(row.canonical);
+      if (!s) {
+        s = new Set<string>();
+        importExcByCanonical.set(row.canonical, s);
+      }
+      s.add(row.canonical);
+      s.add(row.local);
+    }
+    const importedExceptions =
+      importExcByCanonical.size > 0
+        ? [...importExcByCanonical.entries()].map(([canonical, names]) => ({
+            canonical,
+            ctorNames: [...names],
+          }))
+        : undefined;
+
     const mainResult = codegen(program, {
       importedFuncIds,
       importedThunkLocals: importedThunkLocals.size > 0 ? importedThunkLocals : undefined,
@@ -532,6 +564,7 @@ export function compileFile(
       namespaceFuncIds: namespaceFuncIds.size > 0 ? namespaceFuncIds : undefined,
       namespaceVarSetterIds: namespaceVarSetterIds.size > 0 ? namespaceVarSetterIds : undefined,
       namespaceThunkFields: namespaceThunkFields.size > 0 ? namespaceThunkFields : undefined,
+      importedExceptions,
       sourceFile: filePath,
     });
     mainResult.importedFunctionTable = importedFunctionTable;
@@ -560,13 +593,13 @@ export function compileFile(
         if (node.kind === 'ValDecl') exportKind.set(node.name, 'val');
         if (node.kind === 'VarDecl') exportKind.set(node.name, 'var');
       }
-      const typeExports = new Map<string, { kind: 'function' | 'val' | 'var'; function_index: number; arity: number; type: InternalType; setter_index?: number }>();
+      const typeExports = new Map<string, TypesFileExportInput>();
       for (let i = 0; i < mainResult.functionTable.length; i++) {
         const name = mainResult.stringTable[mainResult.functionTable[i]!.nameIndex];
         const t = tc.exports.get(name);
         if (name && t) {
           const kind = exportKind.get(name) ?? 'function';
-          const entry: { kind: 'function' | 'val' | 'var'; function_index: number; arity: number; type: InternalType; setter_index?: number } = {
+          const entry: TypesFileExportInput = {
             kind,
             function_index: i,
             arity: mainResult.functionTable[i]!.arity,
@@ -576,7 +609,24 @@ export function compileFile(
           typeExports.set(name, entry);
         }
       }
+      for (const node of program.body) {
+        if (node?.kind === 'ExceptionDecl' && node.exported) {
+          const t = tc.exports.get(node.name);
+          if (t != null) {
+            typeExports.set(node.name, { kind: 'exception', function_index: 0, arity: 0, type: t });
+          }
+        }
+      }
       writeTypesFile(paths.kti, typeExports, tc.exportedTypeAliases, tc.exportedTypeVisibility);
+    }
+
+    const runtimeKsPathForDeps = pathResolve(stdlibDir, 'kestrel/runtime.ks');
+    if (getOutputPaths && existsSync(runtimeKsPathForDeps) && filePath !== runtimeKsPathForDeps) {
+      const rtOut = compileOne(runtimeKsPathForDeps);
+      if (!rtOut.ok) {
+        visited.delete(filePath);
+        return rtOut;
+      }
     }
 
     const dependencyPaths = [
@@ -609,6 +659,11 @@ export function compileFile(
         return [d.path, ...transitive];
       }),
     ];
+    if (getOutputPaths && existsSync(runtimeKsPathForDeps)) {
+      const rp = getOutputPaths(runtimeKsPathForDeps);
+      if (!dependencyPaths.includes(runtimeKsPathForDeps)) dependencyPaths.push(runtimeKsPathForDeps);
+      if (!dependencyPaths.includes(rp.kbc)) dependencyPaths.push(rp.kbc);
+    }
     if (getOutputPaths) {
       const paths = getOutputPaths(filePath);
       writeFileSync(paths.kbc + '.deps', dependencyPaths.join('\n') + '\n');
