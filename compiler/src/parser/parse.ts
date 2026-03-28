@@ -39,6 +39,12 @@ export interface ParseErrorEntry {
 
 export type ParseResult = Program | { ok: false; errors: ParseErrorEntry[] };
 
+/**
+ * Expression parsing context: `expr` requires a value-producing block end before `}`; `stmt` allows
+ * assign / val / var / fun as the last element (implicit `()`), e.g. statement-oriented `if` branches.
+ */
+export type ExprContext = 'expr' | 'stmt';
+
 export function parse(tokens: Token[]): ParseResult {
   const p = new Parser(tokens);
   return p.parseProgram();
@@ -568,11 +574,11 @@ class Parser {
       const value = this.parseExpr();
       return { kind: 'VarStmt', name, value };
     }
-    const expr = this.parseExpr();
+    const expr = this.parseExpr('stmt');
     // Check if it's an assignment statement
     if (this.at('op', ':=')) {
       this.advance();
-      const value = this.parseExpr();
+      const value = this.parseExpr('expr');
       return { kind: 'AssignStmt', target: expr, value };
     }
     // Otherwise it's an expression statement
@@ -582,6 +588,7 @@ class Parser {
   private isExprStart(): boolean {
     return (
       this.at('keyword', 'if') ||
+      this.at('keyword', 'while') ||
       this.at('keyword', 'match') ||
       this.at('keyword', 'try') ||
       this.at('lparen') ||
@@ -599,9 +606,9 @@ class Parser {
     );
   }
 
-  parseExpr(): Expr {
+  parseExpr(ctx: ExprContext = 'expr'): Expr {
     const startIdx = this.i;
-    const expr = this.parsePipeExpr();
+    const expr = this.parsePipeExpr(ctx);
     const endIdx = this.i - 1;
     if (endIdx >= startIdx && expr && typeof expr === 'object') {
       const startSpan = this.tokens[startIdx]!.span;
@@ -625,86 +632,86 @@ class Parser {
     return this.at('eof');
   }
 
-  private parsePipeExpr(): Expr {
-    let left = this.parseConsExpr();
+  private parsePipeExpr(ctx: ExprContext): Expr {
+    let left = this.parseConsExpr(ctx);
     while (this.at('op', '|>') || this.at('op', '<|')) {
       const op = this.advance().value as '|>' | '<|';
-      const right = this.parseConsExpr();
+      const right = this.parseConsExpr(ctx);
       left = { kind: 'PipeExpr', left, op, right };
     }
     return left;
   }
 
-  private parseConsExpr(): Expr {
-    const left = this.parseOrExpr();
+  private parseConsExpr(ctx: ExprContext): Expr {
+    const left = this.parseOrExpr(ctx);
     if (this.at('op', '::')) {
       this.advance();
-      const right = this.parseConsExpr();
+      const right = this.parseConsExpr(ctx);
       return { kind: 'ConsExpr', head: left, tail: right };
     }
     return left;
   }
 
-  private parseOrExpr(): Expr {
-    let left = this.parseAndExpr();
+  private parseOrExpr(ctx: ExprContext): Expr {
+    let left = this.parseAndExpr(ctx);
     while (this.at('op', '|')) {
       this.advance();
-      left = { kind: 'BinaryExpr', op: '|', left, right: this.parseAndExpr() };
+      left = { kind: 'BinaryExpr', op: '|', left, right: this.parseAndExpr(ctx) };
     }
     return left;
   }
 
-  private parseAndExpr(): Expr {
-    let left = this.parseRelExpr();
+  private parseAndExpr(ctx: ExprContext): Expr {
+    let left = this.parseRelExpr(ctx);
     while (this.at('op', '&')) {
       this.advance();
-      left = { kind: 'BinaryExpr', op: '&', left, right: this.parseRelExpr() };
+      left = { kind: 'BinaryExpr', op: '&', left, right: this.parseRelExpr(ctx) };
     }
     return left;
   }
 
-  private parseRelExpr(): Expr {
-    let left = this.parseAddExpr();
+  private parseRelExpr(ctx: ExprContext): Expr {
+    let left = this.parseAddExpr(ctx);
     const relOps = ['==', '!=', '<', '>', '<=', '>='];
     while (this.at('op') && relOps.includes(this.current().value ?? '')) {
       const op = this.advance().value!;
-      left = { kind: 'BinaryExpr', op, left, right: this.parseAddExpr() };
+      left = { kind: 'BinaryExpr', op, left, right: this.parseAddExpr(ctx) };
     }
     return left;
   }
 
-  private parseAddExpr(): Expr {
-    let left = this.parseMulExpr();
+  private parseAddExpr(ctx: ExprContext): Expr {
+    let left = this.parseMulExpr(ctx);
     while (this.at('op', '+') || this.at('op', '-')) {
       const op = this.advance().value!;
-      left = { kind: 'BinaryExpr', op, left, right: this.parseMulExpr() };
+      left = { kind: 'BinaryExpr', op, left, right: this.parseMulExpr(ctx) };
     }
     return left;
   }
 
-  private parseMulExpr(): Expr {
-    let left = this.parsePowExpr();
+  private parseMulExpr(ctx: ExprContext): Expr {
+    let left = this.parsePowExpr(ctx);
     while (this.at('op', '*') || this.at('op', '/') || this.at('op', '%')) {
       const op = this.advance().value!;
-      left = { kind: 'BinaryExpr', op, left, right: this.parsePowExpr() };
+      left = { kind: 'BinaryExpr', op, left, right: this.parsePowExpr(ctx) };
     }
     return left;
   }
 
-  private parsePowExpr(): Expr {
-    const left = this.parseUnary();
+  private parsePowExpr(ctx: ExprContext): Expr {
+    const left = this.parseUnary(ctx);
     if (this.at('op', '**')) {
       this.advance();
-      return { kind: 'BinaryExpr', op: '**', left, right: this.parsePowExpr() };
+      return { kind: 'BinaryExpr', op: '**', left, right: this.parsePowExpr(ctx) };
     }
     return left;
   }
 
-  private parseUnary(): Expr {
+  private parseUnary(ctx: ExprContext): Expr {
     if (this.at('op', '-') || this.at('op', '+') || this.at('op', '!')) {
       const op = this.current().value!;
       this.advance();
-      const operand = this.parseUnary();
+      const operand = this.parseUnary(ctx);
       return { kind: 'UnaryExpr', op, operand };
     }
     if (this.at('op', '<')) {
@@ -730,7 +737,7 @@ class Parser {
       }
       this.i = pos;
     }
-    return this.parsePrimary();
+    return this.parsePrimary(ctx);
   }
 
   private parseGenericLambda(): Expr {
@@ -747,13 +754,13 @@ class Parser {
     return { kind: 'LambdaExpr', typeParams, params, body: this.parseExpr() };
   }
 
-  private parsePrimary(): Expr {
+  private parsePrimary(ctx: ExprContext): Expr {
     let awaitPrefix = false;
     if (this.at('keyword', 'await')) {
       this.advance();
       awaitPrefix = true;
     }
-    let expr = this.parseAtom();
+    let expr = this.parseAtom(ctx);
     const isTupleIndexFloat = (): boolean =>
       this.at('float') && /^\.\d+$/.test(this.current().value ?? '');
     while (this.at('lparen') || this.at('dot') || isTupleIndexFloat()) {
@@ -762,7 +769,7 @@ class Parser {
         this.advance();
         const args: Expr[] = [];
         while (!this.at('rparen')) {
-          args.push(this.parseExpr());
+          args.push(this.parseExpr('expr'));
           if (!this.at('rparen')) this.expect('comma');
         }
         this.expect('rparen');
@@ -797,20 +804,28 @@ class Parser {
     return expr;
   }
 
-  private parseAtom(): Expr {
+  private parseAtom(ctx: ExprContext): Expr {
     if (this.at('keyword', 'if')) {
       this.advance();
       this.expect('lparen');
-      const cond = this.parseExpr();
+      const cond = this.parseExpr('expr');
       this.expect('rparen');
-      const then = this.parseExpr();
-      const elseBranch = this.at('keyword', 'else') ? (this.advance(), this.parseExpr()) : undefined;
+      const then = this.parseExpr(ctx);
+      const elseBranch = this.at('keyword', 'else') ? (this.advance(), this.parseExpr(ctx)) : undefined;
       return { kind: 'IfExpr', cond, then, else: elseBranch };
+    }
+    if (this.at('keyword', 'while')) {
+      this.advance();
+      this.expect('lparen');
+      const cond = this.parseExpr('expr');
+      this.expect('rparen');
+      const body = this.parseBlock('stmt');
+      return { kind: 'WhileExpr', cond, body };
     }
     if (this.at('keyword', 'match')) {
       this.advance();
       this.expect('lparen');
-      const scrutinee = this.parseExpr();
+      const scrutinee = this.parseExpr('expr');
       this.expect('rparen');
       this.expect('lbrace');
       const cases: Case[] = [];
@@ -823,7 +838,7 @@ class Parser {
     }
     if (this.at('keyword', 'try')) {
       this.advance();
-      const body = this.parseBlock();
+      const body = this.parseBlock('expr');
       this.expect('keyword', 'catch');
       let catchVar: string | null = null;
       if (this.at('lparen')) {
@@ -853,7 +868,7 @@ class Parser {
         this.advance();
         if (this.at('op', '=>')) {
           this.advance();
-          return { kind: 'LambdaExpr', params, body: this.parseExpr() };
+          return { kind: 'LambdaExpr', params, body: this.parseExpr('expr') };
         }
       }
       this.errors.length = savedErrors;
@@ -870,15 +885,15 @@ class Parser {
         const params2 = this.parseParamList();
         this.expect('rparen');
         this.expect('op', '=>');
-        return { kind: 'LambdaExpr', typeParams, params: params2, body: this.parseExpr() };
+        return { kind: 'LambdaExpr', typeParams, params: params2, body: this.parseExpr('expr') };
       }
       this.i = pos;
-      const first = this.parseExpr();
+      const first = this.parseExpr('expr');
       if (this.at('comma')) {
         const elements = [first];
         while (this.at('comma')) {
           this.advance();
-          elements.push(this.parseExpr());
+          elements.push(this.parseExpr('expr'));
         }
         this.expect('rparen');
         return { kind: 'TupleExpr', elements };
@@ -941,20 +956,20 @@ class Parser {
         if (elements.length > 0) this.expect('comma');
         if (this.at('op', '...')) {
           this.advance();
-          elements.push({ spread: true, expr: this.parseExpr() });
+          elements.push({ spread: true, expr: this.parseExpr('expr') });
         } else {
-          elements.push(this.parseExpr());
+          elements.push(this.parseExpr('expr'));
         }
       }
       this.expect('rbrack');
       return { kind: 'ListExpr', elements };
     }
     if (this.at('lbrace')) {
-      return this.parseRecordOrBlock();
+      return this.parseRecordOrBlock(ctx);
     }
     if (this.at('keyword', 'throw')) {
       this.advance();
-      return { kind: 'ThrowExpr', value: this.parseExpr() };
+      return { kind: 'ThrowExpr', value: this.parseExpr('expr') };
     }
     const span = this.current().span;
     this.pushError(CODES.parse.expected_expr, 'Expected expression', span);
@@ -962,7 +977,7 @@ class Parser {
     return { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
   }
 
-  private parseRecordOrBlock(): Expr {
+  private parseRecordOrBlock(ctx: ExprContext): Expr {
     // Distinguish { ident = expr, ... } (record) from { stmt; ...; expr } (block).
     // Record: { ident = ..., ... } or { mut ident = ..., ... } or { ...spread, ... } or { }
     // Block: { val ...; ... } or { var ...; ... } or { expr; ... }
@@ -974,7 +989,7 @@ class Parser {
     }
     if (next1 && (next1.value === 'val' || next1.value === 'var' || next1.value === 'fun')) {
       // { val ... or { var ... or { fun ... — block
-      return this.parseBlock();
+      return this.parseBlock(ctx);
     }
     if (next1 && next1.value === '...') {
       // { ...spread — record
@@ -992,7 +1007,7 @@ class Parser {
       }
     }
     // Otherwise, treat as block
-    return this.parseBlock();
+    return this.parseBlock(ctx);
   }
 
   private parseRecordExpr(): Expr {
@@ -1019,7 +1034,7 @@ class Parser {
     return { kind: 'RecordExpr', spread, fields };
   }
 
-  private parseBlock(): BlockExpr {
+  private parseBlock(ctx: ExprContext): BlockExpr {
     this.expect('lbrace');
     const stmts: BlockExpr['stmts'] = [];
     let result: Expr;
@@ -1033,7 +1048,7 @@ class Parser {
           type = this.parseType();
         }
         this.expect('op', '=');
-        stmts.push({ kind: 'ValStmt', name, type, value: this.parseExpr() });
+        stmts.push({ kind: 'ValStmt', name, type, value: this.parseExpr('expr') });
       } else if (this.at('keyword', 'var')) {
         this.advance();
         const name = this.expect('ident').value!;
@@ -1043,7 +1058,7 @@ class Parser {
           type = this.parseType();
         }
         this.expect('op', '=');
-        stmts.push({ kind: 'VarStmt', name, type, value: this.parseExpr() });
+        stmts.push({ kind: 'VarStmt', name, type, value: this.parseExpr('expr') });
       } else if (this.at('keyword', 'fun')) {
         this.advance();
         const name = this.expect('ident').value!;
@@ -1062,7 +1077,7 @@ class Parser {
         this.expect('colon');
         const returnType = this.parseType();
         this.expect('op', '=');
-        const body = this.parseExpr();
+        const body = this.parseExpr('expr');
         stmts.push({ kind: 'FunStmt', name, typeParams, params, returnType, body });
       } else {
         if (this.at('rbrace') || this.at('eof')) {
@@ -1070,6 +1085,16 @@ class Parser {
           if (last?.kind === 'ExprStmt') {
             result = last.expr;
             stmts.pop();
+          } else if (
+            ctx === 'stmt' &&
+            last &&
+            (last.kind === 'AssignStmt' ||
+              last.kind === 'ValStmt' ||
+              last.kind === 'VarStmt' ||
+              last.kind === 'FunStmt')
+          ) {
+            const span = this.current().span;
+            result = { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
           } else {
             this.pushError(CODES.parse.unmatched_brace, 'Expected expression before `}`', this.current().span);
             const span = this.current().span;
@@ -1077,10 +1102,10 @@ class Parser {
           }
           break;
         }
-        const expr = this.parseExpr();
+        const expr = this.parseExpr(ctx);
         if (this.at('op', ':=')) {
           this.advance();
-          stmts.push({ kind: 'AssignStmt', target: expr, value: this.parseExpr() });
+          stmts.push({ kind: 'AssignStmt', target: expr, value: this.parseExpr('expr') });
         } else if (this.at('rbrace')) {
           result = expr;
           break;
@@ -1115,7 +1140,7 @@ class Parser {
   private parseCase(): Case {
     const pattern = this.parsePattern();
     this.expect('op', '=>');
-    const body = this.parseExpr();
+    const body = this.parseExpr('expr');
     return { kind: 'Case', pattern, body };
   }
 

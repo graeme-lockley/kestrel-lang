@@ -78,7 +78,7 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 |------|-------------|
 | `parse:unexpected_token` | Unexpected token; expected another token. |
 | `parse:expected_semicolon` | Expected `;` (e.g. after statement in block). |
-| `parse:unmatched_brace` | Unmatched `{`; expected `}`. |
+| `parse:unmatched_brace` | Unmatched `{`; expected `}`, or (when the message is “Expected expression before `}`”) a **block** in **expression** context ended after a statement only—add a trailing expression or explicit `()` (01 §3.3). |
 | `parse:expected_expr` | Expected expression. |
 | `resolve:module_not_found` | Module could not be resolved. |
 | `type:unknown_variable` | Unknown variable (optionally with suggestion). |

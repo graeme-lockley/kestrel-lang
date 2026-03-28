@@ -31,6 +31,10 @@ Tag and payload layout for inline values (e.g. how INT/BOOL/UNIT/CHAR use the 61
 
 **Implementor notes:** At least five tag values are needed (INT, BOOL, UNIT, CHAR, PTR). FLOAT and STRING are represented as PTR to heap objects. Common choices: use the low 3 bits of the word for the tag and the high 61 bits for the payload; or use NaN boxing (float bit pattern in 64 bits, pointers in 48-bit space with tag bits). Heap pointers in PTR must be **aligned** (e.g. 4- or 8-byte) so the low bits are zero; the VM may use those bits for tagging. All heap object addresses must be traceable by the GC (§4).
 
+### 1.1 Iterative control (`while`)
+
+A **`while (cond) block`** loop (01 §3) does not allocate a new call frame per iteration: the VM evaluates `cond`, branches out if false, otherwise runs `block`, discards the block’s value on the operand stack, and branches back (04 §1.6). The body may be written with an implicit **Unit** tail in source (01 §3.3); lowering still produces one block value per iteration to discard. Only explicit calls inside the body grow the stack. Locals and `var` updates persist across iterations within the same enclosing frame.
+
 ---
 
 ## 2. Heap Object Kinds

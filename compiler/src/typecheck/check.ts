@@ -584,6 +584,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         setInferredType(expr, result);
         return result;
       }
+      case 'WhileExpr': {
+        const condT = inferExpr(expr.cond);
+        unifyWithBlame(condT, tBool, expr);
+        inferExpr(expr.body);
+        setInferredType(expr, tUnit);
+        return tUnit;
+      }
       case 'BinaryExpr': {
         const l = inferExpr(expr.left);
         const r = inferExpr(expr.right);
@@ -1343,6 +1350,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           resolveNode(n2.result);
         }
         if (n2.kind === 'IfExpr') { resolveNode(n2.cond); resolveNode(n2.then); if (n2.else !== undefined) resolveNode(n2.else); }
+        if (n2.kind === 'WhileExpr') { resolveNode(n2.cond); resolveNode(n2.body); }
         if (n2.kind === 'BinaryExpr') { resolveNode(n2.left); resolveNode(n2.right); }
         if (n2.kind === 'UnaryExpr') { resolveNode(n2.operand); }
         if (n2.kind === 'CallExpr') { resolveNode(n2.callee); (n2.args as unknown[]).forEach(resolveNode); }

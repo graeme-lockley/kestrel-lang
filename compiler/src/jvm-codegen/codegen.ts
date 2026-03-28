@@ -105,6 +105,10 @@ function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, num
         walk(e.then);
         if (e.else !== undefined) walk(e.else);
         return;
+      case 'WhileExpr':
+        walk(e.cond);
+        walk(e.body);
+        return;
       case 'MatchExpr':
         walk(e.scrutinee);
         for (const c of e.cases) walk(c.body);
@@ -239,6 +243,10 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
         walk(e.cond);
         walk(e.then);
         if (e.else !== undefined) walk(e.else);
+        return;
+      case 'WhileExpr':
+        walk(e.cond);
+        walk(e.body);
         return;
       case 'MatchExpr':
         walk(e.scrutinee);
@@ -752,6 +760,27 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1b(JvmOp.ALOAD, ifResultSlot);
         break;
       }
+      case 'WhileExpr': {
+        const loopState = frameState(env, nextLocal);
+        const loopHead = mb.length();
+        mb.addBranchTarget(loopHead, loopState);
+        emitExpr(expr.cond, mb);
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(BOOLEAN));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
+        const ifeqPos = mb.length();
+        mb.emit1s(JvmOp.IFEQ, 0);
+        mb.addBranchTarget(mb.length(), loopState);
+        emitExpr(expr.body, mb);
+        mb.emit1(JvmOp.POP);
+        const gotoPos = mb.length();
+        mb.emit1s(JvmOp.GOTO, 0);
+        const exitPos = mb.length();
+        mb.addBranchTarget(exitPos, loopState);
+        patchShort(mb, ifeqPos + 1, exitPos - ifeqPos);
+        patchShort(mb, gotoPos + 1, loopHead - gotoPos);
+        mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+        break;
+      }
       case 'BlockExpr': {
         const outerEnv = new Map(env);
         const outerNextLocal = nextLocal;
@@ -878,6 +907,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 emitExpr(stmt.value, mb);
                 mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+                mb.emit1(JvmOp.POP);
               } else if (freeVarToIndex?.has(stmt.target.name) && varNames.has(stmt.target.name)) {
                 mb.emit1b(JvmOp.ALOAD, 0);
                 mb.emit1s(JvmOp.LDC_W, cf.constantInt(freeVarToIndex.get(stmt.target.name)!));
@@ -887,14 +917,17 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 emitExpr(stmt.value, mb);
                 mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+                mb.emit1(JvmOp.POP);
               } else if (s !== undefined) {
                 emitExpr(stmt.value, mb);
                 mb.emit1b(JvmOp.ASTORE, s);
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+                mb.emit1(JvmOp.POP);
               } else {
                 emitExpr(stmt.value, mb);
                 mb.emit1(JvmOp.POP);
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+                mb.emit1(JvmOp.POP);
               }
             } else if (stmt.target.kind === 'FieldExpr') {
               emitExpr(stmt.value, mb);
@@ -904,15 +937,20 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1(JvmOp.SWAP);
               mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+              mb.emit1(JvmOp.POP);
             } else {
               emitExpr(stmt.value, mb);
               mb.emit1(JvmOp.POP);
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+              mb.emit1(JvmOp.POP);
             }
           } else if (stmt.kind === 'ExprStmt') {
             emitExpr(stmt.expr, mb);
             mb.emit1(JvmOp.POP);
           }
+          // Nested emitExpr uses `nextLocal` for new locals; sync after each stmt so bindings do not
+          // reuse slots still holding outer values (e.g. val _ inside if vs var current in printPrimes).
+          nextLocal = slot;
         }
         for (const [k, v] of blockEnv) env.set(k, v);
         nextLocal = slot;

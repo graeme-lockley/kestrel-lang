@@ -226,6 +226,7 @@ export interface FunStmt extends NodeBase {
 
 export type Expr =
   | IfExpr
+  | WhileExpr
   | MatchExpr
   | TryExpr
   | LambdaExpr
@@ -250,6 +251,12 @@ export interface IfExpr extends NodeBase {
   cond: Expr;
   then: Expr;
   else?: Expr;
+}
+
+export interface WhileExpr extends NodeBase {
+  kind: 'WhileExpr';
+  cond: Expr;
+  body: BlockExpr;
 }
 
 export interface MatchExpr extends NodeBase {

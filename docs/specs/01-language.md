@@ -65,7 +65,7 @@ So: types, constructors, and exceptions start with an uppercase letter; function
 The following are **reserved** and may not be used as identifiers:
 
 ```
-fun type val var mut if else match try catch throw async await
+fun type val var mut if else while match try catch throw async await
 export import from exception is opaque True False
 ```
 
@@ -264,6 +264,7 @@ These operators are defined for numeric types and, where the implementation spec
 
 ```
 Expr           ::= IfExpr
+                 | WhileExpr
                  | MatchExpr
                  | TryExpr
                  | Lambda
@@ -278,7 +279,8 @@ AddExpr        ::= MulExpr { ("+" | "-") MulExpr }
 MulExpr        ::= PowExpr { ("*" | "/" | "%") PowExpr }
 PowExpr        ::= Primary [ "**" PowExpr ]
 
-IfExpr         ::= "if" "(" Expr ")" Expr "else" Expr
+IfExpr         ::= "if" "(" Expr ")" Expr [ "else" Expr ]
+WhileExpr      ::= "while" "(" Expr ")" Block
 MatchExpr      ::= "match" "(" Expr ")" "{" Case { Case } "}"   /* match must be exhaustive (see type system) */
 Case           ::= Pattern "=>" Expr
 Pattern        ::= ConsPattern | NonConsPattern
@@ -323,7 +325,11 @@ Record spread `{ ...expr, field = value }` is implemented by compiling to the SP
 
 Application and field access are **postfix** on an atom: parse one Atom, then zero or more Suffix (call or field). So `f(x).y` is Atom `f`, Suffix `(x)`, Suffix `.y`. **Await:** A primary expression may be prefixed with `await` (e.g. `await f()`); valid only in async context (see §5).
 
+**If expression:** `if (cond) thenBranch [ else elseBranch ]`. **cond** must be **Bool**. If **else** is omitted, the whole `if` has type **Unit** and **thenBranch** must have type **Unit** (06). If **else** is present, the two branches must unify to a common type. **thenBranch** and **elseBranch** are parsed in the same **statement vs expression** context as the `if` itself (§3.3): in statement context, a branch `{ ... }` may end with `:=` / `val` / `var` / `fun` and no trailing expression (implicit **Unit**); in expression context, a branch block still needs a value-producing tail unless the last line is promoted from an expression statement (§3.3).
+
 **Pipeline semantics:** `e1 |> e2` passes `e1` as the **first** argument when `e2` is a call `f(a, b, …)` — i.e. `x |> f(y)` ≡ `f(x, y)` (and longer argument lists prepend `x` similarly). If `e2` is not a call, it must denote a unary function: `x |> f` ≡ `f(x)`. **Backward pipe:** `f <| x` ≡ `f(x)`; `f(y) <| x` ≡ `f(y, x)` (the piped value is the **last** argument when the left side is a call).
+
+**While loop:** `while (cond) block` evaluates `cond` (which must be **Bool**) before each iteration; while it is `True`, `block` runs. The **block** is always parsed in **statement-oriented** form (§3.3): it may end with `:=` / `val` / `var` / `fun` and no trailing expression (implicit **Unit**). The block’s value each iteration is still evaluated and discarded on the stack; the `while` expression has type **Unit** (06). Lowering uses conditional and backward branches (04 §1.6).
 
 ### 3.3 Blocks and Statements
 
@@ -336,7 +342,15 @@ Stmt           ::= "val" LOWER_IDENT "=" Expr
                  | Expr ":=" Expr
 ```
 
-A block-local **`fun`** declaration is **desugared** to `val name = (params) => body`; see §3.8 for closures. When the nested `fun` has a **full type signature** (all parameter types and return type), the name is in scope for the body so the function may call itself recursively. Every such block-local `fun` is also in scope in the body of every other such `fun` in the same block, so they may call each other (mutual recursion); declaration order does not affect name resolution. The trailing **Expr** in a block is the block’s value; it is required. Each statement is followed by a **statement terminator**: `;`, newline, or `}` (when the next token starts the block’s final expression). `NL` denotes a newline token (or newline codepoint) used as terminator. See §3.5.
+The production above is the **expression-oriented** shape: a trailing **Expr** is the block’s value. In **statement-oriented** positions (see prose below), the same `{` … `}` block may end with **`}`** immediately after the last **Stmt** (no trailing **Expr**); that is equivalent to a trailing **`()`** (type **Unit**, 06). The parser distinguishes positions per §3.3; the typechecker still sees a block with a normal **result** expression after this desugar.
+
+A block-local **`fun`** declaration is **desugared** to `val name = (params) => body`; see §3.8 for closures. When the nested `fun` has a **full type signature** (all parameter types and return type), the name is in scope for the body so the function may call itself recursively. Every such block-local `fun` is also in scope in the body of every other such `fun` in the same block, so they may call each other (mutual recursion); declaration order does not affect name resolution.
+
+**Trailing expression vs implicit Unit:** In **expression** context (e.g. the right-hand side of top-level or block `val`/`var`, a function’s `= body` when the body is a block, a function argument, the trailing expression of a block that is itself in expression context, a `match` case body, a `try` body, etc.), the block must end with a **trailing Expr** (the block’s value), or the last `BlockItem` may be an `ExprStmt` that is promoted to that value—same as before. In **statement** context (top-level expression statement; each `ExprStmt` line inside a block that is itself in statement context; **`while` bodies**, which are always statement-oriented), the block may instead end immediately after a **`val`**, **`var`**, **`fun`**, or **`:=`** statement; the block’s value is then **Unit** (`()`), and you need not write a trailing `()`.
+
+**`if` branches:** The **then** and **else** subexpressions inherit the same context as the `if` itself. So in statement context (e.g. `if (c) { x := 1 }` as a top-level statement or inside a `while` body), a branch block may end with an assignment or binding without a trailing value. In expression context (e.g. `val y = if (c) a else b`, or `if` nested inside a function body’s trailing block expression), each branch must still be a full expression; a branch block cannot end with only `:=` / `val` / `var` / `fun` without an explicit trailing expression (such as `()` when the branch must have type **Unit**).
+
+Each statement is followed by a **statement terminator**: `;`, newline, or `}` (when the next token starts the block’s final expression, or when `}` closes a statement-oriented block as above). `NL` denotes a newline token (or newline codepoint) used as terminator. See §3.5.
 
 ### 3.4 Literals (Expression-Level)
 
@@ -355,7 +369,7 @@ For float literal patterns, matching uses pattern semantics (not plain `==`): a 
 
 ### 3.5 Optional Semicolons and Line Boundaries
 
-- **Statement/expression boundaries:** A newline (or `;`) may be used to separate statements and to separate the last statement from the trailing block expression. Concretely: after `Expr` in a Stmt, and after the last Stmt before the block Expr, a newline or `;` is allowed. A newline is **not** treated as a terminator when it would break a valid expression: e.g. there must be no newline between `Expr` and `=>` in a lambda or case, or between a function and `(` in an application. Implementations may treat newline as terminator only after a complete Stmt (e.g. after `val x = e`, `var x = e`, or `e := e`) or allow semicolons everywhere as explicit terminators.
+- **Statement/expression boundaries:** A newline (or `;`) may be used to separate statements and to separate the last statement from the trailing block expression. Concretely: after `Expr` in a Stmt, and after the last Stmt before the block Expr, a newline or `;` is allowed. In a **statement-oriented** block (§3.3), `}` may close the block immediately after a complete Stmt with no further expression. A newline is **not** treated as a terminator when it would break a valid expression: e.g. there must be no newline between `Expr` and `=>` in a lambda or case, or between a function and `(` in an application. Implementations may treat newline as terminator only after a complete Stmt (e.g. after `val x = e`, `var x = e`, or `e := e`) or allow semicolons everywhere as explicit terminators.
 - **Newlines are not tokens in the reference lexer:** Physical line breaks are skipped like other whitespace. A line break alone does **not** separate `val`/`var` initializers from a following expression that starts with `(`. If the initializer ends with `)` (e.g. `f(a)`) and the next line begins with `(…)`, the parser will treat that `(` as **another** postfix call (currying) unless you end the statement with **`;`**. Example: use `val cp = codePoint(c);` before a line `(cp >= 48 & …) | …`. Literals cannot be call targets, so `val n = 1` followed by `(expr)` on the next line is not fused into `1(expr)`.
 - **Conformance:** Implementations must accept any program in which every statement is terminated by an explicit `;` (and the grammar is otherwise satisfied). When newline is used as terminator, the exact rule is implementation-defined as long as the same set of programs is accepted as with the grammar that allows optional `;` or newline after each Stmt.
 
@@ -397,7 +411,7 @@ Precedence: `&` tighter than `|`; `->` groups to the right; `*` (product) tighte
 - **Keywords:** Keyword tokens are matched before generic IDENT (e.g. `if` is keyword, not identifier). Match fixed keyword strings as tokens first.
 - **Statement termination:** After a Stmt, the parser must see one of `;`, newline, or `}`. The lexer may emit a **newline token** (e.g. on `\n` or `\r\n`) so the parser can treat it as a terminator; or the parser may use a different rule (e.g. require `;` and ignore newlines, or use the next token’s line number). The choice is implementation-defined; the grammar assumes some notion of statement end.
 - **Ambiguous prefixes:** `( ParamList )` appears in Lambda and in parenthesized Expr. Use context: after `=>` expect Expr; after `(` at expression position expect Expr; after `fun` IDENT `(` expect ParamList. Type versus expression after `(`: if the first token is IDENT followed by `:` or `,` or `)`, parse as ParamList; otherwise parse as Expr.
-- **Record vs block:** `{` can start Block or RecordLit. After `{`, if the next token is `}` (empty record literal) or a label (IDENT `=` or `...`), parse as RecordLit; if the next token is `val`, `var`, `fun`, or an expression start, parse as Block. (Expression start: Literal, IDENT, `(`, `[`, `throw`, etc.)
+- **Record vs block:** `{` can start Block or RecordLit. After `{`, if the next token is `}` (empty record literal) or a label (IDENT `=` or `...`), parse as RecordLit; if the next token is `val`, `var`, `fun`, or an expression start, parse as Block. (Expression start: Literal, IDENT, `(`, `[`, `throw`, `if`, `while`, `match`, `try`, `await`, etc.) Whether a Block may end after the last **Stmt** without a trailing **Expr** depends on **statement vs expression context** (§3.3), not on this disambiguation.
 - **Parenthesized type:** `"(" Type ")"` vs `"(" TypeList ")" "->" Type`: after parsing `"("` and one or more types, if the next token is `"->"`, treat as function type and parse the rest of the arrow type; otherwise treat as a single grouped type `"(" Type ")"`.
 - **Paren vs tuple:** After `"("` at expression or pattern position, parse one Expr or Pattern. If the next token is `","`, parse as tuple (two or more elements) and require the matching closing `")"`; otherwise parse as grouping (single `Expr` or `Pattern` and `")"`).
 - **List literal vs pattern:** `"["` at expression position (in Atom) starts `ListLiteral`. `"["` at pattern position starts `ListPattern`. In a list pattern, at most one `"..." LOWER_IDENT` is allowed and only as the **last** component (e.g. `[a, b, ...rest]` or `[...rest]`); the grammar enforces this via `ListPatInner`.

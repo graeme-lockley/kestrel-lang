@@ -38,7 +38,7 @@ export interface Token {
 }
 
 export const KEYWORDS = new Set([
-  'as', 'fun', 'type', 'val', 'var', 'mut', 'if', 'else', 'match', 'try', 'catch', 'throw',
+  'as', 'fun', 'type', 'val', 'var', 'mut', 'if', 'else', 'while', 'match', 'try', 'catch', 'throw',
   'async', 'await', 'export', 'import', 'from', 'exception', 'is', 'opaque', 'True', 'False',
 ]);
 

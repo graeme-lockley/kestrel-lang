@@ -210,7 +210,10 @@ The following table summarises the main typing constraints so that implementors 
 | **Cons** `e1 :: e2` | e2 : List<T>, e1 : T ⇒ type is List<T>. |
 | **Application** `f(e1,...,en)` | f : (T1,...,Tn) -> R, ei : Ti ⇒ type is R. Includes constructor application: `Some(42)` where `Some : (Int) -> Option<Int>`. |
 | **Field access** `e.x` | e : { x: T, ... } ⇒ type is T. |
-| **If/else** `if (e1) e2 else e3` | e1 : Bool; e2 : T, e3 : T (or T2, T3 unify to a common type) ⇒ type is T. |
+| **If** `if (e1) e2` (no else) | e1 : Bool; e2 : **Unit** ⇒ type is **Unit** (01 §3). |
+| **If/else** `if (e1) e2 else e3` | e1 : Bool; e2 : T, e3 : T′, T and T′ unify ⇒ type is the unified type. |
+| **Block** `{ stmts… ; result }` | Statements are typed for effect; **result** (or implicit **Unit** when the parser closed the block in statement-oriented mode per 01 §3.3) gives the block’s type. |
+| **While** `while (e1) block` | e1 : Bool; **block** is typed as a block (01 §3.3: **while** bodies use statement-oriented parsing, so the block may end with implicit **Unit** after `:=` / `val` / `var` / `fun`); the value of `while` is **Unit** (each iteration’s block value is discarded). |
 | **Match** `match (e) { cases }` | e : S; each case pattern is typed against S (pattern produces bindings; constructor/list patterns constrain S); case RHSs unify to T; exhaustiveness (§5) ⇒ type is T. |
 | **Lambda** `(p1,...,pn) => e` | Parameter types from annotation or inference; e : R ⇒ type is (T1,...,Tn) -> R. Lambdas and nested functions may capture enclosing variables (01 §3.8); the type (T1,...,Tn) -> R applies to both non-capturing and capturing closures; closure conversion is a codegen concern and does not change the inferred type. For a **block-local** `fun name(...): ReturnType = body`, when a return type is declared, the body's inferred type is unified with that return type and the binding gets the declared arrow type (params → ReturnType). |
 | **Throw** `throw e` | e : exception type (§7) ⇒ type is bottom (or compatible with context). |
@@ -227,7 +230,7 @@ Pattern typing for primitive literal patterns: `INTEGER : Int`, `FLOAT : Float`,
 
 | Spec | Relation |
 |------|----------|
-| **01** | Type grammar (01 §3.6), expressions, match exhaustiveness, async/await context, exceptions, mut fields. All types and constructs in 01 must have typing rules in this document. |
+| **01** | Type grammar (01 §3.6), expressions, blocks (statement- vs expression-oriented endings, 01 §3.3), `if`/`while`, match exhaustiveness, async/await context, exceptions, mut fields. All types and constructs in 01 must have typing rules in this document. |
 | **02** | Option, Result, List, Value, Task are library/built-in types; their constructors and signatures constrain inference. |
 | **03** | Inferred types are serialised into the bytecode type table (03 §6.2–6.3). The type encoding supports Arrow, Record (shape_index), ADT, Option, List, TypeVar, and primitives; union/intersection may be erased or encoded for debugging. |
 | **04** | Type-checked programs satisfy the ISA: e.g. ADD gets Int; CONSTRUCT gets correct adt_id, ctor, arity; CALL gets correct arity and function type. The type system does not define bytecode; it ensures source-level correctness so the compiler can emit valid 04. |

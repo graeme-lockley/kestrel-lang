@@ -323,6 +323,8 @@ function bodyReferencesName(expr: Expr, name: string, bound: Set<string>): boole
       return bodyReferencesName(expr.operand, name, bound);
     case 'IfExpr':
       return bodyReferencesName(expr.cond, name, bound) || bodyReferencesName(expr.then, name, bound) || (expr.else != null && bodyReferencesName(expr.else, name, bound));
+    case 'WhileExpr':
+      return bodyReferencesName(expr.cond, name, bound) || bodyReferencesName(expr.body, name, bound);
     case 'MatchExpr':
       if (bodyReferencesName(expr.scrutinee, name, bound)) return true;
       for (const c of expr.cases) if (bodyReferencesName(c.body, name, bound)) return true;
@@ -422,6 +424,10 @@ function getFreeVars(
         walk(e.cond);
         walk(e.then);
         if (e.else !== undefined) walk(e.else);
+        return;
+      case 'WhileExpr':
+        walk(e.cond);
+        walk(e.body);
         return;
       case 'MatchExpr':
         walk(e.scrutinee);
@@ -701,6 +707,25 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       const afterElse = codeOffset();
       patchI32(jumpIfFalsePos + 1, elseStart - (jumpIfFalsePos + 5));
       patchI32(jumpOverElsePos + 1, afterElse - (jumpOverElsePos + 5));
+      break;
+    }
+    case 'WhileExpr': {
+      const discKey = '\x00while_disc';
+      const discardSlot = nextLocalSlot(env);
+      env.set(discKey, discardSlot);
+      const loopStart = codeOffset();
+      emitExpr(expr.cond, env, funNameToId, shapes, adts, captures, varNames);
+      const jumpIfFalsePos = codeOffset();
+      emitJumpIfFalse(0);
+      emitExpr(expr.body, env, funNameToId, shapes, adts, captures, varNames);
+      emitStoreLocal(discardSlot);
+      const jumpBackPos = codeOffset();
+      emitJump(0);
+      const exitPos = codeOffset();
+      patchI32(jumpIfFalsePos + 1, exitPos - (jumpIfFalsePos + 5));
+      patchI32(jumpBackPos + 1, loopStart - (jumpBackPos + 5));
+      emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+      env.delete(discKey);
       break;
     }
     case 'BlockExpr': {

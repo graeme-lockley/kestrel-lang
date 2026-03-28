@@ -28,6 +28,19 @@ describe('parse (integration)', () => {
     }
   });
 
+  it('parses while with block body', () => {
+    const ast = parse(tokenize('val x = while (False) { 1 }'));
+    expect(ast.kind).toBe('Program');
+    const valStmt = ast.body[0];
+    expect(valStmt).toMatchObject({ kind: 'ValStmt', name: 'x' });
+    if (valStmt.kind === 'ValStmt') {
+      expect(valStmt.value.kind).toBe('WhileExpr');
+      if (valStmt.value.kind === 'WhileExpr') {
+        expect(valStmt.value.body.kind).toBe('BlockExpr');
+      }
+    }
+  });
+
   it('parses fun decl with param and return type', () => {
     const ast = parse(tokenize('fun id(x): Int = 1'));
     expect(ast.kind).toBe('Program');
@@ -147,6 +160,20 @@ describe('parse (integration)', () => {
 }`;
     const astBad = parse(tokenize(noSemi));
     expect('ok' in astBad && !astBad.ok).toBe(true);
+  });
+
+  it('allows implicit Unit when block ends with assign/binding in statement-oriented while body', () => {
+    const src = `fun f(): Unit = { while (False) { if (True) { var x = 1 } } }`;
+    const ast = parse(tokenize(src));
+    expect(ast.kind).toBe('Program');
+  });
+
+  it('rejects block ending with binding only when if branch is in expression context (e.g. fun body block)', () => {
+    const result = parse(tokenize('fun f(): Unit = { if (True) { var x = 1 } }'));
+    expect('ok' in result && !result.ok).toBe(true);
+    if ('ok' in result && !result.ok) {
+      expect(result.errors.some((e) => e.message.includes('Expected expression before'))).toBe(true);
+    }
   });
 
   it('parses nested literal patterns in list and record patterns', () => {
