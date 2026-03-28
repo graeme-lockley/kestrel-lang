@@ -2,7 +2,7 @@
  * JVM codegen: typed AST → .class file(s).
  * Uses same Program + getInferredType as kbc codegen.
  */
-import type { Program, Expr, TopLevelStmt, TopLevelDecl } from '../ast/nodes.js';
+import type { Program, Expr, TopLevelStmt, TopLevelDecl, TuplePattern } from '../ast/nodes.js';
 import type { FunDecl, ValDecl, VarDecl, BlockExpr, LambdaExpr, FunStmt, TypeDecl } from '../ast/nodes.js';
 import { getInferredType } from '../typecheck/check.js';
 import type { InternalType } from '../types/internal.js';
@@ -1401,6 +1401,100 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const afterGoto = gotoEnd + 3;
             patchShort(mb, ifeq + 1, afterGoto - ifeq);
             mb.addBranchTarget(afterGoto, matchBaseState);
+            continue;
+          }
+          if (c.pattern.kind === 'TuplePattern') {
+            const missLabels: number[] = [];
+            const scrutT = getInferredType(expr.scrutinee);
+
+            function deleteTupleBindings(pat: TuplePattern): void {
+              for (const e of pat.elements) {
+                if (e.kind === 'VarPattern') env.delete(e.name);
+                else if (e.kind === 'TuplePattern') deleteTupleBindings(e);
+              }
+            }
+
+            function emitTupleSlots(scrutSlot: number, pattern: TuplePattern, tupleType: InternalType | undefined): void {
+              const elemsT = tupleType?.kind === 'tuple' ? tupleType.elements : undefined;
+              for (let i = 0; i < pattern.elements.length; i++) {
+                const elem = pattern.elements[i]!;
+                const elemT = elemsT?.[i];
+                if (elem.kind === 'VarPattern') {
+                  mb.emit1b(JvmOp.ALOAD, scrutSlot);
+                  mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+                  mb.emit1s(JvmOp.LDC_W, cf.string(String(i)));
+                  mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
+                  const slot = nextLocal++;
+                  env.set(elem.name, slot);
+                  mb.emit1b(JvmOp.ASTORE, slot);
+                } else if (elem.kind === 'WildcardPattern') {
+                  const toss = nextLocal++;
+                  mb.emit1b(JvmOp.ALOAD, scrutSlot);
+                  mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+                  mb.emit1s(JvmOp.LDC_W, cf.string(String(i)));
+                  mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
+                  mb.emit1b(JvmOp.ASTORE, toss);
+                } else if (elem.kind === 'LiteralPattern') {
+                  const tmp = nextLocal++;
+                  mb.emit1b(JvmOp.ALOAD, scrutSlot);
+                  mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+                  mb.emit1s(JvmOp.LDC_W, cf.string(String(i)));
+                  mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
+                  mb.emit1b(JvmOp.ASTORE, tmp);
+                  const lit = elem;
+                  if (lit.literal === 'float' && Number.isNaN(Number.parseFloat(lit.value))) {
+                    mb.emit1b(JvmOp.ALOAD, tmp);
+                    mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsNan', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
+                    mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
+                  } else {
+                    mb.emit1b(JvmOp.ALOAD, tmp);
+                    emitExpr(
+                      { kind: 'LiteralExpr', literal: lit.literal, value: lit.value, span: undefined } as import('../ast/nodes.js').LiteralExpr,
+                      mb
+                    );
+                    mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
+                    mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
+                  }
+                  const ifeq = mb.length();
+                  mb.emit1s(JvmOp.IFEQ, 0);
+                  missLabels.push(ifeq);
+                } else if (elem.kind === 'TuplePattern') {
+                  const innerSlot = nextLocal++;
+                  mb.emit1b(JvmOp.ALOAD, scrutSlot);
+                  mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+                  mb.emit1s(JvmOp.LDC_W, cf.string(String(i)));
+                  mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
+                  mb.emit1b(JvmOp.ASTORE, innerSlot);
+                  mb.emit1b(JvmOp.ALOAD, innerSlot);
+                  mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(KRECORD));
+                  const ifeq = mb.length();
+                  mb.emit1s(JvmOp.IFEQ, 0);
+                  missLabels.push(ifeq);
+                  emitTupleSlots(innerSlot, elem, elemT?.kind === 'tuple' ? elemT : undefined);
+                }
+              }
+            }
+
+            mb.emit1b(JvmOp.ALOAD, scrutSlot);
+            mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(KRECORD));
+            const ifNotTuple = mb.length();
+            mb.emit1s(JvmOp.IFEQ, 0);
+            missLabels.push(ifNotTuple);
+
+            emitTupleSlots(scrutSlot, c.pattern, scrutT?.kind === 'tuple' ? scrutT : undefined);
+
+            emitExpr(c.body, mb);
+            deleteTupleBindings(c.pattern);
+
+            mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+            const gotoEnd = mb.length();
+            mb.emit1s(JvmOp.GOTO, 0);
+            endLabels.push(gotoEnd);
+            const nextCaseStart = mb.length();
+            for (const miss of missLabels) {
+              patchShort(mb, miss + 1, nextCaseStart - miss);
+            }
+            mb.addBranchTarget(nextCaseStart, matchBaseState);
             continue;
           }
           if (c.pattern.kind === 'VarPattern') {

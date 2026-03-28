@@ -1497,6 +1497,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             c.pattern.kind === 'ListPattern'
       );
       const hasLiteralPatterns = expr.cases.some(c => c.pattern.kind === 'LiteralPattern');
+      const hasTuplePattern = expr.cases.some(c => c.pattern.kind === 'TuplePattern');
 
       let config = getMatchConfig(scrutineeType ?? undefined, adts, userAdtConfigs);
       if (hasAdtPatterns && !config && expr.cases.some(c => c.pattern.kind === 'ListPattern' || c.pattern.kind === 'ConsPattern' || (c.pattern.kind === 'ConstructorPattern' && c.pattern.name === 'Nil'))) {
@@ -1600,20 +1601,21 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         const endJumps: number[] = [];
         let emittedAnyCase = false;
 
-        const emitLiteralPatternTest = (pattern: Extract<import('../ast/nodes.js').Pattern, { kind: 'LiteralPattern' }>): void => {
-          // NaN literal patterns intentionally use NaN self-inequality semantics:
-          // x is NaN iff x != x, unlike normal EQ where NaN != NaN.
+        const emitLiteralPatternTestForSlot = (
+          pattern: Extract<import('../ast/nodes.js').Pattern, { kind: 'LiteralPattern' }>,
+          valueSlot: number
+        ): void => {
           if (pattern.literal === 'float') {
             const value = Number.parseFloat(pattern.value);
             if (Number.isNaN(value)) {
-              emitLoadLocal(scrutineeSlot);
-              emitLoadLocal(scrutineeSlot);
+              emitLoadLocal(valueSlot);
+              emitLoadLocal(valueSlot);
               emitNe();
               return;
             }
           }
 
-          emitLoadLocal(scrutineeSlot);
+          emitLoadLocal(valueSlot);
           switch (pattern.literal) {
             case 'int':
               emitLoadConst(addConstant({ tag: ConstTag.Int, value: Number.parseInt(pattern.value, 10) }));
@@ -1641,6 +1643,10 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               break;
           }
           emitEq();
+        };
+
+        const emitLiteralPatternTest = (pattern: Extract<import('../ast/nodes.js').Pattern, { kind: 'LiteralPattern' }>): void => {
+          emitLiteralPatternTestForSlot(pattern, scrutineeSlot);
         };
 
         for (const matchCase of expr.cases) {
@@ -1689,6 +1695,147 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           patchI32(jumpPos + 1, endPos - (jumpPos + 5));
         }
         env.delete('$scrutinee');
+      } else if (hasTuplePattern) {
+        type TupleT = { kind: 'tuple'; elements: import('../types/internal.js').InternalType[] };
+        const endJumps: number[] = [];
+
+        const emitLiteralPatternTestForSlot = (
+          pattern: Extract<import('../ast/nodes.js').Pattern, { kind: 'LiteralPattern' }>,
+          valueSlot: number
+        ): void => {
+          if (pattern.literal === 'float') {
+            const value = Number.parseFloat(pattern.value);
+            if (Number.isNaN(value)) {
+              emitLoadLocal(valueSlot);
+              emitLoadLocal(valueSlot);
+              emitNe();
+              return;
+            }
+          }
+
+          emitLoadLocal(valueSlot);
+          switch (pattern.literal) {
+            case 'int':
+              emitLoadConst(addConstant({ tag: ConstTag.Int, value: Number.parseInt(pattern.value, 10) }));
+              break;
+            case 'float':
+              emitLoadConst(addConstant({ tag: ConstTag.Float, value: Number.parseFloat(pattern.value) }));
+              break;
+            case 'string':
+              emitLoadConst(addConstant({ tag: ConstTag.String, stringIndex: stringIndex(pattern.value) }));
+              break;
+            case 'char': {
+              const ch = pattern.value.length >= 2 ? pattern.value.slice(1, -1) : pattern.value;
+              const codePoint = ch.startsWith('\\u') ? Number.parseInt(ch.slice(2), 16) : ch.codePointAt(0) ?? 0;
+              emitLoadConst(addConstant({ tag: ConstTag.Char, value: codePoint }));
+              break;
+            }
+            case 'unit':
+              emitLoadConst(addConstant({ tag: ConstTag.Unit }));
+              break;
+            case 'true':
+              emitLoadConst(addConstant({ tag: ConstTag.True }));
+              break;
+            case 'false':
+              emitLoadConst(addConstant({ tag: ConstTag.False }));
+              break;
+          }
+          emitEq();
+        };
+
+        function deleteBindingsFromTuplePattern(pat: import('../ast/nodes.js').TuplePattern): void {
+          for (const e of pat.elements) {
+            if (e.kind === 'VarPattern') env.delete(e.name);
+            else if (e.kind === 'TuplePattern') deleteBindingsFromTuplePattern(e);
+          }
+        }
+
+        function emitTuplePatternMatches(
+          scrutineeSlotLocal: number,
+          tuplePattern: import('../ast/nodes.js').TuplePattern,
+          tupleType: TupleT | undefined
+        ): number[] {
+          const missJumps: number[] = [];
+          const elemsT = tupleType?.elements;
+          for (let i = 0; i < tuplePattern.elements.length; i++) {
+            const elem = tuplePattern.elements[i]!;
+            const elemT = elemsT?.[i];
+            if (elem.kind === 'VarPattern') {
+              const slot = nextPatternBindSlot(env, scrutineeSlotLocal);
+              env.set(elem.name, slot);
+              emitLoadLocal(scrutineeSlotLocal);
+              emitGetField(i);
+              emitStoreLocal(slot);
+            } else if (elem.kind === 'WildcardPattern') {
+              const toss = nextLocalSlot(env);
+              emitLoadLocal(scrutineeSlotLocal);
+              emitGetField(i);
+              emitStoreLocal(toss);
+            } else if (elem.kind === 'LiteralPattern') {
+              const tmp = nextLocalSlot(env);
+              emitLoadLocal(scrutineeSlotLocal);
+              emitGetField(i);
+              emitStoreLocal(tmp);
+              emitLiteralPatternTestForSlot(elem, tmp);
+              const miss = codeOffset();
+              emitJumpIfFalse(0);
+              missJumps.push(miss);
+            } else if (elem.kind === 'TuplePattern') {
+              const innerSlot = nextPatternBindSlot(env, scrutineeSlotLocal);
+              emitLoadLocal(scrutineeSlotLocal);
+              emitGetField(i);
+              emitStoreLocal(innerSlot);
+              const innerT = elemT?.kind === 'tuple' ? (elemT as TupleT) : undefined;
+              missJumps.push(...emitTuplePatternMatches(innerSlot, elem, innerT));
+            }
+          }
+          return missJumps;
+        }
+
+        const outerTupleType = scrutineeType?.kind === 'tuple' ? scrutineeType : undefined;
+
+        for (const matchCase of expr.cases) {
+          if (matchCase.pattern.kind === 'TuplePattern') {
+            const missJumps = emitTuplePatternMatches(scrutineeSlot, matchCase.pattern, outerTupleType);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            deleteBindingsFromTuplePattern(matchCase.pattern);
+            const endJumpPos = codeOffset();
+            emitJump(0);
+            endJumps.push(endJumpPos);
+            const nextCaseStart = codeOffset();
+            for (const missPos of missJumps) {
+              patchI32(missPos + 1, nextCaseStart - (missPos + 5));
+            }
+            continue;
+          }
+
+          if (matchCase.pattern.kind === 'WildcardPattern') {
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            const endJumpPos = codeOffset();
+            emitJump(0);
+            endJumps.push(endJumpPos);
+            continue;
+          }
+
+          if (matchCase.pattern.kind === 'VarPattern') {
+            const slot = nextLocalSlot(env);
+            env.set(matchCase.pattern.name, slot);
+            emitLoadLocal(scrutineeSlot);
+            emitStoreLocal(slot);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            env.delete(matchCase.pattern.name);
+            const endJumpPos = codeOffset();
+            emitJump(0);
+            endJumps.push(endJumpPos);
+            continue;
+          }
+        }
+
+        const endPos = codeOffset();
+        for (const jumpPos of endJumps) {
+          patchI32(jumpPos + 1, endPos - (jumpPos + 5));
+        }
+        env.delete('$scrutinee');
       } else {
         const firstCase = expr.cases[0];
         if (firstCase && firstCase.pattern.kind === 'VarPattern') {
@@ -1698,26 +1845,6 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           emitStoreLocal(slot);
           emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
           env.delete(firstCase.pattern.name);
-        } else if (firstCase && firstCase.pattern.kind === 'TuplePattern') {
-          const scrutineeType = getInferredType(expr.scrutinee);
-          if (scrutineeType?.kind === 'tuple' && scrutineeType.elements.length === firstCase.pattern.elements.length) {
-            for (let i = 0; i < firstCase.pattern.elements.length; i++) {
-              const elemPat = firstCase.pattern.elements[i]!;
-              if (elemPat.kind === 'VarPattern') {
-                const slot = nextLocalSlot(env);
-                env.set(elemPat.name, slot);
-                emitLoadLocal(scrutineeSlot);
-                emitGetField(i);
-                emitStoreLocal(slot);
-              }
-            }
-            emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
-            for (const elemPat of firstCase.pattern.elements) {
-              if (elemPat.kind === 'VarPattern') env.delete(elemPat.name);
-            }
-          } else {
-            emitExpr(firstCase?.body || { kind: 'LiteralExpr', literal: 'unit', value: { kind: 'unit' } }, env, funNameToId, shapes, adts, captures, varNames);
-          }
         } else {
           emitExpr(firstCase?.body || { kind: 'LiteralExpr', literal: 'unit', value: { kind: 'unit' } }, env, funNameToId, shapes, adts, captures, varNames);
         }
