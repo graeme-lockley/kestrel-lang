@@ -37,6 +37,14 @@ export class TypeCheckError extends Error {
   }
 }
 
+/** Snapshot of a dependency module’s public exports (after its typecheck). Used for re-exports (07 §3). */
+export interface DependencyExportSnapshot {
+  exports: Map<string, InternalType>;
+  exportedTypeAliases: Map<string, InternalType>;
+  exportedConstructors: Map<string, InternalType>;
+  exportedTypeVisibility: Map<string, 'local' | 'opaque' | 'export'>;
+}
+
 export interface TypecheckOptions {
   /** Import bindings (localName -> type) to add to scope before typechecking. */
   importBindings?: Map<string, InternalType>;
@@ -48,6 +56,8 @@ export interface TypecheckOptions {
   sourceFile?: string;
   /** Source content for endLine/endColumn in diagnostics. */
   sourceContent?: string;
+  /** Per-specifier export maps for resolved dependencies (re-export merge + conflicts). */
+  dependencyExportsBySpec?: Map<string, DependencyExportSnapshot>;
 }
 
 export function typecheck(program: Program, options?: TypecheckOptions): {
@@ -56,6 +66,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
   exportedTypeAliases: Map<string, InternalType>;
   exportedTypeVisibility: Map<string, 'local' | 'opaque' | 'export'>;
   exportedConstructors: Map<string, InternalType>;
+  reexports: { exportName: string; spec: string; external: string }[];
 } | { ok: false; diagnostics: Diagnostic[] } {
   resetVarId();
   const diagnostics: Diagnostic[] = [];
@@ -1427,17 +1438,134 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     }
     resolveNode(program);
 
+    function publicExportNames(dep: DependencyExportSnapshot): Set<string> {
+      const s = new Set<string>();
+      for (const k of dep.exports.keys()) s.add(k);
+      for (const k of dep.exportedConstructors.keys()) s.add(k);
+      return s;
+    }
+
+    function hasReexportSyntax(p: Program): boolean {
+      for (const n of p.body) {
+        if (n?.kind !== 'ExportDecl') continue;
+        const inner = n.inner;
+        if (inner.kind === 'ExportStar' || inner.kind === 'ExportNamed') return true;
+      }
+      return false;
+    }
+
+    const depExportsBySpec = options?.dependencyExportsBySpec;
+    if (hasReexportSyntax(program) && depExportsBySpec == null) {
+      diagnostics.push({
+        severity: 'error',
+        code: CODES.type.check,
+        message:
+          'Re-exports require dependency export metadata (internal error: dependencyExportsBySpec missing).',
+        location: locationFileOnly(sourceFile),
+      });
+    }
+
     const exports = new Map<string, InternalType>();
     const exportedTypeAliases = new Map<string, InternalType>();
+    const exportSourceByName = new Map<string, 'local' | string>();
+    const firstExportSpan = new Map<string, Span>();
+    const reexports: { exportName: string; spec: string; external: string }[] = [];
+
+    function registerExportSource(name: string, source: 'local' | string, span?: Span): boolean {
+      const prev = exportSourceByName.get(name);
+      if (prev !== undefined && prev !== source) {
+        const prevLoc = firstExportSpan.get(name);
+        const prevLabel = prev === 'local' ? 'this module' : `"${prev}"`;
+        const srcLabel = source === 'local' ? 'this module' : `"${source}"`;
+        diagnostics.push({
+          severity: 'error',
+          code: CODES.export.reexport_conflict,
+          message: `Duplicate export '${name}': already exported from ${prevLabel} and cannot also be exported from ${srcLabel}.`,
+          location: span != null ? locFor({ span } as TopLevelDecl) : locationFileOnly(sourceFile),
+          related:
+            prevLoc != null
+              ? [{ message: 'Previous export', location: locFor({ span: prevLoc } as TopLevelDecl) }]
+              : undefined,
+        });
+        return false;
+      }
+      if (prev === undefined) {
+        exportSourceByName.set(name, source);
+        if (span != null) firstExportSpan.set(name, span);
+      }
+      return true;
+    }
+
+    function mergeFromDep(
+      exportName: string,
+      externalName: string,
+      spec: string,
+      dep: DependencyExportSnapshot,
+      span?: Span
+    ): void {
+      const pub = publicExportNames(dep);
+      if (!pub.has(externalName)) {
+        diagnostics.push({
+          severity: 'error',
+          code: CODES.export.not_exported,
+          message: `Module ${spec} does not export '${externalName}'`,
+          location: span != null ? locFor({ span } as TopLevelDecl) : locationFileOnly(sourceFile),
+        });
+        return;
+      }
+      if (!registerExportSource(exportName, spec, span)) return;
+
+      reexports.push({ exportName, spec, external: externalName });
+
+      if (dep.exportedConstructors.has(externalName)) {
+        exportedConstructors.set(exportName, dep.exportedConstructors.get(externalName)!);
+      }
+      if (dep.exportedTypeAliases.has(externalName)) {
+        const t = dep.exportedTypeAliases.get(externalName)!;
+        exportedTypeAliases.set(exportName, t);
+        exports.set(exportName, t);
+      } else if (dep.exports.has(externalName)) {
+        exports.set(exportName, dep.exports.get(externalName)!);
+      }
+      const vis = dep.exportedTypeVisibility.get(externalName);
+      if (vis !== undefined) {
+        exportedTypeVisibility.set(exportName, vis);
+      }
+    }
+
     for (const node of program.body) {
       if (!node) continue;
+
+      if (node.kind === 'ExportDecl') {
+        const inner = node.inner;
+        if (inner.kind === 'ExportStar') {
+          const dep = depExportsBySpec?.get(inner.spec);
+          if (dep != null) {
+            for (const name of publicExportNames(dep)) {
+              mergeFromDep(name, name, inner.spec, dep, inner.span ?? node.span);
+            }
+          }
+        } else if (inner.kind === 'ExportNamed') {
+          const dep = depExportsBySpec?.get(inner.spec);
+          if (dep != null) {
+            for (const { external, local } of inner.specs) {
+              mergeFromDep(local, external, inner.spec, dep, inner.span ?? node.span);
+            }
+          }
+        }
+        continue;
+      }
+
       if (node.kind === 'FunDecl' && node.exported) {
+        if (!registerExportSource(node.name, 'local', node.span)) continue;
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));
       } else if (node.kind === 'ValDecl' || node.kind === 'VarDecl') {
+        if (!registerExportSource(node.name, 'local', node.span)) continue;
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));
       } else if (node.kind === 'TypeDecl' && (node.visibility === 'export' || node.visibility === 'opaque')) {
+        if (!registerExportSource(node.name, 'local', node.span)) continue;
         const genDef = genericTypeAliasDefs.get(node.name);
         if (genDef != null) {
           const exportArgs = genDef.paramVarIds.map((id) => ({ kind: 'var' as const, id }));
@@ -1451,16 +1579,23 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             exportedTypeAliases.set(node.name, apply(t));
           }
         }
+        if (node.visibility === 'export' && node.body.kind === 'ADTBody') {
+          for (const c of node.body.constructors) {
+            registerExportSource(c.name, 'local', c.span ?? node.span);
+          }
+        }
       } else if (node.kind === 'ExceptionDecl' && node.exported) {
+        if (!registerExportSource(node.name, 'local', node.span)) continue;
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));
       }
+
       if (node.kind === 'TypeDecl') {
         exportedTypeVisibility.set(node.name, node.visibility);
       }
     }
     if (diagnostics.length > 0) return { ok: false, diagnostics };
-    return { ok: true, exports, exportedTypeAliases, exportedTypeVisibility, exportedConstructors };
+    return { ok: true, exports, exportedTypeAliases, exportedTypeVisibility, exportedConstructors, reexports };
   } catch (e) {
     if (e instanceof UnifyError) {
       const err = e as UnifyError & { blameNode?: unknown; relatedNode?: unknown };

@@ -24,8 +24,8 @@ The grammar is in 01 §3.1 (ImportDecl, ImportClause, ImportSpec). The following
 
 ### 2.1 Specifier and distinct imports
 
-- Every import declaration contains exactly one **specifier** (the STRING in `from STRING` or the STRING in `import STRING`).
-- The **distinct specifiers** of a module are the set of specifier values that appear in its import declarations (deduplicated by string equality). Example: if the source has `import { a } from "./m.ks"` and `import { b } from "./m.ks"`, there is **one** distinct specifier, `"./m.ks"`.
+- Every import declaration contains exactly one **specifier** (the STRING in `from STRING` or the STRING in `import STRING`). Re-export forms (`export * from STRING` and `export { … } from STRING`, 01 §3.1) also contain a specifier in `from STRING`.
+- The **distinct specifiers** of a module are the set of specifier values that appear in its **import** declarations **or** its **re-export** declarations (deduplicated by string equality). Example: if the source has `import { a } from "./m.ks"` and `import { b } from "./m.ks"`, there is **one** distinct specifier, `"./m.ks"`. If the source has no imports but has `export * from "./lib.ks"`, the distinct specifiers include `"./lib.ks"`.
 - **Resolution** is performed for each distinct specifier. The same artifact is used for every import declaration that shares that specifier. The **order** in which specifiers are resolved is implementation-defined but must be **deterministic** (same source and environment ⇒ same order and results).
 
 ### 2.2 Named import
@@ -157,7 +157,7 @@ The types file is **JSON**. Implementations must produce and consume this format
 ## 6. Bytecode Import Table (03)
 
 - The **import table** (03 §6.5) stores the list of module specifiers that this module imports from. It does **not** store resolved paths, URLs, or any normalised form. It stores the **exact specifier string** as it appeared in the source (the STRING token value).
-- **Content:** For each **distinct** specifier that appears in any import declaration of the current module, the compiler must emit **exactly one** entry in the import table. Each entry is the **string table index** (03 §0) of that specifier string. So: (1) Ensure the specifier string is in the string table; (2) Add one u32 (that string table index) to the import table for each distinct specifier.
+- **Content:** For each **distinct** specifier that appears in any **import** or **re-export** declaration of the current module (§2.1), the compiler must emit **exactly one** entry in the import table. Each entry is the **string table index** (03 §0) of that specifier string. So: (1) Ensure the specifier string is in the string table; (2) Add one u32 (that string table index) to the import table for each distinct specifier. A barrel file that only re-exports from `"./lib.ks"` must still list `"./lib.ks"` in the import table so the loader can resolve the dependency.
 - **Order:** The order of entries in the import table is **unspecified** (03). The compiler may emit entries in any order (e.g. order of first occurrence in the source).
 - **Side-effect imports:** A side-effect-only import (`import "<specifier>"`) still contributes that specifier to the distinct set; it must appear in the import table like any other import from that specifier.
 - **Purpose:** A loader or tool that reads the .kbc file can reconstruct the set of dependencies by reading the import table and resolving each stored specifier string again. The bytecode does not store which **names** were imported from which module; that is only used at compile time to generate code (e.g. function indices). Per-symbol import details are not persisted (03 §6.5).
@@ -196,7 +196,7 @@ The types file is **JSON**. Implementations must produce and consume this format
 ## 10. Implementor Checklist
 
 1. **Parse** all ImportDecl and ExportDecl per 01 §3.1; extract the STRING value (specifier) for each.
-2. **Distinct specifiers:** Build the set of distinct specifiers (string equality) from all import declarations.
+2. **Distinct specifiers:** Build the set of distinct specifiers (string equality) from all import **and** re-export declarations (§2.1).
 3. **Resolution:** For each distinct specifier, resolve to an artifact (path → file, URL → fetch/cache/lockfile, stdlib → built-in or bundled). Resolve in a deterministic order. If resolution fails, report a compile error.
 4. **Export set:** Compute the current module’s export set by processing export declarations in order; on conflict (same name, different source), report a compile error.
 5. **Import checks:** For each named import, verify that the requested external name is in the resolved module’s export set; otherwise compile error. For namespace import, ensure the namespace name is UPPER_IDENT and unique. Build the namespace **value binding** map from the dependency’s exports: values, functions, type names, type aliases, and **each exported constructor** of each **non-opaque** exported ADT (with constructor types from §3.1.1 / 06 §5.1).

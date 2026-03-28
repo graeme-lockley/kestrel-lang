@@ -2234,6 +2234,11 @@ export interface CodegenOptions {
   importedExceptions?: { canonical: string; ctorNames: string[] }[];
   /** Source file path for debug section (file:line in stack traces). */
   sourceFile?: string;
+  /**
+   * When set, bytecode import table (03 §6.5) lists these specifiers in order (deduped).
+   * Must match compile-file’s `specs` array so import indices align with the imported-function table.
+   */
+  importSpecifierOrder?: string[];
 }
 
 /** Generate bytecode for program. */
@@ -2397,11 +2402,21 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
 
   const seenSpecs = new Set<string>();
   const importSpecifierIndices: number[] = [];
-  for (const imp of program.imports) {
-    const spec = imp.spec;
-    if (!seenSpecs.has(spec)) {
-      seenSpecs.add(spec);
-      importSpecifierIndices.push(stringIndex(spec));
+  const specOrder = options?.importSpecifierOrder;
+  if (specOrder != null && specOrder.length > 0) {
+    for (const spec of specOrder) {
+      if (!seenSpecs.has(spec)) {
+        seenSpecs.add(spec);
+        importSpecifierIndices.push(stringIndex(spec));
+      }
+    }
+  } else {
+    for (const imp of program.imports) {
+      const spec = imp.spec;
+      if (!seenSpecs.has(spec)) {
+        seenSpecs.add(spec);
+        importSpecifierIndices.push(stringIndex(spec));
+      }
     }
   }
 

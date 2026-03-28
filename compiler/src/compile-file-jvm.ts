@@ -6,7 +6,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve as pathResolve, dirname } from 'path';
 import { tokenize } from './lexer/index.js';
 import { parse } from './parser/index.js';
-import { typecheck, type TypecheckOptions } from './typecheck/check.js';
+import { typecheck, type TypecheckOptions, type DependencyExportSnapshot } from './typecheck/check.js';
+import { distinctSpecifiersInSourceOrder, spanForSpecifier } from './module-specifiers.js';
 import { jvmCodegen, type JvmCodegenResult } from './jvm-codegen/index.js';
 import { resolveSpecifier } from './resolve.js';
 import type { Program, ImportDecl, Expr, TopLevelStmt, TopLevelDecl, BlockExpr } from './ast/nodes.js';
@@ -23,31 +24,6 @@ export interface CompileFileJvmOptions {
   stalePaths?: Set<string>;
   /** Return class output directory for a source path. Writes <classDir>/<ClassName>.class and inner classes. */
   getClassOutputDir?: (sourcePath: string) => string;
-}
-
-function getDistinctSpecifiers(program: Program): string[] {
-  const seen = new Set<string>();
-  const specs: string[] = [];
-  for (const imp of program.imports) {
-    const spec = imp.spec;
-    if (!seen.has(spec)) {
-      seen.add(spec);
-      specs.push(spec);
-    }
-  }
-  return specs;
-}
-
-function getExportSet(program: Program): Set<string> {
-  const names = new Set<string>();
-  for (const node of program.body) {
-    if (!node) continue;
-    if (node.kind === 'FunDecl' && node.exported) names.add(node.name);
-    else if (node.kind === 'TypeDecl' && node.visibility === 'export') names.add(node.name);
-    else if (node.kind === 'ExceptionDecl' && node.exported) names.add(node.name);
-    else if (node.kind === 'ValDecl' || node.kind === 'VarDecl') names.add(node.name);
-  }
-  return names;
 }
 
 function getRequestedImports(imp: ImportDecl): Map<string, string> {
@@ -315,13 +291,13 @@ export function compileFileJvm(
     program = parseResult as Program;
 
     const resolveOpts = { fromFile: filePath, projectRoot, stdlibDir };
-    const specs = getDistinctSpecifiers(program);
+    const specs = distinctSpecifiersInSourceOrder(program);
     const resolved = new Map<string, string>();
     for (const spec of specs) {
       const r = resolveSpecifier(spec, resolveOpts);
       if (!r.ok) {
-        const imp = program.imports.find((i) => i.spec === spec);
-        return { ok: false, diagnostics: [diag(filePath, CODES.resolve.module_not_found, r.error, (imp as { span?: Span })?.span, source)] };
+        const span = spanForSpecifier(program, spec);
+        return { ok: false, diagnostics: [diag(filePath, CODES.resolve.module_not_found, r.error, span, source)] };
       }
       resolved.set(spec, r.path);
     }
@@ -342,7 +318,10 @@ export function compileFileJvm(
       const depOut = compileOne(depPath);
       if (!depOut.ok) return depOut;
       const depClassName = depOut.className;
-      const depExportSet = getExportSet(depOut.program);
+      const depExportSet = new Set([
+        ...depOut.exports.keys(),
+        ...depOut.exportedConstructors.keys(),
+      ]);
 
       for (const imp of program.imports) {
         if (imp.kind !== 'NamedImport' || imp.spec !== spec) continue;
@@ -352,7 +331,8 @@ export function compileFileJvm(
             const impNode = program.imports.find((i) => i.spec === spec);
             return { ok: false, diagnostics: [diag(filePath, CODES.export.not_exported, `Module ${spec} does not export ${externalName}`, (impNode as { span?: Span })?.span, source)] };
           }
-          const t = depOut.exports.get(externalName);
+          let t = depOut.exports.get(externalName);
+          if (t == null) t = depOut.exportedConstructors.get(externalName);
           if (t != null) {
             if (depOut.exportedTypeAliases.has(externalName)) {
               typeAliasBindings.set(localName, t);
@@ -380,12 +360,26 @@ export function compileFileJvm(
       });
     }
 
+    const dependencyExportsBySpec = new Map<string, DependencyExportSnapshot>();
+    for (const dr of depResults) {
+      const ent = cache.get(dr.path);
+      if (ent) {
+        dependencyExportsBySpec.set(dr.spec, {
+          exports: ent.exports,
+          exportedTypeAliases: ent.exportedTypeAliases,
+          exportedConstructors: ent.exportedConstructors,
+          exportedTypeVisibility: ent.exportedTypeVisibility ?? new Map(),
+        });
+      }
+    }
+
     const tcOpts: TypecheckOptions = {
       importBindings: importBindings.size > 0 ? importBindings : undefined,
       typeAliasBindings: typeAliasBindings.size > 0 ? typeAliasBindings : undefined,
       importOpaqueTypes: importOpaqueTypes.size > 0 ? importOpaqueTypes : undefined,
       sourceFile: filePath,
       sourceContent: source,
+      dependencyExportsBySpec,
     };
     const tc = typecheck(program, tcOpts);
     if (!tc.ok) return { ok: false, diagnostics: tc.diagnostics };

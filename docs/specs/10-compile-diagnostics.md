@@ -69,7 +69,7 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 - **parse:*** — Parser (syntax) errors. Example: `parse:unexpected_token`.
 - **resolve:*** — Module resolution. Examples: `resolve:module_not_found`, `resolve:stdlib_not_configured`.
 - **type:*** — Typechecker. Examples: `type:unknown_variable`, `type:unify`, `type:non_exhaustive_match`, `type:break_outside_loop`, `type:continue_outside_loop`.
-- **export:*** — Export/import mismatch. Example: `export:not_exported`.
+- **export:*** — Export/import mismatch. Examples: `export:not_exported`, `export:reexport_conflict`.
 - **file:*** — Package/file system. Examples: `file:read_error`, `file:circular_import`.
 
 **Error code catalog (representative):**
@@ -88,6 +88,7 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 | `type:break_outside_loop` | `break` is not inside a `while` body. |
 | `type:continue_outside_loop` | `continue` is not inside a `while` body. |
 | `export:not_exported` | Module does not export the requested name. |
+| `export:reexport_conflict` | The same export name would come from more than one source (07 §3.3). |
 | `compile:jvm_namespace_constructor` | JVM compile path does not support namespace-qualified ADT constructor calls (`M.Ctor(…)`); use the VM target or a wrapper function in the dependency. |
 | `file:read_error` | Could not read file. |
 | `file:circular_import` | Circular import detected. |

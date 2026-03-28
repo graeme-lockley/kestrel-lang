@@ -6,6 +6,8 @@ This document describes the concrete .kti format produced and consumed by the re
 
 - **Top-level `version`** (number): currently **3** in the reference compiler. Consumers must reject files with an unsupported or missing version. Version **3** adds **`constructor`** export entries for non-opaque exported ADTs (namespace-qualified construction and `.kti`-only consumers; see 07 §5.1).
 
+**Re-exported names** (07 §3.2) appear in the barrel package’s `.kti` like direct exports: same `kind` / `function_index` / `constructor` fields, with indices referring to that **barrel** package’s merged function table (or defining-module `adt_id` / `ctor_index` for constructor entries, as for direct exports). Consumers do not need a separate “re-export” kind.
+
 ## Export kinds and required fields
 
 All exports appear in the **`functions`** object (map from export name to entry). Common fields depend on `kind` (see reference `types-file.ts`):

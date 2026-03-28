@@ -189,8 +189,8 @@ Only **exported** type aliases are listed. ADT and record definitions are in the
 
 At the next 4-byte-aligned offset after the exported type declarations (6.4):
 
-- `import_count` (u32): number of modules this file imports from (one entry per distinct `from "..."` source).
-- Then `import_count` × u32: `module_specifier_index` (u32): string table index of the import source string (the literal in `import ... from "..."`; e.g. `"kestrel:string"` or a path).
+- `import_count` (u32): number of modules this file depends on at the specifier level (one entry per **distinct** specifier string from **import** or **re-export** `from "..."`; see 07 §2.1 and §6).
+- Then `import_count` × u32: `module_specifier_index` (u32): string table index of that specifier string (e.g. `"kestrel:string"` or a path).
 
 Order of entries is unspecified. Per-symbol import details (which names are imported from which module) are not stored here; the compiler resolves those at compile time and embeds references (e.g. function index, type index) in the code and type table.
 

@@ -331,7 +331,7 @@ GC: Mark-sweep (v1). Roots: stack, locals, globals.
 
 Deterministic resolution. Specifier = exact string in `from "..."` (no normalisation). Kinds: **stdlib** (`kestrel:string`, `kestrel:stack`, `kestrel:http`, `kestrel:json`, `kestrel:fs`), **URL**, **path**. See **`docs/specs/07-modules.md`**.
 
-Import forms: `import { x } from "./m.ks"`, `import * as M from "./m.ks"`, `import "./m.ks"`. Re-export: `export * from "./m.ks"`, `export { x as y } from "./m.ks"`. Same name from different sources (export or import) → compile error unless renamed. Lockfile: `kestrel.lock` (project root); format and behaviour implementation-defined.
+Import forms: `import { x } from "./m.ks"`, `import * as M from "./m.ks"`, `import "./m.ks"`. Re-export: `export * from "./m.ks"`, `export { x as y } from "./m.ks"`. **Distinct specifiers** (for resolution and the bytecode import table) include re-export `from` strings as well as import specifiers (07 §2.1, §6). Same name from different sources (export or import) → compile error unless renamed. Lockfile: `kestrel.lock` (project root); format and behaviour implementation-defined.
 
 ------------------------------------------------------------------------
 

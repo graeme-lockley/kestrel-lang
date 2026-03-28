@@ -50,6 +50,7 @@ export const CODES = {
   export: {
     not_exported: 'export:not_exported',
     import_conflict: 'export:import_conflict',
+    reexport_conflict: 'export:reexport_conflict',
   },
   file: {
     read_error: 'file:read_error',
