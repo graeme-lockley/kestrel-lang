@@ -35,12 +35,29 @@ log_step() {
 }
 
 # Run Cursor Agent CLI with a single prompt (non-interactive, trusted workspace).
+# Prints the prompt and merges agent stdout/stderr so the run is visible in the terminal.
 run_cursor_cli() {
   local prompt=$1
   if ! command -v "$CURSOR_CLI" >/dev/null 2>&1; then
     die "CURSOR_CLI='$CURSOR_CLI' not found on PATH. Install Cursor Agent CLI or set CURSOR_CLI."
   fi
-  "$CURSOR_CLI" -p --trust --workspace "$REPO_ROOT" "$prompt"
+  echo ""
+  echo "================================================================================"
+  echo "Submitted prompt"
+  echo "================================================================================"
+  printf '%s\n' "$prompt"
+  echo ""
+  echo "================================================================================"
+  echo "Agent output ($CURSOR_CLI)"
+  echo "================================================================================"
+  set +e
+  "$CURSOR_CLI" -p --trust --workspace "$REPO_ROOT" "$prompt" 2>&1
+  local ec=$?
+  set -e
+  echo "================================================================================"
+  echo "End agent output (exit $ec)"
+  echo "================================================================================"
+  return "$ec"
 }
 
 story_basename() {
@@ -60,13 +77,16 @@ is_story_in_done() {
   [[ -f "$DONE_DIR/$name" ]]
 }
 
+# Each step must use "|| return 1": this function is invoked as "if ! run_full_test_suite",
+# and bash disables errexit during that evaluation, so a bare failing subshell would not stop
+# the function and "Full test suite passed." could print anyway.
 run_full_test_suite() {
   echo "Running full test suite (compiler build + tests, VM, E2E, Kestrel harness)…"
-  (cd "$REPO_ROOT/compiler" && npm run build && npm test)
-  (cd "$REPO_ROOT/vm" && zig build test --verbose 2>&1)
-  "$REPO_ROOT/scripts/run-e2e.sh"
-  "$REPO_ROOT/scripts/kestrel" test
-  "$REPO_ROOT/scripts/kestrel" test --target jvm
+  (cd "$REPO_ROOT/compiler" && npm run build && npm test) || return 1
+  (cd "$REPO_ROOT/vm" && zig build test --verbose 2>&1) || return 1
+  "$REPO_ROOT/scripts/run-e2e.sh" || return 1
+  "$REPO_ROOT/scripts/kestrel" test || return 1
+  "$REPO_ROOT/scripts/kestrel" test --target jvm || return 1
   echo "Full test suite passed."
 }
 
@@ -101,9 +121,7 @@ process_one_story() {
 
     log_step "3/7 — Verification via Cursor Agent ($base_name)"
     local verify_ok=0
-    if ! run_cursor_cli "${p3}${failure_context}"; then
-      verify_ok=$?
-    fi
+    run_cursor_cli "${p3}${failure_context}" || verify_ok=$?
 
     if (( verify_ok != 0 )); then
       echo "Verification (step 3) did not succeed (exit $verify_ok)."
