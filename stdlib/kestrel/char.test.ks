@@ -1,8 +1,12 @@
 import { Suite, group, eq } from "kestrel:test"
+import { equals as stringEquals } from "kestrel:string"
 import {
   codePoint,
   toCode,
   fromCode,
+  charToInt,
+  intToChar,
+  charToString,
   isDigit,
   isUpper,
   isLower,
@@ -21,10 +25,17 @@ export fun run(s: Suite): Unit =
       eq(sg, "toCode Z", toCode('Z'), 90)
     })
 
-    group(s1, "fromCode", (sg: Suite) => {
+    group(s1, "fromCode intToChar charToInt", (sg: Suite) => {
       eq(sg, "65 is A", codePoint(fromCode(65)), 65)
+      eq(sg, "intToChar alias", codePoint(intToChar(66)), 66)
+      eq(sg, "charToInt alias", charToInt('C'), 67)
       eq(sg, "surrogate 0", codePoint(fromCode(0xD800)), 0)
       eq(sg, "negative 0", codePoint(fromCode(-1)), 0)
+    })
+
+    group(s1, "charToString", (sg: Suite) => {
+      eq(sg, "A one char", stringEquals(charToString('A'), "A"), True)
+      eq(sg, "emoji one char", stringEquals(charToString('\u{1F600}'), "\u{1F600}"), True)
     })
 
     group(s1, "isDigit", (sg: Suite) => {

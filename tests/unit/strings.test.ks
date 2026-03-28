@@ -18,6 +18,11 @@ export fun run(s: Suite): Unit =
       eq(sg, "hello ${name}", "hello ${name}", "hello Kestrel")
       eq(sg, "${1+1}", "${1 + 1}", "2")
       eq(sg, "${add(1,2)}", "${add(1, 2)}", "3")
+      val ch = 'A'
+      eq(sg, "char in template", "${ch}", "A")
+      // Braced `\u{...}` inside `${...}` cannot be parsed (inner `}` closes the template hole).
+      val grin = '\u{1F600}'
+      eq(sg, "char emoji", "${grin}", "\u{1F600}")
     })
 
     group(s1, "unicode literals", (sg: Suite) => {

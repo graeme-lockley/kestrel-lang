@@ -72,6 +72,17 @@ fn binopCmp(stack: *[4096]Value, sp: *usize, op: CmpOp) void {
                 .ne => false,
                 else => false,
             };
+        } else if (a.tag == .char and b.tag == .char) {
+            const ac: u32 = @truncate(a.payload);
+            const bc: u32 = @truncate(b.payload);
+            result = switch (op) {
+                .eq => ac == bc,
+                .ne => ac != bc,
+                .lt => ac < bc,
+                .le => ac <= bc,
+                .gt => ac > bc,
+                .ge => ac >= bc,
+            };
         } else if (valueToF64(a)) |af| {
             if (valueToF64(b)) |bf| {
                 const anan = std.math.isNan(af);

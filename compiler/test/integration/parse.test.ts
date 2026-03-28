@@ -112,6 +112,43 @@ describe('parse (integration)', () => {
     expect(literals).toEqual(['int', 'float', 'string', 'char', 'unit']);
   });
 
+  it('parses block val with int literal then parenthesized | chain without semicolon (literal is not call callee)', () => {
+    const src = `fun f(): Bool = {
+  val cp = 1
+  (cp >= 48 & cp <= 57) | (cp >= 65 & cp <= 70)
+}`;
+    const ast = parse(tokenize(src));
+    expect(ast.kind).toBe('Program');
+    const fn = ast.body[0];
+    if (fn.kind !== 'FunDecl' || fn.body.kind !== 'BlockExpr') return;
+    expect(fn.body.stmts.length).toBe(1);
+    const vs = fn.body.stmts[0];
+    expect(vs).toMatchObject({ kind: 'ValStmt', name: 'cp' });
+    if (vs.kind === 'ValStmt') expect(vs.value.kind).toBe('LiteralExpr');
+    expect(fn.body.result.kind).toBe('BinaryExpr');
+    if (fn.body.result.kind === 'BinaryExpr') expect(fn.body.result.op).toBe('|');
+  });
+
+  it('parses block val ending in call then `(` line only when `;` terminates the val (currying otherwise)', () => {
+    const withSemi = `fun f(): Bool = {
+  val cp = g(1);
+  (cp >= 48 & cp <= 57) | (cp >= 65 & cp <= 70)
+}`;
+    const astOk = parse(tokenize(withSemi));
+    expect(astOk.kind).toBe('Program');
+    const fn = astOk.body[0];
+    if (fn.kind !== 'FunDecl' || fn.body.kind !== 'BlockExpr') return;
+    expect(fn.body.stmts.length).toBe(1);
+    expect(fn.body.result.kind).toBe('BinaryExpr');
+
+    const noSemi = `fun f(): Bool = {
+  val cp = g(1)
+  (cp >= 48 & cp <= 57) | (cp >= 65 & cp <= 70)
+}`;
+    const astBad = parse(tokenize(noSemi));
+    expect('ok' in astBad && !astBad.ok).toBe(true);
+  });
+
   it('parses nested literal patterns in list and record patterns', () => {
     const ast = parse(tokenize(`
       val y = match (xs) {

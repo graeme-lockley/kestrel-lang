@@ -7,6 +7,11 @@ import type { FunDecl, FunStmt, ValDecl, VarDecl, ExceptionDecl } from '../ast/n
 import type { ConstantEntry } from '../bytecode/constants.js';
 import { ConstTag } from '../bytecode/constants.js';
 
+/** Parser `char` token value is the decoded scalar (no quotes); astral scalars may span two UTF-16 units in JS. */
+function charLiteralCodePoint(value: string): number {
+  return value.codePointAt(0) ?? 0;
+}
+
 /** If expr is a literal, return the constant entry for it; else null (export val/var must be constant). */
 function literalToConstant(expr: Expr, stringIndex: (s: string) => number): ConstantEntry | null {
   if (expr.kind !== 'LiteralExpr') return null;
@@ -18,9 +23,7 @@ function literalToConstant(expr: Expr, stringIndex: (s: string) => number): Cons
     case 'string':
       return { tag: ConstTag.String, stringIndex: stringIndex(expr.value) };
     case 'char': {
-      const ch = expr.value.length >= 2 ? expr.value.slice(1, -1) : expr.value;
-      const codePoint = ch.startsWith('\\u') ? parseInt(ch.slice(2), 16) : ch.codePointAt(0) ?? 0;
-      return { tag: ConstTag.Char, value: codePoint };
+      return { tag: ConstTag.Char, value: charLiteralCodePoint(expr.value) };
     }
     case 'true':
       return { tag: ConstTag.True };
@@ -528,10 +531,7 @@ function makeEmitExpr(
           break;
         }
         case 'char':
-          // value is e.g. 'a' or \uXXXX
-          const ch = expr.value.length >= 2 ? expr.value.slice(1, -1) : expr.value;
-          const codePoint = ch.startsWith('\\u') ? parseInt(ch.slice(2), 16) : ch.codePointAt(0) ?? 0;
-          emitLoadConst(addConstant({ tag: ConstTag.Char, value: codePoint }));
+          emitLoadConst(addConstant({ tag: ConstTag.Char, value: charLiteralCodePoint(expr.value) }));
           break;
         case 'true':
           emitLoadConst(addConstant({ tag: ConstTag.True }));
@@ -1627,9 +1627,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               emitLoadConst(addConstant({ tag: ConstTag.String, stringIndex: stringIndex(pattern.value) }));
               break;
             case 'char': {
-              const ch = pattern.value.length >= 2 ? pattern.value.slice(1, -1) : pattern.value;
-              const codePoint = ch.startsWith('\\u') ? Number.parseInt(ch.slice(2), 16) : ch.codePointAt(0) ?? 0;
-              emitLoadConst(addConstant({ tag: ConstTag.Char, value: codePoint }));
+              emitLoadConst(addConstant({ tag: ConstTag.Char, value: charLiteralCodePoint(pattern.value) }));
               break;
             }
             case 'unit':
@@ -1725,9 +1723,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               emitLoadConst(addConstant({ tag: ConstTag.String, stringIndex: stringIndex(pattern.value) }));
               break;
             case 'char': {
-              const ch = pattern.value.length >= 2 ? pattern.value.slice(1, -1) : pattern.value;
-              const codePoint = ch.startsWith('\\u') ? Number.parseInt(ch.slice(2), 16) : ch.codePointAt(0) ?? 0;
-              emitLoadConst(addConstant({ tag: ConstTag.Char, value: codePoint }));
+              emitLoadConst(addConstant({ tag: ConstTag.Char, value: charLiteralCodePoint(pattern.value) }));
               break;
             }
             case 'unit':

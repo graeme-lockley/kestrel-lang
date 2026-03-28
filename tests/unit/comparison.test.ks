@@ -41,6 +41,18 @@ export fun run(s: Suite): Unit =
       eq(sg, "() != () is false", () != (), False)
     })
 
+    group(s1, "char (Unicode scalar)", (sg: Suite) => {
+      eq(sg, "same literal", 'a' == 'a', True)
+      eq(sg, "different literal", 'a' == 'b', False)
+      eq(sg, "!= ", 'x' != 'y', True)
+      eq(sg, "emoji equal", '\u{1F600}' == '\u{1F600}', True)
+      eq(sg, "order a < b", 'a' < 'b', True)
+      eq(sg, "order b < a is false", 'b' < 'a', False)
+      eq(sg, "<= equal", 'z' <= 'z', True)
+      eq(sg, "> ", 'z' > 'a', True)
+      eq(sg, ">= equal", 'm' >= 'm', True)
+    })
+
     group(s1, "lists (structural)", (sg: Suite) => {
       eq(sg, "nil == nil", [] == [], True)
       eq(sg, "same elements", [1, 2, 3] == [1, 2, 3], True)

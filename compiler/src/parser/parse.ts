@@ -50,6 +50,27 @@ export function parseExpression(tokens: Token[]): Expr {
   return p.parseOneExpr();
 }
 
+/**
+ * Only these may be followed by `(` as a function call (postfix application).
+ * - Without this, `val x = 1` then `(expr)` (often on the next line) becomes `1 (expr)` as a call
+ *   because newlines are not tokenized.
+ * - `CallExpr` remains a callee so `f(x)(y)` currying parses; if a `val` RHS ends with a call and the
+ *   next line starts with `(`, use `;` after the RHS so the opening `(` is not fused (see spec 01 §3.5).
+ */
+function exprMayBeCallCallee(expr: Expr): boolean {
+  switch (expr.kind) {
+    case 'IdentExpr':
+    case 'FieldExpr':
+    case 'CallExpr':
+    case 'LambdaExpr':
+      return true;
+    case 'AwaitExpr':
+      return exprMayBeCallCallee(expr.value);
+    default:
+      return false;
+  }
+}
+
 class Parser {
   private i = 0;
   private errors: ParseErrorEntry[] = [];
@@ -737,6 +758,7 @@ class Parser {
       this.at('float') && /^\.\d+$/.test(this.current().value ?? '');
     while (this.at('lparen') || this.at('dot') || isTupleIndexFloat()) {
       if (this.at('lparen')) {
+        if (!exprMayBeCallCallee(expr)) break;
         this.advance();
         const args: Expr[] = [];
         while (!this.at('rparen')) {

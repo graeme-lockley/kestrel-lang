@@ -49,9 +49,18 @@ fn formatInto(val: Value, buf: []u8, start: usize, module_cache: ?[]const *const
             return pos + 2;
         },
         .char => {
-            const c = @as(u21, @intCast(val.payload));
+            const raw: u32 = @truncate(val.payload);
+            const c: u21 = if (raw > 0x10FFFF or (raw >= 0xD800 and raw <= 0xDFFF))
+                0xFFFD
+            else
+                @intCast(raw);
             var cbuf: [4]u8 = undefined;
-            const len = std.unicode.utf8Encode(c, &cbuf) catch 1;
+            const len = std.unicode.utf8Encode(c, &cbuf) catch {
+                const l2 = std.unicode.utf8Encode(0xFFFD, &cbuf) catch return null;
+                if (pos + l2 > buf.len) return null;
+                @memcpy(buf[pos..][0..l2], cbuf[0..l2]);
+                return pos + l2;
+            };
             if (pos + len > buf.len) return null;
             @memcpy(buf[pos..][0..len], cbuf[0..len]);
             return pos + len;

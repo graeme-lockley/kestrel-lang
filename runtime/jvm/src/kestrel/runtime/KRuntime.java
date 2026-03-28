@@ -58,9 +58,10 @@ public final class KRuntime {
         if (v == null) return "null";
         if (v == KUnit.INSTANCE) return "()";
         if (v instanceof Boolean) return (Boolean) v ? "True" : "False";
+        // Char is boxed as Integer (Kestrel Int uses Long); show the Unicode scalar, not a decimal.
+        if (v instanceof Integer) return charToString(v);
         if (v instanceof Long) return Long.toString((Long) v);
         if (v instanceof Double) return formatDouble((Double) v);
-        if (v instanceof Integer && !(v instanceof Long)) return Integer.toString((Integer) v);
         if (v instanceof String) return (String) v;
         if (v instanceof KRecord) {
             KRecord r = (KRecord) v;
@@ -244,34 +245,34 @@ public final class KRuntime {
         return Long.valueOf((long) str.codePointAt(offset));
     }
 
-    /** Unicode scalar value for a Char (boxed as Long code point in Kestrel JVM). */
+    /** Unicode scalar value for a Char (boxed as Integer on JVM; Int remains Long). */
     public static Long charCodePoint(Object c) {
-        if (c instanceof Long) return (Long) c;
         if (c instanceof Integer) return Long.valueOf(((Integer) c).longValue());
+        if (c instanceof Long) return (Long) c;
         if (c instanceof Number) return Long.valueOf(((Number) c).longValue());
         return Long.valueOf(0L);
     }
 
-    /** Char at code-point index `i` (boxed Long code point), or 0 if out of range. */
-    public static Long stringCharAt(Object s, Object index) {
+    /** Char at code-point index `i` (boxed Integer code point), or U+0000 if out of range. */
+    public static Integer stringCharAt(Object s, Object index) {
         Long cp = stringCodePointAt(s, index);
-        if (cp == null || cp.longValue() < 0) return Long.valueOf(0L);
-        return cp;
+        if (cp == null || cp.longValue() < 0) return Integer.valueOf(0);
+        return Integer.valueOf(cp.intValue());
     }
 
-    /** Single-code-point string from Char (Long code point). */
+    /** Single-code-point string from Char (Integer code point on JVM). */
     public static String charToString(Object c) {
         long cp = charCodePoint(c).longValue();
         if (cp < 0 || cp > 0x10FFFFL) return "";
         return new String(Character.toChars((int) cp));
     }
 
-    /** Int code point to Char (Long on JVM); invalid or surrogate range -> 0. */
-    public static Long charFromCode(Object n) {
+    /** Int code point to Char (boxed Integer); invalid or surrogate range -> U+0000. */
+    public static Integer charFromCode(Object n) {
         long code = longFrom(n);
-        if (code < 0 || code > 0x10FFFFL) return Long.valueOf(0L);
-        if (code >= 0xD800L && code <= 0xDFFFL) return Long.valueOf(0L);
-        return Long.valueOf(code);
+        if (code < 0 || code > 0x10FFFFL) return Integer.valueOf(0);
+        if (code >= 0xD800L && code <= 0xDFFFL) return Integer.valueOf(0);
+        return Integer.valueOf((int) code);
     }
 
     public static Double intToFloat(Object n) {

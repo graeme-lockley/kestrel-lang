@@ -1,11 +1,21 @@
 // kestrel:char — helpers for Char (single Unicode scalar).
 
+/** Unicode scalar value as `Int` (only primitive call Char → Int in this module). */
 export fun codePoint(c: Char): Int = __char_code_point(c)
 
-/** Alias for `codePoint`. */
+/** Synonym for `codePoint` (common in FP stdlibs). */
 export fun toCode(c: Char): Int = codePoint(c)
 
+/** Synonym for `codePoint` (pairs with `intToChar`). */
+export fun charToInt(c: Char): Int = toCode(c)
+
 export fun fromCode(n: Int): Char = __char_from_code(n)
+
+/** Synonym for `fromCode` (pairs with `charToInt`). */
+export fun intToChar(n: Int): Char = fromCode(n)
+
+/** Single-code-point UTF-8 string. */
+export fun charToString(c: Char): String = __char_to_string(c)
 
 export fun isDigit(c: Char): Bool = {
   val cp = codePoint(c)
@@ -32,12 +42,13 @@ export fun isOctDigit(c: Char): Bool = {
 }
 
 export fun isHexDigit(c: Char): Bool = {
-  val cp = codePoint(c)
-  isDigit(c) | (cp >= 65 & cp <= 70) | (cp >= 97 & cp <= 102)
+  // `;` required: the lexer drops newlines, so without it `codePoint(c)(` is parsed as currying.
+  val cp = codePoint(c);
+  (cp >= 48 & cp <= 57) | (cp >= 65 & cp <= 70) | (cp >= 97 & cp <= 102)
 }
 
 export fun toUpper(c: Char): Char =
-  if (isLower(c)) fromCode(codePoint(c) - 32) else c
+  if (isLower(c)) intToChar(charToInt(c) - 32) else c
 
 export fun toLower(c: Char): Char =
-  if (isUpper(c)) fromCode(codePoint(c) + 32) else c
+  if (isUpper(c)) intToChar(charToInt(c) + 32) else c

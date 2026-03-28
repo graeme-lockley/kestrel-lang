@@ -115,6 +115,27 @@ public final class KMath {
         return Boolean.valueOf(a.longValue() >= b.longValue());
     }
 
+    /** Char (Integer code point): ordered comparison by Unicode scalar (unsigned). */
+    public static java.lang.Boolean charLess(Integer a, Integer b) {
+        if (a == null || b == null) throw new NullPointerException();
+        return Boolean.valueOf(Integer.compareUnsigned(a.intValue(), b.intValue()) < 0);
+    }
+
+    public static java.lang.Boolean charLessEq(Integer a, Integer b) {
+        if (a == null || b == null) throw new NullPointerException();
+        return Boolean.valueOf(Integer.compareUnsigned(a.intValue(), b.intValue()) <= 0);
+    }
+
+    public static java.lang.Boolean charGreater(Integer a, Integer b) {
+        if (a == null || b == null) throw new NullPointerException();
+        return Boolean.valueOf(Integer.compareUnsigned(a.intValue(), b.intValue()) > 0);
+    }
+
+    public static java.lang.Boolean charGreaterEq(Integer a, Integer b) {
+        if (a == null || b == null) throw new NullPointerException();
+        return Boolean.valueOf(Integer.compareUnsigned(a.intValue(), b.intValue()) >= 0);
+    }
+
     public static Double addFloat(Double a, Double b) {
         if (a == null || b == null) throw new NullPointerException();
         return Double.valueOf(a.doubleValue() + b.doubleValue());

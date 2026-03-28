@@ -23,6 +23,11 @@ const K_NIL = 'kestrel/runtime/KNil';
 const K_LIST = 'kestrel/runtime/KList';
 const K_CONS = 'kestrel/runtime/KCons';
 const K_ERR = 'kestrel/runtime/KErr';
+
+/** Parser `char` token value is the decoded scalar (no quotes); astral scalars may span two UTF-16 units in JS. */
+function charLiteralCodePoint(value: string): number {
+  return value.codePointAt(0) ?? 0;
+}
 const K_OK = 'kestrel/runtime/KOk';
 const K_VNULL = 'kestrel/runtime/KVNull';
 const K_FUNCTION = 'kestrel/runtime/KFunction';
@@ -481,8 +486,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.LDC_W, cf.string(expr.value));
             break;
           case 'char': {
-            const ch = expr.value.length >= 2 ? expr.value.slice(1, -1) : expr.value;
-            const codePoint = ch.startsWith('\\u') ? parseInt(ch.slice(2), 16) : ch.codePointAt(0) ?? 0;
+            const codePoint = charLiteralCodePoint(expr.value);
             mb.emit1s(JvmOp.LDC_W, cf.constantInt(codePoint));
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref('java/lang/Integer', 'valueOf', '(I)Ljava/lang/Integer;'));
             break;
@@ -634,13 +638,17 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         const leftPrim = primName(getInferredType(expr.left));
         const rightPrim = primName(getInferredType(expr.right));
         const isInt = leftPrim === 'Int' && rightPrim === 'Int';
+        const isChar =
+          (leftPrim === 'Char' || leftPrim === 'Rune') && (rightPrim === 'Char' || rightPrim === 'Rune');
         const isFloat = leftPrim === 'Float' || rightPrim === 'Float';
         emitExpr(expr.left, mb);
         if (isInt) mb.emit1s(JvmOp.CHECKCAST, cf.classRef(LONG));
         else if (isFloat) mb.emit1s(JvmOp.CHECKCAST, cf.classRef(DOUBLE));
+        else if (isChar) mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Integer'));
         emitExpr(expr.right, mb);
         if (isInt) mb.emit1s(JvmOp.CHECKCAST, cf.classRef(LONG));
         else if (isFloat) mb.emit1s(JvmOp.CHECKCAST, cf.classRef(DOUBLE));
+        else if (isChar) mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Integer'));
         if (expr.op === '==') {
           mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
           break;
@@ -674,6 +682,24 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const intOpMap: Record<string, string> = { '+': 'add', '-': 'sub', '*': 'mul', '/': 'div', '%': 'mod', '**': 'pow' };
             const op = intOpMap[expr.op] ?? jvmMangleName(expr.op);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(KMATH, op, '(Ljava/lang/Long;Ljava/lang/Long;)Ljava/lang/Long;'));
+          }
+        } else if (isChar) {
+          const cmpOps = new Set(['<', '<=', '>', '>=']);
+          if (cmpOps.has(expr.op)) {
+            const charMethod =
+              expr.op === '<'
+                ? 'charLess'
+                : expr.op === '<='
+                  ? 'charLessEq'
+                  : expr.op === '>'
+                    ? 'charGreater'
+                    : 'charGreaterEq';
+            mb.emit1s(
+              JvmOp.INVOKESTATIC,
+              cf.methodref(KMATH, charMethod, '(Ljava/lang/Integer;Ljava/lang/Integer;)Ljava/lang/Boolean;')
+            );
+          } else {
+            throw new Error(`JVM codegen: unsupported binary ${expr.op} on Char`);
           }
         } else if (isFloat) {
           const cmpOps = new Set(['<', '<=', '>', '>=']);
@@ -1037,7 +1063,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             emitExpr(expr.args[1], mb);
             mb.emit1s(
               JvmOp.INVOKESTATIC,
-              cf.methodref(RUNTIME, 'stringCharAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;')
+              cf.methodref(RUNTIME, 'stringCharAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Integer;')
             );
             break;
           }
@@ -1093,7 +1119,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           }
           if (name === '__char_from_code' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charFromCode', '(Ljava/lang/Object;)Ljava/lang/Long;'));
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charFromCode', '(Ljava/lang/Object;)Ljava/lang/Integer;'));
             break;
           }
           if (name === '__json_parse' && expr.args.length === 1) {
