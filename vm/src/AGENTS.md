@@ -43,7 +43,7 @@ vm/src/
 ```bash
 zig build          # Debug build
 zig build -Doptimize=ReleaseSafe  # Optimized
-zig test           # Run VM tests
+zig build test     # Run VM tests (from vm/)
 ```
 
 ## Notes

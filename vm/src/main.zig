@@ -21,11 +21,17 @@ pub fn main() !void {
 
     var module = try load_mod.load(allocator, path);
     defer load_mod.freeModule(allocator, &module);
-    if (!exec_mod.run(allocator, &module, path)) {
+    if (!exec_mod.run(allocator, &module, path, null)) {
         std.process.exit(1);
     }
 }
 
-test "vm placeholder" {
-    try std.testing.expect(true);
+test {
+    // Register tests from all VM modules (Zig only runs tests reachable from the root file).
+    _ = @import("value.zig");
+    _ = @import("load.zig");
+    _ = @import("exec.zig");
+    _ = @import("gc.zig");
+    _ = @import("primitives.zig");
+    _ = @import("vm_bytecode_tests.zig");
 }

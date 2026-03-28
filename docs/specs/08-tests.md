@@ -44,6 +44,7 @@ A conforming implementation must:
 
 - **Format:** Emitted `.kbc` files have valid header, section offsets, and section layout per [03-bytecode-format.md](03-bytecode-format.md). Invalid or truncated files are rejected by the VM.
 - **Instructions:** Each instruction in [04-bytecode-isa.md](04-bytecode-isa.md) is covered by at least one test that executes it and checks stack/result. **Record spread:** SPREAD (0x19) is exercised by the record spread literal test in `tests/unit/records.test.ks`, which compiles `{ ...r, x = v }` to SPREAD and is run by the unit test harness.
+- **Zig VM unit tests:** The reference VM (`vm/`) runs `zig build test` from `vm/src/main.zig`, which imports tests from `value.zig`, `load.zig`, `exec.zig`, `gc.zig`, `primitives.zig`, and `vm_bytecode_tests.zig`. `vm_bytecode_tests.zig` executes hand-crafted bytecode for core opcodes; `vm/test/fixtures/` holds minimal and compiler-generated `.kbc` samples for the loader.
 - **Calling convention:** Calls with multiple arguments and returns follow left-to-right argument order and single return value.
 
 ### 2.5 Runtime Model

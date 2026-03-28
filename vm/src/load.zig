@@ -458,33 +458,19 @@ pub fn freeModule(allocator: std.mem.Allocator, m: *const Module) void {
 
 test "load minimal kbc" {
     const a = std.testing.allocator;
-    const m = try load(a, "test/fixtures/empty.kbc");
-    defer a.free(m.file_data);
-    defer a.free(m.code);
-    defer a.free(m.constants);
-    defer {
-        for (m.string_slices) |s| a.free(s);
-        a.free(m.string_slices);
-    }
-    defer {
-        for (m.float_objects) |f| a.free(f);
-        a.free(m.float_objects);
-    }
-    if (m.functions.len > 0) a.free(m.functions);
-    for (m.shapes) |s| a.free(s.field_names);
-    if (m.shapes.len > 0) a.free(m.shapes);
-    for (m.adts) |ad| a.free(ad.constructor_names);
-    if (m.adts.len > 0) a.free(m.adts);
-    if (m.import_specifiers.len > 0) a.free(m.import_specifiers);
-    if (m.imported_functions.len > 0) a.free(m.imported_functions);
-    if (m.globals.len > 0) a.free(m.globals);
-    if (m.debug_files.len > 0) {
-        for (m.debug_files) |f| a.free(f);
-        a.free(m.debug_files);
-    }
-    if (m.debug_entries.len > 0) a.free(m.debug_entries);
+    var m = try load(a, "test/fixtures/empty.kbc");
+    defer freeModule(a, &m);
     try std.testing.expect(m.code.len >= 1);
     try std.testing.expect(m.code[0] == 0x11);
     try std.testing.expect(m.debug_files.len == 0);
     try std.testing.expect(m.debug_entries.len == 0);
+}
+
+test "load compiler-generated minimal_main fixture" {
+    const a = std.testing.allocator;
+    var m = try load(a, "test/fixtures/minimal_main.kbc");
+    defer freeModule(a, &m);
+    try std.testing.expect(m.functions.len >= 1);
+    try std.testing.expect(m.constants.len >= 1);
+    try std.testing.expect(m.code.len >= 1);
 }

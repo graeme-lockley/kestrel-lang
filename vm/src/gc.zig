@@ -265,6 +265,31 @@ test "GC marks module globals as roots" {
     try std.testing.expect(found);
 }
 
+test "sweep frees unmarked heap object" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var gc = GC.init(allocator);
+    defer gc.deinit();
+
+    const a = try gc.allocFloat(1.0);
+    const b = try gc.allocFloat(2.0);
+    _ = b;
+    var stack: [1]Value = .{a};
+    gc.markRoots(stack[0..], &[_][]const Value{}, &[_][]const Value{});
+    gc.collect(stack[0..], &[_][]const Value{}, &[_][]const Value{});
+
+    const addr_a = Value.ptrTo(a);
+    var n: usize = 0;
+    var cur = gc.objects;
+    while (cur) |node| : (cur = node.next) {
+        n += 1;
+        try std.testing.expect(node.addr == addr_a);
+    }
+    try std.testing.expect(n == 1);
+}
+
 test "mark ignores non-GC pointers (no segfault on interior or constant-pool addrs)" {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();

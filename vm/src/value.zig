@@ -61,3 +61,24 @@ pub const Value = packed struct(u64) {
 test "value size" {
     try std.testing.expect(@sizeOf(Value) == 8);
 }
+
+test "int round-trip 61-bit extrema" {
+    const hi: i64 = (1 << 60) - 1;
+    const lo: i64 = -(@as(i64, 1) << 60);
+    try std.testing.expect(Value.intTo(Value.int(hi)) == hi);
+    try std.testing.expect(Value.intTo(Value.int(lo)) == lo);
+}
+
+test "bool unit char ptr fn_ref round-trip" {
+    const t = Value.boolVal(true);
+    try std.testing.expect(t.tag == .bool);
+    try std.testing.expect(t.payload != 0);
+    try std.testing.expect(Value.boolVal(false).payload == 0);
+    try std.testing.expect(Value.unit().tag == .unit);
+    try std.testing.expect(Value.char(0x1F600).payload == 0x1F600);
+    const addr: usize = 0x1000;
+    try std.testing.expect(Value.ptrTo(Value.ptr(addr)) == addr);
+    const fr = Value.fnRef(0xABCD, 0x12345678);
+    try std.testing.expect(Value.fnRefModule(fr) == 0xABCD);
+    try std.testing.expect(Value.fnRefIndex(fr) == 0x12345678);
+}

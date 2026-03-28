@@ -343,7 +343,9 @@ fn resolveImportPath(allocator: std.mem.Allocator, specifier: []const u8, entry_
 }
 
 /// Returns true if execution completed normally, false if terminated by uncaught exception.
-pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: []const u8) bool {
+/// When `out_top` is non-null and execution completes at the outermost `RET`, writes the top
+/// stack slot (or unit if empty) for test harnesses.
+pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: []const u8, out_top: ?*Value) bool {
     module.source_path = allocator.dupe(u8, entry_path) catch return false;
     var current_module = module;
     var code = current_module.code;
@@ -1740,7 +1742,12 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 }
             },
             RET => {
-                if (frame_sp == 0) return true;
+                if (frame_sp == 0) {
+                    if (out_top) |p| {
+                        p.* = if (sp > 0) stack[sp - 1] else Value.unit();
+                    }
+                    return true;
+                }
                 const ret_val = if (sp > 0) blk: {
                     sp -= 1;
                     break :blk stack[sp];
@@ -1765,6 +1772,9 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
             else => return false,
         }
     }
+    if (out_top) |p| {
+        p.* = if (sp > 0) stack[sp - 1] else Value.unit();
+    }
     return true;
 }
 
@@ -1782,7 +1792,6 @@ test "run stops on operand stack overflow bytecode" {
     const a = std.testing.allocator;
     const n_push = operand_stack_slots + 1;
     const code = try a.alloc(u8, n_push * 5 + 1);
-    defer a.free(code);
     var off: usize = 0;
     for (0..n_push) |_| {
         code[off] = LOAD_CONST;
@@ -1792,9 +1801,9 @@ test "run stops on operand stack overflow bytecode" {
     code[off] = RET;
 
     const constants = try a.alloc(Value, 1);
-    defer a.free(constants);
     constants[0] = Value.int(0);
 
+    const file_data = try a.alloc(u8, 0);
     var m = load_mod.Module{
         .code = code,
         .constants = constants,
@@ -1807,11 +1816,11 @@ test "run stops on operand stack overflow bytecode" {
         .import_specifiers = &[_][]const u8{},
         .imported_functions = &[_]load_mod.ImportedFnEntry{},
         .globals = &[_]Value{},
-        .file_data = &[_]u8{},
+        .file_data = file_data,
         .debug_files = &[_][]const u8{},
         .debug_entries = &[_]load_mod.DebugEntry{},
     };
-    const ok = run(a, &m, "operand_overflow_test.ks");
-    if (m.source_path) |p| a.free(p);
+    defer load_mod.freeModule(a, &m);
+    const ok = run(a, &m, "operand_overflow_test.ks", null);
     try std.testing.expect(!ok);
 }

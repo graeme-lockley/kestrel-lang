@@ -50,8 +50,8 @@ zig build
 # Build with optimizations
 zig build -Doptimize=ReleaseSafe
 
-# Run VM tests
-zig test
+# Run VM tests (uses build.zig; registers tests via src/main.zig)
+zig build test
 ```
 
 ### End-to-End Tests
