@@ -217,7 +217,7 @@ For an imported **var** (07 §5.1), the calling package may emit **two** entries
 
 - **Layout:** Raw bytecode only; no internal header. Section length = `section_offsets[4] - section_offsets[3]`.
 - **Entry point:** Execution begins at the first byte of this section. If the module has no top-level statements to run, the compiler must emit exactly one **RET** instruction at that offset.
-- Instruction encoding and semantics: [04-bytecode-isa.md](04-bytecode-isa.md). The code may contain opcodes 0x20 (CALL_INDIRECT), 0x21 (LOAD_FN), 0x22 (MAKE_CLOSURE), 0x23 (LOAD_IMPORTED_FN), 0x24 (CONSTRUCT_IMPORT), and others listed in 04 §4.1 (including closure and cross-module construction).
+- Instruction encoding and semantics: [04-bytecode-isa.md](04-bytecode-isa.md). The code may contain opcodes 0x20 (CALL_INDIRECT), 0x21 (LOAD_FN), 0x22 (MAKE_CLOSURE), 0x23 (LOAD_IMPORTED_FN), 0x24 (CONSTRUCT_IMPORT), **0x25 (KIND_IS)** for `e is T` lowering, and others listed in 04 §4.1 (including closure, cross-module construction, and type tests).
 
 ---
 

@@ -39,6 +39,8 @@ export const enum Op {
   LOAD_IMPORTED_FN = 0x23,
   /** Construct ADT value tagged with a dependency module (import_index, adt_id, ctor, arity). */
   CONSTRUCT_IMPORT = 0x24,
+  /** Runtime type probe for `e is Prim` / heap kind (spec 04 §1.3 extension, `is` lowering 03/05). Operand: discriminant u32 (0–6). */
+  KIND_IS = 0x25,
 }
 
 const code: number[] = [];
@@ -169,6 +171,12 @@ export function emitConstructImport(importIndex: number, adtId: number, ctor: nu
   u32(adtId);
   u32(ctor);
   u32(arity);
+}
+
+/** Append KIND_IS discriminant (runtime `is` probe for primitives / heap kinds). */
+export function emitKindIs(discriminant: number): void {
+  u8(Op.KIND_IS);
+  u32(discriminant);
 }
 
 /** Append MATCH with jump table (offsets relative to MATCH opcode). */

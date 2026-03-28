@@ -127,6 +127,45 @@ public final class KRuntime {
         return Boolean.valueOf(deepEquals(a, b));
     }
 
+    /**
+     * Runtime probe for {@code e is T} when T is a primitive or record heap kind (matches VM KIND_IS / compiler).
+     * Discriminant: 0 Int (Long), 1 Bool, 2 Unit, 3 Char (Integer), 4 String, 5 Float (Double), 6 KRecord.
+     */
+    public static boolean isValueKind(Object v, int disc) {
+        switch (disc) {
+            case 0:
+                return v instanceof Long;
+            case 1:
+                return v instanceof Boolean;
+            case 2:
+                return v == KUnit.INSTANCE;
+            case 3:
+                return v instanceof Integer;
+            case 4:
+                return v instanceof String;
+            case 5:
+                return v instanceof Double;
+            case 6:
+                return v instanceof KRecord;
+            default:
+                return false;
+        }
+    }
+
+    /** True if {@code rec} is a record with {@code field} whose value matches {@link #isValueKind(Object, int)}. */
+    public static boolean recordFieldIsKind(Object rec, String field, int disc) {
+        if (!(rec instanceof KRecord)) return false;
+        Object x = ((KRecord) rec).getFields().get(field);
+        if (x == null) return false;
+        return isValueKind(x, disc);
+    }
+
+    /** User-defined (or any) ADT constructor class simple name match, e.g. value is {@code Red}. */
+    public static boolean isAdtNamedCtor(Object v, String ctorName) {
+        if (v == null || ctorName == null) return false;
+        return ctorName.equals(v.getClass().getSimpleName());
+    }
+
     private static boolean deepEquals(Object a, Object b) {
         if (a == b) return true;
         if (a == null || b == null) return false;

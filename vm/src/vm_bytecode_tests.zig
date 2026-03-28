@@ -35,6 +35,7 @@ const END_TRY: u8 = 0x1C;
 const CALL_INDIRECT: u8 = 0x20;
 const LOAD_FN: u8 = 0x21;
 const MAKE_CLOSURE: u8 = 0x22;
+const KIND_IS: u8 = 0x25;
 
 fn writeU32(buf: []u8, off: usize, v: u32) void {
     std.mem.writeInt(u32, buf[off..][0..4], v, .little);
@@ -619,6 +620,25 @@ test "bytecode TRY END_TRY no throw" {
 
     const constants = [_]Value{Value.int(77)};
     try expectIntTop(a, code[0..c], &constants, &[_]load_mod.ShapeEntry{}, &[_]load_mod.AdtEntry{}, 77);
+}
+
+test "bytecode KIND_IS primitive tags" {
+    const a = std.testing.allocator;
+    try expectBoolTop(a, &.{
+        LOAD_CONST, 0, 0, 0, 0,
+        KIND_IS,   0, 0, 0, 0, // Int
+        RET,
+    }, &[_]Value{Value.int(7)}, true);
+    try expectBoolTop(a, &.{
+        LOAD_CONST, 0, 0, 0, 0,
+        KIND_IS,   1, 0, 0, 0, // Bool
+        RET,
+    }, &[_]Value{Value.int(7)}, false);
+    try expectBoolTop(a, &.{
+        LOAD_CONST, 0, 0, 0, 0,
+        KIND_IS,   1, 0, 0, 0,
+        RET,
+    }, &[_]Value{Value.boolVal(true)}, true);
 }
 
 test "bytecode THROW uncaught fails run" {

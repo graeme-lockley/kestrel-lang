@@ -225,10 +225,13 @@ Expression precedence from **lowest** to **highest** (same row = same precedence
 | 2     | `::`      | Right         |
 | 3     | `\|`      | Left          |
 | 4     | `&`       | Left          |
-| 5     | `==` `!=` `<` `>` `>=` `<=` | Left |
-| 6     | `+` `-`   | Left          |
-| 7     | `*` `/` `%` | Left        |
-| 8     | `**`      | Right         |
+| 5     | `is`      | —             |
+| 6     | `==` `!=` `<` `>` `>=` `<=` | Left |
+| 7     | `+` `-`   | Left          |
+| 8     | `*` `/` `%` | Left        |
+| 9     | `**`      | Right         |
+
+**`is` (level 5)** is the **type test** operator `e is T` (see below): it is **not** an associative chain of the same kind as `+` or `&`. The grammar allows at most one `is Type` suffix per `IsExpr` (after relational operands). **`T`** is the **type** nonterminal (§3.6). Because `is` binds **tighter** than expression-level `|` (level 3) and **looser** than `&` (level 4), a form like `f() is Int | String` parses as `f() is (Int | String)` — the RHS is a **union type**, not `(f() is Int) | …`.
 
 All binary operators are left-associative unless stated otherwise. `**` (exponentiation) and `::` (list cons) are **right-associative**. The grammar reflects this by splitting expression levels (PipeExpr through PowExpr). **Unary operators** are not specified in this version; add a UnaryExpr level if introduced.
 
@@ -264,6 +267,13 @@ If the dynamic types of the operands differ (e.g. after an unsound cast), the im
 
 These operators are defined for numeric types and, where the implementation specifies, for other totally ordered types (e.g. lexicographic order on strings). For combinations where ordering is not defined, the implementation may yield `False` or reject the program at compile time; the language does not require a total order on every type.
 
+#### 3.2.2 Type test (`e is T`)
+
+- **Syntax:** `IsExpr` in the grammar above: `RelExpr` optionally followed by **`is`** and a **Type** (§3.6).
+- **Typing:** The expression has type **Bool** (06 §8). The type checker must ensure **`T`** can **narrow** the type of **`e`** (structural overlap with **`e`**’s type); otherwise it is a compile-time error (06 §4, 10 §4 `type:narrow_impossible`). **Opaque** ADT rules from importing modules apply as for pattern matching (06 §5.3, 07 §5.3; `type:narrow_opaque` when violated).
+- **Narrowing:** When `e` is a **simple identifier** `x`, the type of `x` is refined in **`if`**’s **then**-branch and **`while`**’s **body** to **`original_type & T`** (06 §4). The **`else`** branch (if any) keeps **`x`** at the **unrefined** type. Standalone **`x is T`** does not change the binding’s type outside the boolean result.
+- **Runtime truth (summary):** **`T`** is checked **structurally** against the value of **`e`**: primitives and heap **kind** (e.g. Int vs String) via the probe described in 04/05; **ADT** variants by constructor **tag** (and payload where needed); **records** by presence and type of required fields. Exact lowering is in [04-bytecode-isa.md](04-bytecode-isa.md) and [05-runtime-model.md](05-runtime-model.md). JVM and VM backends must agree on user-visible results for well-typed programs.
+
 ```
 Expr           ::= IfExpr
                  | WhileExpr
@@ -275,7 +285,8 @@ Expr           ::= IfExpr
 PipeExpr       ::= ConsExpr { ("|>" | "<|") ConsExpr }
 ConsExpr       ::= OrExpr [ "::" ConsExpr ]
 OrExpr         ::= AndExpr { "|" AndExpr }
-AndExpr        ::= RelExpr { "&" RelExpr }
+AndExpr        ::= IsExpr { "&" IsExpr }
+IsExpr         ::= RelExpr [ "is" Type ]
 RelExpr        ::= AddExpr { ("==" | "!=" | "<" | ">" | ">=" | "<=") AddExpr }
 AddExpr        ::= MulExpr { ("+" | "-") MulExpr }
 MulExpr        ::= PowExpr { ("*" | "/" | "%") PowExpr }
@@ -327,11 +338,11 @@ Record spread `{ ...expr, field = value }` is implemented by compiling to the SP
 
 Application and field access are **postfix** on an atom: parse one Atom, then zero or more Suffix (call or field). So `f(x).y` is Atom `f`, Suffix `(x)`, Suffix `.y`. **Await:** A primary expression may be prefixed with `await` (e.g. `await f()`); valid only in async context (see §5).
 
-**If expression:** `if (cond) thenBranch [ else elseBranch ]`. **cond** must be **Bool**. If **else** is omitted, the whole `if` has type **Unit** and **thenBranch** must have type **Unit** (06). If **else** is present, the two branches must unify to a common type. **thenBranch** and **elseBranch** are parsed in the same **statement vs expression** context as the `if` itself (§3.3): in statement context, a branch `{ ... }` may end with `:=` / `val` / `var` / `fun` and no trailing expression (implicit **Unit**); in expression context, a branch block still needs a value-producing tail unless the last line is promoted from an expression statement (§3.3).
+**If expression:** `if (cond) thenBranch [ else elseBranch ]`. **cond** must be **Bool**. When **cond** is **`x is T`** with **`x`** an identifier, the **then**-branch is type-checked with **`x`** narrowed per 06 §4; the **else** branch uses the **unrefined** type of **`x`**. If **else** is omitted, the whole `if` has type **Unit** and **thenBranch** must have type **Unit** (06). If **else** is present, the two branches must unify to a common type. **thenBranch** and **elseBranch** are parsed in the same **statement vs expression** context as the `if` itself (§3.3): in statement context, a branch `{ ... }` may end with `:=` / `val` / `var` / `fun` and no trailing expression (implicit **Unit**); in expression context, a branch block still needs a value-producing tail unless the last line is promoted from an expression statement (§3.3).
 
 **Pipeline semantics:** `e1 |> e2` passes `e1` as the **first** argument when `e2` is a call `f(a, b, …)` — i.e. `x |> f(y)` ≡ `f(x, y)` (and longer argument lists prepend `x` similarly). If `e2` is not a call, it must denote a unary function: `x |> f` ≡ `f(x)`. **Backward pipe:** `f <| x` ≡ `f(x)`; `f(y) <| x` ≡ `f(y, x)` (the piped value is the **last** argument when the left side is a call).
 
-**While loop:** `while (cond) block` evaluates `cond` (which must be **Bool**) before each iteration; while it is `True`, `block` runs. The **block** is always parsed in **statement-oriented** form (§3.3): it may end with `:=` / `val` / `var` / `fun` / `break` / `continue` and no trailing expression (implicit **Unit**). The block’s value each iteration is still evaluated and discarded on the stack; the `while` expression has type **Unit** (06). Lowering uses conditional and backward branches (04 §1.6).
+**While loop:** `while (cond) block` evaluates `cond` (which must be **Bool**) before each iteration; while it is `True`, `block` runs. When **cond** is **`x is T`** with **`x`** an identifier, **`block`** is type-checked with **`x`** narrowed to **`original_type & T`** (06 §4), like the **then** branch of **`if`**. The **block** is always parsed in **statement-oriented** form (§3.3): it may end with `:=` / `val` / `var` / `fun` / `break` / `continue` and no trailing expression (implicit **Unit**). The block’s value each iteration is still evaluated and discarded on the stack; the `while` expression has type **Unit** (06). Lowering uses conditional and backward branches (04 §1.6).
 
 **`break` and `continue`:** These are **statements** (not general expressions) and may appear only as **BlockItem**s inside a **block** that is nested (lexically) within a `while` body (including nested blocks and `if`/`match` branch blocks inside the loop). **`break`** exits the **nearest** enclosing `while` loop (skipping the rest of the current iteration and any further iterations of that loop). **`continue`** skips the remainder of the current iteration of that same loop and jumps to the next **condition** test. In nested loops, both target the innermost enclosing `while`. Using `break` or `continue` outside any loop is a **compile-time error** (06, 10).
 

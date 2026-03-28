@@ -6,7 +6,7 @@
 
 ## Summary
 
-Union (`A | B`) and intersection (`A & B`) types are parsed and represented in the type system (InternalType has `union` and `inter` variants). However, runtime support is limited -- there's no runtime type tag for union/intersection values, and the type checker may erase them during codegen. Full support requires `is` narrowing (sequence **09**) and possibly runtime type information.
+Union (`A | B`) and intersection (`A & B`) types are parsed and represented in the type system (InternalType has `union` and `inter` variants). However, runtime support is limited -- there's no runtime type tag for union/intersection values, and the type checker may erase them during codegen. Full support requires `is` narrowing (sequence **13**) and possibly runtime type information.
 
 ## Current State
 
@@ -18,12 +18,12 @@ Union (`A | B`) and intersection (`A & B`) types are parsed and represented in t
 
 ## Dependencies
 
-- Sequence **09** (`is` type narrowing) is a prerequisite.
+- Sequence **13** (`is` type narrowing) is a prerequisite.
 
 ## Acceptance Criteria
 
 - [ ] A function declared as `fun f(x: Int | String): Unit` can accept both Int and String arguments.
-- [ ] `is` narrowing (sequence **09**) works with union types: `if (x is Int) { ... } else { ... }`.
+- [ ] `is` narrowing (sequence **13**) works with union types: `if (x is Int) { ... } else { ... }`.
 - [ ] Type table encoding (03 §6.3) can represent union/intersection types (may need new type tags or they may remain erased with the information used only at compile time).
 - [ ] Kestrel test: function accepting union type, using `is` to narrow.
 - [ ] Kestrel test: intersection type in record extension context.

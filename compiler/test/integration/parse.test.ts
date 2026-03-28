@@ -227,4 +227,35 @@ describe('parse (integration)', () => {
       expect(recordCase.pattern.fields?.[0]?.pattern).toMatchObject({ kind: 'LiteralPattern', literal: 'int', value: '42' });
     }
   });
+
+  it('parses is with union type on RHS (type | binds tighter than is)', () => {
+    const ast = parse(tokenize('fun f(): Bool = x is Int | String'));
+    const fd = ast.body[0];
+    expect(fd?.kind).toBe('FunDecl');
+    if (fd?.kind !== 'FunDecl') return;
+    expect(fd.body.kind).toBe('IsExpr');
+    if (fd.body.kind === 'IsExpr') {
+      expect(fd.body.testedType.kind).toBe('UnionType');
+    }
+  });
+
+  it('parses relational tighter than is: a == b is Bool', () => {
+    const ast = parse(tokenize('fun f(a: Int, b: Int): Bool = a == b is Bool'));
+    const fd = ast.body[0];
+    if (fd?.kind !== 'FunDecl') return;
+    expect(fd.body.kind).toBe('IsExpr');
+    if (fd.body.kind === 'IsExpr') {
+      expect(fd.body.expr.kind).toBe('BinaryExpr');
+    }
+  });
+
+  it('parses a & b is Int as a & (b is Int)', () => {
+    const ast = parse(tokenize('fun f(a: Bool, b: Int): Bool = a & b is Int'));
+    const fd = ast.body[0];
+    if (fd?.kind !== 'FunDecl') return;
+    expect(fd.body.kind).toBe('BinaryExpr');
+    if (fd.body.kind === 'BinaryExpr' && fd.body.op === '&') {
+      expect(fd.body.right.kind).toBe('IsExpr');
+    }
+  });
 });

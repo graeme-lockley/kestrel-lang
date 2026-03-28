@@ -25,6 +25,17 @@ export function getInferredType(node: { span?: unknown }): InternalType | undefi
   return (node as Record<symbol, InternalType>)[TypedExpr];
 }
 
+/** Populated while typechecking `IsExpr`; read by codegen for lowering. */
+const narrowingByIsExpr = new WeakMap<
+  import('../ast/nodes.js').IsExpr,
+  { bindingName: string; narrowed: InternalType }
+>();
+
+export function getNarrowingFromIsCond(cond: Expr): { bindingName: string; narrowed: InternalType } | undefined {
+  if (cond.kind === 'IsExpr') return narrowingByIsExpr.get(cond);
+  return undefined;
+}
+
 export class TypeCheckError extends Error {
   constructor(
     message: string,
@@ -407,6 +418,120 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     return applySubst(t, subst);
   }
 
+  function cloneSubst(): Map<number, InternalType> {
+    return new Map(subst);
+  }
+
+  /** Resolve RHS of `e is T`: type syntax, or a constructor name (`None`, `Red`, `Some<Int>`). */
+  function resolveTypeForIsRhs(ast: import('../ast/nodes.js').Type): InternalType {
+    if (ast.kind === 'AppType') {
+      const sch = env.get(ast.name);
+      if (sch != null) {
+        const b = apply(instantiate(sch));
+        if (b.kind === 'arrow' && b.params.length === ast.args.length) {
+          const trial = cloneSubst();
+          try {
+            for (let i = 0; i < ast.args.length; i++) {
+              const pi = astTypeToInternal(ast.args[i]!, typeAliases, resolveQualified);
+              unify(
+                applySubst(b.params[i]!, trial),
+                applySubst(pi, trial),
+                trial,
+                genericTypeAliasDefs
+              );
+            }
+            return applySubst(b.return, trial);
+          } catch {
+            // fall through
+          }
+        }
+      }
+    }
+    if (ast.kind === 'IdentType') {
+      const sch = env.get(ast.name);
+      if (sch != null) {
+        const b = apply(instantiate(sch));
+        if (b.kind === 'app') return b;
+        if (b.kind === 'arrow' && b.params.length === 0) return b.return;
+        // Unary+ constructor as type name (`Some` → Option<α>); arity-specific `is` uses `AppType`.
+        if (b.kind === 'arrow' && b.params.length >= 1) return b.return;
+      }
+    }
+    return astTypeToInternal(ast, typeAliases, resolveQualified);
+  }
+
+  function checkOpaqueIsRule(scrutApplied: InternalType, rhsAst: import('../ast/nodes.js').Type, node: Expr): void {
+    if (scrutApplied.kind !== 'app') return;
+    if (!opaqueTypes.has(scrutApplied.name)) return;
+    const ok =
+      (rhsAst.kind === 'IdentType' && rhsAst.name === scrutApplied.name) ||
+      (rhsAst.kind === 'QualifiedType' && rhsAst.name === scrutApplied.name);
+    if (!ok) {
+      throw new TypeCheckError(
+        `Cannot narrow imported opaque ADT ${scrutApplied.name} except to the type name itself`,
+        node,
+        undefined,
+        CODES.type.narrow_opaque
+      );
+    }
+  }
+
+  function tryMeetArm(sArm: InternalType, tApplied: InternalType): InternalType | null {
+    const trial = cloneSubst();
+    try {
+      unify(
+        applySubst(sArm, trial),
+        applySubst(tApplied, trial),
+        trial,
+        genericTypeAliasDefs
+      );
+      return applySubst(tApplied, trial);
+    } catch {
+      return null;
+    }
+  }
+
+  /** `{ x: A, y: B }` refines by `{ x: A }`: overlap when RHS fields exist on LHS with unifiable types. */
+  function tryRecordSubsetMeet(s: InternalType, t: InternalType): InternalType | null {
+    const sA = apply(s);
+    const tA = apply(t);
+    if (sA.kind !== 'record' || tA.kind !== 'record') return null;
+    const trial = cloneSubst();
+    for (const tf of tA.fields) {
+      const sf = sA.fields.find((f) => f.name === tf.name);
+      if (sf == null) return null;
+      try {
+        unify(applySubst(sf.type, trial), applySubst(tf.type, trial), trial, genericTypeAliasDefs);
+      } catch {
+        return null;
+      }
+    }
+    return applySubst(sA, trial);
+  }
+
+  function refinementMeetScrutTarget(s: InternalType, t: InternalType): InternalType | null {
+    const trial = cloneSubst();
+    const s0 = applySubst(s, trial);
+    const t0 = applySubst(t, trial);
+    try {
+      unify(s0, t0, trial, genericTypeAliasDefs);
+      return applySubst(t0, trial);
+    } catch {
+      const rs = tryRecordSubsetMeet(s, t);
+      if (rs != null) return rs;
+      const sA = apply(s);
+      const tA = apply(t);
+      if (sA.kind === 'union') {
+        const m1 = tryMeetArm(sA.left, tA);
+        const m2 = tryMeetArm(sA.right, tA);
+        if (m1 != null && m2 == null) return m1;
+        if (m1 == null && m2 != null) return m2;
+        return null;
+      }
+      return null;
+    }
+  }
+
   /** Get free variables from all types in environment */
   function envFreeVars(): Set<number> {
     const free = new Set<number>();
@@ -590,10 +715,42 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         setInferredType(expr, result);
         return result;
       }
+      case 'IsExpr': {
+        const sRaw = inferExpr(expr.expr);
+        const tRaw = resolveTypeForIsRhs(expr.testedType);
+        checkOpaqueIsRule(apply(sRaw), expr.testedType, expr);
+        const narrowed = refinementMeetScrutTarget(sRaw, tRaw);
+        if (narrowed == null) {
+          throw new TypeCheckError(
+            `Cannot narrow: scrutinee type does not overlap \`is\` target (${typeStr(apply(sRaw))} vs ${typeStr(apply(tRaw))})`,
+            expr,
+            undefined,
+            CODES.type.narrow_impossible
+          );
+        }
+        if (expr.expr.kind === 'IdentExpr') {
+          narrowingByIsExpr.set(expr, { bindingName: expr.expr.name, narrowed });
+        }
+        setInferredType(expr, tBool);
+        return tBool;
+      }
       case 'IfExpr': {
         const condT = inferExpr(expr.cond);
         unifyWithBlame(condT, tBool, expr);
-        const thenT = inferExpr(expr.then);
+        const nar = expr.cond.kind === 'IsExpr' ? narrowingByIsExpr.get(expr.cond) : undefined;
+        let thenT: InternalType;
+        if (nar) {
+          const prev = env.get(nar.bindingName);
+          env.set(nar.bindingName, nar.narrowed);
+          try {
+            thenT = inferExpr(expr.then);
+          } finally {
+            if (prev !== undefined) env.set(nar.bindingName, prev);
+            else env.delete(nar.bindingName);
+          }
+        } else {
+          thenT = inferExpr(expr.then);
+        }
         if (expr.else !== undefined) {
           const elseT = inferExpr(expr.else);
           unifyWithBlame(thenT, elseT, expr);
@@ -608,8 +765,20 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       case 'WhileExpr': {
         const condT = inferExpr(expr.cond);
         unifyWithBlame(condT, tBool, expr);
+        const nar = expr.cond.kind === 'IsExpr' ? narrowingByIsExpr.get(expr.cond) : undefined;
         loopDepth++;
-        inferExpr(expr.body);
+        if (nar) {
+          const prev = env.get(nar.bindingName);
+          env.set(nar.bindingName, nar.narrowed);
+          try {
+            inferExpr(expr.body);
+          } finally {
+            if (prev !== undefined) env.set(nar.bindingName, prev);
+            else env.delete(nar.bindingName);
+          }
+        } else {
+          inferExpr(expr.body);
+        }
         loopDepth--;
         setInferredType(expr, tUnit);
         return tUnit;
@@ -1417,6 +1586,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           resolveNode(n2.result);
         }
         if (n2.kind === 'IfExpr') { resolveNode(n2.cond); resolveNode(n2.then); if (n2.else !== undefined) resolveNode(n2.else); }
+        if (n2.kind === 'IsExpr') resolveNode(n2.expr);
         if (n2.kind === 'WhileExpr') { resolveNode(n2.cond); resolveNode(n2.body); }
         if (n2.kind === 'BinaryExpr') { resolveNode(n2.left); resolveNode(n2.right); }
         if (n2.kind === 'UnaryExpr') { resolveNode(n2.operand); }

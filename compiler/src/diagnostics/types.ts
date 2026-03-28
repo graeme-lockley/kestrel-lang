@@ -46,6 +46,10 @@ export const CODES = {
     check: 'type:check',
     break_outside_loop: 'type:break_outside_loop',
     continue_outside_loop: 'type:continue_outside_loop',
+    /** `e is T` where T does not overlap the inferred type of `e` (06 §4). */
+    narrow_impossible: 'type:narrow_impossible',
+    /** `is` on an imported opaque ADT using a constructor or non-name RHS (07 §5.3). */
+    narrow_opaque: 'type:narrow_opaque',
   },
   export: {
     not_exported: 'export:not_exported',

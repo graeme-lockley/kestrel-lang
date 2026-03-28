@@ -111,17 +111,26 @@ unify({ a:T1 | R1 }, { a:T2 | R2 })
 
 ### Narrowing
 
+The expression **`e is T`** is defined in [01-language.md](01-language.md) §3.2.2. Its type is **Bool** (see §8).
+
+**Refinement sites:** When **`e`** is an identifier **`x`**:
+
+- In **`if (x is T) { then } [else { else }] `**, the type of **`x`** in **`then`** is **`original_type & T`**. In **`else`**, **`x`** keeps the **unrefined** **`original_type`** (the implementation does **not** exclude **`T`** from a union in the else branch).
+- In **`while (x is T) { body }`**, the type of **`x`** in **`body`** is **`original_type & T`** (same refinement as **`if`**’s then-branch).
+
+**Validity:** The type checker must reject **`e is T`** when there is **no structural overlap** between the type of **`e`** and **`T`** (after the usual rules for unions, records, ADTs, and primitives). Report **`type:narrow_impossible`** (10 §4). For **imported opaque ADTs**, **`T`** may only be the **exported type name** itself, analogously to pattern matching — **`type:narrow_opaque`** when violated (§5.3, 07 §5.3).
+
 ```
 if (x is T) { ... }
 ```
 
-Inside the branch, the type of `x` is narrowed to:
+Inside the **then** branch above, the type of `x` is narrowed to:
 
 ```
 original_type & T
 ```
 
-So `x` is treated as both its original type and `T` in that block. The grammar for `e is T` (if present in the language) is in 01; the type system requires that `T` is a type that can narrow the type of `e` (e.g. record shape, ADT constructor, or structural subtype).
+So `x` is treated as both its original type and `T` in that block. For **standalone** **`e is T`** (e.g. as a boolean operand), there is no refinement of bindings beyond the **Bool** value of the expression.
 
 ---
 
@@ -221,7 +230,9 @@ The following table summarises the main typing constraints so that implementors 
 | **Lambda** `(p1,...,pn) => e` | Parameter types from annotation or inference; e : R ⇒ type is (T1,...,Tn) -> R. Lambdas and nested functions may capture enclosing variables (01 §3.8); the type (T1,...,Tn) -> R applies to both non-capturing and capturing closures; closure conversion is a codegen concern and does not change the inferred type. For a **block-local** `fun name(...): ReturnType = body`, when a return type is declared, the body's inferred type is unified with that return type and the binding gets the declared arrow type (params → ReturnType). |
 | **Throw** `throw e` | e : exception type (§7) ⇒ type is bottom (or compatible with context). |
 | **Await** `await e` | e : Task<A>, in async context (§6) ⇒ type is A. |
-| **Narrowing** `if (x is T) { ... }` | In then-branch, x has type original & T (§4). |
+| **`e is T` (type test)** | **`e : S`**, **`T`** a type; **`S`** must **overlap** **`T`** structurally or compile error (**§4**, `type:narrow_impossible`). Result type **Bool**. |
+| **Narrowing** `if (x is T) { ... }` | In **then**-branch, **`x`** has type **original & T**; in **else**, **`x`** unrefined (**§4**). |
+| **Narrowing** `while (x is T) { ... }` | In **body**, **`x`** has type **original & T** (**§4**). |
 
 Additional constraints: **SET_FIELD** (04) applies only to records with a **mut** field at that slot; the type system must ensure that assignment to a field is only for `mut` fields (01 §3.6). **Assignment** `x := e` (01): the type of `e` must unify with the type of `x` (which must be a `var` or a mutable field). **Binary operators:** Arithmetic (+, -, *, /, %, **): both operands must have the same numeric type (**Int** or **Float**); result has that type (01 §2.6, §2.7). Comparison (==, !=, <, >, <=, >=): both operands have the same type; result is **Bool**. **Value** semantics of `==` and `!=` (deep equality, `!=` as negation of `==`) are defined in **01 §3.2.1**. Logical (&, |): both operands **Bool**; result **Bool**. The compiler emits typed bytecode (03 type table, 04) so the VM (05) receives values of the expected shapes.
 
@@ -253,5 +264,6 @@ An implementation of the type system should provide at least the following:
 6. **Async context and exceptions** — Track whether the current scope is inside an `async fun`; reject `await` outside async context (§6). For `throw e`, require `e` to have an exception type (§7). For try/catch, type the block and unify catch case RHSs with the block type.
 7. **Operators and assignment** — Enforce operand and result types for arithmetic, comparison, and logical operators (§8); ensure assignment and SET_FIELD only apply to mutable targets.
 8. **Output** — Emit inferred types into the bytecode type table (03 §6.2–6.3) so that the VM and tooling can use them. Union/intersection may be erased to a concrete type or encoded as the implementation sees fit for 03.
+9. **Narrowing (`is`)** — Implement **`e is T`** (01 §3.2.2) with result type **Bool**; refine **`x`** in **`if`**/**`while`** branches per §4; reject impossible or opaque-violating **`T`** with stable codes (10 §4).
 
 **Tail-call optimization** (self and mutual top-level calls; 04 §1.5, 05 §1.2) is a codegen/runtime framing detail only: it does not change typing rules or inferred types.

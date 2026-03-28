@@ -3,6 +3,7 @@
  * Covers: module initializer, top-level val/var, fun decls, literals, locals, calls.
  */
 import type { Program, Expr, TopLevelStmt } from '../ast/nodes.js';
+import type { InternalType } from '../types/internal.js';
 import type { FunDecl, FunStmt, ValDecl, VarDecl, ExceptionDecl } from '../ast/nodes.js';
 import type { ConstantEntry } from '../bytecode/constants.js';
 import { ConstTag } from '../bytecode/constants.js';
@@ -78,6 +79,7 @@ import {
   emitLoadFn,
   emitMakeClosure,
   emitLoadImportedFn,
+  emitKindIs,
   codeSave,
   codeRestore,
 } from '../bytecode/instructions.js';
@@ -222,6 +224,37 @@ interface MatchConfig {
   ctorArity: Record<string, number>;
 }
 
+/** For `is` lowering: pick a record shape from inferred scrutinee (union → first matching arm). */
+function asRecordInternal(t: InternalType | undefined): (InternalType & { kind: 'record' }) | null {
+  if (t == null) return null;
+  if (t.kind === 'record') return t;
+  if (t.kind === 'union') {
+    return asRecordInternal(t.left) ?? asRecordInternal(t.right);
+  }
+  return null;
+}
+
+/** Operand for KIND_IS (must match vm exec.zig). */
+function primKindDiscriminant(name: string): number {
+  switch (name) {
+    case 'Int':
+      return 0;
+    case 'Bool':
+      return 1;
+    case 'Unit':
+      return 2;
+    case 'Char':
+    case 'Rune':
+      return 3;
+    case 'String':
+      return 4;
+    case 'Float':
+      return 5;
+    default:
+      return -1;
+  }
+}
+
 function getMatchConfig(scrutineeType: { kind: string; name?: string } | undefined, adts?: AdtEntry[], userAdtConfigs?: Map<string, MatchConfig>): MatchConfig | null {
   if (scrutineeType?.kind !== 'app' && scrutineeType?.kind !== 'prim') return null;
   const name = scrutineeType.name;
@@ -362,6 +395,8 @@ function bodyReferencesName(expr: Expr, name: string, bound: Set<string>): boole
       return bodyReferencesName(expr.operand, name, bound);
     case 'IfExpr':
       return bodyReferencesName(expr.cond, name, bound) || bodyReferencesName(expr.then, name, bound) || (expr.else != null && bodyReferencesName(expr.else, name, bound));
+    case 'IsExpr':
+      return bodyReferencesName(expr.expr, name, bound);
     case 'WhileExpr':
       return bodyReferencesName(expr.cond, name, bound) || bodyReferencesName(expr.body, name, bound);
     case 'MatchExpr':
@@ -463,6 +498,9 @@ function getFreeVars(
         walk(e.cond);
         walk(e.then);
         if (e.else !== undefined) walk(e.else);
+        return;
+      case 'IsExpr':
+        walk(e.expr);
         return;
       case 'WhileExpr':
         walk(e.cond);
@@ -2196,6 +2234,119 @@ function makeEmitExpr(
       emitAllocRecord(shapeId);
       emitMakeClosure(lambdaIndex);
       break;
+    }
+    case 'IsExpr': {
+      const tested = expr.testedType;
+      const subjT = getInferredType(expr.expr);
+
+      if (tested.kind === 'PrimType') {
+        const d = primKindDiscriminant(tested.name);
+        if (d < 0) throw new Error(`Codegen: is ${tested.name} not supported`);
+        emitExpr(expr.expr, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+        emitKindIs(d);
+        break;
+      }
+
+      if (tested.kind === 'RecordType') {
+        const subjRec = asRecordInternal(subjT);
+        if (subjRec == null) throw new Error('Codegen: record is requires a record scrutinee type');
+        const temp = nextLocalSlot(env);
+        emitExpr(expr.expr, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+        emitStoreLocal(temp);
+        emitLoadLocal(temp);
+        emitKindIs(6);
+        const jumpOut: number[] = [];
+        jumpOut.push(codeOffset());
+        emitJumpIfFalse(0);
+        for (const f of tested.fields) {
+          const slot = subjRec.fields.findIndex((x) => x.name === f.name);
+          if (slot < 0) throw new Error(`Codegen: record is missing field ${f.name} on scrutinee`);
+          if (f.type.kind !== 'PrimType') {
+            throw new Error('Codegen: record is only supports primitive field types in this version');
+          }
+          const d = primKindDiscriminant(f.type.name);
+          if (d < 0) throw new Error(`Codegen: is field ${f.type.name}`);
+          emitLoadLocal(temp);
+          emitGetField(slot);
+          emitKindIs(d);
+          jumpOut.push(codeOffset());
+          emitJumpIfFalse(0);
+        }
+        emitLoadConst(addConstant({ tag: ConstTag.True }));
+        const jumpEnd = codeOffset();
+        emitJump(0);
+        const falseLab = codeOffset();
+        emitLoadConst(addConstant({ tag: ConstTag.False }));
+        const endLab = codeOffset();
+        patchI32(jumpEnd + 1, endLab - (jumpEnd + 5));
+        for (const j of jumpOut) {
+          patchI32(j + 1, falseLab - (j + 5));
+        }
+        break;
+      }
+
+      if (tested.kind === 'IdentType') {
+        const z = getConstructor(tested.name, 0);
+        if (z != null && adts) {
+          emitExpr(expr.expr, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+          emitConstruct(z.adtId, z.ctor, z.arity);
+          emitEq();
+          break;
+        }
+        const subjApp = subjT?.kind === 'app' ? subjT : null;
+        if (subjApp != null && subjApp.name === tested.name) {
+          emitLoadConst(addConstant({ tag: ConstTag.True }));
+          break;
+        }
+        throw new Error(`Codegen: is ${tested.name} not supported`);
+      }
+
+      if (tested.kind === 'AppType') {
+        const z = getConstructor(tested.name, tested.args.length);
+        if (z != null && adts) {
+          if (z.arity === 0) {
+            emitExpr(expr.expr, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+            emitConstruct(z.adtId, z.ctor, 0);
+            emitEq();
+            break;
+          }
+          const cfg = getMatchConfig(subjT ?? undefined, adts, userAdtConfigs);
+          if (cfg == null) throw new Error('Codegen: is on ADT constructor needs match config');
+          const wantTag = z.ctor;
+          const slot = nextLocalSlot(env);
+          emitExpr(expr.expr, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+          emitStoreLocal(slot);
+          emitLoadLocal(slot);
+          const matchPos = codeOffset();
+          const ph: number[] = new Array(cfg.size).fill(0);
+          emitMatch(ph);
+          const endJumps: number[] = [];
+          for (let tag = 0; tag < cfg.size; tag++) {
+            ph[tag] = codeOffset() - matchPos;
+            emitLoadConst(
+              addConstant({ tag: tag === wantTag ? ConstTag.True : ConstTag.False })
+            );
+            const jp = codeOffset();
+            emitJump(0);
+            endJumps.push(jp);
+          }
+          const after = codeOffset();
+          for (const jp of endJumps) {
+            patchI32(jp + 1, after - (jp + 5));
+          }
+          for (let i = 0; i < cfg.size; i++) {
+            patchI32(matchPos + 5 + i * 4, ph[i]!);
+          }
+          break;
+        }
+        if (subjT?.kind === 'app' && subjT.name === tested.name) {
+          emitLoadConst(addConstant({ tag: ConstTag.True }));
+          break;
+        }
+        throw new Error(`Codegen: is ${tested.name}<...> not supported`);
+      }
+
+      throw new Error('Codegen: is — unsupported tested type shape');
     }
     case 'NeverExpr':
       // Unreachable tail after `break`/`continue` in the same block; no stack effect.

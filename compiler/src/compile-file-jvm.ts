@@ -86,6 +86,9 @@ function collectJvmNamespaceConstructorDiags(
         visit(e.then, false);
         if (e.else) visit(e.else, false);
         return;
+      case 'IsExpr':
+        visit(e.expr, false);
+        return;
       case 'WhileExpr':
         visit(e.cond, false);
         for (const st of e.body.stmts) visitBlockStmt(st);

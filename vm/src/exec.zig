@@ -206,6 +206,7 @@ const LOAD_FN: u8 = 0x21;
 const MAKE_CLOSURE: u8 = 0x22;
 const LOAD_IMPORTED_FN: u8 = 0x23;
 const CONSTRUCT_IMPORT: u8 = 0x24;
+const KIND_IS: u8 = 0x25;
 
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
@@ -1730,6 +1731,45 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 sp -= arity;
                 const addr = @intFromPtr(adt.ptr);
                 if (!pushOperand(&stack, &sp, Value.ptr(addr))) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
+            },
+            KIND_IS => {
+                const disc = std.mem.readInt(u32, code[pc..][0..4], .little);
+                pc += 4;
+                if (sp == 0) continue;
+                const v = stack[sp - 1];
+                sp -= 1;
+                const ok: bool = switch (disc) {
+                    0 => v.tag == .int,
+                    1 => v.tag == .bool,
+                    2 => v.tag == .unit,
+                    3 => v.tag == .char,
+                    4 => blk: {
+                        if (v.tag != .ptr) break :blk false;
+                        const addr = Value.ptrTo(v);
+                        if (addr == 0) break :blk false;
+                        const base = @as([*]const u8, @ptrFromInt(addr));
+                        break :blk base[0] == gc_mod.STRING_KIND;
+                    },
+                    5 => blk: {
+                        if (v.tag != .ptr) break :blk false;
+                        const addr = Value.ptrTo(v);
+                        if (addr == 0) break :blk false;
+                        const base = @as([*]const u8, @ptrFromInt(addr));
+                        break :blk base[0] == gc_mod.FLOAT_KIND;
+                    },
+                    6 => blk: {
+                        if (v.tag != .ptr) break :blk false;
+                        const addr = Value.ptrTo(v);
+                        if (addr == 0) break :blk false;
+                        const base = @as([*]const u8, @ptrFromInt(addr));
+                        break :blk base[0] == RECORD_KIND;
+                    },
+                    else => false,
+                };
+                if (!pushOperand(&stack, &sp, Value.boolVal(ok))) {
                     operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
                     return false;
                 }

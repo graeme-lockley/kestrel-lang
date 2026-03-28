@@ -198,13 +198,14 @@ Row unification:
 -   `A & B` represents intersection
 -   `is` means structural conformance
 
+**Expression `e is T`:** Boolean type test; **`T`** is any type (§3.6). Precedence is **tighter** than `&` and **looser** than `==` (see [01-language.md](specs/01-language.md) §3.2). Example: `f() is Int | String` parses as `f() is (Int | String)`.
+
 Narrowing:
 
     if (x is T) { ... }
+    while (x is T) { ... }
 
-Within branch:
-
-    x : original_type & T
+In **`if` then** and **`while` body**, when **`e`** is identifier **`x`**: **`x : original_type & T`**. In **`if` else**, **`x`** stays unrefined. Standalone **`e is T`** does not refine bindings.
 
 ------------------------------------------------------------------------
 

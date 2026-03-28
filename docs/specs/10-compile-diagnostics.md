@@ -68,7 +68,7 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 
 - **parse:*** — Parser (syntax) errors. Example: `parse:unexpected_token`.
 - **resolve:*** — Module resolution. Examples: `resolve:module_not_found`, `resolve:stdlib_not_configured`.
-- **type:*** — Typechecker. Examples: `type:unknown_variable`, `type:unify`, `type:non_exhaustive_match`, `type:break_outside_loop`, `type:continue_outside_loop`.
+- **type:*** — Typechecker. Examples: `type:unknown_variable`, `type:unify`, `type:non_exhaustive_match`, `type:break_outside_loop`, `type:continue_outside_loop`, `type:narrow_impossible`, `type:narrow_opaque`.
 - **export:*** — Export/import mismatch. Examples: `export:not_exported`, `export:reexport_conflict`.
 - **file:*** — Package/file system. Examples: `file:read_error`, `file:circular_import`.
 
@@ -87,6 +87,8 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 | `type:check` | General type-check error. |
 | `type:break_outside_loop` | `break` is not inside a `while` body. |
 | `type:continue_outside_loop` | `continue` is not inside a `while` body. |
+| `type:narrow_impossible` | `e is T` rejected: **T** does not structurally overlap the type of **e** (06 §4). |
+| `type:narrow_opaque` | `is` on an imported **opaque** ADT: RHS must be the exported type name only (06 §5.3, 07 §5.3). |
 | `export:not_exported` | Module does not export the requested name. |
 | `export:reexport_conflict` | The same export name would come from more than one source (07 §3.3). |
 | `compile:jvm_namespace_constructor` | JVM compile path does not support namespace-qualified ADT constructor calls (`M.Ctor(…)`); use the VM target or a wrapper function in the dependency. |

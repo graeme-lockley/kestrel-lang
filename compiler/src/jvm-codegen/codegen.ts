@@ -47,6 +47,53 @@ const K_FUNCTION = 'kestrel/runtime/KFunction';
 const K_FUNCTION_REF = 'kestrel/runtime/KFunctionRef';
 const K_EXCEPTION = 'kestrel/runtime/KException';
 
+function jvmAsRecord(t: InternalType | undefined): (InternalType & { kind: 'record' }) | null {
+  if (t == null) return null;
+  if (t.kind === 'record') return t as InternalType & { kind: 'record' };
+  if (t.kind === 'union') {
+    return jvmAsRecord(t.left) ?? jvmAsRecord(t.right);
+  }
+  return null;
+}
+
+function jvmPrimDisc(name: string): number {
+  switch (name) {
+    case 'Int':
+      return 0;
+    case 'Bool':
+      return 1;
+    case 'Unit':
+      return 2;
+    case 'Char':
+    case 'Rune':
+      return 3;
+    case 'String':
+      return 4;
+    case 'Float':
+      return 5;
+    default:
+      return -1;
+  }
+}
+
+/** Built-in constructor tag info for JVM `is` (mirrors vm codegen ADT indices). */
+function jvmBuiltinCtorInfo(name: string, arity: number): { arity: number } | null {
+  switch (name) {
+    case 'None':
+    case 'Nil':
+    case 'Null':
+      return arity === 0 ? { arity: 0 } : null;
+    case 'Some':
+    case 'Ok':
+    case 'Err':
+      return arity === 1 ? { arity: 1 } : null;
+    case 'Cons':
+      return arity === 2 ? { arity: 2 } : null;
+    default:
+      return null;
+  }
+}
+
 /** Build stack map frame state: objectSlots from env + optional extra (e.g. scrut 55, exn 57); numLocals to cover all; optional stackDepth. */
 function frameState(
   env: Map<string, number>,
@@ -117,6 +164,9 @@ function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, num
         walk(e.cond);
         walk(e.then);
         if (e.else !== undefined) walk(e.else);
+        return;
+      case 'IsExpr':
+        walk(e.expr);
         return;
       case 'WhileExpr':
         walk(e.cond);
@@ -256,6 +306,9 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
         walk(e.cond);
         walk(e.then);
         if (e.else !== undefined) walk(e.else);
+        return;
+      case 'IsExpr':
+        walk(e.expr);
         return;
       case 'WhileExpr':
         walk(e.cond);
@@ -2018,6 +2071,133 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           else env.delete(expr.catchVar);
         }
         return false;
+      }
+      case 'IsExpr': {
+        const tested = expr.testedType;
+        const subjT = getInferredType(expr.expr);
+        const boxBoolFromInt = (): void => {
+          mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(BOOLEAN, 'valueOf', '(Z)Ljava/lang/Boolean;'));
+        };
+        if (tested.kind === 'PrimType') {
+          const d = jvmPrimDisc(tested.name);
+          if (d < 0) throw new Error(`JVM codegen: is ${tested.name} not supported`);
+          emitExpr(expr.expr, mb, tcN);
+          mb.emit1s(JvmOp.LDC_W, cf.constantInt(d));
+          mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'isValueKind', '(Ljava/lang/Object;I)Z'));
+          boxBoolFromInt();
+          return false;
+        }
+        if (tested.kind === 'RecordType') {
+          const subRec = jvmAsRecord(subjT);
+          if (subRec == null) throw new Error('JVM codegen: record is needs record scrutinee');
+          for (const f of tested.fields) {
+            if (subRec.fields.every((x) => x.name !== f.name)) {
+              throw new Error(`JVM codegen: record is missing field ${f.name}`);
+            }
+          }
+          const tmpSlot = nextLocal++;
+          emitExpr(expr.expr, mb, tcN);
+          mb.emit1b(JvmOp.ASTORE, tmpSlot);
+          mb.emit1b(JvmOp.ALOAD, tmpSlot);
+          mb.emit1s(JvmOp.LDC_W, cf.constantInt(6));
+          mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'isValueKind', '(Ljava/lang/Object;I)Z'));
+          const jumps: number[] = [];
+          jumps.push(mb.length());
+          mb.emit1s(JvmOp.IFEQ, 0);
+          for (const f of tested.fields) {
+            if (f.type.kind !== 'PrimType') {
+              throw new Error('JVM codegen: record is only supports primitive field types here');
+            }
+            const fd = jvmPrimDisc(f.type.name);
+            if (fd < 0) throw new Error(`JVM codegen: is field ${f.type.name}`);
+            mb.emit1b(JvmOp.ALOAD, tmpSlot);
+            mb.emit1s(JvmOp.LDC_W, cf.string(f.name));
+            mb.emit1s(JvmOp.LDC_W, cf.constantInt(fd));
+            mb.emit1s(
+              JvmOp.INVOKESTATIC,
+              cf.methodref(RUNTIME, 'recordFieldIsKind', '(Ljava/lang/Object;Ljava/lang/String;I)Z')
+            );
+            jumps.push(mb.length());
+            mb.emit1s(JvmOp.IFEQ, 0);
+          }
+          mb.emit1(JvmOp.ICONST_1);
+          const gotoEnd = mb.length();
+          mb.emit1s(JvmOp.GOTO, 0);
+          const falseLab = mb.length();
+          mb.emit1(JvmOp.ICONST_0);
+          const endLab = mb.length();
+          patchShort(mb, gotoEnd + 1, endLab - gotoEnd);
+          for (const j of jumps) {
+            patchShort(mb, j + 1, falseLab - j);
+          }
+          boxBoolFromInt();
+          return false;
+        }
+        if (tested.kind === 'IdentType') {
+          if (jvmBuiltinCtorInfo(tested.name, 0) != null) {
+            emitExpr(expr.expr, mb, tcN);
+            if (tested.name === 'None') {
+              mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NONE, 'INSTANCE', 'Lkestrel/runtime/KNone;'));
+            } else if (tested.name === 'Nil') {
+              mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
+            } else if (tested.name === 'Null') {
+              mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_VNULL, 'INSTANCE', 'Lkestrel/runtime/KVNull;'));
+            } else {
+              throw new Error(`JVM codegen: is ${tested.name}`);
+            }
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
+            return false;
+          }
+          const subjApp = subjT?.kind === 'app' ? subjT : null;
+          if (subjApp != null && subjApp.name === tested.name) {
+            mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'TRUE', 'Ljava/lang/Boolean;'));
+            return false;
+          }
+          emitExpr(expr.expr, mb, tcN);
+          mb.emit1s(JvmOp.LDC_W, cf.string(tested.name));
+          mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'isAdtNamedCtor', '(Ljava/lang/Object;Ljava/lang/String;)Z'));
+          boxBoolFromInt();
+          return false;
+        }
+        if (tested.kind === 'AppType') {
+          const b = jvmBuiltinCtorInfo(tested.name, tested.args.length);
+          if (b != null) {
+            if (b.arity === 0) {
+              emitExpr(expr.expr, mb, tcN);
+              if (tested.name === 'None') {
+                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NONE, 'INSTANCE', 'Lkestrel/runtime/KNone;'));
+              } else if (tested.name === 'Nil') {
+                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
+              } else if (tested.name === 'Null') {
+                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_VNULL, 'INSTANCE', 'Lkestrel/runtime/KVNull;'));
+              } else {
+                throw new Error(`JVM codegen: is ${tested.name}`);
+              }
+              mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
+              return false;
+            }
+            emitExpr(expr.expr, mb, tcN);
+            if (tested.name === 'Some') {
+              mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_SOME));
+            } else if (tested.name === 'Ok') {
+              mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_OK));
+            } else if (tested.name === 'Err') {
+              mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_ERR));
+            } else if (tested.name === 'Cons') {
+              mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_CONS));
+            } else {
+              throw new Error(`JVM codegen: is ${tested.name}`);
+            }
+            boxBoolFromInt();
+            return false;
+          }
+          if (subjT?.kind === 'app' && subjT.name === tested.name) {
+            mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'TRUE', 'Ljava/lang/Boolean;'));
+            return false;
+          }
+          throw new Error(`JVM codegen: is ${tested.name}<...> not supported`);
+        }
+        throw new Error('JVM codegen: is — unsupported tested type');
       }
       case 'NeverExpr':
         // Unreachable tail after `break`/`continue` in the same block.

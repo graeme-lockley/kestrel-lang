@@ -50,6 +50,26 @@ All jump **offsets** are **byte offsets** (signed or unsigned, see §4) relative
 
 **Language coverage:** `==`, `!=`, `<`, `>`, `>=`, `<=` (01 §3.2). Result is Bool; used with `JUMP_IF_FALSE` / `JUMP` for conditionals and short-circuit logic.
 
+#### 1.3.1 `KIND_IS` (runtime probe for `e is T`)
+
+| Instruction | Operands | Effect |
+|-------------|----------|--------|
+| `KIND_IS` | `discriminant` (u32) | Pop one value. Push **True** if it matches the **discriminant**’s runtime class, else **False**. |
+
+**Discriminants** (reference VM and JVM `KRuntime.isValueKind`; must stay in lockstep across backends):
+
+| `discriminant` | Matches |
+|----------------|---------|
+| 0 | Tagged **Int** |
+| 1 | Tagged **Bool** |
+| 2 | Tagged **Unit** |
+| 3 | Tagged **Char** / **Rune** |
+| 4 | **PTR** to heap object of kind **STRING** |
+| 5 | **PTR** to heap object of kind **FLOAT** |
+| 6 | **PTR** to heap object of kind **RECORD** (any shape) |
+
+**Language coverage:** Part of lowering **`e is T`** when **`T`** is a primitive or a record kind probe (01 §3.2.2, 05). **ADT** constructor tests use **`MATCH`** jump tables, **`CONSTRUCT` + `EQ`**, or type-name checks as emitted by the compiler; **n-ary** ADT **`is`** may combine **`MATCH`** with branch-local **True**/**False** pushes.
+
 ### 1.4 Logical (short-circuit)
 
 Logical `&` and `|` in the language are short-circuit; the compiler emits branches (e.g. evaluate left, `JUMP_IF_FALSE` to skip right for `&`, or `JUMP_IF_FALSE` to result for `|`) rather than dedicated AND/OR instructions. No separate `AND`/`OR` stack instructions are required.
@@ -157,7 +177,7 @@ All multi-byte operands and offsets in the code section are **little-endian** (c
 
 ### 4.1 Opcode assignment
 
-Each instruction has a single-byte opcode. Opcodes 0x01–0x24 are assigned as below; 0x00, 0x25–0xFF are reserved unless assigned in a future revision.
+Each instruction has a single-byte opcode. Opcodes **0x01–0x25** are assigned as below; **0x00**, **0x26–0xFF** are reserved unless assigned in a future revision.
 
 | Opcode | Instruction     | Operands (after opcode, in order) |
 |--------|-----------------|------------------------------------|
@@ -197,8 +217,9 @@ Each instruction has a single-byte opcode. Opcodes 0x01–0x24 are assigned as b
 | 0x22   | MAKE_CLOSURE    | fn_index (u32) |
 | 0x23   | LOAD_IMPORTED_FN | imported_fn_index (u32) |
 | 0x24   | CONSTRUCT_IMPORT | import_index (u32), adt_id (u32), ctor (u32), arity (u32) |
+| 0x25   | KIND_IS         | discriminant (u32) |
 
-**Reserved:** 0x00, 0x25–0xFF. Decoder must reject reserved or unknown opcodes.
+**Reserved:** 0x00, 0x26–0xFF. Decoder must reject reserved or unknown opcodes.
 
 ### 4.2 MATCH instruction layout
 
@@ -237,6 +258,7 @@ So the total size of a MATCH instruction is **1 + 4 + 4×count** bytes. The next
 | LOAD_FN           | 1 + 4 = 5    |
 | LOAD_IMPORTED_FN  | 1 + 4 = 5    |
 | MAKE_CLOSURE      | 1 + 4 = 5    |
+| KIND_IS           | 1 + 4 = 5    |
 
 Instruction boundaries are thus deterministic: a decoder can always compute the start of the next instruction from the current opcode and operands.
 
@@ -248,6 +270,7 @@ Instruction boundaries are thus deterministic: a decoder can always compute the 
 - **Arithmetic and comparison:** ADD, SUB, MUL, DIV, MOD, POW and EQ, NE, LT, LE, GT, GE cover all arithmetic and comparison operators (01 §3.2).
 - **Logic:** Short-circuit `&` and `|` are compiled using JUMP_IF_FALSE and JUMP (no AND/OR instructions).
 - **If/else, match, try/catch:** JUMP, JUMP_IF_FALSE, MATCH, TRY, END_TRY (01 §3.2, §4).
+- **Type test `is`:** KIND_IS (§1.3.1), MATCH, EQ, GET_FIELD, CONSTRUCT as needed (01 §3.2.2, 05).
 - **Functions and calls:** CALL (function table index), RET (01 §3.1).
 - **Lists and ADTs:** CONSTRUCT with list ADT and Nil/Cons (and Option, Result, Value from 02); CONSTRUCT_IMPORT for qualified **`M.Ctor(…)`** (07 §2.3); MATCH for pattern matching on constructors and list patterns (01 §3.2, 02 List/Option/Result/Value).
 - **Primitive literal match patterns:** For `Int`/`Float`/`String`/`Char`/`Unit` literal pattern chains, compilers emit sequential tests using `LOAD_LOCAL` (scrutinee), `LOAD_CONST` (literal), comparison (`EQ` or equivalent predicate), and `JUMP_IF_FALSE` to the next arm, with `JUMP` to the common end after a successful arm. ADT/list constructor matches continue to use `MATCH`.

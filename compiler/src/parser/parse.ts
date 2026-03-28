@@ -662,10 +662,21 @@ class Parser {
   }
 
   private parseAndExpr(ctx: ExprContext): Expr {
-    let left = this.parseRelExpr(ctx);
+    let left = this.parseIsExpr(ctx);
     while (this.at('op', '&')) {
       this.advance();
-      left = { kind: 'BinaryExpr', op: '&', left, right: this.parseRelExpr(ctx) };
+      left = { kind: 'BinaryExpr', op: '&', left, right: this.parseIsExpr(ctx) };
+    }
+    return left;
+  }
+
+  /** `is Type` binds tighter than `==` and looser than `&` (spec 01 §3.2). */
+  private parseIsExpr(ctx: ExprContext): Expr {
+    const left = this.parseRelExpr(ctx);
+    if (this.at('keyword', 'is')) {
+      this.advance();
+      const testedType = this.parseType();
+      return { kind: 'IsExpr', expr: left, testedType };
     }
     return left;
   }

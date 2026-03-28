@@ -260,7 +260,16 @@ export type Expr =
   | ConsExpr
   | TupleExpr
   | BlockExpr
-  | NeverExpr;
+  | NeverExpr
+  | IsExpr;
+
+/** Type test / narrowing probe: `e is T` (spec 01 §3.2). Result type Bool; typechecker narrows in `if`/`while` when `e` is a simple binding. */
+export interface IsExpr extends NodeBase {
+  kind: 'IsExpr';
+  expr: Expr;
+  /** Right-hand side is a type (01 §3.6), not an expression. */
+  testedType: Type;
+}
 
 export interface IfExpr extends NodeBase {
   kind: 'IfExpr';
