@@ -75,6 +75,9 @@ zig test
 
 # Run Kestrel test suite
 ./kestrel test [files...]
+
+# Run unit tests on VM and JVM with wall-clock and harness timing comparison
+./kestrel test-both [files...]
 ```
 
 ---

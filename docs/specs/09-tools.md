@@ -57,7 +57,15 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Output:** For each test file, prints a line with PASS (green) or FAIL (red). At the end, prints a summary line: “Tests: X passed, Y failed, Z total” with colour (green for passed count, red for failed count when Y &gt; 0).
 - **Exit code:** 0 if all tests passed; 1 if any test failed or did not compile.
 
-### 2.5 Compiler options (diagnostics)
+### 2.5 test-both
+
+**Usage:** `kestrel test-both [files...]`
+
+- **Effect:** Runs the same unit test selection as `kestrel test` twice: once on the Zig VM and once on the JVM (same file list and discovery rules as §2.4). Requires `node`, `zig`, `java`, `javac`, and `perl` on `PATH`. Builds the compiler and VM and the JVM runtime jar when missing, as for `run` / `test`.
+- **Output:** Prints only a compact comparison, using the same ANSI styling vocabulary as the test harness ([`stdlib/kestrel/console.ks`](../../stdlib/kestrel/console.ks)): dim labels, **bold** for emphasis, green for success and faster timing, red for failures and non-zero exit, and ✓/✗ where failures are listed. Content: wall-clock time for each full run (including any compile steps), a relative speed line (which backend was faster and by how much, with a simple ratio), and parsed pass/fail counts plus in-harness elapsed milliseconds from the test framework’s final summary line ([`stdlib/kestrel/test.ks`](../../stdlib/kestrel/test.ks) `printSummary`). If any assertion printed a failure (✗), lists those descriptions per backend and, when both backends had failures, a sorted `comm` diff of descriptions that appear on only one side.
+- **Exit code:** 0 only if **both** runs exited 0; otherwise 1.
+
+### 2.6 Compiler options (diagnostics)
 
 When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
 
