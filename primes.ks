@@ -3,38 +3,41 @@
 
 fun hasDivisor(n: Int): Bool = {
   var d = 2
-  var found = False
 
-  while (!found & d * d <= n) {
+  while (d * d <= n) {
     if (n % d == 0) {
-      found := True
+      break
     }
+
     d := d + 1
   }
 
-  found
+  d * d <= n
 }
 
 fun isPrime(n: Int): Bool =
-  if (n < 2) {
+  if (n < 2)
     False
-  } else if (n == 2) {
+  else if (n == 2)
     True
-  } else {
+  else
     !hasDivisor(n)
-  }
 
 fun printPrimes(count: Int): Unit = {
   var current = 2
   var printed = 0
+
   while (printed < count) {
     if (isPrime(current)) {
-      val _ = if (printed > 0) print(", ") else ()
+      if (printed > 0) 
+        print(", ")
       print(current)
+
       printed := printed + 1
     }
     current := current + 1
   }
+
   println("")
 }
 
