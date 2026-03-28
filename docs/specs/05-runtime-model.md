@@ -39,6 +39,15 @@ A **`while (cond) block`** loop (01 §3) does not allocate a new call frame per 
 
 The VM still implements **`CALL`** by pushing a frame. The **reference compiler** (`.kbc`) may avoid that for **direct calls in tail position** from one **top-level** function to **itself or another top-level function in the same module** when the lowering rules in 04 §1.5 apply: it reloads parameters via **`STORE_LOCAL`** and branches with **`JUMP`** to the callee’s entry in the module code. That keeps stack depth **O(1)** for tail-recursive and mutually tail-recursive loops (e.g. `even`/`odd`). Calls that are not eligible (see 04 §1.5), non-tail recursion, and indirect calls continue to use one frame per invocation.
 
+### 1.3 Operand stack and call depth limits
+
+The VM holds an **operand stack** (values for pending operations) separately from **call frames** (saved PCs, modules, and local slots). Both are **finite** in any conforming implementation; exact sizes are **implementation-defined**.
+
+- **Operand stack overflow:** If an instruction would push a value when the operand stack is already full, the implementation must **not** write past the operand stack storage (no undefined behaviour). It must terminate execution with a clear **operand stack overflow** (or equivalent) diagnostic. When a **debug section** (03 §8) is present, the runtime should print a **stack trace** in the same style as an **uncaught exception** (§5): at least one ` at file:line` for the faulting instruction and for each active call frame, derived from the debug mapping where possible.
+- **Call-frame overflow:** If a **CALL** would exceed the implementation’s maximum call depth, the implementation must report a clear error (e.g. call stack / frame limit exceeded) and must not corrupt memory.
+
+The **reference VM** uses **4096** operand slots and **8192** call frames.
+
 ---
 
 ## 2. Heap Object Kinds
@@ -137,5 +146,6 @@ An implementation of the runtime model must provide:
 4. **Exceptions:** On THROW, unwind stack to the nearest TRY, deliver the exception value (ADT) to the handler; optional backtrace for StackTrace (02 kestrel:stack) and debug mapping (03 §8).
 5. **Tasks:** TASK objects with state (suspended vs completed); AWAIT pops a TASK and either pushes the result or suspends the current frame; scheduling policy is implementation-defined.
 6. **Record mutation:** SET_FIELD updates the RECORD in place for `mut` fields; result may be updated record or unit (§3).
+7. **Stack limits:** Operand stack and call-frame depth are bounded (§1.3); overflow is a hard error with a clear message and stack-trace-style output when debug info is available.
 
 Pattern-match literal chains (01 match, 04 lowering) rely on runtime value comparison for Int/String/Char/Unit. Float literal patterns additionally require NaN-aware matching semantics (NaN pattern matches NaN scrutinee) via a predicate path rather than plain equality.

@@ -30,7 +30,7 @@ fn allocRuntimeException(gc: *GC, module: *const load_mod.Module, name: []const 
     return null;
 }
 
-fn binopInt(stack: *[4096]Value, sp: *usize, op: *const fn (i64, i64) i64) void {
+fn binopInt(stack: *[operand_stack_slots]Value, sp: *usize, op: *const fn (i64, i64) i64) void {
     if (sp.* >= 2) {
         const b = stack[sp.* - 1];
         const a = stack[sp.* - 2];
@@ -42,7 +42,7 @@ fn binopInt(stack: *[4096]Value, sp: *usize, op: *const fn (i64, i64) i64) void 
 }
 
 const CmpOp = enum { eq, ne, lt, le, gt, ge };
-fn binopCmp(stack: *[4096]Value, sp: *usize, op: CmpOp) void {
+fn binopCmp(stack: *[operand_stack_slots]Value, sp: *usize, op: CmpOp) void {
     if (sp.* >= 2) {
         const b = stack[sp.* - 1];
         const a = stack[sp.* - 2];
@@ -165,6 +165,8 @@ const STRING_KIND: u8 = 4;
 const CLOSURE_KIND: u8 = gc_mod.CLOSURE_KIND;
 const FLOAT_KIND: u8 = gc_mod.FLOAT_KIND;
 const max_frames = 8192;
+/// Operand stack depth limit (implementation-defined; spec 05 §1.3).
+pub const operand_stack_slots = 4096;
 
 /// If v is a PTR to a FLOAT heap object, return the f64; else null.
 fn valueToF64(v: Value) ?f64 {
@@ -227,6 +229,34 @@ fn printUncaughtException(
     var i: usize = frame_sp;
     const code_offset = @as(usize, @intCast(throw_pc));
     if (lookupDebugLine(current_module, code_offset)) |loc| {
+        std.debug.print("  at {s}:{d}\n", .{ loc.file, loc.line });
+    }
+    while (i > 0) {
+        i -= 1;
+        const frame = call_frames[i];
+        if (lookupDebugLine(frame.module, frame.pc)) |loc| {
+            std.debug.print("  at {s}:{d}\n", .{ loc.file, loc.line });
+        }
+    }
+}
+
+fn pushOperand(stack: *[operand_stack_slots]Value, sp: *usize, val: Value) bool {
+    if (sp.* >= operand_stack_slots) return false;
+    stack[sp.*] = val;
+    sp.* += 1;
+    return true;
+}
+
+/// Same stack trace shape as uncaught-exception reporting (spec 05 §5).
+fn operandStackOverflowReport(
+    fault_pc: usize,
+    current_module: *const load_mod.Module,
+    call_frames: []const CallFrame,
+    frame_sp: usize,
+) void {
+    std.debug.print("Operand stack overflow (limit {d} entries)\n", .{operand_stack_slots});
+    var i: usize = frame_sp;
+    if (lookupDebugLine(current_module, fault_pc)) |loc| {
         std.debug.print("  at {s}:{d}\n", .{ loc.file, loc.line });
     }
     while (i > 0) {
@@ -320,7 +350,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
     var constants = current_module.constants;
     var functions = current_module.functions;
     var shapes = current_module.shapes;
-    var stack: [4096]Value = undefined;
+    var stack: [operand_stack_slots]Value = undefined;
     for (&stack) |*v| v.* = Value.unit();
     var sp: usize = 0;
     var locals: [max_locals]Value = undefined;
@@ -395,8 +425,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
             current_locals = saved_locals[frame_sp][0..];
             pc = handler.handler_pc;
             sp = handler.stack_sp;
-            stack[sp] = exception;
-            sp += 1;
+            if (!pushOperand(&stack, &sp, exception)) {
+                operandStackOverflowReport(pc, current_module, call_frames, frame_sp);
+                return false;
+            }
             continue;
         }
 
@@ -417,31 +449,38 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
             gc.collect(stack[0..sp], local_slices[0 .. frame_sp + 1], global_slices_buf[0..n_global_slices]);
         }
 
-        const op = code[pc];
+        const instr_pc = pc;
+        const op = code[instr_pc];
         pc += 1;
         switch (op) {
             LOAD_CONST => {
                 const idx = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
                 if (idx < constants.len) {
-                    stack[sp] = constants[idx];
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, constants[idx])) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                 }
             },
             LOAD_LOCAL => {
                 const idx = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
                 if (idx < current_locals.len) {
-                    stack[sp] = current_locals[idx];
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, current_locals[idx])) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                 }
             },
             LOAD_GLOBAL => {
                 const idx = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
                 if (idx < current_module.globals.len) {
-                    stack[sp] = current_module.globals[idx];
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, current_module.globals[idx])) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                 }
             },
             STORE_GLOBAL => {
@@ -455,8 +494,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
             LOAD_FN => {
                 const fn_idx = std.mem.readInt(u32, code[pc..][0..4], .little);
                 pc += 4;
-                stack[sp] = Value.fnRef(@intCast(current_module.module_index), fn_idx);
-                sp += 1;
+                if (!pushOperand(&stack, &sp, Value.fnRef(@intCast(current_module.module_index), fn_idx))) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
             },
             LOAD_IMPORTED_FN => {
                 const instr_start = pc - 1; // start of the LOAD_IMPORTED_FN opcode byte
@@ -464,31 +505,38 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 pc += 4;
 
                 if (imported_fn_idx >= current_module.imported_functions.len) {
-                    stack[sp] = Value.unit();
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, Value.unit())) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                     continue;
                 }
-                if (imported_fn_idx >= current_module.imported_functions.len) continue;
 
                 const imp_entry = current_module.imported_functions[imported_fn_idx];
                 if (imp_entry.import_index >= current_module.import_specifiers.len) {
-                    stack[sp] = Value.unit();
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, Value.unit())) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                     continue;
                 }
 
                 const specifier = current_module.import_specifiers[imp_entry.import_index];
                 const base_path = current_module.source_path orelse entry_path;
                 const dep_path = resolveImportPath(allocator, specifier, base_path) catch {
-                    stack[sp] = Value.unit();
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, Value.unit())) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                     continue;
                 };
 
                 path_deps_to_free.ensureTotalCapacity(allocator, path_deps_to_free.items.len + 1) catch {
                     allocator.free(dep_path);
-                    stack[sp] = Value.unit();
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, Value.unit())) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                     continue;
                 };
                 path_deps_to_free.appendAssumeCapacity(dep_path);
@@ -499,21 +547,27 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     dep_module_ptr = ptr;
                 } else {
                     dependency_cache.ensureTotalCapacity(allocator, dependency_cache.items.len + 1) catch {
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     };
                     const loaded = load_mod.load(allocator, dep_path) catch {
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     };
                     dependency_cache.appendAssumeCapacity(loaded);
                     const ptr = &dependency_cache.items[dependency_cache.items.len - 1];
 
                     module_ptrs.ensureTotalCapacity(allocator, module_ptrs.items.len + 1) catch {
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     };
 
@@ -522,19 +576,25 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     ptr.source_path = allocator.dupe(u8, dep_path) catch null;
 
                     const path_key = allocator.dupe(u8, dep_path) catch {
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     };
                     path_keys.append(allocator, path_key) catch {
                         allocator.free(path_key);
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     };
                     path_to_module.put(path_key, ptr) catch {
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     };
                     dep_module_ptr = ptr;
@@ -562,12 +622,16 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 }
 
                 if (imp_entry.function_index >= dep_module_ptr.functions.len) {
-                    stack[sp] = Value.unit();
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, Value.unit())) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                     continue;
                 }
-                stack[sp] = Value.fnRef(@intCast(dep_module_ptr.module_index), imp_entry.function_index);
-                sp += 1;
+                if (!pushOperand(&stack, &sp, Value.fnRef(@intCast(dep_module_ptr.module_index), imp_entry.function_index))) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
             },
             MAKE_CLOSURE => {
                 const fn_idx = std.mem.readInt(u32, code[pc..][0..4], .little);
@@ -587,8 +651,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 std.mem.writeInt(u32, closure_mem[8..12], fn_idx, .little);
                 std.mem.writeInt(usize, closure_mem[16..24], env_addr, .little);
                 const closure_addr = @intFromPtr(closure_mem.ptr);
-                stack[sp] = Value.ptr(closure_addr);
-                sp += 1;
+                if (!pushOperand(&stack, &sp, Value.ptr(closure_addr))) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
             },
             STORE_LOCAL => {
                 const idx = std.mem.readInt(u32, code[pc..][0..4], .little);
@@ -609,15 +675,19 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, false, module_ptrs.items);
                         sp -= arity;
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF01 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, true, module_ptrs.items);
                         sp -= arity;
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF02 and arity == 1) {
                         const code_val = stack[sp - 1];
@@ -631,16 +701,20 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const slice = primitives.formatOne(val, &format_buf, module_ptrs.items);
                         const total = 8 + slice.len;
                         const obj = gc.allocObject(total) catch {
-                            stack[sp] = Value.unit();
-                            sp += 1;
+                            if (!pushOperand(&stack, &sp, Value.unit())) {
+                                operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                                return false;
+                            }
                             continue;
                         };
                         @memset(obj, 0);
                         obj[0] = STRING_KIND;
                         std.mem.writeInt(u32, obj[4..8], @as(u32, @intCast(slice.len)), .little);
                         @memcpy(obj[8..][0..slice.len], slice);
-                        stack[sp] = Value.ptr(@intFromPtr(obj.ptr));
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.ptr(@intFromPtr(obj.ptr)))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF04 and arity == 2) {
                         const b = stack[sp - 1];
@@ -652,8 +726,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const slice_b = primitives.getStringSlice(b) orelse primitives.formatOne(b, &buf_b, module_ptrs.items);
                         const total_len = slice_a.len + slice_b.len;
                         const obj = gc.allocObject(8 + total_len) catch {
-                            stack[sp] = Value.unit();
-                            sp += 1;
+                            if (!pushOperand(&stack, &sp, Value.unit())) {
+                                operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                                return false;
+                            }
                             continue;
                         };
                         @memset(obj, 0);
@@ -661,206 +737,274 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         std.mem.writeInt(u32, obj[4..8], @as(u32, @intCast(total_len)), .little);
                         @memcpy(obj[8..][0..slice_a.len], slice_a);
                         @memcpy(obj[8 + slice_a.len ..][0..slice_b.len], slice_b);
-                        stack[sp] = Value.ptr(@intFromPtr(obj.ptr));
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.ptr(@intFromPtr(obj.ptr)))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF05 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.jsonParse(&gc, arg, current_module.module_index);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.jsonParse(&gc, arg, current_module.module_index))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF06 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.jsonStringify(&gc, arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.jsonStringify(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF07 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.readFileAsync(&gc, arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.readFileAsync(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF08 and arity == 0) {
-                        stack[sp] = primitives.nowMs();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.nowMs())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF09 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.stringLength(arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.stringLength(arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF0A and arity == 3) {
                         const end_v = stack[sp - 1];
                         const start_v = stack[sp - 2];
                         const s_v = stack[sp - 3];
                         sp -= 3;
-                        stack[sp] = primitives.stringSlice(&gc, s_v, start_v, end_v);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.stringSlice(&gc, s_v, start_v, end_v))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF0B and arity == 2) {
                         const sub = stack[sp - 1];
                         const s = stack[sp - 2];
                         sp -= 2;
-                        stack[sp] = primitives.stringIndexOf(s, sub);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.stringIndexOf(s, sub))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF0C and arity == 2) {
                         const b = stack[sp - 1];
                         const a = stack[sp - 2];
                         sp -= 2;
-                        stack[sp] = primitives.stringEquals(a, b);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.stringEquals(a, b))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF0D and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.stringUpper(&gc, arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.stringUpper(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF0E and arity == 2) {
                         const b = stack[sp - 1];
                         const a = stack[sp - 2];
                         sp -= 2;
-                        stack[sp] = primitives.equals(a, b);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.equals(a, b))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF0F and arity == 0) {
-                        stack[sp] = primitives.getProcess(&gc, current_module);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.getProcess(&gc, current_module))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF10 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.listDir(&gc, arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.listDir(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF11 and arity == 2) {
                         const content = stack[sp - 1];
                         const path = stack[sp - 2];
                         sp -= 2;
                         primitives.writeText(path, content);
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF12 and arity == 2) {
                         const args_val = stack[sp - 1];
                         const prog = stack[sp - 2];
                         sp -= 2;
-                        stack[sp] = primitives.runProcess(prog, args_val);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.runProcess(prog, args_val))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF13 and arity == 0) {
-                        stack[sp] = primitives.getOs(&gc);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.getOs(&gc))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF14 and arity == 0) {
-                        stack[sp] = primitives.getArgs(&gc);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.getArgs(&gc))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF15 and arity == 0) {
-                        stack[sp] = primitives.getCwd(&gc);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.getCwd(&gc))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF16 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.stringTrim(&gc, arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.stringTrim(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF17 and arity == 2) {
                         const idx_v = stack[sp - 1];
                         const s_v = stack[sp - 2];
                         sp -= 2;
-                        stack[sp] = primitives.stringCodePointAt(s_v, idx_v);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.stringCodePointAt(s_v, idx_v))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF18 and arity == 1) {
                         const c_v = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.charCodePoint(c_v);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.charCodePoint(c_v))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF19 and arity == 2) {
                         const idx_v = stack[sp - 1];
                         const s_v = stack[sp - 2];
                         sp -= 2;
-                        stack[sp] = primitives.stringCharAt(s_v, idx_v);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.stringCharAt(s_v, idx_v))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF1a and arity == 1) {
                         const c_v = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.charToString(&gc, c_v);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.charToString(&gc, c_v))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF1b and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.stringLower(&gc, arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.stringLower(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF1c and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.intToFloat(&gc, arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.intToFloat(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF1d and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.floatToInt(arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.floatToInt(arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF1e and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.floatFloor(arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.floatFloor(arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF1f and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.floatCeil(arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.floatCeil(arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF20 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.floatRound(arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.floatRound(arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF21 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.floatSqrt(&gc, arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.floatSqrt(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF22 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.floatIsNan(arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.floatIsNan(arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF23 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.floatIsInfinite(arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.floatIsInfinite(arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF24 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.floatAbs(&gc, arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.floatAbs(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     } else if (fn_id == 0xFFFFFF25 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;
-                        stack[sp] = primitives.charFromCode(arg);
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, primitives.charFromCode(arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     }
                 }
@@ -874,30 +1018,38 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     }
                     if (k >= current_module.imported_functions.len or sp < arity) {
                         sp -= arity;
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     }
                     const imp_entry = current_module.imported_functions[k];
                     if (imp_entry.import_index >= current_module.import_specifiers.len) {
                         sp -= arity;
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     }
                     const specifier = current_module.import_specifiers[imp_entry.import_index];
                     const base_path = current_module.source_path orelse entry_path;
                     const dep_path = resolveImportPath(allocator, specifier, base_path) catch {
                         sp -= arity;
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     };
                     path_deps_to_free.ensureTotalCapacity(allocator, path_deps_to_free.items.len + 1) catch {
                         allocator.free(dep_path);
                         sp -= arity;
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     };
                     path_deps_to_free.appendAssumeCapacity(dep_path);
@@ -906,22 +1058,28 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         if (path_to_module.get(dep_path)) |ptr| break :blk ptr;
                         dependency_cache.ensureTotalCapacity(allocator, dependency_cache.items.len + 1) catch {
                             sp -= arity;
-                            stack[sp] = Value.unit();
-                            sp += 1;
+                            if (!pushOperand(&stack, &sp, Value.unit())) {
+                                operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                                return false;
+                            }
                             continue;
                         };
                         const loaded = load_mod.load(allocator, dep_path) catch {
                             sp -= arity;
-                            stack[sp] = Value.unit();
-                            sp += 1;
+                            if (!pushOperand(&stack, &sp, Value.unit())) {
+                                operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                                return false;
+                            }
                             continue;
                         };
                         dependency_cache.appendAssumeCapacity(loaded);
                         const ptr = &dependency_cache.items[dependency_cache.items.len - 1];
                         module_ptrs.ensureTotalCapacity(allocator, module_ptrs.items.len + 1) catch {
                             sp -= arity;
-                            stack[sp] = Value.unit();
-                            sp += 1;
+                            if (!pushOperand(&stack, &sp, Value.unit())) {
+                                operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                                return false;
+                            }
                             continue;
                         };
                         ptr.module_index = @intCast(module_ptrs.items.len);
@@ -929,21 +1087,27 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         ptr.source_path = allocator.dupe(u8, dep_path) catch null;
                         const path_key = allocator.dupe(u8, dep_path) catch {
                             sp -= arity;
-                            stack[sp] = Value.unit();
-                            sp += 1;
+                            if (!pushOperand(&stack, &sp, Value.unit())) {
+                                operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                                return false;
+                            }
                             continue;
                         };
                         path_keys.append(allocator, path_key) catch {
                             allocator.free(path_key);
                             sp -= arity;
-                            stack[sp] = Value.unit();
-                            sp += 1;
+                            if (!pushOperand(&stack, &sp, Value.unit())) {
+                                operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                                return false;
+                            }
                             continue;
                         };
                         path_to_module.put(path_key, ptr) catch {
                             sp -= arity;
-                            stack[sp] = Value.unit();
-                            sp += 1;
+                            if (!pushOperand(&stack, &sp, Value.unit())) {
+                                operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                                return false;
+                            }
                             continue;
                         };
                         break :blk ptr;
@@ -966,8 +1130,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     }
                     if (imp_entry.function_index >= dep_module.functions.len) {
                         sp -= arity;
-                        stack[sp] = Value.unit();
-                        sp += 1;
+                        if (!pushOperand(&stack, &sp, Value.unit())) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
                         continue;
                     }
                     const target_entry = dep_module.functions[imp_entry.function_index];
@@ -1307,8 +1473,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 }
                 sp -= n;
                 const addr = @intFromPtr(rec.ptr);
-                stack[sp] = Value.ptr(addr);
-                sp += 1;
+                if (!pushOperand(&stack, &sp, Value.ptr(addr))) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
             },
             GET_FIELD => {
                 const slot = std.mem.readInt(u32, code[pc..][0..4], .little);
@@ -1323,8 +1491,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 const header_size: usize = if (kind == gc_mod.ADT_KIND) gc_mod.ADT_HEADER else gc_mod.RECORD_HEADER;
                 const field_offset = header_size + slot * 8;
                 const field_ptr = @as(*const Value, @ptrCast(@alignCast(base + field_offset)));
-                stack[sp] = field_ptr.*;
-                sp += 1;
+                if (!pushOperand(&stack, &sp, field_ptr.*)) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
             },
             SET_FIELD => {
                 const slot = std.mem.readInt(u32, code[pc..][0..4], .little);
@@ -1341,8 +1511,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 const field_offset = header_size + slot * 8;
                 const field_ptr = @as(*Value, @ptrCast(@alignCast(base + field_offset)));
                 field_ptr.* = val;
-                stack[sp] = Value.unit();
-                sp += 1;
+                if (!pushOperand(&stack, &sp, Value.unit())) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
             },
             SPREAD => {
                 const shape_id = std.mem.readInt(u32, code[pc..][0..4], .little);
@@ -1379,8 +1551,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 }
                 sp -= n_extra;
                 const new_addr = @intFromPtr(rec.ptr);
-                stack[sp] = Value.ptr(new_addr);
-                sp += 1;
+                if (!pushOperand(&stack, &sp, Value.ptr(new_addr))) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
             },
             CONSTRUCT => {
                 const adt_id = std.mem.readInt(u32, code[pc..][0..4], .little);
@@ -1405,8 +1579,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
 
                 sp -= arity;
                 const addr = @intFromPtr(adt.ptr);
-                stack[sp] = Value.ptr(addr);
-                sp += 1;
+                if (!pushOperand(&stack, &sp, Value.ptr(addr))) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
             },
             MATCH => {
                 const count = std.mem.readInt(u32, code[pc..][0..4], .little);
@@ -1485,8 +1661,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 sp = handler.stack_sp;
 
                 // Push exception value for catch block
-                stack[sp] = exception;
-                sp += 1;
+                if (!pushOperand(&stack, &sp, exception)) {
+                    operandStackOverflowReport(pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
             },
             TRY => {
                 // Read handler offset
@@ -1521,8 +1699,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 // Check if it's a PTR to a TASK object
                 if (task_val.tag != .ptr) {
                     // Not a task: push unit and continue
-                    stack[sp] = Value.unit();
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, Value.unit())) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                     continue;
                 }
 
@@ -1532,8 +1712,10 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
 
                 if (kind != TASK_KIND) {
                     // Not a task: push unit
-                    stack[sp] = Value.unit();
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, Value.unit())) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                     continue;
                 }
 
@@ -1544,13 +1726,17 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 if (status == 1) {
                     // Task completed: push result
                     const result_ptr = @as(*const Value, @ptrCast(@alignCast(base + 8)));
-                    stack[sp] = result_ptr.*;
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, result_ptr.*)) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                 } else {
                     // Task pending: for now, just push unit (no actual suspension)
                     // A full implementation would suspend the frame here
-                    stack[sp] = Value.unit();
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, Value.unit())) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                 }
             },
             RET => {
@@ -1570,12 +1756,62 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 pc = frame.pc;
                 sp = frame.saved_sp;
                 if (!frame.discard_return) {
-                    stack[sp] = ret_val;
-                    sp += 1;
+                    if (!pushOperand(&stack, &sp, ret_val)) {
+                        operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                        return false;
+                    }
                 }
             },
             else => return false,
         }
     }
     return true;
+}
+
+test "pushOperand rejects one past capacity" {
+    var stack: [operand_stack_slots]Value = undefined;
+    for (&stack) |*v| v.* = Value.unit();
+    var sp: usize = 0;
+    for (0..operand_stack_slots) |_| {
+        try std.testing.expect(pushOperand(&stack, &sp, Value.int(0)));
+    }
+    try std.testing.expect(!pushOperand(&stack, &sp, Value.int(0)));
+}
+
+test "run stops on operand stack overflow bytecode" {
+    const a = std.testing.allocator;
+    const n_push = operand_stack_slots + 1;
+    const code = try a.alloc(u8, n_push * 5 + 1);
+    defer a.free(code);
+    var off: usize = 0;
+    for (0..n_push) |_| {
+        code[off] = LOAD_CONST;
+        std.mem.writeInt(u32, code[off + 1 ..][0..4], 0, .little);
+        off += 5;
+    }
+    code[off] = RET;
+
+    const constants = try a.alloc(Value, 1);
+    defer a.free(constants);
+    constants[0] = Value.int(0);
+
+    var m = load_mod.Module{
+        .code = code,
+        .constants = constants,
+        .functions = &[_]load_mod.FnEntry{},
+        .shapes = &[_]load_mod.ShapeEntry{},
+        .adts = &[_]load_mod.AdtEntry{},
+        .strings = &[_]load_mod.StringEntry{},
+        .string_slices = &[_][]const u8{},
+        .float_objects = &[_][]u8{},
+        .import_specifiers = &[_][]const u8{},
+        .imported_functions = &[_]load_mod.ImportedFnEntry{},
+        .globals = &[_]Value{},
+        .file_data = &[_]u8{},
+        .debug_files = &[_][]const u8{},
+        .debug_entries = &[_]load_mod.DebugEntry{},
+    };
+    const ok = run(a, &m, "operand_overflow_test.ks");
+    if (m.source_path) |p| a.free(p);
+    try std.testing.expect(!ok);
 }
