@@ -488,7 +488,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     return innerCf.toBytes();
   }
 
-  function emitExpr(expr: Expr, mb: MethodBuilder, tailCtx?: JvmEmitTailContext): void {
+  function emitExpr(expr: Expr, mb: MethodBuilder, tailCtx?: JvmEmitTailContext): boolean {
     const tcN = subJvmTail(tailCtx, false);
     const tcT = subJvmTail(tailCtx, true);
     switch (expr.kind) {
@@ -529,7 +529,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           default:
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
         }
-        break;
+        return false;
       }
       case 'IdentExpr': {
         if (localFunNamesInEnv?.has(expr.name)) {
@@ -537,7 +537,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
           mb.emit1s(JvmOp.LDC_W, cf.string(expr.name));
           mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
-          break;
+          return false;
         }
         if (freeVarToIndex?.has(expr.name)) {
           mb.emit1b(JvmOp.ALOAD, 0);
@@ -548,7 +548,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.LDC_W, cf.string('0'));
             mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
           }
-          break;
+          return false;
         }
         const slot = env.get(expr.name);
         if (slot !== undefined) {
@@ -558,11 +558,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.LDC_W, cf.string('0'));
             mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
           }
-          break;
+          return false;
         }
         if (globalNames.has(expr.name)) {
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(className, jvmMangleName(expr.name), 'Ljava/lang/Object;'));
-          break;
+          return false;
         }
         if (funNames.has(expr.name)) {
           const arity = funArities.get(expr.name);
@@ -578,14 +578,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';'
             )
           );
-          break;
+          return false;
         }
         const importedValVarClass = options.importedValVarToClass?.get(expr.name);
         if (importedValVarClass != null) {
           const originalName = options.importedNameToOriginal?.get(expr.name) ?? expr.name;
           mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedValVarClass, '$init', '()V'));
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(importedValVarClass, jvmMangleName(originalName), 'Ljava/lang/Object;'));
-          break;
+          return false;
         }
         const importedFunClass = options.importedNameToClass?.get(expr.name);
         const importedFunArity = options.importedFunArities?.get(expr.name);
@@ -603,19 +603,19 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';'
             )
           );
-          break;
+          return false;
         }
         if (expr.name === 'None') {
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NONE, 'INSTANCE', 'Lkestrel/runtime/KNone;'));
-          break;
+          return false;
         }
         if (expr.name === 'Nil' || expr.name === '[]') {
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
-          break;
+          return false;
         }
         if (expr.name === 'Null') {
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_VNULL, 'INSTANCE', 'Lkestrel/runtime/KVNull;'));
-          break;
+          return false;
         }
         throw new Error(`JVM codegen: unknown variable ${expr.name}`);
       }
@@ -747,7 +747,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               throw new Error(`JVM codegen: unsupported binary ${expr.op}`);
           }
         }
-        break;
+        return false;
       }
       case 'IfExpr': {
         const ifResultSlot = 53;
@@ -776,7 +776,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         patchShort(mb, ifeqPos + 1, elseStart - ifeqPos);
         patchShort(mb, gotoPos + 1, ifEndPos - gotoPos);
         mb.emit1b(JvmOp.ALOAD, ifResultSlot);
-        break;
+        return false;
       }
       case 'WhileExpr': {
         const loopState = frameState(env, nextLocal);
@@ -803,7 +803,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           patchShort(mb, j + 1, exitPos - j);
         }
         mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
-        break;
+        return false;
       }
       case 'BlockExpr': {
         const outerEnv = new Map(env);
@@ -990,11 +990,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         }
         for (const [k, v] of blockEnv) env.set(k, v);
         nextLocal = slot;
-        emitExpr(expr.result, mb, tcT);
+        const blockTail = emitExpr(expr.result, mb, tcT);
         env.clear();
         for (const [k, v] of outerEnv) env.set(k, v);
         nextLocal = outerNextLocal;
-        break;
+        return blockTail;
       }
       case 'CallExpr': {
         if (expr.callee.kind === 'IdentExpr') {
@@ -1004,7 +1004,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1(JvmOp.DUP);
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_SOME, '<init>', '(Ljava/lang/Object;)V'));
-            break;
+            return false;
           }
           if (name === 'Cons' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
@@ -1016,21 +1016,21 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1b(JvmOp.ALOAD, 60);
             mb.emit1b(JvmOp.ALOAD, 61);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_CONS, '<init>', '(Ljava/lang/Object;Lkestrel/runtime/KList;)V'));
-            break;
+            return false;
           }
           if (name === 'Err' && expr.args.length === 1) {
             mb.emit1s(JvmOp.NEW, cf.classRef(K_ERR));
             mb.emit1(JvmOp.DUP);
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_ERR, '<init>', '(Ljava/lang/Object;)V'));
-            break;
+            return false;
           }
           if (name === 'Ok' && expr.args.length === 1) {
             mb.emit1s(JvmOp.NEW, cf.classRef(K_OK));
             mb.emit1(JvmOp.DUP);
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_OK, '<init>', '(Ljava/lang/Object;)V'));
-            break;
+            return false;
           }
           if (name === 'println' || name === 'print') {
             const runtimeMethod = name === 'println' ? 'println' : 'print';
@@ -1048,75 +1048,75 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             }
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, runtimeMethod, '([Ljava/lang/Object;)V'));
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
-            break;
+            return false;
           }
           if (name === 'exit' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'exit', '(Ljava/lang/Object;)V'));
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
-            break;
+            return false;
           }
           if (name === '__format_one' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'formatOne', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === 'concat' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
             emitExpr(expr.args[1], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__equals' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
             emitExpr(expr.args[1], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
-            break;
+            return false;
           }
           if (name === '__string_length' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringLength', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            break;
+            return false;
           }
           if (name === '__string_slice' && expr.args.length === 3) {
             emitExpr(expr.args[0], mb, tcN);
             emitExpr(expr.args[1], mb, tcN);
             emitExpr(expr.args[2], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringSlice', '(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__string_index_of' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
             emitExpr(expr.args[1], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringIndexOf', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;'));
-            break;
+            return false;
           }
           if (name === '__string_equals' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
             emitExpr(expr.args[1], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringEquals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
-            break;
+            return false;
           }
           if (name === '__string_concat' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
             emitExpr(expr.args[1], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__string_upper' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringUpper', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__string_lower' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringLower', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__string_trim' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringTrim', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__string_code_point_at' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
@@ -1125,12 +1125,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               JvmOp.INVOKESTATIC,
               cf.methodref(RUNTIME, 'stringCodePointAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;')
             );
-            break;
+            return false;
           }
           if (name === '__char_code_point' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charCodePoint', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            break;
+            return false;
           }
           if (name === '__string_char_at' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
@@ -1139,111 +1139,111 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               JvmOp.INVOKESTATIC,
               cf.methodref(RUNTIME, 'stringCharAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Integer;')
             );
-            break;
+            return false;
           }
           if (name === '__char_to_string' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charToString', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__int_to_float' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'intToFloat', '(Ljava/lang/Object;)Ljava/lang/Double;'));
-            break;
+            return false;
           }
           if (name === '__float_to_int' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatToInt', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            break;
+            return false;
           }
           if (name === '__float_floor' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatFloor', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            break;
+            return false;
           }
           if (name === '__float_ceil' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatCeil', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            break;
+            return false;
           }
           if (name === '__float_round' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatRound', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            break;
+            return false;
           }
           if (name === '__float_sqrt' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatSqrt', '(Ljava/lang/Object;)Ljava/lang/Double;'));
-            break;
+            return false;
           }
           if (name === '__float_is_nan' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsNan', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
-            break;
+            return false;
           }
           if (name === '__float_is_infinite' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsInfinite', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
-            break;
+            return false;
           }
           if (name === '__float_abs' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatAbs', '(Ljava/lang/Object;)Ljava/lang/Double;'));
-            break;
+            return false;
           }
           if (name === '__char_from_code' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charFromCode', '(Ljava/lang/Object;)Ljava/lang/Integer;'));
-            break;
+            return false;
           }
           if (name === '__json_parse' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'jsonParse', '(Ljava/lang/Object;)Lkestrel/runtime/KValue;'));
-            break;
+            return false;
           }
           if (name === '__json_stringify' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'jsonStringify', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__read_file_async' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'readFileAsync', '(Ljava/lang/Object;)Ljava/lang/Object;'));
-            break;
+            return false;
           }
           if (name === '__list_dir' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'listDir', '(Ljava/lang/Object;)Lkestrel/runtime/KList;'));
-            break;
+            return false;
           }
           if (name === '__write_text' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
             emitExpr(expr.args[1], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'writeText', '(Ljava/lang/Object;Ljava/lang/Object;)V'));
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
-            break;
+            return false;
           }
           if (name === '__now_ms' && expr.args.length === 0) {
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'nowMs', '()Ljava/lang/Long;'));
-            break;
+            return false;
           }
           if (name === '__get_os' && expr.args.length === 0) {
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'getOs', '()Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__get_args' && expr.args.length === 0) {
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'getArgs', '()Lkestrel/runtime/KList;'));
-            break;
+            return false;
           }
           if (name === '__get_cwd' && expr.args.length === 0) {
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'getCwd', '()Ljava/lang/String;'));
-            break;
+            return false;
           }
           if (name === '__run_process' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN);
             emitExpr(expr.args[1], mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'runProcess', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;'));
-            break;
+            return false;
           }
           const ns = options.namespaceClasses?.get(name);
           const importedClass = options.importedNameToClass?.get(name);
@@ -1270,11 +1270,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const gpos = mb.length();
               mb.emit1s(JvmOp.GOTO, 0);
               patchShort(mb, gpos + 1, st.loopHead - gpos);
-              break;
+              return true;
             }
             for (const arg of expr.args) emitExpr(arg, mb, tcN);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(targetClass, jvmMangleName(methodName), descriptor(arity)));
-            break;
+            return false;
           }
         }
         emitExpr(expr.callee, mb, tcN);
@@ -1300,7 +1300,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.pushShort(applyIdx);
         mb.pushByte(2);
         mb.pushByte(0);
-        break;
+        return false;
       }
       case 'TemplateExpr': {
         mb.emit1s(JvmOp.NEW, cf.classRef(STRING_BUILDER));
@@ -1317,7 +1317,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           }
         }
         mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(STRING_BUILDER, 'toString', '()Ljava/lang/String;'));
-        break;
+        return false;
       }
       case 'MatchExpr': {
         emitExpr(expr.scrutinee, mb, tcN);
@@ -1340,12 +1340,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const ifeq = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
             mb.addBranchTarget(ifeq + 3, matchBaseState);
-            emitExpr(c.body, mb, tcT);
-            mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-            const gotoEnd = mb.length();
-            mb.emit1s(JvmOp.GOTO, 0);
-            endLabels.push(gotoEnd);
-            const afterGoto = gotoEnd + 3;
+            const xfer = emitExpr(c.body, mb, tcT);
+            if (!xfer) {
+              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              endLabels.push(gotoEnd);
+            }
+            const afterGoto = mb.length();
             patchShort(mb, ifeq + 1, afterGoto - ifeq);
             mb.addBranchTarget(afterGoto, matchBaseState);
             continue;
@@ -1358,12 +1360,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
               mb.addBranchTarget(ifeq + 3, matchBaseState);
-              emitExpr(c.body, mb, tcT);
-              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-              const gotoEnd = mb.length();
-              mb.emit1s(JvmOp.GOTO, 0);
-              endLabels.push(gotoEnd);
-              const afterGoto = gotoEnd + 3;
+              const xferNone = emitExpr(c.body, mb, tcT);
+              if (!xferNone) {
+                mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                endLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
               mb.addBranchTarget(afterGoto, matchBaseState);
               continue;
@@ -1383,13 +1387,15 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 env.set(varName, slot);
                 mb.emit1b(JvmOp.ASTORE, slot);
               }
-              emitExpr(c.body, mb, tcT);
+              const xferSome = emitExpr(c.body, mb, tcT);
               if (varName) env.delete(varName);
-              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-              const gotoEnd = mb.length();
-              mb.emit1s(JvmOp.GOTO, 0);
-              endLabels.push(gotoEnd);
-              const afterGoto = gotoEnd + 3;
+              if (!xferSome) {
+                mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                endLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
               mb.addBranchTarget(afterGoto, matchBaseState);
               continue;
@@ -1400,12 +1406,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
               mb.addBranchTarget(mb.length(), matchBaseState);
-              emitExpr(c.body, mb, tcT);
-              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-              const gotoEnd = mb.length();
-              mb.emit1s(JvmOp.GOTO, 0);
-              endLabels.push(gotoEnd);
-              const afterGoto = gotoEnd + 3;
+              const xferNil = emitExpr(c.body, mb, tcT);
+              if (!xferNil) {
+                mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                endLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
               mb.addBranchTarget(afterGoto, matchBaseState);
               continue;
@@ -1434,14 +1442,16 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 env.set(tailPat.name, slot);
                 mb.emit1b(JvmOp.ASTORE, slot);
               }
-              emitExpr(c.body, mb, tcT);
+              const xferCons = emitExpr(c.body, mb, tcT);
               if (headPat?.kind === 'VarPattern') env.delete(headPat.name);
               if (tailPat?.kind === 'VarPattern') env.delete(tailPat.name);
-              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-              const gotoEnd = mb.length();
-              mb.emit1s(JvmOp.GOTO, 0);
-              endLabels.push(gotoEnd);
-              const afterGoto = gotoEnd + 3;
+              if (!xferCons) {
+                mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                endLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
               mb.addBranchTarget(afterGoto, matchBaseState);
               continue;
@@ -1471,14 +1481,16 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               env.set(tailPat.name, slot);
               mb.emit1b(JvmOp.ASTORE, slot);
             }
-            emitExpr(c.body, mb, tcT);
+            const xferConsPat = emitExpr(c.body, mb, tcT);
             if (headPat.kind === 'VarPattern') env.delete(headPat.name);
             if (tailPat.kind === 'VarPattern') env.delete(tailPat.name);
-            mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-            const gotoEnd = mb.length();
-            mb.emit1s(JvmOp.GOTO, 0);
-            endLabels.push(gotoEnd);
-            const afterGoto = gotoEnd + 3;
+            if (!xferConsPat) {
+              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              endLabels.push(gotoEnd);
+            }
+            const afterGoto = mb.length();
             patchShort(mb, ifeq + 1, afterGoto - ifeq);
             mb.addBranchTarget(afterGoto, matchBaseState);
             continue;
@@ -1491,12 +1503,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
               mb.addBranchTarget(ifeq + 3, matchBaseState);
-              emitExpr(c.body, mb, tcT);
-              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-              const gotoEnd = mb.length();
-              mb.emit1s(JvmOp.GOTO, 0);
-              endLabels.push(gotoEnd);
-              const afterGoto = gotoEnd + 3;
+              const xferLitNan = emitExpr(c.body, mb, tcT);
+              if (!xferLitNan) {
+                mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                endLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
               mb.addBranchTarget(afterGoto, matchBaseState);
               continue;
@@ -1509,12 +1523,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const ifeq = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
             mb.addBranchTarget(ifeq + 3, matchBaseState);
-            emitExpr(c.body, mb, tcT);
-            mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-            const gotoEnd = mb.length();
-            mb.emit1s(JvmOp.GOTO, 0);
-            endLabels.push(gotoEnd);
-            const afterGoto = gotoEnd + 3;
+            const xferLit = emitExpr(c.body, mb, tcT);
+            if (!xferLit) {
+              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              endLabels.push(gotoEnd);
+            }
+            const afterGoto = mb.length();
             patchShort(mb, ifeq + 1, afterGoto - ifeq);
             mb.addBranchTarget(afterGoto, matchBaseState);
             continue;
@@ -1600,13 +1616,15 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
 
             emitTupleSlots(scrutSlot, c.pattern, scrutT?.kind === 'tuple' ? scrutT : undefined);
 
-            emitExpr(c.body, mb, tcT);
+            const xferTuple = emitExpr(c.body, mb, tcT);
             deleteTupleBindings(c.pattern);
 
-            mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-            const gotoEnd = mb.length();
-            mb.emit1s(JvmOp.GOTO, 0);
-            endLabels.push(gotoEnd);
+            if (!xferTuple) {
+              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              endLabels.push(gotoEnd);
+            }
             const nextCaseStart = mb.length();
             for (const miss of missLabels) {
               patchShort(mb, miss + 1, nextCaseStart - miss);
@@ -1619,20 +1637,24 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             env.set(c.pattern.name, slot);
             mb.emit1b(JvmOp.ALOAD, scrutSlot);
             mb.emit1b(JvmOp.ASTORE, slot);
-            emitExpr(c.body, mb, tcT);
+            const xferVar = emitExpr(c.body, mb, tcT);
             env.delete(c.pattern.name);
-            mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-            const gotoEnd = mb.length();
-            mb.emit1s(JvmOp.GOTO, 0);
-            endLabels.push(gotoEnd);
+            if (!xferVar) {
+              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              endLabels.push(gotoEnd);
+            }
             continue;
           }
           if (c.pattern.kind === 'WildcardPattern') {
-            emitExpr(c.body, mb, tcT);
-            mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-            const gotoEnd = mb.length();
-            mb.emit1s(JvmOp.GOTO, 0);
-            endLabels.push(gotoEnd);
+            const xferWild = emitExpr(c.body, mb, tcT);
+            if (!xferWild) {
+              mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              endLabels.push(gotoEnd);
+            }
           }
         }
         env.delete('$matchScrut');
@@ -1643,12 +1665,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         for (const gotoPos of endLabels) {
           patchShort(mb, gotoPos + 1, endPos - gotoPos);
         }
-        break;
+        return false;
       }
       case 'ListExpr': {
         if (expr.elements.length === 0) {
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
-          break;
+          return false;
         }
         const listTemp = 62;
         const elemTemp = 63;
@@ -1675,7 +1697,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           mb.emit1b(JvmOp.ASTORE, listTemp);
         }
         mb.emit1b(JvmOp.ALOAD, listTemp);
-        break;
+        return false;
       }
       case 'ConsExpr': {
         emitExpr(expr.head, mb, tcN);
@@ -1688,7 +1710,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1b(JvmOp.ALOAD, 61);
         mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_LIST));
         mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_CONS, '<init>', '(Ljava/lang/Object;Lkestrel/runtime/KList;)V'));
-        break;
+        return false;
       }
       case 'PipeExpr': {
         if (expr.op === '|>') {
@@ -1696,15 +1718,13 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             expr.right.kind === 'CallExpr'
               ? { kind: 'CallExpr', callee: expr.right.callee, args: [expr.left, ...expr.right.args], span: expr.span }
               : { kind: 'CallExpr', callee: expr.right, args: [expr.left], span: expr.span };
-          emitExpr(call, mb, tailCtx);
-        } else {
-          const call: Expr =
-            expr.left.kind === 'CallExpr'
-              ? { kind: 'CallExpr', callee: expr.left.callee, args: [...expr.left.args, expr.right], span: expr.span }
-              : { kind: 'CallExpr', callee: expr.left, args: [expr.right], span: expr.span };
-          emitExpr(call, mb, tailCtx);
+          return emitExpr(call, mb, tailCtx);
         }
-        break;
+        const call: Expr =
+          expr.left.kind === 'CallExpr'
+            ? { kind: 'CallExpr', callee: expr.left.callee, args: [...expr.left.args, expr.right], span: expr.span }
+            : { kind: 'CallExpr', callee: expr.left, args: [expr.right], span: expr.span };
+        return emitExpr(call, mb, tailCtx);
       }
       case 'UnaryExpr': {
         if (expr.op === '-') {
@@ -1732,7 +1752,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         } else {
           emitExpr(expr.operand, mb, tcN);
         }
-        break;
+        return false;
       }
       case 'LambdaExpr': {
         const id = idByNode.get(expr);
@@ -1790,7 +1810,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           mb.emit1(JvmOp.DUP);
           mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(className + '$Lambda' + id, '<init>', '()V'));
         }
-        break;
+        return false;
       }
       case 'RecordExpr': {
         if (expr.spread) {
@@ -1808,14 +1828,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           emitExpr(f.value, mb, tcN);
           mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
         }
-        break;
+        return false;
       }
       case 'FieldExpr': {
         emitExpr(expr.object, mb, tcN);
         mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
         mb.emit1s(JvmOp.LDC_W, cf.string(expr.field));
         mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
-        break;
+        return false;
       }
       case 'TupleExpr': {
         mb.emit1s(JvmOp.NEW, cf.classRef(KRECORD));
@@ -1827,7 +1847,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           emitExpr(expr.elements[i], mb, tcN);
           mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
         }
-        break;
+        return false;
       }
       case 'ThrowExpr': {
         emitExpr(expr.value, mb, tcN);
@@ -1835,15 +1855,18 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1(JvmOp.DUP_X1);
         mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_EXCEPTION, '<init>', '(Ljava/lang/Object;)V'));
         mb.emit1(JvmOp.ATHROW);
-        break;
+        return false;
       }
       case 'TryExpr': {
         const tryStart = mb.length();
         mb.addBranchTarget(tryStart, frameState(env, nextLocal));
-        emitExpr(expr.body, mb, tcT);
+        const tryBodyXfer = emitExpr(expr.body, mb, tcT);
         const tryEnd = mb.length();
-        const gotoAfter = mb.length();
-        mb.emit1s(JvmOp.GOTO, 0);
+        let gotoAfter: number | undefined;
+        if (!tryBodyXfer) {
+          gotoAfter = mb.length();
+          mb.emit1s(JvmOp.GOTO, 0);
+        }
         const handlerStart = mb.length();
         mb.addBranchTarget(handlerStart, frameState(env, nextLocal, [57]));
         const EXN_SLOT = 57;
@@ -1863,18 +1886,22 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             env.set(c.pattern.name, slot);
             mb.emit1b(JvmOp.ALOAD, PAYLOAD_SLOT);
             mb.emit1b(JvmOp.ASTORE, slot);
-            emitExpr(c.body, mb, tcT);
+            const xferTryVar = emitExpr(c.body, mb, tcT);
             env.delete(c.pattern.name);
-            const gotoEnd = mb.length();
-            mb.emit1s(JvmOp.GOTO, 0);
-            catchEndLabels.push(gotoEnd);
+            if (!xferTryVar) {
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              catchEndLabels.push(gotoEnd);
+            }
             continue;
           }
           if (c.pattern.kind === 'WildcardPattern') {
-            emitExpr(c.body, mb, tcT);
-            const gotoEnd = mb.length();
-            mb.emit1s(JvmOp.GOTO, 0);
-            catchEndLabels.push(gotoEnd);
+            const xferTryWild = emitExpr(c.body, mb, tcT);
+            if (!xferTryWild) {
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              catchEndLabels.push(gotoEnd);
+            }
             continue;
           }
           if (c.pattern.kind === 'ConstructorPattern') {
@@ -1900,12 +1927,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                   }
                 }
               }
-              emitExpr(c.body, mb, tcT);
+              const xferTryAdt = emitExpr(c.body, mb, tcT);
               if (p.fields?.length) for (const f of p.fields) if (f.pattern?.kind === 'VarPattern') env.delete((f.pattern as { name: string }).name);
-              const gotoEnd = mb.length();
-              mb.emit1s(JvmOp.GOTO, 0);
-              catchEndLabels.push(gotoEnd);
-              const afterGoto = gotoEnd + 3;
+              if (!xferTryAdt) {
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                catchEndLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
               mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57]));
               continue;
@@ -1916,11 +1945,13 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
               mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57]));
-              emitExpr(c.body, mb, tcT);
-              const gotoEnd = mb.length();
-              mb.emit1s(JvmOp.GOTO, 0);
-              catchEndLabels.push(gotoEnd);
-              const afterGoto = gotoEnd + 3;
+              const xferTryNone = emitExpr(c.body, mb, tcT);
+              if (!xferTryNone) {
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                catchEndLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
               mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57]));
               continue;
@@ -1940,12 +1971,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 env.set(varName, slot);
                 mb.emit1b(JvmOp.ASTORE, slot);
               }
-              emitExpr(c.body, mb, tcT);
+              const xferTrySome = emitExpr(c.body, mb, tcT);
               if (varName) env.delete(varName);
-              const gotoEnd = mb.length();
-              mb.emit1s(JvmOp.GOTO, 0);
-              catchEndLabels.push(gotoEnd);
-              const afterGoto = gotoEnd + 3;
+              if (!xferTrySome) {
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                catchEndLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
               mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57]));
               continue;
@@ -1959,11 +1992,13 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const ifeq = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
             mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57]));
-            emitExpr(c.body, mb, tcT);
-            const gotoEnd = mb.length();
-            mb.emit1s(JvmOp.GOTO, 0);
-            catchEndLabels.push(gotoEnd);
-            const afterGoto = gotoEnd + 3;
+            const xferTryLit = emitExpr(c.body, mb, tcT);
+            if (!xferTryLit) {
+              const gotoEnd = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              catchEndLabels.push(gotoEnd);
+            }
+            const afterGoto = mb.length();
             patchShort(mb, ifeq + 1, afterGoto - ifeq);
             mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57]));
             continue;
@@ -1976,20 +2011,21 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         const afterCatch = mb.length();
         mb.addBranchTarget(afterCatch, frameState(env, nextLocal));
         for (const gotoPos of catchEndLabels) patchShort(mb, gotoPos + 1, afterCatch - gotoPos);
-        patchShort(mb, gotoAfter + 1, afterCatch - gotoAfter);
+        if (gotoAfter !== undefined) patchShort(mb, gotoAfter + 1, afterCatch - gotoAfter);
         mb.addException(tryStart, tryEnd, handlerStart, cf.classRef(K_EXCEPTION));
         if (expr.catchVar != null) {
           if (prevCatchVar !== undefined) env.set(expr.catchVar, prevCatchVar);
           else env.delete(expr.catchVar);
         }
-        break;
+        return false;
       }
       case 'NeverExpr':
         // Unreachable tail after `break`/`continue` in the same block.
-        break;
+        return false;
       default:
         throw new Error(`JVM codegen: unsupported expr ${(expr as Expr).kind}`);
     }
+    return false;
   }
 
   function patchShort(mb: MethodBuilder, at: number, value: number): void {
@@ -2068,9 +2104,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       self: { name: fun.name, arity, loopHead: funLoopHead },
       inTail: true,
     };
-    emitExpr(fun.body, mb, funSelfTail);
+    const funXfer = emitExpr(fun.body, mb, funSelfTail);
     mb.setMaxs(32, Math.max(Math.max(arity, nextLocal) + 8, 70));
-    mb.emit1(JvmOp.ARETURN);
+    if (!funXfer) mb.emit1(JvmOp.ARETURN);
     cf.flushLastMethod();
     for (const k of paramEnv.keys()) env.delete(k);
   }
