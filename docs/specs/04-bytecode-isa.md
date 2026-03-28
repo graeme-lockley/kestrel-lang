@@ -245,6 +245,7 @@ Instruction boundaries are thus deterministic: a decoder can always compute the 
 - **Functions and calls:** CALL (function table index), RET (01 §3.1).
 - **Lists and ADTs:** CONSTRUCT with list ADT and Nil/Cons (and Option, Result, Value from 02); MATCH for pattern matching on constructors and list patterns (01 §3.2, 02 List/Option/Result/Value).
 - **Primitive literal match patterns:** For `Int`/`Float`/`String`/`Char`/`Unit` literal pattern chains, compilers emit sequential tests using `LOAD_LOCAL` (scrutinee), `LOAD_CONST` (literal), comparison (`EQ` or equivalent predicate), and `JUMP_IF_FALSE` to the next arm, with `JUMP` to the common end after a successful arm. ADT/list constructor matches continue to use `MATCH`.
+- **Tuple pattern match:** Tuple arms `(p1, p2, …)` are **not** lowered with the `MATCH` opcode (that opcode is for ADT constructor dispatch). The compiler emits `GET_FIELD` with field indices `0`, `1`, … on the scrutinee record, binds or compares subpatterns (including nested tuple patterns and literal subpatterns), and uses `JUMP_IF_FALSE` / `JUMP` between cases like primitive literal chains.
 - **Records and tuples:** ALLOC_RECORD, GET_FIELD, SET_FIELD, SPREAD (01 §3.2, §3.6). Tuples as records with positional shape.
 - **Exceptions:** CONSTRUCT for exception payload, THROW, TRY/END_TRY (01 §4). Stack traces via stdlib (02 kestrel:stack).
 - **Async:** AWAIT; async functions compiled to functions returning Task (01 §5, 02 Task<T>).

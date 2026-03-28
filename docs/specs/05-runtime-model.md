@@ -105,7 +105,7 @@ The following language and stdlib features have runtime representation or behavi
 |---------|------------------------|--------|
 | **Literals** (Int, Float, Bool, Unit, Char, String) | §1, §2 | Int 61-bit inline; Float boxed; Bool, Unit, Char inline; String heap. |
 | **Records** (structural, mut fields) | §2 RECORD, §3 | Shape-defined layout; SET_FIELD for mut. |
-| **Tuples** | §2 RECORD | Anonymous shape, field order 0,1,… |
+| **Tuples** | §2 RECORD | Anonymous shape, field order 0,1,…; `match` tuple patterns project the same indices as field access `.0`, `.1`, … (01 §3.4). |
 | **ADTs** (Option, Result, List, Value, exceptions) | §2 ADT | Constructor tag + payload; exceptions are ADTs. |
 | **Exceptions** (throw, try/catch) | §2 ADT, §5 | Exception value = ADT; unwind to TRY handler; stack trace via stdlib. |
 | **Task / async / await** | §2 TASK, §6 | TASK heap object; AWAIT semantics; scheduling impl-defined. |

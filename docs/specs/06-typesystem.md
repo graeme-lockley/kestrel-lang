@@ -153,6 +153,8 @@ Constructors are in scope wherever the type name is in scope (module-level or im
 
 **Exhaustiveness** for user-defined ADTs: the compiler builds a **constructor registry** from type declarations mapping each ADT name to the set of its constructors. When `match (e) { ... }` has `e` of a user-defined ADT type, every constructor must be covered by at least one case, or a catch-all (`_` or variable) must be present.
 
+**Tuple patterns in `match`:** The scrutinee must have a **tuple** type whose arity matches the tuple pattern. A tuple pattern with **literal** (or otherwise non–variable-only) subpatterns is **not** exhaustive by itself: a catch-all case (`_` or a variable pattern) is required unless there is an arm that matches all tuple values with only variables and wildcards in every slot (including nested tuple patterns), e.g. a single arm `(x, y) => …` for a pair type. Arity mismatch or a tuple pattern against a non-tuple scrutinee is a **type error**.
+
 ### 5.2 Recursive and mutually recursive types
 
 All type names declared at the same scope level (top-level or within a block) are in scope for all type bodies at that level, regardless of declaration order. This enables:

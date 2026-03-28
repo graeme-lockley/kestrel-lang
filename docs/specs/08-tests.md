@@ -32,6 +32,7 @@ A conforming implementation must:
 
 - **Inference:** Programs that should type-check (including polymorphic and row-polymorphic functions) are accepted; inferred types match expected principal types where specified.
 - **Rejection:** Programs that violate the type rules (e.g. wrong arity, missing cases in match, unification failures, row conflicts) are rejected with a type error. Tests in `typecheck/invalid/` may assert that a specific type error (or error substring) is produced.
+- **Tuple `match`:** `tests/unit/match.test.ks` exercises tuple destructuring, nested tuples, wildcards, literal slots, and catch-all arms. `tests/conformance/typecheck/valid/tuple_pattern_match.ks` and `tests/conformance/typecheck/invalid/tuple_*.ks` cover typing and exhaustiveness for tuple patterns.
 - **Unions and narrowing:** `is` narrowing and use of values in `A | B` and `A & B` are tested for both valid and invalid usage.
 
 ### 2.3 Exceptions and Async

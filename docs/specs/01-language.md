@@ -347,6 +347,8 @@ Unit           ::= "(" ")"
 
 **Tuples:** Syntactically, grouping and constant tuples share the same parenthesized comma-separated form `"(" Expr { "," Expr } ")"` (and the same for patterns). A single expression or pattern `(e)` or `(p)` is treated as **grouping** (same as `e` or `p`). Two or more `(e1, e2, …)` form a **constant tuple** with product type (e.g. `(Int, String)` has type `Int * String`). Tuple patterns match the same shape: `(p1, p2)` or `(p1, p2, p3, …)`. The parser disambiguates by the presence of a comma after the first element. `()` is always the **Unit** literal (expression or pattern), not a tuple.
 
+At runtime, tuple values use the same representation as **records** with **positional field names** `"0"`, `"1"`, … (see [05-runtime-model.md](05-runtime-model.md)). In `match`, tuple patterns destructure by those indices (06 exhaustiveness for tuple `match`).
+
 For float literal patterns, matching uses pattern semantics (not plain `==`): a float NaN pattern matches a NaN scrutinee.
 
 **No member calls:** The grammar does not allow `e.M(args)` (method call). Function and constructor calls use `e(args)`; field read uses the postfix `e.fieldName` (Suffix `"." LOWER_IDENT`).
