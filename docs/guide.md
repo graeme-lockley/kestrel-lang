@@ -169,6 +169,8 @@ val b = 2 ** 3 ** 2   // 512 (right-associative: 2^(3^2))
 val c = True & !False  // True
 ```
 
+**Integer bounds and errors:** `Int` is a fixed-width signed type (61-bit in the reference VM). If an `+`, `-`, or `*` result does not fit, the runtime throws **`ArithmeticOverflow`**. **`/`** and **`%`** throw **`DivideByZero`** when the divisor is zero. Both are standard-library exception ADTs from **`kestrel:runtime`** — import them so your `catch` patterns match what the VM throws (see [Exceptions](#exceptions) below).
+
 ---
 
 ## Types
@@ -421,7 +423,19 @@ match (result) {
 
 ### Exceptions
 
-For truly exceptional situations, Kestrel has `throw` and `try`/`catch`:
+For truly exceptional situations, Kestrel has `throw` and `try`/`catch`.
+
+**Built-in integer traps:** Overflow and divide-by-zero from the built-in operators use the canonical types exported by **`kestrel:runtime`**. Import **`ArithmeticOverflow`** and **`DivideByZero`** so handlers can match the values the VM constructs:
+
+```kestrel
+import { ArithmeticOverflow, DivideByZero } from "kestrel:runtime"
+
+val ok = try { 1 / 0 } catch {
+  DivideByZero => 0
+}
+```
+
+**User-defined exceptions:** You can still declare your own exception ADTs and `throw` them — useful when failure is a deliberate API choice, not only a hardware-style trap:
 
 ```kestrel
 exception DivByZero {}
@@ -434,6 +448,8 @@ val safe = try { divide(10, 0) } catch {
 }
 // safe is 0
 ```
+
+Note that **`a / b`** and **`a % b`** already throw **`kestrel:runtime`’s `DivideByZero`** when `b == 0`; the example above is for wrapping logic that chooses to signal failure with a *custom* exception type.
 
 Exceptions are declared with the `exception` keyword and can carry fields. Prefer `Option` and `Result` for expected failure paths; reserve exceptions for situations where recovery is the caller's responsibility.
 
@@ -485,6 +501,7 @@ The standard library ships as `kestrel:*` modules:
 
 | Module | Purpose |
 |--------|---------|
+| `kestrel:runtime` | Canonical **`ArithmeticOverflow`** and **`DivideByZero`** exception ADTs (VM throws these for integer overflow and div/mod by zero) |
 | `kestrel:string` | String manipulation — `length`, `slice`, `split`, `join`, `trim`, `replace`, and more |
 | `kestrel:list` | List operations — `map`, `filter`, `foldl`, `sort`, `reverse`, `zip`, and more |
 | `kestrel:option` | Option helpers — `map`, `andThen`, `getOrElse`, `withDefault` |
