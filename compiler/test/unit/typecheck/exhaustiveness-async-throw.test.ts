@@ -160,6 +160,48 @@ describe('checkExhaustive', () => {
     `);
     expect(bad.ok).toBe(false);
   });
+
+  it('tuple match: single arm with only variables is exhaustive', () => {
+    const ok = tc(`
+      val p = (1, 2)
+      val r = match (p) { (x, y) => x + y }
+    `);
+    expect(ok.ok).toBe(true);
+  });
+
+  it('tuple match: literal in tuple slot requires catch-all', () => {
+    const bad = tc(`
+      val p = (1, 2)
+      val r = match (p) { (0, y) => y }
+    `);
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) {
+      expect(bad.diagnostics.some((d) => d.message.includes('Non-exhaustive match') && d.message.includes('tuple'))).toBe(
+        true
+      );
+    }
+    const good = tc(`
+      val p = (1, 2)
+      val r = match (p) { (0, y) => y, _ => 0 }
+    `);
+    expect(good.ok).toBe(true);
+  });
+
+  it('tuple pattern arity mismatch is a type error', () => {
+    const bad = tc(`
+      val p = (1, 2)
+      val r = match (p) { (a, b, c) => a }
+    `);
+    expect(bad.ok).toBe(false);
+  });
+
+  it('tuple pattern against non-tuple scrutinee is a type error', () => {
+    const bad = tc(`
+      val n = 1
+      val r = match (n) { (a, b) => a }
+    `);
+    expect(bad.ok).toBe(false);
+  });
 });
 
 describe('await outside async', () => {

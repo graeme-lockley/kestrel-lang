@@ -450,6 +450,27 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       }
     }
 
+    if (appType.kind === 'tuple') {
+      function tuplePatternLeavesTotal(p: import('../ast/nodes.js').Pattern): boolean {
+        if (p.kind === 'VarPattern' || p.kind === 'WildcardPattern') return true;
+        if (p.kind === 'TuplePattern') return p.elements.every(tuplePatternLeavesTotal);
+        return false;
+      }
+      if (hasCatchAll) return;
+      const hasTotalTupleArm = cases.some(
+        c => c.pattern.kind === 'TuplePattern' && tuplePatternLeavesTotal(c.pattern)
+      );
+      if (hasTotalTupleArm) return;
+      diagnostics.push({
+        severity: 'error',
+        code: CODES.type.non_exhaustive_match,
+        message:
+          'Non-exhaustive match: add a catch-all (`_` or variable pattern) or a tuple pattern `(x, y, ...)` that only binds variables (no literals in tuple slots)',
+        location: locFor(expr),
+      });
+      return;
+    }
+
     if (appType.kind !== 'app') return;
     
     // Check hardcoded built-in ADTs first, then user-defined
@@ -823,12 +844,24 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           if (pattern.kind === 'VarPattern') {
             env.set(pattern.name, patternType);
             bound.push(pattern.name);
+          } else if (pattern.kind === 'WildcardPattern') {
+            // no bindings
           } else if (pattern.kind === 'TuplePattern') {
             const applied = apply(patternType);
-            if (applied.kind === 'tuple' && applied.elements.length === pattern.elements.length) {
-              for (let i = 0; i < pattern.elements.length; i++) {
-                bound.push(...bindPattern(pattern.elements[i]!, applied.elements[i]!));
-              }
+            if (applied.kind !== 'tuple') {
+              throw new TypeCheckError(
+                `Expected tuple type for tuple pattern, got ${typeStr(applied)}`,
+                pattern
+              );
+            }
+            if (applied.elements.length !== pattern.elements.length) {
+              throw new TypeCheckError(
+                `Tuple pattern has ${pattern.elements.length} components but scrutinee has type ${typeStr(applied)}`,
+                pattern
+              );
+            }
+            for (let i = 0; i < pattern.elements.length; i++) {
+              bound.push(...bindPattern(pattern.elements[i]!, applied.elements[i]!));
             }
           } else if (pattern.kind === 'ConsPattern') {
             const applied = apply(patternType);
