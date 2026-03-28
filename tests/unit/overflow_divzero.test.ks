@@ -14,7 +14,7 @@ export fun run(s: Suite): Unit =
 //      eq(sg, "ADD overflow throws ArithmeticOverflow",
 //        try { halfMax + halfMax } catch { ArithmeticOverflow => 1, other => 0 }, 1)
 //      eq(sg, "SUB overflow throws ArithmeticOverflow",
-//        try { 0 - halfMax - halfMax - 1 } catch { ArithmeticOverflow => 1, other => 0 }, 1)
+//        try { -halfMax - halfMax - 1 } catch { ArithmeticOverflow => 1, other => 0 }, 1)
 //      eq(sg, "MUL overflow throws ArithmeticOverflow",
 //        try { halfMax * 2 } catch { ArithmeticOverflow => 1, other => 0 }, 1)
 //    })

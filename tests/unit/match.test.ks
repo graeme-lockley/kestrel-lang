@@ -10,7 +10,7 @@ fun fromOption(o: Option<Int>): Int = match (o) {
 }
 
 fun fromResult(r: Result<Int, Int>): Int = match (r) {
-  Err(_) => 0 - 1,
+  Err(_) => -1,
   Ok(x) => x
 }
 
@@ -57,7 +57,7 @@ export fun run(s: Suite): Unit =
 
     group(s1, "result patterns", (sg: Suite) => {
       eq(sg, "fromResult Ok(42)", fromResult(Ok(42)), 42)
-      eq(sg, "fromResult Err(1)", fromResult(Err(1)), 0 - 1)
+      eq(sg, "fromResult Err(1)", fromResult(Err(1)), -1)
       eq(sg, "match Ok(5)", match (Ok(5)) { Err { value = _ } => 0, Ok { value = v } => v }, 5)
       eq(sg, "match Err(3)", match (Err(3)) { Err { value = e } => e, Ok { value = _ } => 0 }, 3)
     })

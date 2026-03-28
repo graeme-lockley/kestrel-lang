@@ -20,7 +20,7 @@ export fun run(s: Suite): Unit =
     })
 
     group(s1, "chained", (sg: Suite) => {
-      eq(sg, "classify(-5)", classify(0 - 5), 0)
+      eq(sg, "classify(-5)", classify(-5), 0)
       eq(sg, "classify(0)", classify(0), 1)
       eq(sg, "classify(10)", classify(10), 2)
     })

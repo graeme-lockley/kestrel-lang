@@ -77,7 +77,7 @@ export fun run(s: Suite): Unit =
       eq(sg, "prefix", left("hello", 2), "he")
       eq(sg, "whole when n large", left("ab", 5), "ab")
       eq(sg, "zero n", left("ab", 0), "")
-      eq(sg, "negative n", left("ab", 0 - 1), "")
+      eq(sg, "negative n", left("ab", -1), "")
       eq(sg, "emoji", left("\u{1F600}yz", 2), "\u{1F600}y")
     })
 
@@ -91,7 +91,7 @@ export fun run(s: Suite): Unit =
     group(s1, "dropLeft", (sg: Suite) => {
       eq(sg, "one", dropLeft("hello", 1), "ello")
       eq(sg, "zero", dropLeft("ab", 0), "ab")
-      eq(sg, "negative", dropLeft("ab", 0 - 1), "ab")
+      eq(sg, "negative", dropLeft("ab", -1), "ab")
       eq(sg, "all", dropLeft("ab", 2), "")
       eq(sg, "more than length", dropLeft("ab", 9), "")
       eq(sg, "emoji", dropLeft("\u{1F600}bc", 1), "bc")
@@ -110,7 +110,7 @@ export fun run(s: Suite): Unit =
 
     group(s1, "indexOf", (sg: Suite) => {
       eq(sg, "found", indexOf("hello", "ll"), 2)
-      eq(sg, "not found", indexOf("hello", "z"), 0 - 1)
+      eq(sg, "not found", indexOf("hello", "z"), -1)
       eq(sg, "at start", indexOf("hello", "he"), 0)
       eq(sg, "emoji char index", indexOf("a\u{1F600}b", "\u{1F600}"), 1)
     })
@@ -142,14 +142,14 @@ export fun run(s: Suite): Unit =
 
     group(s1, "codePointAt", (sg: Suite) => {
       eq(sg, "a", codePointAt("a", 0), 97)
-      eq(sg, "oob", codePointAt("a", 1), 0 - 1)
+      eq(sg, "oob", codePointAt("a", 1), -1)
       eq(sg, "emoji", codePointAt("\u{1F600}", 0), 128512)
     })
 
     group(s1, "parseInt", (sg: Suite) => {
       eq(sg, "zero", parseInt("0"), 0)
       eq(sg, "positive", parseInt("42"), 42)
-      eq(sg, "negative", parseInt("-7"), 0 - 7)
+      eq(sg, "negative", parseInt("-7"), -7)
       eq(sg, "trimmed", parseInt("  9  "), 9)
       eq(sg, "invalid", parseInt("12a3"), 0)
       eq(sg, "empty after trim", parseInt("   "), 0)
@@ -180,9 +180,9 @@ export fun run(s: Suite): Unit =
     })
 
     group(s1, "sliceRel", (sg: Suite) => {
-      eq(sg, "negative end", sliceRel(0, 0 - 1, "ab"), "a")
+      eq(sg, "negative end", sliceRel(0, -1, "ab"), "a")
       eq(sg, "clamp", sliceRel(0, 99, "x"), "x")
-      eq(sg, "negative end three", sliceRel(0, 0 - 1, "abc"), "ab")
+      eq(sg, "negative end three", sliceRel(0, -1, "abc"), "ab")
       eq(sg, "inverted empty", sliceRel(2, 0, "ab"), "")
       eq(sg, "empty string", sliceRel(0, 0, ""), "")
     })
@@ -208,10 +208,10 @@ export fun run(s: Suite): Unit =
       eq(sg, "none bad", toInt("12a"), None)
       eq(sg, "fromInt", fromInt(7), "7")
       eq(sg, "zero", toInt("0"), Some(0))
-      eq(sg, "negative", toInt("-3"), Some(0 - 3))
+      eq(sg, "negative", toInt("-3"), Some(-3))
       eq(sg, "empty", toInt(""), None)
       eq(sg, "lone minus", toInt("-"), None)
-      eq(sg, "fromInt negative", fromInt(0 - 1), "-1")
+      eq(sg, "fromInt negative", fromInt(-1), "-1")
     })
 
     group(s1, "append concat reverse replace", (sg: Suite) => {

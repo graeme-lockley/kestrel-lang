@@ -11,7 +11,7 @@ export fun run(s: Suite): Unit =
 
     group(s1, "right-assoc and edge cases", (ra: Suite) => {
       eq(ra, "2 ** 3 ** 2 == 512", 2 ** 3 ** 2, 512)
-      eq(ra, "3 - 5 negative", 3 - 5, 0 - 2)
+      eq(ra, "3 - 5 negative", 3 - 5, -2)
       eq(ra, "multiply by 1", 7 * 1, 7)
       eq(ra, "divide by 1", 8 / 1, 8)
     })

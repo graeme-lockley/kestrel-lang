@@ -99,7 +99,7 @@ export fun run(s: Suite): Unit =
     group(s1, "less than", (sg: Suite) => {
       eq(sg, "3 < 5", 3 < 5, True)
       eq(sg, "5 < 3 is false", 5 < 3, False)
-      eq(sg, "-1 < 0", 0 - 1 < 0, True)
+      eq(sg, "-1 < 0", -1 < 0, True)
     })
 
     group(s1, "greater than", (sg: Suite) => {

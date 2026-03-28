@@ -24,7 +24,7 @@ export fun run(s: Suite): Unit =
     group(s1, "compound", (sg: Suite) => {
       eq(sg, "!(3>5)&(2<4)", !(3 > 5) & (2 < 4), True)
       eq(sg, "(True|False)&(False|True)", (True | False) & (False | True), True)
-      eq(sg, "if (!(False|False)) -100 else -200", if (!(False | False)) (0 - 100) else (0 - 200), 0 - 100)
+      eq(sg, "if (!(False|False)) -100 else -200", if (!(False | False)) -100 else -200, -100)
     })
     
     group(s1, "short circuit and", (sg: Suite) => {

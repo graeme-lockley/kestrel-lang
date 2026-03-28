@@ -26,7 +26,7 @@ export fun run(s: Suite): Unit = {
 
     group(s1, "drop", (sg: Suite) => {
       eq(sg, "drop 0", List.drop(0, [1, 2, 3]), [1, 2, 3])
-      eq(sg, "drop negative", List.drop(0 - 1, [1, 2, 3]), [1, 2, 3])
+      eq(sg, "drop negative", List.drop(-1, [1, 2, 3]), [1, 2, 3])
       eq(sg, "drop 1", List.drop(1, [1, 2, 3]), [2, 3])
       eq(sg, "drop 2", List.drop(2, [1, 2, 3]), [3])
       eq(sg, "drop 3", List.drop(3, [1, 2, 3]), emptyInts())
