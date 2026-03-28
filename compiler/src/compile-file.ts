@@ -10,7 +10,7 @@ import { codegen, type CodegenResult } from './codegen/codegen.js';
 import { writeKbc, type ImportedFunctionEntry } from './bytecode/write.js';
 import { resolveSpecifier } from './resolve.js';
 import { readTypesFile, writeTypesFile, isTypesFileFresh, type TypesFileExportInput } from './types-file.js';
-import type { Program, ImportDecl, Expr, ExceptionDecl } from './ast/nodes.js';
+import type { Program, ImportDecl, Expr, ExceptionDecl, TypeDecl } from './ast/nodes.js';
 import type { InternalType } from './types/internal.js';
 import { tUnit } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
@@ -136,6 +136,41 @@ function diag(file: string, code: string, message: string, span?: Span, source?:
   };
 }
 
+/** ADT name → index in dependency bytecode ADT section (same order as codegen). */
+function adtBytecodeIndex(result: CodegenResult, adtName: string): number {
+  for (let i = 0; i < result.adts.length; i++) {
+    const n = result.stringTable[result.adts[i]!.nameIndex];
+    if (n === adtName) return i;
+  }
+  throw new Error(`compile-file: ADT "${adtName}" not found in codegen adt table`);
+}
+
+function ctorMetaForExportedCtor(program: Program, ctorName: string): { adtName: string; ctorIndex: number } | undefined {
+  for (const node of program.body) {
+    if (node == null || node.kind !== 'TypeDecl') continue;
+    if (node.visibility !== 'export' || node.body.kind !== 'ADTBody') continue;
+    const idx = node.body.constructors.findIndex((c) => c.name === ctorName);
+    if (idx >= 0) return { adtName: node.name, ctorIndex: idx };
+  }
+  return undefined;
+}
+
+function ctorArityInProgram(program: Program, adtName: string, ctorIndex: number): number {
+  for (const node of program.body) {
+    if (node == null || node.kind !== 'TypeDecl') continue;
+    if (node.name !== adtName || node.body.kind !== 'ADTBody') continue;
+    return node.body.constructors[ctorIndex]?.params.length ?? 0;
+  }
+  return 0;
+}
+
+interface NamespaceImportConstructorInfo {
+  importIndex: number;
+  adtId: number;
+  ctorIndex: number;
+  arity: number;
+}
+
 export function compileFile(
   inputPath: string,
   options?: CompileFileOptions
@@ -145,11 +180,30 @@ export function compileFile(
   const absPath = pathResolve(inputPath);
 
   const visited = new Set<string>();
-  const cache = new Map<string, { program: Program; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; codegenResult: CodegenResult; dependencyPaths: string[] }>();
+  const cache = new Map<
+    string,
+    {
+      program: Program;
+      exports: Map<string, InternalType>;
+      exportedTypeAliases: Map<string, InternalType>;
+      exportedConstructors: Map<string, InternalType>;
+      codegenResult: CodegenResult;
+      dependencyPaths: string[];
+    }
+  >();
   const onCompilingFile = options?.onCompilingFile;
   const stalePaths = options?.stalePaths;
 
-  function compileOne(filePath: string): { ok: true; program: Program; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>; codegenResult: CodegenResult; dependencyPaths: string[] } | { ok: false; diagnostics: Diagnostic[] } {
+  function compileOne(filePath: string): {
+    ok: true;
+    program: Program;
+    exports: Map<string, InternalType>;
+    exportedTypeAliases: Map<string, InternalType>;
+    exportedConstructors: Map<string, InternalType>;
+    exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>;
+    codegenResult: CodegenResult;
+    dependencyPaths: string[];
+  } | { ok: false; diagnostics: Diagnostic[] } {
     if (visited.has(filePath)) {
       return { ok: false, diagnostics: [diag(filePath, CODES.file.circular_import, `Circular import: ${filePath}`)] };
     }
@@ -250,8 +304,10 @@ export function compileFile(
     const depResults: DepResult[] = [];
     /** Imported exception ADTs (e.g. `kestrel:runtime`) for codegen catch patterns + VM cross-module `==`. */
     const exceptionImports: { canonical: string; local: string }[] = [];
+    const namespaceImportConstructors = new Map<string, Map<string, NamespaceImportConstructorInfo>>();
 
-    for (const spec of specs) {
+    for (let specIndex = 0; specIndex < specs.length; specIndex++) {
+      const spec = specs[specIndex]!;
       const depPath = resolved.get(spec)!;
       let usedTypesFile = false;
       if (getOutputPaths) {
@@ -341,11 +397,30 @@ export function compileFile(
                 if (exp.kind === 'function' || exp.kind === 'val' || exp.kind === 'var' || exp.kind === 'exception') {
                   bindings.set(name, exp.type);
                 }
+                if (exp.kind === 'constructor') {
+                  bindings.set(name, exp.type);
+                }
               }
               for (const [name, ta] of typesTypeAliases) {
                 bindings.set(name, ta.type);
               }
               importBindings.set(imp.name, { kind: 'namespace', bindings });
+              const nsCtorMap = new Map<string, NamespaceImportConstructorInfo>();
+              for (const [name, exp] of typesExports) {
+                if (
+                  exp.kind === 'constructor' &&
+                  exp.adt_id !== undefined &&
+                  exp.ctor_index !== undefined
+                ) {
+                  nsCtorMap.set(name, {
+                    importIndex: specIndex,
+                    adtId: exp.adt_id,
+                    ctorIndex: exp.ctor_index,
+                    arity: exp.arity,
+                  });
+                }
+              }
+              namespaceImportConstructors.set(imp.name, nsCtorMap);
             }
             depResults.push({ spec, path: depPath, exportSet, nameToExport, fromTypesFile: true });
             usedTypesFile = true;
@@ -392,7 +467,22 @@ export function compileFile(
           for (const [name, t] of depOut.exportedTypeAliases) {
             bindings.set(name, t);
           }
+          for (const [name, t] of depOut.exportedConstructors) {
+            bindings.set(name, t);
+          }
           importBindings.set(imp.name, { kind: 'namespace', bindings });
+          const nsCtorMap = new Map<string, NamespaceImportConstructorInfo>();
+          for (const ctorName of depOut.exportedConstructors.keys()) {
+            const meta = ctorMetaForExportedCtor(depOut.program, ctorName);
+            if (meta == null) continue;
+            nsCtorMap.set(ctorName, {
+              importIndex: specIndex,
+              adtId: adtBytecodeIndex(depOut.codegenResult, meta.adtName),
+              ctorIndex: meta.ctorIndex,
+              arity: ctorArityInProgram(depOut.program, meta.adtName, meta.ctorIndex),
+            });
+          }
+          namespaceImportConstructors.set(imp.name, nsCtorMap);
         }
         depResults.push({
           spec,
@@ -564,6 +654,8 @@ export function compileFile(
       namespaceFuncIds: namespaceFuncIds.size > 0 ? namespaceFuncIds : undefined,
       namespaceVarSetterIds: namespaceVarSetterIds.size > 0 ? namespaceVarSetterIds : undefined,
       namespaceThunkFields: namespaceThunkFields.size > 0 ? namespaceThunkFields : undefined,
+      namespaceImportConstructors:
+        namespaceImportConstructors.size > 0 ? namespaceImportConstructors : undefined,
       importedExceptions,
       sourceFile: filePath,
     });
@@ -617,6 +709,25 @@ export function compileFile(
           }
         }
       }
+      for (const node of program.body) {
+        if (node == null || node.kind !== 'TypeDecl') continue;
+        const td = node as TypeDecl;
+        if (td.visibility !== 'export' || td.body.kind !== 'ADTBody') continue;
+        const adtId = adtBytecodeIndex(mainResult, td.name);
+        for (let ci = 0; ci < td.body.constructors.length; ci++) {
+          const c = td.body.constructors[ci]!;
+          const t = tc.exportedConstructors.get(c.name);
+          if (t == null) continue;
+          typeExports.set(c.name, {
+            kind: 'constructor',
+            function_index: 0,
+            arity: c.params.length,
+            adt_id: adtId,
+            ctor_index: ci,
+            type: t,
+          });
+        }
+      }
       writeTypesFile(paths.kti, typeExports, tc.exportedTypeAliases, tc.exportedTypeVisibility);
     }
 
@@ -668,12 +779,28 @@ export function compileFile(
       const paths = getOutputPaths(filePath);
       writeFileSync(paths.kbc + '.deps', dependencyPaths.join('\n') + '\n');
     }
-    cache.set(filePath, { program, exports: tc.exports, exportedTypeAliases: tc.exportedTypeAliases, codegenResult: mainResult, dependencyPaths });
+    cache.set(filePath, {
+      program,
+      exports: tc.exports,
+      exportedTypeAliases: tc.exportedTypeAliases,
+      exportedConstructors: tc.exportedConstructors,
+      codegenResult: mainResult,
+      dependencyPaths,
+    });
     visited.delete(filePath);
     const durationMs = Math.round(performance.now() - compileStart);
     // Report every file we compile (so incremental runs show full chain: e.g. m3, m2, hello)
     onCompilingFile?.(filePath, durationMs);
-    return { ok: true, program, exports: tc.exports, exportedTypeAliases: tc.exportedTypeAliases, exportedTypeVisibility: tc.exportedTypeVisibility, codegenResult: mainResult, dependencyPaths };
+    return {
+      ok: true,
+      program,
+      exports: tc.exports,
+      exportedTypeAliases: tc.exportedTypeAliases,
+      exportedConstructors: tc.exportedConstructors,
+      exportedTypeVisibility: tc.exportedTypeVisibility,
+      codegenResult: mainResult,
+      dependencyPaths,
+    };
   }
 
   const out = compileOne(absPath);

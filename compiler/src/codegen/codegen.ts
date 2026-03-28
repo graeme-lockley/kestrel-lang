@@ -68,6 +68,7 @@ import {
   emitJump,
   emitJumpIfFalse,
   emitConstruct,
+  emitConstructImport,
   emitMatch,
   emitThrow,
   emitTry,
@@ -528,6 +529,11 @@ function makeEmitExpr(
   namespaceFuncIds?: Map<string, Map<string, number>>,
   namespaceVarSetterIds?: Map<string, Map<string, number>>,
   namespaceThunkFields?: Map<string, Set<string>>,
+  /** Namespace import: qualified ADT constructor lowering (CONSTRUCT_IMPORT). */
+  namespaceImportConstructors?: Map<
+    string,
+    Map<string, { importIndex: number; adtId: number; ctorIndex: number; arity: number }>
+  >,
   importedThunkLocals?: Set<string>,
   localFuncCount?: number,
   moduleTopLevelFunDeclCount?: number,
@@ -549,6 +555,7 @@ function makeEmitExpr(
   const loopBreakStack: LoopCodegenLayer[] = [];
   const peers = topLevelFunPeers;
   const mutualPatches = mutualTailPatches;
+  const nsImportCtors = namespaceImportConstructors;
   return { moduleGlobals, emitExpr: function emitExpr(
   expr: Expr,
   env: Map<string, number>,
@@ -1237,6 +1244,11 @@ function makeEmitExpr(
     case 'FieldExpr': {
       const objType = getInferredType(expr.object);
       if (objType?.kind === 'namespace' && expr.object.kind === 'IdentExpr') {
+        const nsCtorInfo = nsImportCtors?.get(expr.object.name)?.get(expr.field);
+        if (nsCtorInfo != null && nsCtorInfo.arity === 0) {
+          emitConstructImport(nsCtorInfo.importIndex, nsCtorInfo.adtId, nsCtorInfo.ctorIndex, 0);
+          break;
+        }
         const nsMap = namespaceFuncIds?.get(expr.object.name);
         const fnId = nsMap?.get(expr.field);
         if (fnId !== undefined) {
@@ -1549,6 +1561,12 @@ function makeEmitExpr(
       if (expr.callee.kind === 'FieldExpr' && expr.callee.object.kind === 'IdentExpr') {
         const objType = getInferredType(expr.callee.object);
         if (objType?.kind === 'namespace') {
+          const nsCtorInfo = nsImportCtors?.get(expr.callee.object.name)?.get(expr.callee.field);
+          if (nsCtorInfo != null) {
+            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+            emitConstructImport(nsCtorInfo.importIndex, nsCtorInfo.adtId, nsCtorInfo.ctorIndex, nsCtorInfo.arity);
+            break;
+          }
           const nsMap = namespaceFuncIds?.get(expr.callee.object.name);
           const fnId = nsMap?.get(expr.callee.field);
           if (fnId !== undefined) {
@@ -2204,6 +2222,11 @@ export interface CodegenOptions {
   namespaceVarSetterIds?: Map<string, Map<string, number>>;
   /** Namespace members that are export val/var getters (0-ary CALL); functions use LOAD_IMPORTED_FN. */
   namespaceThunkFields?: Map<string, Set<string>>;
+  /** Qualified `M.Ctor` for imported modules → CONSTRUCT_IMPORT metadata. */
+  namespaceImportConstructors?: Map<
+    string,
+    Map<string, { importIndex: number; adtId: number; ctorIndex: number; arity: number }>
+  >;
   /**
    * Imported exception ADTs (e.g. `kestrel:runtime`). Adds bytecode ADT rows and ctor aliases (`as` imports).
    * VM `==` matches across modules for exception-style ADTs with the same type name.
@@ -2250,6 +2273,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     options?.namespaceFuncIds,
     options?.namespaceVarSetterIds,
     options?.namespaceThunkFields,
+    options?.namespaceImportConstructors,
     options?.importedThunkLocals,
     options?.localFuncCount,
     funDecls.length,

@@ -3,8 +3,13 @@
 # using the Cursor Agent CLI (non-interactive).
 #
 # Environment:
-#   CURSOR_CLI   — Agent binary (default: cursor-agent). Must support -p, --trust, --workspace.
+#   CURSOR_CLI   — Agent binary (default: cursor-agent). Must support the flags used below.
 #   REPO_ROOT    — Workspace root (default: parent of scripts/)
+#
+# Agent invocation uses --sandbox disabled, --force, and --approve-mcps so headless runs can
+# use filesystem tools (including delete), shell, MCP servers, and other actions without
+# sandbox blocks or extra prompts.
+# Only run this script on workspaces you trust.
 #
 # Prerequisites: cursor-agent (or agent) on PATH, logged in; git remote for push.
 set -euo pipefail
@@ -34,7 +39,7 @@ log_step() {
   echo "── STEP $* ──"
 }
 
-# Run Cursor Agent CLI with a single prompt (non-interactive, trusted workspace).
+# Run Cursor Agent CLI with a single prompt (non-interactive, trusted workspace, sandbox off).
 # Prints the prompt and merges agent stdout/stderr so the run is visible in the terminal.
 run_cursor_cli() {
   local prompt=$1
@@ -51,7 +56,7 @@ run_cursor_cli() {
   echo "Agent output ($CURSOR_CLI)"
   echo "================================================================================"
   set +e
-  "$CURSOR_CLI" -p --trust --workspace "$REPO_ROOT" "$prompt" 2>&1
+  "$CURSOR_CLI" -p --trust --sandbox disabled --force --approve-mcps --workspace "$REPO_ROOT" "$prompt" 2>&1
   local ec=$?
   set -e
   echo "================================================================================"

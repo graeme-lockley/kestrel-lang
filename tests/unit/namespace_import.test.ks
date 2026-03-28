@@ -30,6 +30,13 @@ export fun run(s: Suite): Unit =
       eq(s2, "Lib.secretTokenToInt(makeSecretToken(100))", Lib.secretTokenToInt(Lib.makeSecretToken(100)), 100)
       eq(s2, "Lib.userIdToInt(makeUserId(999))", Lib.userIdToInt(Lib.makeUserId(999)), 999)
     })
+    group(s1, "namespace ADT constructors", (s2: Suite) => {
+      eq(s2, "Lib.PubNum unary", Lib.publicTokenToInt(Lib.PubNum(42)), 42)
+      eq(s2, "Lib.PubOp unary", Lib.publicTokenToInt(Lib.PubOp("x")), 0)
+      eq(s2, "Lib.PubEof nullary", Lib.publicTokenToInt(Lib.PubEof), -1)
+      eq(s2, "Lib.PubPair multi-arg", Lib.publicTokenToInt(Lib.PubPair(1, 2)), 3)
+      eq(s2, "makePubNum still matches Lib.PubNum", Lib.publicTokenToInt(Lib.makePubNum(7)), Lib.publicTokenToInt(Lib.PubNum(7)))
+    })
     group(s1, "qualified type annotation", (s2: Suite) => {
       val x: Lib.PublicToken = Lib.makePubNum(42)
       eq(s2, "Lib.PublicToken annotation and makePubNum", Lib.publicTokenToInt(x), 42)

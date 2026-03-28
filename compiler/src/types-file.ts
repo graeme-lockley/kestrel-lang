@@ -7,7 +7,7 @@ import type { InternalType } from './types/internal.js';
 import { freshVar } from './types/internal.js';
 
 /** Bump when export shape changes (e.g. new `kind` values) so stale cache `.kti` files are rejected and deps recompiled. */
-const KTI_VERSION = 2;
+const KTI_VERSION = 3;
 
 /** Serialized type for JSON (var ids in scheme body are 0-based indices into scheme vars). */
 type SerType =
@@ -161,7 +161,7 @@ function deserializeType(raw: unknown, schemeVars?: InternalType[]): InternalTyp
   return { kind: 'prim', name: 'Unit' };
 }
 
-export type TypesFileExportKind = 'function' | 'val' | 'var' | 'type' | 'exception';
+export type TypesFileExportKind = 'function' | 'val' | 'var' | 'type' | 'exception' | 'constructor';
 
 export interface TypesFileFunctionExport {
   kind: 'function';
@@ -195,12 +195,22 @@ export interface TypesFileExceptionExport {
   type: SerType;
 }
 
+/** Exported non-opaque ADT constructor (namespace `M.Ctor` / `.kti` consumers). */
+export interface TypesFileConstructorExport {
+  kind: 'constructor';
+  adt_id: number;
+  ctor_index: number;
+  arity: number;
+  type: SerType;
+}
+
 export type TypesFileExportEntry =
   | TypesFileFunctionExport
   | TypesFileValExport
   | TypesFileVarExport
   | TypesFileTypeAliasExport
-  | TypesFileExceptionExport;
+  | TypesFileExceptionExport
+  | TypesFileConstructorExport;
 
 export interface TypesFileExport {
   functions: Record<string, TypesFileExportEntry>;
@@ -213,6 +223,9 @@ export interface ResolvedTypesFileExport {
   type: InternalType;
   /** Setter function index in package function table; present when kind === 'var'. */
   setter_index?: number;
+  /** Present when kind === 'constructor' (dependency bytecode ADT table index). */
+  adt_id?: number;
+  ctor_index?: number;
 }
 
 export interface ResolvedTypeAliasExport {
@@ -228,6 +241,9 @@ export type TypesFileExportInput = {
   type: InternalType;
   /** Required when kind === 'var'. */
   setter_index?: number;
+  /** Required when kind === 'constructor'. */
+  adt_id?: number;
+  ctor_index?: number;
 };
 
 /**
@@ -242,6 +258,22 @@ export function writeTypesFile(
   const functions: Record<string, TypesFileExportEntry> = {};
   for (const [name, exp] of exports) {
     const kind = exp.kind ?? 'function';
+    if (kind === 'constructor') {
+      const adt_id = exp.adt_id;
+      const ctor_index = exp.ctor_index;
+      const arity = exp.arity ?? 0;
+      if (adt_id === undefined || ctor_index === undefined) {
+        throw new Error(`Types file: constructor export "${name}" requires adt_id and ctor_index`);
+      }
+      functions[name] = {
+        kind: 'constructor',
+        adt_id,
+        ctor_index,
+        arity,
+        type: serializeType(exp.type),
+      };
+      continue;
+    }
     if (kind === 'exception') {
       functions[name] = { kind: 'exception', type: serializeType(exp.type) };
       continue;
@@ -303,6 +335,18 @@ export function readTypesFile(path: string): { exports: Map<string, ResolvedType
         kind: 'type', 
         type: deserializeType(typeExp.type),
         opaque: typeExp.opaque 
+      });
+      continue;
+    }
+    if (kind === 'constructor') {
+      const ce = exp as TypesFileConstructorExport;
+      out.set(name, {
+        kind: 'constructor',
+        function_index: 0,
+        arity: ce.arity,
+        type: deserializeType(ce.type),
+        adt_id: ce.adt_id,
+        ctor_index: ce.ctor_index,
       });
       continue;
     }

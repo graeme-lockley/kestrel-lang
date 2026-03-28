@@ -43,6 +43,7 @@ const OP_NAMES: Record<number, string> = {
   0x21: 'LOAD_FN',
   0x22: 'MAKE_CLOSURE',
   0x23: 'LOAD_IMPORTED_FN',
+  0x24: 'CONSTRUCT_IMPORT',
 };
 
 function readU32(data: Uint8Array, offset: number): number {
@@ -270,6 +271,10 @@ function disasm(
       case 0x14: // CONSTRUCT
         operands = ` ${readU32(data, pc)}, ${readU32(data, pc + 4)}, ${readU32(data, pc + 8)}`;
         pc += 12;
+        break;
+      case 0x24: // CONSTRUCT_IMPORT
+        operands = ` ${readU32(data, pc)}, ${readU32(data, pc + 4)}, ${readU32(data, pc + 8)}, ${readU32(data, pc + 12)}`;
+        pc += 16;
         break;
       case 0x15: // MATCH
         {

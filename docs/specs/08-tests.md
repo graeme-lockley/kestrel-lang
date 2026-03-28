@@ -57,6 +57,7 @@ A conforming implementation must:
 
 - **Resolution:** Local path imports and (where supported) URL imports resolve deterministically; lockfile and cache behaviour match [07-modules.md](07-modules.md).
 - **Re-export and conflicts:** Re-exports and name conflicts are tested; conflicts produce compile errors unless renamed.
+- **Namespace imports and ADT constructors:** `import * as M from "…"` exposes exported **non-opaque** ADT constructors as `M.Ctor` / `M.Ctor(…)` with correct typing and VM interop (same ADT identity as construction in the exporter). Coverage includes nullary, unary, and multi-argument constructors; opaque constructor rejection; wrong name, arity, and argument types; and at least one **`.kti`-only** dependency path (importer uses a fresh types file without re-parsing dependency source). See `tests/unit/namespace_import.test.ks`, `tests/fixtures/opaque_pkg/`, and `compiler/test/integration/compile-file.test.ts`.
 
 ### 2.7 Standard Library
 

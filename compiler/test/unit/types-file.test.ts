@@ -139,6 +139,32 @@ describe('types-file', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it('round-trips constructor export kind (namespace / .kti)', () => {
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, 'ctor.kti');
+    const intPrim = { kind: 'prim' as const, name: 'Int' as const };
+    const tokApp = { kind: 'app' as const, name: 'PublicToken', args: [] as InternalType[] };
+    const exports = new Map<string, TypesFileExportInput>();
+    exports.set('PubNum', {
+      kind: 'constructor',
+      function_index: 0,
+      arity: 1,
+      adt_id: 4,
+      ctor_index: 0,
+      type: { kind: 'arrow', params: [intPrim], return: tokApp },
+    });
+    writeTypesFile(path, exports);
+    const read = readTypesFile(path);
+    expect(read.exports.size).toBe(1);
+    const p = read.exports.get('PubNum');
+    expect(p?.kind).toBe('constructor');
+    expect(p?.adt_id).toBe(4);
+    expect(p?.ctor_index).toBe(0);
+    expect(p?.arity).toBe(1);
+    expect(typeStructureEqual(p!.type, exports.get('PubNum')!.type)).toBe(true);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
   it('round-trips exception export kind', () => {
     mkdirSync(dir, { recursive: true });
     const path = join(dir, 'exn.kti');

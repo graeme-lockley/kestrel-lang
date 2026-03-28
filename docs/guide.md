@@ -471,6 +471,8 @@ import * as Str from "kestrel:string"
 val n = Str.length("hello")  // 5
 ```
 
+If a module exports an ADT (not `opaque`), you can use its constructors through the namespace: nullary constructors are values (`Lib.Eof`), and n-ary ones use call syntax (`Lib.Pair(1, 2)`), same rules as unqualified constructors (see [Language spec — ADTs](specs/06-typesystem.md)).
+
 Relative imports use file paths:
 
 ```kestrel

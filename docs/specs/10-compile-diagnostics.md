@@ -88,6 +88,7 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 | `type:break_outside_loop` | `break` is not inside a `while` body. |
 | `type:continue_outside_loop` | `continue` is not inside a `while` body. |
 | `export:not_exported` | Module does not export the requested name. |
+| `compile:jvm_namespace_constructor` | JVM compile path does not support namespace-qualified ADT constructor calls (`M.Ctor(…)`); use the VM target or a wrapper function in the dependency. |
 | `file:read_error` | Could not read file. |
 | `file:circular_import` | Circular import detected. |
 

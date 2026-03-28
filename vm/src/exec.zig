@@ -205,6 +205,7 @@ const CALL_INDIRECT: u8 = 0x20;
 const LOAD_FN: u8 = 0x21;
 const MAKE_CLOSURE: u8 = 0x22;
 const LOAD_IMPORTED_FN: u8 = 0x23;
+const CONSTRUCT_IMPORT: u8 = 0x24;
 
 const RECORD_KIND: u8 = 1;
 const ADT_KIND: u8 = 2;
@@ -1627,6 +1628,96 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 adt[1] = 0; // mark bit
                 adt[2] = 1; // layout version 1 (has module_index, adt_id for formatting)
                 std.mem.writeInt(u32, adt[4..8], current_module.module_index, .little);
+                std.mem.writeInt(u32, adt[8..12], adt_id, .little);
+                std.mem.writeInt(u32, adt[12..16], ctor, .little);
+                std.mem.writeInt(u32, adt[16..20], arity, .little);
+                const fields_ptr = @as([*]Value, @ptrCast(@alignCast(adt.ptr + gc_mod.ADT_HEADER)));
+                var i: usize = 0;
+                while (i < arity) : (i += 1) {
+                    fields_ptr[i] = stack[sp - arity + i];
+                }
+
+                sp -= arity;
+                const addr = @intFromPtr(adt.ptr);
+                if (!pushOperand(&stack, &sp, Value.ptr(addr))) {
+                    operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                    return false;
+                }
+            },
+            CONSTRUCT_IMPORT => {
+                const construct_import_pc = pc - 1;
+                const import_idx = std.mem.readInt(u32, code[pc..][0..4], .little);
+                const adt_id = std.mem.readInt(u32, code[pc + 4 ..][0..4], .little);
+                const ctor = std.mem.readInt(u32, code[pc + 8 ..][0..4], .little);
+                const arity = std.mem.readInt(u32, code[pc + 12 ..][0..4], .little);
+                pc += 16;
+                if (sp < arity) return false;
+                if (import_idx >= current_module.import_specifiers.len) return false;
+
+                const specifier = current_module.import_specifiers[import_idx];
+                const base_path = current_module.source_path orelse entry_path;
+                const dep_path = resolveImportPath(allocator, specifier, base_path) catch return false;
+
+                path_deps_to_free.ensureTotalCapacity(allocator, path_deps_to_free.items.len + 1) catch {
+                    allocator.free(dep_path);
+                    return false;
+                };
+                path_deps_to_free.appendAssumeCapacity(dep_path);
+
+                const already_loaded = path_to_module.get(dep_path) != null;
+                var dep_module_ptr: *load_mod.Module = undefined;
+                if (path_to_module.get(dep_path)) |ptr| {
+                    dep_module_ptr = ptr;
+                } else {
+                    dependency_cache.ensureTotalCapacity(allocator, dependency_cache.items.len + 1) catch return false;
+                    const loaded = load_mod.load(allocator, dep_path) catch return false;
+                    dependency_cache.appendAssumeCapacity(loaded);
+                    const ptr = &dependency_cache.items[dependency_cache.items.len - 1];
+
+                    module_ptrs.ensureTotalCapacity(allocator, module_ptrs.items.len + 1) catch return false;
+
+                    ptr.module_index = @intCast(module_ptrs.items.len);
+                    module_ptrs.appendAssumeCapacity(ptr);
+                    ptr.source_path = allocator.dupe(u8, dep_path) catch null;
+
+                    const path_key = allocator.dupe(u8, dep_path) catch return false;
+                    path_keys.append(allocator, path_key) catch {
+                        allocator.free(path_key);
+                        return false;
+                    };
+                    path_to_module.put(path_key, ptr) catch {
+                        allocator.free(path_key);
+                        return false;
+                    };
+                    dep_module_ptr = ptr;
+                }
+
+                if (!already_loaded) {
+                    if (frame_sp >= max_frames) {
+                        std.debug.print("kestrel: stack overflow (exceeded {d} call frames)\n", .{max_frames});
+                        return false;
+                    }
+                    call_frames[frame_sp] = .{ .pc = construct_import_pc, .module = current_module, .saved_sp = sp, .discard_return = true };
+                    for (0..max_locals) |i| {
+                        saved_locals[frame_sp][i] = if (i < current_locals.len) current_locals[i] else Value.unit();
+                    }
+                    frame_sp += 1;
+                    current_module = dep_module_ptr;
+                    code = current_module.code;
+                    constants = current_module.constants;
+                    functions = current_module.functions;
+                    shapes = current_module.shapes;
+                    current_locals = if (dep_module_ptr.globals.len > 0) dep_module_ptr.globals else saved_locals[frame_sp][0..];
+                    pc = 0;
+                    continue;
+                }
+
+                const adt = gc.allocObject(gc_mod.ADT_HEADER + arity * 8) catch return false;
+                @memset(adt, 0);
+                adt[0] = ADT_KIND;
+                adt[1] = 0;
+                adt[2] = 1;
+                std.mem.writeInt(u32, adt[4..8], dep_module_ptr.module_index, .little);
                 std.mem.writeInt(u32, adt[8..12], adt_id, .little);
                 std.mem.writeInt(u32, adt[12..16], ctor, .little);
                 std.mem.writeInt(u32, adt[16..20], arity, .little);

@@ -37,6 +37,8 @@ export const enum Op {
   LOAD_FN = 0x21,
   MAKE_CLOSURE = 0x22,
   LOAD_IMPORTED_FN = 0x23,
+  /** Construct ADT value tagged with a dependency module (import_index, adt_id, ctor, arity). */
+  CONSTRUCT_IMPORT = 0x24,
 }
 
 const code: number[] = [];
@@ -155,6 +157,15 @@ export function emitMakeClosure(fnIndex: number): void {
 /** Append CONSTRUCT adt_id, ctor, arity. */
 export function emitConstruct(adtId: number, ctor: number, arity: number): void {
   u8(Op.CONSTRUCT);
+  u32(adtId);
+  u32(ctor);
+  u32(arity);
+}
+
+/** Append CONSTRUCT_IMPORT import_index, adt_id, ctor, arity (ADT identity = dependency module). */
+export function emitConstructImport(importIndex: number, adtId: number, ctor: number, arity: number): void {
+  u8(Op.CONSTRUCT_IMPORT);
+  u32(importIndex);
   u32(adtId);
   u32(ctor);
   u32(arity);

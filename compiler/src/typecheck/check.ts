@@ -50,7 +50,13 @@ export interface TypecheckOptions {
   sourceContent?: string;
 }
 
-export function typecheck(program: Program, options?: TypecheckOptions): { ok: true; exports: Map<string, InternalType>; exportedTypeAliases: Map<string, InternalType>; exportedTypeVisibility: Map<string, 'local' | 'opaque' | 'export'> } | { ok: false; diagnostics: Diagnostic[] } {
+export function typecheck(program: Program, options?: TypecheckOptions): {
+  ok: true;
+  exports: Map<string, InternalType>;
+  exportedTypeAliases: Map<string, InternalType>;
+  exportedTypeVisibility: Map<string, 'local' | 'opaque' | 'export'>;
+  exportedConstructors: Map<string, InternalType>;
+} | { ok: false; diagnostics: Diagnostic[] } {
   resetVarId();
   const diagnostics: Diagnostic[] = [];
   const subst = new Map<number, InternalType>();
@@ -59,6 +65,8 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
   /** Generic type aliases (e.g. `type Dict<K,V> = { ... }`): expand `App` to body for unify / field access. */
   const genericTypeAliasDefs = new Map<string, { paramVarIds: number[]; body: InternalType }>();
   const adtConstructors = new Map<string, { name: string; arity: number }[]>();
+  /** Exported ADT constructor names -> type scheme (for namespace importers and .kti). */
+  const exportedConstructors = new Map<string, InternalType>();
   const opaqueTypes = new Set<string>();
   const exportedTypeVisibility = new Map<string, 'local' | 'opaque' | 'export'>();
   let inAsyncContext = false; // Track if we're in an async function
@@ -1319,6 +1327,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
           }
           
           adtConstructors.set(node.name, node.body.constructors.map(c => ({ name: c.name, arity: c.params.length })));
+          if (node.visibility === 'export') {
+            for (const ctor of node.body.constructors) {
+              const ct = env.get(ctor.name);
+              if (ct != null) exportedConstructors.set(ctor.name, apply(ct));
+            }
+          }
         }
       } else if (node.kind === 'ExceptionDecl') {
         const adtType: InternalType = { kind: 'app', name: node.name, args: [] };
@@ -1446,7 +1460,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       }
     }
     if (diagnostics.length > 0) return { ok: false, diagnostics };
-    return { ok: true, exports, exportedTypeAliases, exportedTypeVisibility };
+    return { ok: true, exports, exportedTypeAliases, exportedTypeVisibility, exportedConstructors };
   } catch (e) {
     if (e instanceof UnifyError) {
       const err = e as UnifyError & { blameNode?: unknown; relatedNode?: unknown };

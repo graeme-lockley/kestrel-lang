@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { compileFile } from '../../src/compile-file.js';
 import { resolve } from 'path';
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, utimesSync, statSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -125,6 +125,111 @@ val x = Str.length("hi")`;
     expect(result.kbc.length).toBeGreaterThan(0);
     const imported = readImportedFunctionTable(result.kbc);
     expect(imported.length).toBeGreaterThanOrEqual(1);
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  it('namespace-qualified exported ADT constructor compiles (CONSTRUCT_IMPORT path)', () => {
+    const outDir = join(tmpdir(), `kestrel-ns-ctor-${Date.now()}`);
+    mkdirSync(outDir, { recursive: true });
+    const rootProj = resolve(process.cwd(), '..');
+    const libSrc = readFileSync(join(rootProj, 'tests/fixtures/opaque_pkg/lib.ks'), 'utf-8');
+    writeFileSync(join(outDir, 'lib.ks'), libSrc);
+    const importerPath = join(outDir, 'importer.ks');
+    writeFileSync(
+      importerPath,
+      `import * as Lib from "./lib.ks"
+export fun run(): Int = Lib.publicTokenToInt(Lib.PubNum(9))`
+    );
+    const getOutputPaths = (sourcePath: string) => {
+      const base = sourcePath.replace(/\.ks$/, '');
+      return { kbc: base + '.kbc', kti: base + '.kti' };
+    };
+    const r = compileFile(importerPath, { projectRoot: outDir, getOutputPaths });
+    expect(r.ok).toBe(true);
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  it('namespace constructor: importer compiles when dependency is .kti-only (stale .ks ignored)', () => {
+    const outDir = join(tmpdir(), `kestrel-ns-kti-${Date.now()}`);
+    mkdirSync(outDir, { recursive: true });
+    const rootProj = resolve(process.cwd(), '..');
+    const libPath = join(outDir, 'lib.ks');
+    const libSrc = readFileSync(join(rootProj, 'tests/fixtures/opaque_pkg/lib.ks'), 'utf-8');
+    writeFileSync(libPath, libSrc);
+    const getOutputPaths = (sourcePath: string) => {
+      const base = sourcePath.replace(/\.ks$/, '');
+      return { kbc: base + '.kbc', kti: base + '.kti' };
+    };
+    const libCompile = compileFile(libPath, { projectRoot: outDir, getOutputPaths });
+    expect(libCompile.ok).toBe(true);
+    writeFileSync(libPath, 'this is not valid kestrel source {{{');
+    const ktiPath = libPath.replace(/\.ks$/, '.kti');
+    const kbcPath = libPath.replace(/\.ks$/, '.kbc');
+    const future = new Date(Date.now() + 120_000);
+    const past = new Date(Date.now() - 120_000);
+    utimesSync(ktiPath, future, future);
+    utimesSync(kbcPath, future, future);
+    utimesSync(libPath, past, past);
+    expect(statSync(ktiPath).mtimeMs >= statSync(libPath).mtimeMs).toBe(true);
+    const importerPath = join(outDir, 'importer.ks');
+    writeFileSync(
+      importerPath,
+      `import * as Lib from "./lib.ks"
+export fun run(): Int = Lib.publicTokenToInt(Lib.PubPair(2, 3))`
+    );
+    const r = compileFile(importerPath, { projectRoot: outDir, getOutputPaths });
+    expect(r.ok).toBe(true);
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  it('rejects opaque ADT constructor through namespace', () => {
+    const outDir = join(tmpdir(), `kestrel-ns-opaque-ctor-${Date.now()}`);
+    mkdirSync(outDir, { recursive: true });
+    const rootProj = resolve(process.cwd(), '..');
+    writeFileSync(join(outDir, 'lib.ks'), readFileSync(join(rootProj, 'tests/fixtures/opaque_pkg/lib.ks'), 'utf-8'));
+    const mainPath = join(outDir, 'main.ks');
+    writeFileSync(mainPath, `import * as Lib from "./lib.ks"\nval _ = Lib.SecNum(1)`);
+    const r = compileFile(mainPath, { projectRoot: outDir });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.diagnostics.some((d) => d.message.includes('does not export') || d.message.includes('SecNum'))).toBe(true);
+    }
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  it('rejects unknown namespace constructor name', () => {
+    const outDir = join(tmpdir(), `kestrel-ns-bad-ctor-${Date.now()}`);
+    mkdirSync(outDir, { recursive: true });
+    const rootProj = resolve(process.cwd(), '..');
+    writeFileSync(join(outDir, 'lib.ks'), readFileSync(join(rootProj, 'tests/fixtures/opaque_pkg/lib.ks'), 'utf-8'));
+    const mainPath = join(outDir, 'main.ks');
+    writeFileSync(mainPath, `import * as Lib from "./lib.ks"\nval _ = Lib.NotARealCtor(1)`);
+    const r = compileFile(mainPath, { projectRoot: outDir });
+    expect(r.ok).toBe(false);
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  it('type error on wrong arity for namespace constructor', () => {
+    const outDir = join(tmpdir(), `kestrel-ns-arity-${Date.now()}`);
+    mkdirSync(outDir, { recursive: true });
+    const rootProj = resolve(process.cwd(), '..');
+    writeFileSync(join(outDir, 'lib.ks'), readFileSync(join(rootProj, 'tests/fixtures/opaque_pkg/lib.ks'), 'utf-8'));
+    const mainPath = join(outDir, 'main.ks');
+    writeFileSync(mainPath, `import * as Lib from "./lib.ks"\nval _ = Lib.PubNum()`);
+    const r = compileFile(mainPath, { projectRoot: outDir });
+    expect(r.ok).toBe(false);
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  it('type error on wrong argument type for namespace constructor', () => {
+    const outDir = join(tmpdir(), `kestrel-ns-argty-${Date.now()}`);
+    mkdirSync(outDir, { recursive: true });
+    const rootProj = resolve(process.cwd(), '..');
+    writeFileSync(join(outDir, 'lib.ks'), readFileSync(join(rootProj, 'tests/fixtures/opaque_pkg/lib.ks'), 'utf-8'));
+    const mainPath = join(outDir, 'main.ks');
+    writeFileSync(mainPath, `import * as Lib from "./lib.ks"\nval _ = Lib.PubNum("hi")`);
+    const r = compileFile(mainPath, { projectRoot: outDir });
+    expect(r.ok).toBe(false);
     rmSync(outDir, { recursive: true, force: true });
   });
 

@@ -89,10 +89,11 @@ Logical `&` and `|` in the language are short-circuit; the compiler emits branch
 
 | Instruction | Operands | Effect |
 |-------------|----------|--------|
-| `CONSTRUCT` | `adt_id` (u32), `ctor` (u32), `arity` (u32) | Pop `arity` values (constructor payload, left-to-right). Build an ADT value for the constructor at index `ctor` of the ADT at index `adt_id` (03 §10: ADT table, constructor order = 0-based tag). Push the value. For no-payload constructors, `arity` is 0. |
+| `CONSTRUCT` | `adt_id` (u32), `ctor` (u32), `arity` (u32) | Pop `arity` values (constructor payload, left-to-right). Build an ADT value for the constructor at index `ctor` of the ADT at index `adt_id` (03 §10: ADT table, constructor order = 0-based tag). Push the value. For no-payload constructors, `arity` is 0. The ADT value’s **defining module** is the **current** module (05 §2). |
+| `CONSTRUCT_IMPORT` | `import_index` (u32), `adt_id` (u32), `ctor` (u32), `arity` (u32) | Same stack effect as **CONSTRUCT**, but the ADT table indices refer to the **dependency** package selected by `import_index` (03 §6.5 import table, same index as for cross-module **CALL**). The VM builds the ADT value with **module_index** = that loaded dependency so values match **`CONSTRUCT`** executed inside the exporter (07 §2.3, §10). |
 | `MATCH` | — | Pop one value (ADT or list cons). Dispatch by runtime tag to one of the following **inline** targets: the next instruction encodes a **jump table** (e.g. count + offsets per tag). Exact encoding of the jump table is part of the instruction format (§4). Used for `match (e) { Ctor1 => ... ; Ctor2 => ... }`, list cons pattern, etc. |
 
-**Language coverage:** ADT construction (including List cons `::`, Option, Result, exceptions), pattern matching on constructors and list patterns. **Note:** List is an ADT (e.g. Nil, Cons); `[a,b,c]` and `a::b` compile to CONSTRUCT with the list ADT and appropriate constructor.
+**Language coverage:** ADT construction (including List cons `::`, Option, Result, exceptions), **namespace-qualified** exported constructors **`M.Ctor(…)`** via **CONSTRUCT_IMPORT**, pattern matching on constructors and list patterns. **Note:** List is an ADT (e.g. Nil, Cons); `[a,b,c]` and `a::b` compile to CONSTRUCT with the list ADT and appropriate constructor.
 
 ### 1.8 Records
 
@@ -138,7 +139,8 @@ The code section (03 §7) contains a sequence of instructions. Every operand tha
 |---------|---------|----------------|
 | `idx` (LOAD_CONST) | Constant pool index | Section 1 (Constant pool); [0, constant_pool_count) |
 | `fn_id` (CALL) | Local or imported function index | **Local:** [0, function_count) → 03 §6.1 (this module’s function table); code address = code section start + function_entry.code_offset. **Imported:** [function_count, function_count + imported_function_count) → 03 §6.6 (imported function table) yields (import_index, function_index); VM resolves module for import, then calls that function in that module. |
-| `adt_id`, `ctor` (CONSTRUCT) | ADT index and constructor index | Section 6 (ADT table); constructor order = runtime tag. |
+| `adt_id`, `ctor` (CONSTRUCT) | ADT index and constructor index in **current** module | Section 6 (ADT table); constructor order = runtime tag. |
+| `import_index`, `adt_id`, `ctor` (CONSTRUCT_IMPORT) | Import table index + ADT/ctor in **target** module | 03 §6.5 (import table); ADT table of the resolved dependency package. |
 | `shape_id` (ALLOC_RECORD, SPREAD) | Shape table index | Section 5 (Shape table); [0, shape_count) |
 | `slot` (GET_FIELD, SET_FIELD) | Field index within the record’s shape | Shape’s field order (03 §9) |
 | `offset`, `handler_offset` | Byte offset within the code section (or within current function) | Code section (03 §7); see §4 |
@@ -155,7 +157,7 @@ All multi-byte operands and offsets in the code section are **little-endian** (c
 
 ### 4.1 Opcode assignment
 
-Each instruction has a single-byte opcode. Opcodes 0x00–0x1E are assigned as below; 0x1F–0xFF are reserved.
+Each instruction has a single-byte opcode. Opcodes 0x01–0x24 are assigned as below; 0x00, 0x25–0xFF are reserved unless assigned in a future revision.
 
 | Opcode | Instruction     | Operands (after opcode, in order) |
 |--------|-----------------|------------------------------------|
@@ -194,8 +196,9 @@ Each instruction has a single-byte opcode. Opcodes 0x00–0x1E are assigned as b
 | 0x21   | LOAD_FN         | fn_index (u32) |
 | 0x22   | MAKE_CLOSURE    | fn_index (u32) |
 | 0x23   | LOAD_IMPORTED_FN | imported_fn_index (u32) |
+| 0x24   | CONSTRUCT_IMPORT | import_index (u32), adt_id (u32), ctor (u32), arity (u32) |
 
-**Reserved:** 0x00, 0x24–0xFF. Decoder must reject reserved or unknown opcodes.
+**Reserved:** 0x00, 0x25–0xFF. Decoder must reject reserved or unknown opcodes.
 
 ### 4.2 MATCH instruction layout
 
@@ -223,6 +226,7 @@ So the total size of a MATCH instruction is **1 + 4 + 4×count** bytes. The next
 | JUMP              | 1 + 4 = 5    |
 | JUMP_IF_FALSE     | 1 + 4 = 5    |
 | CONSTRUCT         | 1 + 4 + 4 + 4 = 13 |
+| CONSTRUCT_IMPORT  | 1 + 4 + 4 + 4 + 4 = 17 |
 | MATCH             | 1 + 4 + 4×count |
 | ALLOC_RECORD      | 1 + 4 = 5    |
 | GET_FIELD, SET_FIELD | 1 + 4 = 5  |
@@ -245,7 +249,7 @@ Instruction boundaries are thus deterministic: a decoder can always compute the 
 - **Logic:** Short-circuit `&` and `|` are compiled using JUMP_IF_FALSE and JUMP (no AND/OR instructions).
 - **If/else, match, try/catch:** JUMP, JUMP_IF_FALSE, MATCH, TRY, END_TRY (01 §3.2, §4).
 - **Functions and calls:** CALL (function table index), RET (01 §3.1).
-- **Lists and ADTs:** CONSTRUCT with list ADT and Nil/Cons (and Option, Result, Value from 02); MATCH for pattern matching on constructors and list patterns (01 §3.2, 02 List/Option/Result/Value).
+- **Lists and ADTs:** CONSTRUCT with list ADT and Nil/Cons (and Option, Result, Value from 02); CONSTRUCT_IMPORT for qualified **`M.Ctor(…)`** (07 §2.3); MATCH for pattern matching on constructors and list patterns (01 §3.2, 02 List/Option/Result/Value).
 - **Primitive literal match patterns:** For `Int`/`Float`/`String`/`Char`/`Unit` literal pattern chains, compilers emit sequential tests using `LOAD_LOCAL` (scrutinee), `LOAD_CONST` (literal), comparison (`EQ` or equivalent predicate), and `JUMP_IF_FALSE` to the next arm, with `JUMP` to the common end after a successful arm. ADT/list constructor matches continue to use `MATCH`.
 - **Tuple pattern match:** Tuple arms `(p1, p2, …)` are **not** lowered with the `MATCH` opcode (that opcode is for ADT constructor dispatch). The compiler emits `GET_FIELD` with field indices `0`, `1`, … on the scrutinee record, binds or compares subpatterns (including nested tuple patterns and literal subpatterns), and uses `JUMP_IF_FALSE` / `JUMP` between cases like primitive literal chains.
 - **Records and tuples:** ALLOC_RECORD, GET_FIELD, SET_FIELD, SPREAD (01 §3.2, §3.6). Tuples as records with positional shape.
@@ -270,7 +274,7 @@ First-class closures (e.g. passing a lambda to a higher-order function) are thus
 ## 6. Execution Efficiency
 
 - **Constant pool:** All literal loads go through LOAD_CONST; the constant pool (03 §5) avoids embedding large immediates in the instruction stream and allows deduplication.
-- **Direct indices:** CALL, CONSTRUCT, ALLOC_RECORD, SPREAD use direct table indices (function, ADT, shape) so the VM does a single table lookup to get code address or layout.
+- **Direct indices:** CALL, CONSTRUCT, CONSTRUCT_IMPORT, ALLOC_RECORD, SPREAD use direct table indices (function, import + ADT, ADT, shape) so the VM does a single table lookup to get code address or layout.
 - **Byte offsets:** Fixed byte-offset jumps allow compact relative branches (e.g. 16-bit signed offset from current PC) and deterministic interpretation.
 - **Stack discipline:** Single stack for operands and clear call convention minimize register pressure and keep the VM simple.
 - **No redundant work:** Comparison and arithmetic are single-pop/push; MATCH is a single dispatch. No hidden allocations except where the runtime model requires (e.g. boxed Float, heap records).

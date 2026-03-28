@@ -41,6 +41,10 @@ function patchDepCode(
         }
         pc += 12;
         break;
+      case Op.CONSTRUCT_IMPORT:
+        // import_index is stable; adt_id is relative to the dependency module (not merged ADT table).
+        pc += 16;
+        break;
       case Op.ALLOC_RECORD:
       case Op.GET_FIELD:
       case Op.SET_FIELD:

@@ -55,6 +55,9 @@ export const CODES = {
     read_error: 'file:read_error',
     circular_import: 'file:circular_import',
   },
+  compile: {
+    jvm_namespace_constructor: 'compile:jvm_namespace_constructor',
+  },
 } as const;
 
 /** 1-based line and column for the character at offset in source. */

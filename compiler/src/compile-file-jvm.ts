@@ -9,7 +9,8 @@ import { parse } from './parser/index.js';
 import { typecheck, type TypecheckOptions } from './typecheck/check.js';
 import { jvmCodegen, type JvmCodegenResult } from './jvm-codegen/index.js';
 import { resolveSpecifier } from './resolve.js';
-import type { Program, ImportDecl } from './ast/nodes.js';
+import type { Program, ImportDecl, Expr, TopLevelStmt, TopLevelDecl, BlockExpr } from './ast/nodes.js';
+import { getInferredType } from './typecheck/check.js';
 import type { InternalType } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
 import { CODES, locationFromSpan, locationFileOnly } from './diagnostics/types.js';
@@ -66,6 +67,161 @@ function diag(file: string, code: string, message: string, span?: Span, source?:
   };
 }
 
+function collectJvmNamespaceConstructorDiags(
+  program: Program,
+  nsCtorByNs: Map<string, Set<string>>,
+  file: string,
+  source: string
+): Diagnostic[] {
+  const diags: Diagnostic[] = [];
+  const msgCall = (ns: string, f: string) =>
+    `Namespace-qualified ADT constructor ${ns}.${f} is not supported when compiling to JVM; use the VM (kestrel run) or a wrapper function in the dependency.`;
+
+  function visit(e: Expr, isCallCallee: boolean): void {
+    switch (e.kind) {
+      case 'CallExpr': {
+        if (e.callee.kind === 'FieldExpr' && e.callee.object.kind === 'IdentExpr') {
+          const ns = e.callee.object.name;
+          const f = e.callee.field;
+          if (nsCtorByNs.get(ns)?.has(f)) {
+            diags.push(diag(file, CODES.compile.jvm_namespace_constructor, msgCall(ns, f), e.callee.span, source));
+          }
+        }
+        visit(e.callee, true);
+        for (const a of e.args) visit(a, false);
+        return;
+      }
+      case 'FieldExpr': {
+        visit(e.object, false);
+        if (!isCallCallee && e.object.kind === 'IdentExpr') {
+          const ns = e.object.name;
+          const f = e.field;
+          if (nsCtorByNs.get(ns)?.has(f)) {
+            const t = getInferredType(e);
+            if (t?.kind === 'app') {
+              diags.push(diag(file, CODES.compile.jvm_namespace_constructor, msgCall(ns, f), e.span, source));
+            }
+          }
+        }
+        return;
+      }
+      case 'IfExpr':
+        visit(e.cond, false);
+        visit(e.then, false);
+        if (e.else) visit(e.else, false);
+        return;
+      case 'WhileExpr':
+        visit(e.cond, false);
+        for (const st of e.body.stmts) visitBlockStmt(st);
+        visit(e.body.result, false);
+        return;
+      case 'BlockExpr':
+        for (const st of e.stmts) visitBlockStmt(st);
+        visit(e.result, false);
+        return;
+      case 'MatchExpr':
+        visit(e.scrutinee, false);
+        for (const c of e.cases) visit(c.body, false);
+        return;
+      case 'TryExpr':
+        visit(e.body, false);
+        for (const c of e.cases) visit(c.body, false);
+        return;
+      case 'LambdaExpr':
+        visit(e.body, false);
+        return;
+      case 'PipeExpr':
+        visit(e.left, false);
+        visit(e.right, false);
+        return;
+      case 'TemplateExpr':
+        for (const p of e.parts) if (p.type === 'interp') visit(p.expr, false);
+        return;
+      case 'BinaryExpr':
+        visit(e.left, false);
+        visit(e.right, false);
+        return;
+      case 'UnaryExpr':
+        visit(e.operand, false);
+        return;
+      case 'ConsExpr':
+        visit(e.head, false);
+        visit(e.tail, false);
+        return;
+      case 'TupleExpr':
+        for (const el of e.elements) visit(el, false);
+        return;
+      case 'ListExpr':
+        for (const el of e.elements) {
+          if (typeof el === 'object' && el !== null && 'spread' in el) {
+            visit((el as { expr: Expr }).expr, false);
+          } else {
+            visit(el as Expr, false);
+          }
+        }
+        return;
+      case 'RecordExpr':
+        if (e.spread) visit(e.spread, false);
+        for (const f of e.fields) visit(f.value, false);
+        return;
+      case 'ThrowExpr':
+        visit(e.value, false);
+        return;
+      case 'AwaitExpr':
+        visit(e.value, false);
+        return;
+      default:
+        return;
+    }
+  }
+
+  function visitBlockStmt(s: BlockExpr['stmts'][number]): void {
+    switch (s.kind) {
+      case 'ExprStmt':
+        visit(s.expr, false);
+        return;
+      case 'ValStmt':
+      case 'VarStmt':
+        visit(s.value, false);
+        return;
+      case 'AssignStmt':
+        visit(s.target, false);
+        visit(s.value, false);
+        return;
+      case 'FunStmt':
+        visit(s.body, false);
+        return;
+      case 'BreakStmt':
+      case 'ContinueStmt':
+        return;
+    }
+  }
+
+  function visitStmt(s: TopLevelStmt): void {
+    if (!s) return;
+    switch (s.kind) {
+      case 'ExprStmt':
+        visit(s.expr, false);
+        return;
+      default:
+        return;
+    }
+  }
+
+  for (const node of program.body) {
+    if (!node) continue;
+    const n = node as TopLevelDecl | TopLevelStmt;
+    if (n.kind === 'FunDecl') {
+      visit(n.body, false);
+    } else if (n.kind === 'ValDecl' || n.kind === 'VarDecl') {
+      visit(n.value, false);
+    } else {
+      visitStmt(n as TopLevelStmt);
+    }
+  }
+  return diags;
+}
+
 /**
  * Derive JVM internal class name from the absolute source path.
  * Example:
@@ -104,6 +260,7 @@ export function compileFileJvm(
       className: string;
       exports: Map<string, InternalType>;
       exportedTypeAliases: Map<string, InternalType>;
+      exportedConstructors: Map<string, InternalType>;
       exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>;
     }
   >();
@@ -121,6 +278,7 @@ export function compileFileJvm(
     className: string;
     exports: Map<string, InternalType>;
     exportedTypeAliases: Map<string, InternalType>;
+    exportedConstructors: Map<string, InternalType>;
     exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>;
   } | { ok: false; diagnostics: Diagnostic[] } {
     if (visited.has(filePath)) {
@@ -210,6 +368,7 @@ export function compileFileJvm(
         const bindings = new Map<string, InternalType>();
         for (const [name, t] of depOut.exports) bindings.set(name, t);
         for (const [name, t] of depOut.exportedTypeAliases) bindings.set(name, t);
+        for (const [name, t] of depOut.exportedConstructors) bindings.set(name, t);
         importBindings.set(imp.name, { kind: 'namespace', bindings });
       }
       depResults.push({
@@ -230,6 +389,20 @@ export function compileFileJvm(
     };
     const tc = typecheck(program, tcOpts);
     if (!tc.ok) return { ok: false, diagnostics: tc.diagnostics };
+
+    const nsCtorByNs = new Map<string, Set<string>>();
+    for (const imp of program.imports) {
+      if (imp.kind !== 'NamespaceImport') continue;
+      const depPath = resolved.get(imp.spec);
+      if (depPath == null) continue;
+      const depEntry = cache.get(depPath);
+      nsCtorByNs.set(imp.name, new Set(depEntry?.exportedConstructors.keys() ?? []));
+    }
+    const jvmCtorDiags = collectJvmNamespaceConstructorDiags(program, nsCtorByNs, filePath, source);
+    if (jvmCtorDiags.length > 0) {
+      visited.delete(filePath);
+      return { ok: false, diagnostics: jvmCtorDiags };
+    }
 
     const className = classNameForPath(filePath);
 
@@ -338,6 +511,7 @@ export function compileFileJvm(
       className,
       exports: tc.exports,
       exportedTypeAliases: tc.exportedTypeAliases,
+      exportedConstructors: tc.exportedConstructors,
       exportedTypeVisibility: tc.exportedTypeVisibility,
     });
     visited.delete(filePath);
@@ -350,6 +524,7 @@ export function compileFileJvm(
       className,
       exports: tc.exports,
       exportedTypeAliases: tc.exportedTypeAliases,
+      exportedConstructors: tc.exportedConstructors,
       exportedTypeVisibility: tc.exportedTypeVisibility,
     };
   }

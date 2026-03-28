@@ -71,6 +71,10 @@ When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
 
 - **`--format=json`** — Emit diagnostics in machine-readable form (JSON Lines, one JSON object per diagnostic on stderr). See [10-compile-diagnostics.md](10-compile-diagnostics.md) §7 for the exact format. When omitted, diagnostics are printed in human-readable form per §6.
 
+### 2.7 JVM backend limitations
+
+- **Namespace-qualified ADT constructors** (`M.Ctor` / `M.Ctor(…)` after `import * as M`, 07 §2.3) are **not** supported on the JVM compile path. The compiler must fail with a clear diagnostic (stable code `compile:jvm_namespace_constructor`, 10 §4). Use the **VM** target (`kestrel run`, default) or expose a normal exported function in the dependency that performs the construction.
+
 ---
 
 ## 3. Implementation Responsibilities

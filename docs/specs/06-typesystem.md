@@ -149,6 +149,8 @@ Constructors are in scope wherever the type name is in scope (module-level or im
 
 **Constructor application** uses standard call syntax: `Some(42)`, `Node(left, right)`. For nullary constructors, no parentheses: `None`, `Red`.
 
+**Qualified constructors (namespace import):** When `M` is bound by `import * as M from "…"` (07 §2.3), each exported constructor `C` of an exported **non-opaque** ADT in that module is available as **`M.C`**: nullary `M.C` has the same type **`T`** as unqualified `C`; k-ary **`M.C(e1,…,ek)`** has the same type rules as **`C(e1,…,ek)`** (payload types and return type `T`). Opaque ADT constructors are not members of `M`. Arity and argument-type errors are the same as for unqualified constructor application.
+
 **Pattern matching** on user-defined ADTs uses the same constructor syntax: `Some(x) => ...`, `Node(l, r) => ...`, `Red => ...`. Pattern variables bind to the positional payload values.
 
 **Exhaustiveness** for user-defined ADTs: the compiler builds a **constructor registry** from type declarations mapping each ADT name to the set of its constructors. When `match (e) { ... }` has `e` of a user-defined ADT type, every constructor must be covered by at least one case, or a catch-all (`_` or variable) must be present.
