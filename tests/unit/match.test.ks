@@ -16,6 +16,8 @@ fun fromResult(r: Result<Int, Int>): Int = match (r) {
 
 fun sumListMatch(xs: List<Int>): Int = match (xs) { [] => 0, h :: t => h + sumListMatch(t) }
 
+fun makePair(): (Int * Int) = (7, 8)
+
 export fun run(s: Suite): Unit =
   group(s, "match", (s1: Suite) => {
     group(s1, "boolean patterns", (sg: Suite) => {
@@ -75,5 +77,20 @@ export fun run(s: Suite): Unit =
       eq(sg, "string literal fallback", classifyString("z"), 0)
       eq(sg, "char literal fallback", classifyChar('z'), 0)
       eq(sg, "unit literal", classifyUnit(()), 1)
+    })
+
+    group(s1, "tuple patterns", (sg: Suite) => {
+      val pair = (10, 20)
+      eq(sg, "pair sum", match (pair) { (x, y) => x + y }, 30)
+      eq(sg, "triple", match ((1, 2, 3)) { (a, b, c) => a + b + c }, 6)
+      eq(sg, "from function", match (makePair()) { (x, y) => x + y }, 15)
+      val nested = ((1, 2), 3)
+      eq(sg, "nested tuple", match (nested) { ((a, b), c) => a + b + c }, 6)
+      eq(sg, "wildcard slot", match ((5, 6)) { (_, y) => y }, 6)
+      eq(sg, "mixed wildcards", match ((1, 2, 3)) { (_, _, z) => z }, 3)
+      eq(sg, "string literal in tuple pattern", match (("hello", 2)) { ("hello", n) => n, _ => 0 }, 2)
+      val mixed = (1, "x", True)
+      eq(sg, "mixed types", match (mixed) { (i, s, b) => if (b) { i } else { 0 } }, 1)
+      eq(sg, "literal first slot with catch-all", match ((0, 9)) { (0, y) => y, _ => 0 }, 9)
     })
   })
