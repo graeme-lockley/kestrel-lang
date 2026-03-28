@@ -595,32 +595,43 @@ fun calculate(input: String): Int = {
 
 ## Testing
 
-Kestrel has a built-in test framework. Test files end in `.test.ks` and use the `kestrel:test` module:
+Kestrel has a built-in test framework. Test files end in `.test.ks` and export `run(s: Suite): Unit`. Use `kestrel:test` for assertions and grouping:
 
 ```kestrel
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, neq, isTrue, isFalse, gt, gte, throws } from "kestrel:test"
 
-export fun suite(s: Suite): Suite =
-  s
-  |> group("arithmetic", (s) =>
-    s
-    |> eq("1 + 1", 1 + 1, 2)
-    |> eq("2 * 3", 2 * 3, 6)
-  )
-  |> group("strings", (s) =>
-    s
-    |> eq("greeting", "Hello, ${"world"}!", "Hello, world!")
-  )
+export fun run(s: Suite): Unit = {
+  group(s, "arithmetic", (s1: Suite) => {
+    eq(s1, "add", 1 + 1, 2);
+    neq(s1, "not three", 1 + 1, 3);
+    gt(s1, "order", 3, 2);
+    gte(s1, "tie ok", 2, 2)
+  });
+  group(s, "booleans", (s1: Suite) => {
+    isTrue(s1, "t", True);
+    isFalse(s1, "f", False)
+  });
+  group(s, "exceptions", (s1: Suite) => {
+    throws(s1, "div by zero", (_: Unit) => {
+      val x = 1 / 0;
+      ()
+    })
+  })
+}
 ```
+
+`throws` takes a **`(Unit) -> Unit`** thunk and calls it with `()` — the language does not write `() -> Unit` as a type, so use `(_: Unit) => …`.
+
+On failure, `eq` prints labelled lines (`expected (right)` / `actual (left)`) plus a short note that comparison is deep structural equality; ordering helpers label operands as `Int`; `isTrue`/`isFalse` label `Bool`.
 
 Run tests from the repository root:
 
 ```bash
-./kestrel test                          # all tests
+./kestrel test                          # all tests (tests/unit + stdlib/kestrel)
 ./kestrel test tests/unit/match.test.ks # one file
 ```
 
-Tests can be nested with `group` for structure, and `eq` performs deep structural equality.
+The runner ends with `printSummary(counts)` (see `scripts/run_tests.ks`): if any assertion failed, the process exits with code **1**.
 
 ---
 

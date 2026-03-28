@@ -253,6 +253,40 @@ File system (async).
 
 ---
 
+## kestrel:test
+
+Assertions and reporting for the Kestrel unit-test harness (`kestrel test`, `scripts/run_tests.ks`). Imports `kestrel:console` for styled output (✓/✗, colours, dim group labels).
+
+### Suite
+
+`Suite` is a record:
+
+| Field | Type | Role |
+|-------|------|------|
+| `depth` | `Int` | Nesting depth for indentation of group labels and assertion lines |
+| `summaryOnly` | `Bool` | When `True`, passing assertions and `group` headers/footers do not print; **failed** assertions still print. Counters always update. |
+| `counts` | `{ passed: mut Int, failed: mut Int, startTime: mut Int }` | Shared mutable tallies and harness start time (`__now_ms()` at suite creation) |
+
+The harness constructs one root `Suite` (typically `depth = 1` or as in `run_tests.ks`) whose `counts` is passed to `printSummary` after all `run(s)` calls.
+
+### Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `group` | `(Suite, String, (Suite) -> Unit) -> Unit` | Runs `body` with a child suite (depth + 1, same `summaryOnly` and `counts`). Unless `summaryOnly`, prints a dim group title and a footer with pass/fail delta for the group and elapsed ms. |
+| `eq` | `(Suite, String, X, X) -> Unit` | Success when `__equals(actual, expected)`. On failure: increments `failed`, prints ✗ and three indented lines — `expected (right):`, `actual (left):` (values via `__format_one`), then `(deep equality / same value shape)`. |
+| `neq` | `(Suite, String, X, X) -> Unit` | Success when values are **not** deeply equal. On failure: prints ✗, `expected: values must differ (deep inequality)`, `both sides: …` (`__format_one`). |
+| `isTrue` | `(Suite, String, Bool) -> Unit` | Success when `value` is `True`. On failure: `expected (Bool): true`, `actual (Bool): …`. |
+| `isFalse` | `(Suite, String, Bool) -> Unit` | Success when `value` is `False`. On failure: `expected (Bool): false`, `actual (Bool): …`. |
+| `gt` / `lt` | `(Suite, String, Int, Int) -> Unit` | Strict order on `Int` (`left > right` / `left < right`). On failure: requirement line (`need: left > right` or `left < right`, “strict total order on Int”), then `left (Int):` / `right (Int):` with `__format_one`. **Float is not in scope** for these helpers. |
+| `gte` / `lte` | `(Suite, String, Int, Int) -> Unit` | Non-strict order (`>=` / `<=`). On failure: `need: left >= right` or `left <= right` (“total order on Int”), then labelled `Int` lines. |
+| `throws` | `(Suite, String, (Unit) -> Unit) -> Unit` | Invokes `thunk(())`. Success if the call throws any exception (catch-all `_`); failure if it returns normally. On failure: `expected: callee throws an exception`, `actual: completed normally (no exception)`. **Note:** The surface type is `(Unit) -> Unit` because the language does not accept `() -> T` in type position for a zero-parameter function type; callers use e.g. `(_: Unit) => { … }`. |
+| `printSummary` | `({ passed: mut Int, failed: mut Int, startTime: mut Int }) -> Unit` | Prints a blank line, then total elapsed ms. If `failed > 0`: red `M failed, N passed (…ms)` and **`exit(1)`**. If `failed == 0`: green `N passed (…ms)`. |
+
+Passing assertions increment `passed` and, unless `summaryOnly`, print a green ✓ line with the description.
+
+---
+
 ## Standard Types
 
 Types referenced in the above signatures are part of the standard contract:
