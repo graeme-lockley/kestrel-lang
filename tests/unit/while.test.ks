@@ -7,7 +7,6 @@ fun sumTo(n: Int): Int = {
   while (i < n) {
     acc := acc + i
     i := i + 1
-    acc
   }
   
   acc
