@@ -1,4 +1,5 @@
 // Hand-crafted bytecode integration tests (spec 04, 08 §2.4). Opcode bytes must match exec.zig.
+// Union/intersection types are compile-time only; .kbc type blob remains a minimal placeholder (03 §6.3).
 const std = @import("std");
 const Value = @import("value.zig").Value;
 const load_mod = @import("load.zig");

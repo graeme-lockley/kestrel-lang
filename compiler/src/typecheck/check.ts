@@ -6,7 +6,8 @@ import type { InternalType } from '../types/internal.js';
 import { freshVar, prim, tInt, tFloat, tBool, tString, tUnit, resetVarId, freeVars, generalize, instantiate } from '../types/internal.js';
 import { astTypeToInternal, astTypeToInternalWithScope } from '../types/from-ast.js';
 import type { ResolveQualifiedType } from '../types/from-ast.js';
-import { unify, applySubst, UnifyError, expandGenericAliasHead } from '../types/unify.js';
+import { unify, unifySubtype, applySubst, UnifyError, expandGenericAliasHead } from '../types/unify.js';
+import type { UnifyArrowMode } from '../types/unify.js';
 import type { Diagnostic } from '../diagnostics/types.js';
 import { CODES, locationFromSpan, locationFileOnly } from '../diagnostics/types.js';
 import type { Span } from '../lexer/types.js';
@@ -104,12 +105,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     return locationFileOnly(sourceFile);
   }
 
-  /** Call unify; on UnifyError attach blameNode (and optional relatedNode) for diagnostics. */
+  /** Call unify or subtype-unify; on UnifyError attach blameNode (and optional relatedNode) for diagnostics. */
   function unifyWithBlame(
     left: InternalType,
     right: InternalType,
     blameNode: unknown,
-    relatedNode?: unknown
+    relatedNode?: unknown,
+    unification?: { relation?: 'eq' | 'subtype'; arrowMode?: UnifyArrowMode }
   ): void {
     if (left == null || right == null) {
       const which = left == null ? 'left' : 'right';
@@ -119,7 +121,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       );
     }
     try {
-      unify(left, right, subst, genericTypeAliasDefs);
+      if (unification?.relation === 'subtype') {
+        unifySubtype(left, right, subst, genericTypeAliasDefs);
+      } else {
+        unify(left, right, subst, genericTypeAliasDefs, { arrowMode: unification?.arrowMode });
+      }
     } catch (e) {
       if (e instanceof UnifyError) {
         const err = e as UnifyError & { blameNode?: unknown; relatedNode?: unknown };
@@ -838,7 +844,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         const argTs = expr.args.map(inferExpr);
         const ret = freshVar();
         const arrow = { kind: 'arrow' as const, params: argTs, return: ret };
-        unifyWithBlame(calleeT, arrow, expr);
+        unifyWithBlame(calleeT, arrow, expr, undefined, { arrowMode: 'call' });
         result = apply(ret);
         setInferredType(expr, result);
         return result;
@@ -870,7 +876,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         for (const stmt of expr.stmts) {
           if (stmt.kind === 'ValStmt') {
             const t = apply(inferExpr(stmt.value));
-            if (stmt.type) unifyWithBlame(t, astTypeToInternal(stmt.type, typeAliases, resolveQualified), stmt.value);
+            if (stmt.type) {
+              unifyWithBlame(t, astTypeToInternal(stmt.type, typeAliases, resolveQualified), stmt.value, undefined, {
+                relation: 'subtype',
+              });
+            }
             const scheme = generalize(apply(t), envFreeVars());
             env.set(stmt.name, scheme);
           } else if (stmt.kind === 'FunStmt') {
@@ -881,7 +891,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
               }
               const bodyT = inferExpr(stmt.body);
               const inferredArrow: InternalType = { kind: 'arrow', params: arrowT.params, return: apply(bodyT) };
-              unifyWithBlame(inferredArrow, arrowT, stmt.body);
+              unifyWithBlame(inferredArrow, arrowT, stmt.body, undefined, { arrowMode: 'fun_check' });
               const scheme = generalize(apply(arrowT), envFreeVars());
               env.set(stmt.name, scheme);
               for (let i = 0; i < stmt.params.length; i++) {
@@ -890,7 +900,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             }
           } else if (stmt.kind === 'VarStmt') {
             const t = apply(inferExpr(stmt.value));
-            if (stmt.type) unifyWithBlame(t, astTypeToInternal(stmt.type, typeAliases, resolveQualified), stmt.value);
+            if (stmt.type) {
+              unifyWithBlame(t, astTypeToInternal(stmt.type, typeAliases, resolveQualified), stmt.value, undefined, {
+                relation: 'subtype',
+              });
+            }
             env.set(stmt.name, apply(t));
           } else if (stmt.kind === 'ExprStmt') {
             inferExpr(stmt.expr);
@@ -917,7 +931,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           } else {
             const targetT = inferExpr(stmt.target);
             const v = inferExpr(stmt.value);
-            unifyWithBlame(v, targetT, stmt.value, stmt.target);
+            unifyWithBlame(v, targetT, stmt.value, stmt.target, { relation: 'subtype' });
           }
         }
         result = inferExpr(expr.result);
@@ -1291,7 +1305,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           const leftT = apply(inferExpr(expr.left));
           const rightT = apply(inferExpr(expr.right));
           result = freshVar();
-          unifyWithBlame(rightT, { kind: 'arrow', params: [leftT], return: result }, expr);
+          unifyWithBlame(rightT, { kind: 'arrow', params: [leftT], return: result }, expr, undefined, {
+            arrowMode: 'call',
+          });
           result = apply(result);
           setInferredType(expr, result);
           return result;
@@ -1310,7 +1326,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         const leftT = apply(inferExpr(expr.left));
         const rightT = apply(inferExpr(expr.right));
         result = freshVar();
-        unifyWithBlame(leftT, { kind: 'arrow', params: [rightT], return: result }, expr);
+        unifyWithBlame(leftT, { kind: 'arrow', params: [rightT], return: result }, expr, undefined, {
+          arrowMode: 'call',
+        });
         result = apply(result);
         setInferredType(expr, result);
         return result;
@@ -1429,7 +1447,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             );
           }
         }
-        unifyWithBlame(bodyT, returnT, node.body);
+        unifyWithBlame(bodyT, returnT, node.body, undefined, { relation: 'subtype' });
 
         // Restore async context
         inAsyncContext = wasAsync;
@@ -1536,13 +1554,21 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         env.set(node.name, t);
       } else if (node.kind === 'ValDecl') {
         const valueT = inferExpr(node.value);
-        if (node.type) unifyWithBlame(valueT, astTypeToInternal(node.type, typeAliases, resolveQualified), node.value);
+        if (node.type) {
+          unifyWithBlame(valueT, astTypeToInternal(node.type, typeAliases, resolveQualified), node.value, undefined, {
+            relation: 'subtype',
+          });
+        }
         const t = apply(valueT);
         const scheme = generalize(t, envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'VarDecl') {
         const valueT = inferExpr(node.value);
-        if (node.type) unifyWithBlame(valueT, astTypeToInternal(node.type, typeAliases, resolveQualified), node.value);
+        if (node.type) {
+          unifyWithBlame(valueT, astTypeToInternal(node.type, typeAliases, resolveQualified), node.value, undefined, {
+            relation: 'subtype',
+          });
+        }
         const t = apply(valueT);
         env.set(node.name, t);
       } else if (node.kind === 'ExprStmt') {
@@ -1557,11 +1583,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             const field = objT.fields.find((f) => f.name === target.field);
             if (field == null) throw new TypeCheckError(`Unknown field: ${target.field}`, target);
             if (!field.mut) throw new TypeCheckError(`Cannot assign to immutable field: ${target.field}`, target);
-            unifyWithBlame(valueT, field.type, node.value, target);
+            unifyWithBlame(valueT, field.type, node.value, target, { relation: 'subtype' });
           }
         } else if (target.kind === 'IdentExpr') {
           const lhs = env.get(target.name);
-          if (lhs != null) unifyWithBlame(valueT, lhs, node.value, target);
+          if (lhs != null) unifyWithBlame(valueT, lhs, node.value, target, { relation: 'subtype' });
         }
       }
     }

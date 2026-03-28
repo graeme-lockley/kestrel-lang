@@ -70,6 +70,8 @@ All jump **offsets** are **byte offsets** (signed or unsigned, see §4) relative
 
 **Language coverage:** Part of lowering **`e is T`** when **`T`** is a primitive or a record kind probe (01 §3.2.2, 05). **ADT** constructor tests use **`MATCH`** jump tables, **`CONSTRUCT` + `EQ`**, or type-name checks as emitted by the compiler; **n-ary** ADT **`is`** may combine **`MATCH`** with branch-local **True**/**False** pushes.
 
+**Union types in source:** If **`e`** has a static union type, **`e is T`** is still lowered with the same concrete probes; there is no extra runtime tag for “union” (06 §1, 05 intro).
+
 ### 1.4 Logical (short-circuit)
 
 Logical `&` and `|` in the language are short-circuit; the compiler emits branches (e.g. evaluate left, `JUMP_IF_FALSE` to skip right for `&`, or `JUMP_IF_FALSE` to result for `|`) rather than dedicated AND/OR instructions. No separate `AND`/`OR` stack instructions are required.

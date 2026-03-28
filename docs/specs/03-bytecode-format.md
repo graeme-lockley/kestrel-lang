@@ -170,6 +170,8 @@ Each type in the blob is encoded as a tag byte followed by a payload. All multi-
 
 **Reserved tags:** 12–255. Decoder must reject unknown type tags.
 
+**Union and intersection (`|`, `&`):** These are **not** represented as distinct tags in the `.kbc` type blob in the current toolchain. The emitter uses a **minimal placeholder** type table (see compiler `writeKbc`); static union/intersection checking is enforced only in the typechecker, while **exported** signatures and importers use **`.kti`** (07 §5, `kti-format.md`), where `SerType` may still record `union` / `inter`. Runtime values remain the usual concrete forms (05); there is no separate “union value” tag in the VM.
+
 Type indices inside the blob refer to other entries in the **same** type table (0-based; index < type_count). Arrow: parameter types first, then return type. Record refers to shape table (section 5). ADT refers to ADT table (section 6) and supplies type arguments. Library types with multiple type parameters (e.g. **Result\<T, E\>** from 02) are encoded as **ADT** (tag 8) with the appropriate adt_index and the corresponding number of type_index arguments (e.g. two for Result); there is no separate Result tag in the type blob.
 
 ### 6.4 Exported type declarations

@@ -161,6 +161,102 @@ export function expandGenericAliasHead(
   return a;
 }
 
+/** How arrow types combine in a unification (call vs fun body use different variance). */
+export type UnifyArrowMode = 'symmetric' | 'call' | 'fun_check';
+
+export type UnifyOptions = {
+  arrowMode?: UnifyArrowMode;
+};
+
+function cloneSubstMap(subst: Map<number, InternalType>): Map<number, InternalType> {
+  return new Map(subst);
+}
+
+function copySubstInto(target: Map<number, InternalType>, from: Map<number, InternalType>): void {
+  target.clear();
+  for (const [k, v] of from) target.set(k, v);
+}
+
+/**
+ * Subtyping check for inference: `actual` must be assignable to `expected` (spec 06 §1, §4).
+ * Union on the expected side: any arm; union on the actual side: every arm; intersection on
+ * expected: actual must match each conjunct; function types use contravariant parameters and
+ * covariant return.
+ */
+export function unifySubtype(
+  actual: InternalType,
+  expected: InternalType,
+  subst: Map<number, InternalType>,
+  genericAliases?: GenericTypeAliasDefs
+): void {
+  if (actual == null || expected == null) {
+    throw new Error('unifySubtype called with null or undefined type');
+  }
+  const a = expandGenericAliasHead(actual, subst, genericAliases);
+  const e = expandGenericAliasHead(expected, subst, genericAliases);
+
+  if (e.kind === 'inter') {
+    unifySubtype(a, e.left, subst, genericAliases);
+    unifySubtype(a, e.right, subst, genericAliases);
+    return;
+  }
+  if (a.kind === 'inter') {
+    unifySubtype(a.left, e, subst, genericAliases);
+    unifySubtype(a.right, e, subst, genericAliases);
+    return;
+  }
+  if (e.kind === 'union') {
+    const saved = cloneSubstMap(subst);
+    try {
+      unifySubtype(a, e.left, subst, genericAliases);
+      return;
+    } catch (err) {
+      if (!(err instanceof UnifyError)) throw err;
+      copySubstInto(subst, saved);
+      unifySubtype(a, e.right, subst, genericAliases);
+      return;
+    }
+  }
+  if (a.kind === 'union') {
+    unifySubtype(a.left, e, subst, genericAliases);
+    unifySubtype(a.right, e, subst, genericAliases);
+    return;
+  }
+
+  if (a.kind === 'var') {
+    if (e.kind === 'var' && e.id === a.id) return;
+    if (occurs(a.id, e)) {
+      subst.set(a.id, e);
+      return;
+    }
+    subst.set(a.id, e);
+    return;
+  }
+  if (e.kind === 'var') {
+    if (occurs(e.id, a)) {
+      subst.set(e.id, a);
+      return;
+    }
+    subst.set(e.id, a);
+    return;
+  }
+
+  if (a.kind === 'arrow' && e.kind === 'arrow') {
+    if (a.params.length !== e.params.length) throw new UnifyError(actual, expected);
+    for (let i = 0; i < a.params.length; i++) {
+      unifySubtype(e.params[i]!, a.params[i]!, subst, genericAliases);
+    }
+    unifySubtype(a.return, e.return, subst, genericAliases);
+    return;
+  }
+
+  if (a.kind === 'namespace' || e.kind === 'namespace') {
+    throw new UnifyError(actual, expected, 'Namespace type cannot be unified with value type');
+  }
+
+  unify(actual, expected, subst, genericAliases, undefined);
+}
+
 /**
  * Unify two types; mutates subst. On success, after return, applySubst(left, subst) === applySubst(right, subst).
  */
@@ -168,7 +264,8 @@ export function unify(
   left: InternalType,
   right: InternalType,
   subst: Map<number, InternalType>,
-  genericAliases?: GenericTypeAliasDefs
+  genericAliases?: GenericTypeAliasDefs,
+  options?: UnifyOptions
 ): void {
   if (left == null || right == null) {
     throw new Error('unify called with null or undefined type');
@@ -201,18 +298,61 @@ export function unify(
   }
   if (l.kind === 'arrow' && r.kind === 'arrow') {
     if (l.params.length !== r.params.length) throw new UnifyError(left, right);
-    for (let i = 0; i < l.params.length; i++) unify(l.params[i]!, r.params[i]!, subst, genericAliases);
-    unify(l.return, r.return, subst, genericAliases);
+    const arrowMode = options?.arrowMode ?? 'symmetric';
+    if (arrowMode === 'call') {
+      // Prefer symmetric unification for parameters so polymorphic calls (e.g. eq's two X args)
+      // share one type variable correctly; fall back to subtyping so Int can match Int|Bool.
+      for (let i = 0; i < l.params.length; i++) {
+        try {
+          unify(l.params[i]!, r.params[i]!, subst, genericAliases, undefined);
+        } catch (err) {
+          if (!(err instanceof UnifyError)) throw err;
+          unifySubtype(r.params[i]!, l.params[i]!, subst, genericAliases);
+        }
+      }
+      try {
+        unify(l.return, r.return, subst, genericAliases, undefined);
+      } catch (err) {
+        if (!(err instanceof UnifyError)) throw err;
+        const calleeRet = applySubst(l.return, subst);
+        const retSynth = r.return;
+        if (
+          retSynth.kind === 'var' &&
+          (calleeRet.kind === 'union' || calleeRet.kind === 'inter')
+        ) {
+          subst.set(retSynth.id, calleeRet);
+        } else {
+          unifySubtype(r.return, l.return, subst, genericAliases);
+        }
+      }
+      return;
+    }
+    if (arrowMode === 'fun_check') {
+      // Parameter types must match exactly; subtype only at the outer function's body return.
+      for (let i = 0; i < l.params.length; i++) {
+        unify(l.params[i]!, r.params[i]!, subst, genericAliases, undefined);
+      }
+      unifySubtype(l.return, r.return, subst, genericAliases);
+      return;
+    }
+    for (let i = 0; i < l.params.length; i++) {
+      unify(l.params[i]!, r.params[i]!, subst, genericAliases, options);
+    }
+    unify(l.return, r.return, subst, genericAliases, options);
     return;
   }
   if (l.kind === 'tuple' && r.kind === 'tuple') {
     if (l.elements.length !== r.elements.length) throw new UnifyError(left, right);
-    for (let i = 0; i < l.elements.length; i++) unify(l.elements[i]!, r.elements[i]!, subst, genericAliases);
+    for (let i = 0; i < l.elements.length; i++) {
+      unify(l.elements[i]!, r.elements[i]!, subst, genericAliases, options);
+    }
     return;
   }
   if (l.kind === 'app' && r.kind === 'app') {
     if (l.name !== r.name || l.args.length !== r.args.length) throw new UnifyError(left, right);
-    for (let i = 0; i < l.args.length; i++) unify(l.args[i]!, r.args[i]!, subst, genericAliases);
+    for (let i = 0; i < l.args.length; i++) {
+      unify(l.args[i]!, r.args[i]!, subst, genericAliases, options);
+    }
     return;
   }
 
@@ -234,7 +374,7 @@ export function unify(
           throw new UnifyError(left, right, `Field '${name}' mutability mismatch`);
         }
         // Unify field types
-        unify(lField.type, rField.type, subst, genericAliases);
+        unify(lField.type, rField.type, subst, genericAliases, options);
       }
     }
 
@@ -249,7 +389,7 @@ export function unify(
       }
       // Unify r's row with a record containing l's extra fields
       const lExtra: InternalType = { kind: 'record', fields: lOnly, row: l.row };
-      unify(r.row, lExtra, subst, genericAliases);
+      unify(r.row, lExtra, subst, genericAliases, options);
       return;
     }
 
@@ -260,21 +400,21 @@ export function unify(
       }
       // Unify l's row with a record containing r's extra fields
       const rExtra: InternalType = { kind: 'record', fields: rOnly, row: r.row };
-      unify(l.row, rExtra, subst, genericAliases);
+      unify(l.row, rExtra, subst, genericAliases, options);
       return;
     }
 
     // Both have same fields, unify row variables if present
     if (l.row && r.row) {
-      unify(l.row, r.row, subst, genericAliases);
+      unify(l.row, r.row, subst, genericAliases, options);
     } else if (l.row && !r.row) {
       // l's row must be empty (closed record)
       const emptyRow: InternalType = { kind: 'record', fields: [] };
-      unify(l.row, emptyRow, subst, genericAliases);
+      unify(l.row, emptyRow, subst, genericAliases, options);
     } else if (!l.row && r.row) {
       // r's row must be empty (closed record)
       const emptyRow: InternalType = { kind: 'record', fields: [] };
-      unify(r.row, emptyRow, subst, genericAliases);
+      unify(r.row, emptyRow, subst, genericAliases, options);
     }
     // else both closed records with same fields - success
     return;

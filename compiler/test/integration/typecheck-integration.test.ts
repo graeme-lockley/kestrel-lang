@@ -79,4 +79,25 @@ describe('parse then typecheck (multi-declaration)', () => {
     const tc = typecheck(parse(tokenize(source)));
     expect(tc.ok).toBe(true);
   });
+
+  it('accepts union parameter when passing Int or Bool (subtyping)', () => {
+    const source = `
+      fun id(x: Int | Bool): Int = if (x is Int) x else 0
+      val a = id(1)
+      val b = id(True)
+      fun g(): Int | Bool = 1
+    `;
+    const tc = typecheck(parse(tokenize(source)));
+    expect(tc.ok).toBe(true);
+  });
+
+  it('rejects passing Int|Bool where Int is required', () => {
+    const source = `
+      fun needInt(x: Int): Int = x
+      fun u(): Int | Bool = True
+      val bad = needInt(u())
+    `;
+    const tc = typecheck(parse(tokenize(source)));
+    expect(tc.ok).toBe(false);
+  });
 });

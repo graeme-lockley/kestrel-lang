@@ -13,7 +13,7 @@ Kestrel is a statically typed, scripting and server-oriented programming languag
 -   Hindley–Milner type inference
 -   Structural records with row polymorphism
 -   Algebraic data types
--   Union (`|`) and intersection (`&`) types
+-   Union (`|`) and intersection (`&`) types (static only at runtime; assignability rules in **06** §3; **`.kti`** carries signatures, **`.kbc`** type blob is minimal per **03** §6.3)
 -   Pattern-based exception handling
 -   Async/await (`Task<T>`)
 -   Pipeline operator (`|>`)

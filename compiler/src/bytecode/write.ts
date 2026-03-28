@@ -83,6 +83,8 @@ function sizeSection2(
   importedFunctionTable: ImportedFunctionEntry[] = []
 ): number {
   const fnCount = functionTable.length;
+  // Minimal placeholder type table (03 §6.2–6.3): union/intersection from the typechecker are not
+  // encoded here; full signatures live in .kti (07 §5). VM values stay concrete (05).
   const typeCount = 1;
   const typeBlobLen = 1;
   const afterTypeBlob = 4 + (typeCount + 1) * 4 + typeBlobLen;

@@ -421,6 +421,8 @@ TypeField      ::= LOWER_IDENT ":" [ "mut" ] Type
 
 Precedence: `&` tighter than `|`; `->` groups to the right; `*` (product) tighter than `->`. Record and function types use parentheses when nested (e.g. `(Int -> Bool) -> String`). **Built-in generics:** `Array<T>` and `Task<T>` are runtime built-ins. **Library types:** `Option<T>`, `Result<T,E>`, and `List<T>` are provided by the standard library; see [02-stdlib.md](02-stdlib.md). List has special syntax: `[a, b, ...c]` and `::` (expression and pattern).
 
+**Union / intersection at use sites:** Where a type is **expected** (function parameter, declared return, assignment target, annotated binding when supported by the parser), a **value** whose type is a **member** of a union (e.g. `Int` where `Int | Bool` is expected) is allowed; the full rules are in [06-typesystem.md](06-typesystem.md) §3 (subtyping) and §4 (narrowing with `is`). Values at runtime do not gain a separate “union tag”; see [05-runtime-model.md](05-runtime-model.md).
+
 ### 3.7 Parser and Lexer Disambiguation
 
 - **Shebang:** Before tokenizing, if the source starts with `#!` (after optional BOM), skip the entire first line (including the newline); tokenization begins on the second line. Do not treat `#` as a token elsewhere.
