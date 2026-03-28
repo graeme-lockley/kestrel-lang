@@ -251,3 +251,5 @@ An implementation of the type system should provide at least the following:
 6. **Async context and exceptions** — Track whether the current scope is inside an `async fun`; reject `await` outside async context (§6). For `throw e`, require `e` to have an exception type (§7). For try/catch, type the block and unify catch case RHSs with the block type.
 7. **Operators and assignment** — Enforce operand and result types for arithmetic, comparison, and logical operators (§8); ensure assignment and SET_FIELD only apply to mutable targets.
 8. **Output** — Emit inferred types into the bytecode type table (03 §6.2–6.3) so that the VM and tooling can use them. Union/intersection may be erased to a concrete type or encoded as the implementation sees fit for 03.
+
+**Self tail-call optimization** (04 §1.5, 05 §1.2) is a codegen/runtime framing detail only: it does not change typing rules or inferred types.

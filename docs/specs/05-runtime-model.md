@@ -35,6 +35,10 @@ Tag and payload layout for inline values (e.g. how INT/BOOL/UNIT/CHAR use the 61
 
 A **`while (cond) block`** loop (01 §3) does not allocate a new call frame per iteration: the VM evaluates `cond`, branches out if false, otherwise runs `block`, discards the block’s value on the operand stack, and branches back (04 §1.6). The body may be written with an implicit **Unit** tail in source (01 §3.3); lowering still produces one block value per iteration to discard. Only explicit calls inside the body grow the stack. Locals and `var` updates persist across iterations within the same enclosing frame.
 
+### 1.2 Self tail recursion (call frames)
+
+The VM still implements **`CALL`** by pushing a frame. The **reference compiler** may avoid that for **direct self calls in tail position** in a **top-level** function by reusing the current frame: it reloads parameters via **`STORE_LOCAL`** and branches with **`JUMP`** to the function entry (04 §1.5). That keeps stack depth **O(1)** for tail-recursive loops. Non-tail self recursion and indirect calls continue to use one frame per invocation.
+
 ---
 
 ## 2. Heap Object Kinds

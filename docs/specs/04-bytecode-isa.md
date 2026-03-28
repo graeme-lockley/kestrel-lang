@@ -63,6 +63,8 @@ Logical `&` and `|` in the language are short-circuit; the compiler emits branch
 
 **Language coverage:** Function application `f(args)`, constructor application (when compiled as call to constructor), pipeline `|>` / `<|` (compiled to calls). **Alias:** `RETURN` may be used as a synonym for `RET`; 03 refers to `RET`.
 
+**Self tail-call optimization (reference compiler):** For a **top-level** function `f`, a direct call `f(...)` in **tail position** of `f`’s body (including tail positions of `if`/`match` branches and the result of a block) may be lowered without a **`CALL`**: arguments are evaluated left-to-right, then **`STORE_LOCAL`** into the parameter slots `0 .. arity-1` (last argument popped first so slot `0` receives the first parameter), then **`JUMP`** to the start of `f`’s body (byte offset `0` within that function’s code chunk). Observable semantics match a normal call followed by return. **Not** lowered: calls that are not in tail position, short-circuit operands (`&`, `|`), **`CALL_INDIRECT`**, nested lambdas, or non-self callees. Mutual tail calls are not optimized (see kanban 07).
+
 ### 1.10 Indirect Calls and Closures
 
 | Instruction | Operands | Effect |

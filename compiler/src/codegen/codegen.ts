@@ -110,6 +110,22 @@ interface LoopCodegenLayer {
   loopHead: number;
 }
 
+/** When compiling a top-level `fun` body, enables lowering of direct self-calls in tail position to a backward jump (no extra call frame). */
+export interface SelfTailTarget {
+  name: string;
+  arity: number;
+  fnId: number;
+  /** Byte offset from the start of this function’s code chunk to the loop head (parameter reload point). */
+  loopHeadOffset: number;
+}
+
+export type EmitTailContext = { self: SelfTailTarget; inTail: boolean };
+
+function subTailCtx(parent: EmitTailContext | undefined, childIsTailPosition: boolean): EmitTailContext | undefined {
+  if (parent?.self == null) return undefined;
+  return { self: parent.self, inTail: childIsTailPosition && parent.inTail };
+}
+
 
 /** Constructor entry for ADT table (spec 03 §10). */
 export interface ConstructorEntry {
@@ -507,7 +523,8 @@ function makeEmitExpr(
   adts?: AdtEntry[],
   captures?: Map<string, { index: number; isVar: boolean }>,
   varNames?: Set<string>,
-  userAdtConfigs?: Map<string, MatchConfig>
+  userAdtConfigs?: Map<string, MatchConfig>,
+  tailCtx?: EmitTailContext,
 ) => void; moduleGlobals: Map<string, number> } {
   const moduleGlobals = new Map<string, number>();
   const topLevelFuns = moduleTopLevelFunDeclCount ?? 0;
@@ -520,8 +537,11 @@ function makeEmitExpr(
   adts?: AdtEntry[],
   captures?: Map<string, { index: number; isVar: boolean }>,
   varNames?: Set<string>,
-  userAdtConfigs?: Map<string, MatchConfig>
+  userAdtConfigs?: Map<string, MatchConfig>,
+  tailCtx?: EmitTailContext,
 ): void {
+  const tcNon = subTailCtx(tailCtx, false);
+  const tcTail = subTailCtx(tailCtx, true);
   recordDebug(expr.span?.line);
   switch (expr.kind) {
     case 'LiteralExpr': {
@@ -568,7 +588,7 @@ function makeEmitExpr(
           const idx = addConstant({ tag: ConstTag.String, stringIndex: stringIndex(part.value) });
           emitLoadConst(idx);
         } else {
-          emitExpr(part.expr, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(part.expr, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff03, 1); // format value -> string
         }
         emitCall(0xffffff04, 2); // concat(top-1, top) -> result
@@ -626,10 +646,10 @@ function makeEmitExpr(
     case 'BinaryExpr': {
       if (expr.op === '&') {
         // a & b: eval a; JUMP_IF_FALSE pops a – if false, push False; else eval b (result)
-        emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         const andSkipPos = codeOffset();
         emitJumpIfFalse(0);
-        emitExpr(expr.right, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.right, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         const andJumpOverFalse = codeOffset();
         emitJump(0);
         const andPushFalsePos = codeOffset();
@@ -641,21 +661,21 @@ function makeEmitExpr(
       }
       if (expr.op === '|') {
         // a | b: eval a; if true push true and skip b; else eval b
-        emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         const orEvalRightPos = codeOffset();
         emitJumpIfFalse(0); // patch: when false, go eval right
         emitLoadConst(addConstant({ tag: ConstTag.True }));
         const orJumpToEnd = codeOffset();
         emitJump(0); // patch: skip right
         const orRightStart = codeOffset();
-        emitExpr(expr.right, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.right, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         const orEnd = codeOffset();
         patchI32(orEvalRightPos + 1, orRightStart - (orEvalRightPos + 5));
         patchI32(orJumpToEnd + 1, orEnd - (orJumpToEnd + 5));
         break;
       }
-emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
-        emitExpr(expr.right, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+      emitExpr(expr.right, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       switch (expr.op) {
         case '+': emitAdd(); break;
         case '-': emitSub(); break;
@@ -678,18 +698,18 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       if (expr.op === '-') {
         // Unary minus: 0 - operand
         emitLoadConst(addConstant({ tag: ConstTag.Int, value: 0 }));
-        emitExpr(expr.operand, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.operand, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         emitSub();
       } else if (expr.op === '+') {
         // Unary plus: just emit operand
-        emitExpr(expr.operand, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.operand, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       } else if (expr.op === '!') {
         // Logical not: constant-fold !True -> False, !False -> True; else (x == False)
         const op = expr.operand;
         if (op.kind === 'LiteralExpr' && (op.literal === 'true' || op.literal === 'false')) {
           emitLoadConst(addConstant({ tag: op.literal === 'true' ? ConstTag.False : ConstTag.True }));
         } else {
-          emitExpr(expr.operand, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.operand, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitLoadConst(addConstant({ tag: ConstTag.False }));
           emitEq();
         }
@@ -699,15 +719,15 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       break;
     }
     case 'IfExpr': {
-      emitExpr(expr.cond, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.cond, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       const jumpIfFalsePos = codeOffset();
       emitJumpIfFalse(0); // patch later
-      emitExpr(expr.then, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.then, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
       const jumpOverElsePos = codeOffset();
       emitJump(0); // patch later
       const elseStart = codeOffset();
       if (expr.else !== undefined) {
-        emitExpr(expr.else, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.else, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
       } else {
         emitLoadConst(addConstant({ tag: ConstTag.Unit }));
       }
@@ -721,12 +741,12 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       const discardSlot = nextLocalSlot(env);
       env.set(discKey, discardSlot);
       const loopStart = codeOffset();
-      emitExpr(expr.cond, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.cond, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       const jumpIfFalsePos = codeOffset();
       emitJumpIfFalse(0);
       const layer: LoopCodegenLayer = { breakPatches: [], loopHead: loopStart };
       loopBreakStack.push(layer);
-      emitExpr(expr.body, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       loopBreakStack.pop();
       emitStoreLocal(discardSlot);
       const jumpBackPos = codeOffset();
@@ -828,7 +848,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           chunkBaseRef.value = -1;
           const saved = codeSave();
           codeStart();
-          emitExpr(stmt.body, liftedEnv, funNameToId, shapes, adts, captureMap, undefined);
+          emitExpr(stmt.body, liftedEnv, funNameToId, shapes, adts, captureMap, undefined, undefined, undefined);
           emitRet();
           const lambdaCode = codeSlice();
           codeRestore(saved);
@@ -910,7 +930,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             codeStart();
             const lambdaEnv = new Map<string, number>();
             for (let i = 0; i < stmt.params.length; i++) lambdaEnv.set(stmt.params[i]!.name, i);
-            emitExpr(stmt.body, lambdaEnv, funNameToId, shapes, adts, captures, nextVarNames);
+            emitExpr(stmt.body, lambdaEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, undefined);
             emitRet();
             const lambdaCode = codeSlice();
             codeRestore(saved);
@@ -945,7 +965,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             chunkBaseRef.value = -1;
             const saved = codeSave();
             codeStart();
-            emitExpr(stmt.body, liftedEnv, funNameToId, shapes, adts, singleCaptureMap, undefined);
+            emitExpr(stmt.body, liftedEnv, funNameToId, shapes, adts, singleCaptureMap, undefined, undefined, undefined);
             emitRet();
             const lambdaCode = codeSlice();
             codeRestore(saved);
@@ -1002,7 +1022,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
 
       for (const stmt of expr.stmts) {
         if (stmt.kind === 'ValStmt') {
-          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
           const slot = blockEnv.size;
           blockEnv.set(stmt.name, slot);
           emitStoreLocal(slot);
@@ -1011,12 +1031,12 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           const refShapeId = getRefShapeId(shapes, stringIndex);
           const slot = blockEnv.size;
           blockEnv.set(stmt.name, slot);
-          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
           emitAllocRecord(refShapeId);
           emitStoreLocal(slot);
         } else if (stmt.kind === 'ExprStmt') {
           if (seenFunStmtInSource) emitPhase2();
-          emitExpr(stmt.expr, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          emitExpr(stmt.expr, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
           const discardSlot = blockEnv.get('$discard');
           if (discardSlot !== undefined) emitStoreLocal(discardSlot);
         } else if (stmt.kind === 'AssignStmt') {
@@ -1029,13 +1049,13 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               fieldSlot = objType.fields.findIndex((f) => f.name === target.field);
             }
             if (fieldSlot >= 0) {
-              emitExpr(target.object, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
-              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+              emitExpr(target.object, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
+              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
               emitSetField(fieldSlot);
             } else if (objType?.kind === 'namespace' && target.object.kind === 'IdentExpr') {
               const setterId = namespaceVarSetterIds?.get(target.object.name)?.get(target.field);
               if (setterId !== undefined) {
-                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
                 emitCall(setterId, 1);
                 const discardSlot = blockEnv.get('$discard');
                 if (discardSlot !== undefined) emitStoreLocal(discardSlot);
@@ -1046,7 +1066,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             if (cap?.isVar) {
               emitLoadLocal(0);
               emitGetField(cap.index);
-              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+              emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
               emitSetField(0);
               const discardSlotCap = blockEnv.get('$discard');
               if (discardSlotCap !== undefined) emitStoreLocal(discardSlotCap);
@@ -1054,12 +1074,12 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               const localSlot = blockEnv.get(target.name);
               if (localSlot !== undefined && nextVarNames.has(target.name)) {
                 emitLoadLocal(localSlot);
-                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
                 emitSetField(0);
                 const discardSlot = blockEnv.get('$discard');
                 if (discardSlot !== undefined) emitStoreLocal(discardSlot);
               } else {
-                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+                emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
                 if (localSlot !== undefined) {
                   emitStoreLocal(localSlot);
                 } else {
@@ -1108,10 +1128,10 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           const fieldIndex = mutualFunNames.indexOf(result.callee.name);
           emitLoadLocal(sharedRecordTemp);
           emitGetField(fieldIndex);
-          for (const arg of result.args) emitExpr(arg, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          for (const arg of result.args) emitExpr(arg, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
           emitCallIndirect(result.args.length);
         } else {
-          emitExpr(expr.result, blockEnv, funNameToId, shapes, adts, captures, nextVarNames);
+          emitExpr(expr.result, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcTail);
         }
       }
       break;
@@ -1124,7 +1144,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         shapeId = shapes.length;
         shapes.push({ nameIndices: [...nameIndices] });
       }
-      for (const e of expr.elements) emitExpr(e, env, funNameToId, shapes, adts, captures, varNames);
+      for (const e of expr.elements) emitExpr(e, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       emitAllocRecord(shapeId);
       break;
     }
@@ -1138,7 +1158,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           shapeId = shapes.length;
           shapes.push({ nameIndices: [...nameIndices] });
         }
-        for (const f of expr.fields) emitExpr(f.value, env, funNameToId, shapes, adts, captures, varNames);
+        for (const f of expr.fields) emitExpr(f.value, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         emitAllocRecord(shapeId);
         break;
       }
@@ -1167,21 +1187,21 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         for (let i = baseCount; i < extendedCount; i++) {
           const name = extendedFields[i]!.name;
           const fieldExpr = exprFieldsByName.get(name);
-          if (fieldExpr) emitExpr(fieldExpr.value, env, funNameToId, shapes, adts, captures, varNames);
+          if (fieldExpr) emitExpr(fieldExpr.value, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         }
-        emitExpr(expr.spread, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.spread, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         emitSpread(extendedShapeId);
       } else {
         // Override-only: build record manually (base shape + overrides). Temp slot for base record.
         const tempSlot = env.size;
         env.set('$spreadBase', tempSlot);
-        emitExpr(expr.spread, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.spread, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         emitStoreLocal(tempSlot);
         for (let i = 0; i < extendedCount; i++) {
           const name = extendedFields[i]!.name;
           const fieldExpr = exprFieldsByName.get(name);
           if (fieldExpr) {
-            emitExpr(fieldExpr.value, env, funNameToId, shapes, adts, captures, varNames);
+            emitExpr(fieldExpr.value, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           } else {
             const baseSlot = baseFields.findIndex((f) => f.name === name);
             if (baseSlot >= 0) {
@@ -1229,7 +1249,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         if (i >= 0 && i < expr.object.elements.length) slot = i;
       }
       if (slot >= 0) {
-        emitExpr(expr.object, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.object, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
         emitGetField(slot);
         break;
       }
@@ -1240,32 +1260,32 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       if (expr.callee.kind === 'IdentExpr') {
         // Check for builtin primitives: print (no newline), println (newline)
         if (expr.callee.name === 'print') {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF00, expr.args.length);
           break;
         }
         if (expr.callee.name === 'println') {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF01, expr.args.length);
           break;
         }
         if (expr.callee.name === 'exit' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF02, 1);
           break;
         }
         if (expr.callee.name === '__json_parse' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF05, 1);
           break;
         }
         if (expr.callee.name === '__json_stringify' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF06, 1);
           break;
         }
         if (expr.callee.name === '__read_file_async' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF07, 1);
           break;
         }
@@ -1274,132 +1294,132 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           break;
         }
         if (expr.callee.name === '__string_length' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF09, 1);
           break;
         }
         if (expr.callee.name === '__string_slice' && expr.args.length === 3) {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF0A, 3);
           break;
         }
         if (expr.callee.name === '__string_index_of' && expr.args.length === 2) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
-          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF0B, 2);
           break;
         }
         if (expr.callee.name === '__string_equals' && expr.args.length === 2) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
-          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF0C, 2);
           break;
         }
         if (expr.callee.name === '__string_concat' && expr.args.length === 2) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
-          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff04, 2);
           break;
         }
         if (expr.callee.name === '__string_upper' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF0D, 1);
           break;
         }
         if (expr.callee.name === '__string_lower' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff1b, 1);
           break;
         }
         if (expr.callee.name === '__string_trim' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF16, 1);
           break;
         }
         if (expr.callee.name === '__string_code_point_at' && expr.args.length === 2) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
-          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF17, 2);
           break;
         }
         if (expr.callee.name === '__char_code_point' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF18, 1);
           break;
         }
         if (expr.callee.name === '__string_char_at' && expr.args.length === 2) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
-          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+          emitExpr(expr.args[1]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff19, 2);
           break;
         }
         if (expr.callee.name === '__char_to_string' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff1a, 1);
           break;
         }
         if (expr.callee.name === '__int_to_float' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff1c, 1);
           break;
         }
         if (expr.callee.name === '__float_to_int' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff1d, 1);
           break;
         }
         if (expr.callee.name === '__float_floor' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff1e, 1);
           break;
         }
         if (expr.callee.name === '__float_ceil' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff1f, 1);
           break;
         }
         if (expr.callee.name === '__float_round' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff20, 1);
           break;
         }
         if (expr.callee.name === '__float_sqrt' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff21, 1);
           break;
         }
         if (expr.callee.name === '__float_is_nan' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff22, 1);
           break;
         }
         if (expr.callee.name === '__float_is_infinite' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff23, 1);
           break;
         }
         if (expr.callee.name === '__float_abs' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff24, 1);
           break;
         }
         if (expr.callee.name === '__char_from_code' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xffffff25, 1);
           break;
         }
         if (expr.callee.name === '__format_one' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF03, 1);
           break;
         }
         if (expr.callee.name === '__print_one' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF00, 1);
           break;
         }
         if (expr.callee.name === '__equals' && expr.args.length === 2) {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF0E, 2);
           break;
         }
@@ -1420,17 +1440,17 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           break;
         }
         if (expr.callee.name === '__list_dir' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF10, 1);
           break;
         }
         if (expr.callee.name === '__write_text' && expr.args.length === 2) {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF11, 2);
           break;
         }
         if (expr.callee.name === '__run_process' && expr.args.length === 2) {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF12, 2);
           break;
         }
@@ -1440,7 +1460,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         if (adts != null) {
           const ctor = getConstructor(expr.callee.name, expr.args.length, adts);
           if (ctor != null) {
-            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
             emitConstruct(ctor.adtId, ctor.ctor, ctor.arity);
             break;
           }
@@ -1450,7 +1470,21 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         if (funNameToId != null) {
           const fnId = funNameToId.get(expr.callee.name);
           if (fnId !== undefined) {
-            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+            const st = tailCtx?.inTail === true ? tailCtx.self : undefined;
+            if (
+              st != null &&
+              expr.callee.name === st.name &&
+              expr.args.length === st.arity &&
+              fnId === st.fnId
+            ) {
+              for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+              for (let s = st.arity - 1; s >= 0; s--) emitStoreLocal(s);
+              const jPos = codeOffset();
+              emitJump(0);
+              patchI32(jPos + 1, st.loopHeadOffset - (jPos + 5));
+              break;
+            }
+            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
             emitCall(fnId, expr.args.length);
             break;
           }
@@ -1461,7 +1495,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         if (capCallee !== undefined) {
           emitLoadLocal(0);
           emitGetField(capCallee.index);
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCallIndirect(expr.args.length);
           break;
         }
@@ -1470,7 +1504,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         const localSlot = env.get(expr.callee.name);
         if (localSlot !== undefined) {
           emitLoadLocal(localSlot);
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCallIndirect(expr.args.length);
           break;
         }
@@ -1481,15 +1515,15 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           const nsMap = namespaceFuncIds?.get(expr.callee.object.name);
           const fnId = nsMap?.get(expr.callee.field);
           if (fnId !== undefined) {
-            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+            for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
             emitCall(fnId, expr.args.length);
             break;
           }
         }
       }
       // Callee is an expression (e.g. makeAdd(2) — call that returns a closure; chained call)
-      emitExpr(expr.callee, env, funNameToId, shapes, adts, captures, varNames);
-      for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.callee, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+      for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       emitCallIndirect(expr.args.length);
       break;
     }
@@ -1512,7 +1546,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         }
         // Stack has tail, need to push head then CONSTRUCT
         // CONSTRUCT pops args left-to-right, so push: head, tail
-        emitExpr(elem as Expr, env, funNameToId, shapes, adts, captures, varNames); // Push head
+        emitExpr(elem as Expr, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon); // Push head
         // Now stack: tail, head - need to swap
         const temp1 = env.size;
         const temp2 = env.size + 1;
@@ -1529,14 +1563,14 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       if (!adts) break;
       const listAdtId = 0;
       const consCtor = 1;
-      emitExpr(expr.head, env, funNameToId, shapes, adts, captures, varNames);
-      emitExpr(expr.tail, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.head, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+      emitExpr(expr.tail, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       emitConstruct(listAdtId, consCtor, 2);
       break;
     }
     case 'MatchExpr': {
       // match (scrutinee) { Pat1 => e1; Pat2 => e2; ... }
-      emitExpr(expr.scrutinee, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.scrutinee, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
 
       const scrutineeSlot = nextLocalSlot(env);
       env.set('$scrutinee', scrutineeSlot);
@@ -1616,7 +1650,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               }
             }
 
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
 
             if (matchCase.pattern.kind === 'ConsPattern') {
               if (matchCase.pattern.head.kind === 'VarPattern') env.delete(matchCase.pattern.head.name);
@@ -1631,7 +1665,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           } else if (matchCase.pattern.kind === 'WildcardPattern') {
             const firstUncovered = [...Array(jumpTableSize).keys()].find(i => casePositions[i] === undefined);
             if (firstUncovered !== undefined) casePositions[firstUncovered] = caseStart - matchPos;
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
           }
 
           const jumpPos = codeOffset();
@@ -1704,7 +1738,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             emitLiteralPatternTest(matchCase.pattern);
             const missJumpPos = codeOffset();
             emitJumpIfFalse(0);
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
             const endJumpPos = codeOffset();
             emitJump(0);
             endJumps.push(endJumpPos);
@@ -1714,7 +1748,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           }
 
           if (matchCase.pattern.kind === 'WildcardPattern') {
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
             const endJumpPos = codeOffset();
             emitJump(0);
             endJumps.push(endJumpPos);
@@ -1727,7 +1761,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             env.set(matchCase.pattern.name, slot);
             emitLoadLocal(scrutineeSlot);
             emitStoreLocal(slot);
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
             env.delete(matchCase.pattern.name);
             const endJumpPos = codeOffset();
             emitJump(0);
@@ -1845,7 +1879,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         for (const matchCase of expr.cases) {
           if (matchCase.pattern.kind === 'TuplePattern') {
             const missJumps = emitTuplePatternMatches(scrutineeSlot, matchCase.pattern, outerTupleType);
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
             deleteBindingsFromTuplePattern(matchCase.pattern);
             const endJumpPos = codeOffset();
             emitJump(0);
@@ -1858,7 +1892,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           }
 
           if (matchCase.pattern.kind === 'WildcardPattern') {
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
             const endJumpPos = codeOffset();
             emitJump(0);
             endJumps.push(endJumpPos);
@@ -1870,7 +1904,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
             env.set(matchCase.pattern.name, slot);
             emitLoadLocal(scrutineeSlot);
             emitStoreLocal(slot);
-            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames);
+            emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
             env.delete(matchCase.pattern.name);
             const endJumpPos = codeOffset();
             emitJump(0);
@@ -1891,10 +1925,10 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           env.set(firstCase.pattern.name, slot);
           emitLoadLocal(scrutineeSlot);
           emitStoreLocal(slot);
-          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
           env.delete(firstCase.pattern.name);
         } else {
-          emitExpr(firstCase?.body || { kind: 'LiteralExpr', literal: 'unit', value: { kind: 'unit' } }, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(firstCase?.body || { kind: 'LiteralExpr', literal: 'unit', value: { kind: 'unit' } }, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
         }
         env.delete('$scrutinee');
       }
@@ -1902,7 +1936,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
     }
     case 'ThrowExpr': {
       // Evaluate exception value and throw
-      emitExpr(expr.value, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.value, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       emitThrow();
       // Push unit (unreachable but keeps stack consistent)
       emitLoadConst(addConstant({ tag: ConstTag.Unit }));
@@ -1915,7 +1949,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       emitTry(0); // Placeholder offset, will be patched
 
       // Emit try block
-      emitExpr(expr.body, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
       emitEndTry();
 
       // Jump over catch handler
@@ -1942,10 +1976,10 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           env.set(firstCase.pattern.name, slot);
           emitLoadLocal(excSlot); // Load exception
           emitStoreLocal(slot);
-          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
           env.delete(firstCase.pattern.name);
         } else {
-          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames);
+          emitExpr(firstCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
         }
       } else {
         emitLoadConst(addConstant({ tag: ConstTag.Unit }));
@@ -1962,7 +1996,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
     }
     case 'AwaitExpr': {
       // Evaluate task expression and await it
-      emitExpr(expr.value, env, funNameToId, shapes, adts, captures, varNames);
+      emitExpr(expr.value, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
       emitAwait();
       // AWAIT leaves the result on stack
       break;
@@ -1973,13 +2007,13 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
           expr.right.kind === 'CallExpr'
             ? { kind: 'CallExpr', callee: expr.right.callee, args: [expr.left, ...expr.right.args], span: expr.span }
             : { kind: 'CallExpr', callee: expr.right, args: [expr.left], span: expr.span };
-        emitExpr(call, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(call, env, funNameToId, shapes, adts, captures, varNames, userAdtConfigs, tailCtx);
       } else {
         const call: Expr =
           expr.left.kind === 'CallExpr'
             ? { kind: 'CallExpr', callee: expr.left.callee, args: [...expr.left.args, expr.right], span: expr.span }
             : { kind: 'CallExpr', callee: expr.left, args: [expr.right], span: expr.span };
-        emitExpr(call, env, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(call, env, funNameToId, shapes, adts, captures, varNames, userAdtConfigs, tailCtx);
       }
       break;
     }
@@ -1993,7 +2027,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
         codeStart();
         const lambdaEnv = new Map<string, number>();
         for (let i = 0; i < expr.params.length; i++) lambdaEnv.set(expr.params[i]!.name, i);
-        emitExpr(expr.body, lambdaEnv, funNameToId, shapes, adts, captures, varNames);
+        emitExpr(expr.body, lambdaEnv, funNameToId, shapes, adts, captures, varNames, undefined, undefined);
         emitRet();
         const lambdaCode = codeSlice();
         codeRestore(saved);
@@ -2023,7 +2057,7 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       chunkBaseRef.value = -1;
       const saved = codeSave();
       codeStart();
-      emitExpr(expr.body, liftedEnv, funNameToId, shapes, adts, captureMap, undefined);
+      emitExpr(expr.body, liftedEnv, funNameToId, shapes, adts, captureMap, undefined, undefined, undefined);
       emitRet();
       const lambdaCode = codeSlice();
       codeRestore(saved);
@@ -2320,14 +2354,19 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   let codeOffsetSoFar = initCode.length;
   const functionTable: FunctionEntry[] = [];
 
-  for (const decl of funDecls) {
+  for (let fi = 0; fi < funDecls.length; fi++) {
+    const decl = funDecls[fi]!;
     chunkBaseRef.value = codeOffsetSoFar;
     codeStart();
     recordDebug(decl.span?.line);
     const arity = decl.params.length;
     const fnEnv = new Map<string, number>();
     for (let i = 0; i < arity; i++) fnEnv.set(decl.params[i]!.name, i);
-    emitExpr(decl.body, fnEnv, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs);
+    const selfTailCtx: EmitTailContext = {
+      self: { name: decl.name, arity, fnId: fi, loopHeadOffset: 0 },
+      inTail: true,
+    };
+    emitExpr(decl.body, fnEnv, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs, selfTailCtx);
     emitRet();
     const fnCode = codeSlice();
     functionTable.push({
