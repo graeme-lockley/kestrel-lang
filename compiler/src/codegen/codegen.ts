@@ -104,6 +104,12 @@ export interface ShapeEntry {
   nameIndices: number[];
 }
 
+/** Nearest enclosing `while` for `break`/`continue` (emitExpr closure in makeEmitExpr). */
+interface LoopCodegenLayer {
+  breakPatches: number[];
+  loopHead: number;
+}
+
 
 /** Constructor entry for ADT table (spec 03 §10). */
 export interface ConstructorEntry {
@@ -505,6 +511,7 @@ function makeEmitExpr(
 ) => void; moduleGlobals: Map<string, number> } {
   const moduleGlobals = new Map<string, number>();
   const topLevelFuns = moduleTopLevelFunDeclCount ?? 0;
+  const loopBreakStack: LoopCodegenLayer[] = [];
   return { moduleGlobals, emitExpr: function emitExpr(
   expr: Expr,
   env: Map<string, number>,
@@ -717,13 +724,19 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       emitExpr(expr.cond, env, funNameToId, shapes, adts, captures, varNames);
       const jumpIfFalsePos = codeOffset();
       emitJumpIfFalse(0);
+      const layer: LoopCodegenLayer = { breakPatches: [], loopHead: loopStart };
+      loopBreakStack.push(layer);
       emitExpr(expr.body, env, funNameToId, shapes, adts, captures, varNames);
+      loopBreakStack.pop();
       emitStoreLocal(discardSlot);
       const jumpBackPos = codeOffset();
       emitJump(0);
       const exitPos = codeOffset();
       patchI32(jumpIfFalsePos + 1, exitPos - (jumpIfFalsePos + 5));
       patchI32(jumpBackPos + 1, loopStart - (jumpBackPos + 5));
+      for (const p of layer.breakPatches) {
+        patchI32(p + 1, exitPos - (p + 5));
+      }
       emitLoadConst(addConstant({ tag: ConstTag.Unit }));
       env.delete(discKey);
       break;
@@ -1065,6 +1078,20 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
               }
             }
           }
+        } else if (stmt.kind === 'BreakStmt') {
+          if (seenFunStmtInSource) emitPhase2();
+          const inner = loopBreakStack[loopBreakStack.length - 1];
+          if (!inner) throw new Error('Codegen: `break` outside loop');
+          const pos = codeOffset();
+          emitJump(0);
+          inner.breakPatches.push(pos);
+        } else if (stmt.kind === 'ContinueStmt') {
+          if (seenFunStmtInSource) emitPhase2();
+          const inner = loopBreakStack[loopBreakStack.length - 1];
+          if (!inner) throw new Error('Codegen: `continue` outside loop');
+          const pos = codeOffset();
+          emitJump(0);
+          patchI32(pos + 1, inner.loopHead - (pos + 5));
         } else if (stmt.kind === 'FunStmt') {
           seenFunStmtInSource = true;
         }
@@ -2023,6 +2050,9 @@ emitExpr(expr.left, env, funNameToId, shapes, adts, captures, varNames);
       emitMakeClosure(lambdaIndex);
       break;
     }
+    case 'NeverExpr':
+      // Unreachable tail after `break`/`continue` in the same block; no stack effect.
+      break;
     default:
       // Fallback: push unit
       emitLoadConst(addConstant({ tag: ConstTag.Unit }));

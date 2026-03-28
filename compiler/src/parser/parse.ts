@@ -1079,6 +1079,12 @@ class Parser {
         this.expect('op', '=');
         const body = this.parseExpr('expr');
         stmts.push({ kind: 'FunStmt', name, typeParams, params, returnType, body });
+      } else if (this.at('keyword', 'break')) {
+        this.advance();
+        stmts.push({ kind: 'BreakStmt' });
+      } else if (this.at('keyword', 'continue')) {
+        this.advance();
+        stmts.push({ kind: 'ContinueStmt' });
       } else {
         if (this.at('rbrace') || this.at('eof')) {
           const last = stmts[stmts.length - 1];
@@ -1091,10 +1097,19 @@ class Parser {
             (last.kind === 'AssignStmt' ||
               last.kind === 'ValStmt' ||
               last.kind === 'VarStmt' ||
-              last.kind === 'FunStmt')
+              last.kind === 'FunStmt' ||
+              last.kind === 'BreakStmt' ||
+              last.kind === 'ContinueStmt')
           ) {
             const span = this.current().span;
             result = { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
+          } else if (
+            ctx === 'expr' &&
+            last &&
+            (last.kind === 'BreakStmt' || last.kind === 'ContinueStmt')
+          ) {
+            const span = this.current().span;
+            result = { kind: 'NeverExpr', span };
           } else {
             this.pushError(CODES.parse.unmatched_brace, 'Expected expression before `}`', this.current().span);
             const span = this.current().span;
@@ -1123,6 +1138,8 @@ class Parser {
         !this.at('keyword', 'val') &&
         !this.at('keyword', 'var') &&
         !this.at('keyword', 'fun') &&
+        !this.at('keyword', 'break') &&
+        !this.at('keyword', 'continue') &&
         !this.isExprStart()
       ) {
         this.pushError(CODES.parse.expected_semicolon, 'Expected `;`', this.current().span);

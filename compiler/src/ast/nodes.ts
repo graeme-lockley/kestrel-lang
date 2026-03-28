@@ -224,6 +224,19 @@ export interface FunStmt extends NodeBase {
   body: Expr;
 }
 
+export interface BreakStmt extends NodeBase {
+  kind: 'BreakStmt';
+}
+
+export interface ContinueStmt extends NodeBase {
+  kind: 'ContinueStmt';
+}
+
+/** Synthetic block result when an expression-oriented block ends with `break`/`continue`: no value is produced (control never reaches the tail). Infers as a fresh type variable so the block unifies with any expected type. */
+export interface NeverExpr extends NodeBase {
+  kind: 'NeverExpr';
+}
+
 export type Expr =
   | IfExpr
   | WhileExpr
@@ -244,7 +257,8 @@ export type Expr =
   | UnaryExpr
   | ConsExpr
   | TupleExpr
-  | BlockExpr;
+  | BlockExpr
+  | NeverExpr;
 
 export interface IfExpr extends NodeBase {
   kind: 'IfExpr';
@@ -373,7 +387,7 @@ export interface TupleExpr extends NodeBase {
 
 export interface BlockExpr extends NodeBase {
   kind: 'BlockExpr';
-  stmts: (ValStmt | VarStmt | AssignStmt | ExprStmt | FunStmt)[];
+  stmts: (ValStmt | VarStmt | AssignStmt | ExprStmt | FunStmt | BreakStmt | ContinueStmt)[];
   result: Expr;
 }
 

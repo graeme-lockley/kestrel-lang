@@ -81,7 +81,7 @@ Logical `&` and `|` in the language are short-circuit; the compiler emits branch
 | `JUMP` | `offset` | Unconditional jump. `offset` is a **byte offset** (see §4) from the base (e.g. start of current instruction or of function). |
 | `JUMP_IF_FALSE` | `offset` | Pop one value; if it is False (or falsy per runtime model), jump by `offset`; else fall through. |
 
-**Language coverage:** `if`/`else`, short-circuit `&`/`|`, `while` loops (backward `JUMP` after the body, `JUMP_IF_FALSE` to exit), pattern-match fall-through.
+**Language coverage:** `if`/`else`, short-circuit `&`/`|`, `while` loops (backward `JUMP` after the body, `JUMP_IF_FALSE` to exit), **`break`** (forward `JUMP` to the loop exit, patched after the loop is emitted) and **`continue`** (unconditional `JUMP` back to the condition test at the loop head), pattern-match fall-through.
 
 ### 1.7 Algebraic Data Types
 

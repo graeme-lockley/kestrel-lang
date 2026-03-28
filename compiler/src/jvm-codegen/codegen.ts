@@ -428,6 +428,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
 
   const { lambdas, idByNode } = collectLambdas(program, globalNames, funNames);
 
+  /** Nearest enclosing `while` for `break`/`continue` (JVM emitExpr closure). */
+  const loopBreakStack: { breakJumps: number[]; loopHead: number }[] = [];
+
   /** Build inner class for lambda (implements KFunction, apply calls outer.$lambdaN). */
   function buildLambdaClass(outerClassName: string, lambdaId: number, arity: number, capturing: boolean): Uint8Array {
     const innerName = outerClassName + '$Lambda' + lambdaId;
@@ -770,7 +773,10 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         const ifeqPos = mb.length();
         mb.emit1s(JvmOp.IFEQ, 0);
         mb.addBranchTarget(mb.length(), loopState);
+        const layer = { breakJumps: [] as number[], loopHead };
+        loopBreakStack.push(layer);
         emitExpr(expr.body, mb);
+        loopBreakStack.pop();
         mb.emit1(JvmOp.POP);
         const gotoPos = mb.length();
         mb.emit1s(JvmOp.GOTO, 0);
@@ -778,6 +784,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.addBranchTarget(exitPos, loopState);
         patchShort(mb, ifeqPos + 1, exitPos - ifeqPos);
         patchShort(mb, gotoPos + 1, loopHead - gotoPos);
+        for (const j of layer.breakJumps) {
+          patchShort(mb, j + 1, exitPos - j);
+        }
         mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
         break;
       }
@@ -944,6 +953,18 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
               mb.emit1(JvmOp.POP);
             }
+          } else if (stmt.kind === 'BreakStmt') {
+            const top = loopBreakStack[loopBreakStack.length - 1];
+            if (!top) throw new Error('JVM codegen: `break` outside loop');
+            const gotoPos = mb.length();
+            mb.emit1s(JvmOp.GOTO, 0);
+            top.breakJumps.push(gotoPos);
+          } else if (stmt.kind === 'ContinueStmt') {
+            const top = loopBreakStack[loopBreakStack.length - 1];
+            if (!top) throw new Error('JVM codegen: `continue` outside loop');
+            const gotoPos = mb.length();
+            mb.emit1s(JvmOp.GOTO, 0);
+            patchShort(mb, gotoPos + 1, top.loopHead - gotoPos);
           } else if (stmt.kind === 'ExprStmt') {
             emitExpr(stmt.expr, mb);
             mb.emit1(JvmOp.POP);
@@ -1931,6 +1952,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         }
         break;
       }
+      case 'NeverExpr':
+        // Unreachable tail after `break`/`continue` in the same block.
+        break;
       default:
         throw new Error(`JVM codegen: unsupported expr ${(expr as Expr).kind}`);
     }

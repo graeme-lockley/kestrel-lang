@@ -44,6 +44,8 @@ export const CODES = {
     unify: 'type:unify',
     non_exhaustive_match: 'type:non_exhaustive_match',
     check: 'type:check',
+    break_outside_loop: 'type:break_outside_loop',
+    continue_outside_loop: 'type:continue_outside_loop',
   },
   export: {
     not_exported: 'export:not_exported',

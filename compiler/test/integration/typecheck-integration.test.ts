@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { tokenize } from '../../src/lexer/index.js';
 import { parse } from '../../src/parser/index.js';
 import { typecheck, getInferredType } from '../../src/typecheck/index.js';
+import { CODES } from '../../src/diagnostics/types.js';
 
 describe('parse then typecheck (multi-declaration)', () => {
   it('typechecks program with multiple val and fun declarations', () => {
@@ -62,5 +63,20 @@ describe('parse then typecheck (multi-declaration)', () => {
         expect(typeOnValue.name).toBe('Int');
       }
     }
+  });
+
+  it('rejects break outside loop with type:break_outside_loop', () => {
+    const source = 'fun f(): Unit = { break }';
+    const tc = typecheck(parse(tokenize(source)));
+    expect(tc.ok).toBe(false);
+    if (!tc.ok) {
+      expect(tc.diagnostics.some((d) => d.code === CODES.type.break_outside_loop)).toBe(true);
+    }
+  });
+
+  it('allows if-branch block ending with break in expression context inside while', () => {
+    const source = 'fun f(): Unit = { while (True) { if (True) { break } else () } }';
+    const tc = typecheck(parse(tokenize(source)));
+    expect(tc.ok).toBe(true);
   });
 });

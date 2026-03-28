@@ -41,6 +41,33 @@ describe('parse (integration)', () => {
     }
   });
 
+  it('parses break and continue in while body', () => {
+    const ast = parse(tokenize('fun f(): Unit = { while (True) { break; continue } }'));
+    expect(ast.body[0]?.kind).toBe('FunDecl');
+    const fd = ast.body[0];
+    if (fd?.kind !== 'FunDecl') return;
+    expect(fd.body.kind).toBe('BlockExpr');
+    const wb = fd.body;
+    if (wb.kind !== 'BlockExpr') return;
+    const wh = wb.result;
+    expect(wh.kind).toBe('WhileExpr');
+    if (wh.kind !== 'WhileExpr') return;
+    const inner = wh.body;
+    expect(inner.stmts.map((s) => s.kind)).toEqual(['BreakStmt', 'ContinueStmt']);
+  });
+
+  it('parses expression-oriented block ending with break as NeverExpr tail', () => {
+    const ast = parse(tokenize('fun f(): Unit = { break }'));
+    const fd = ast.body[0];
+    expect(fd?.kind).toBe('FunDecl');
+    if (fd?.kind !== 'FunDecl') return;
+    expect(fd.body.kind).toBe('BlockExpr');
+    const b = fd.body;
+    if (b.kind !== 'BlockExpr') return;
+    expect(b.stmts.map((s) => s.kind)).toEqual(['BreakStmt']);
+    expect(b.result.kind).toBe('NeverExpr');
+  });
+
   it('parses fun decl with param and return type', () => {
     const ast = parse(tokenize('fun id(x): Int = 1'));
     expect(ast.kind).toBe('Program');

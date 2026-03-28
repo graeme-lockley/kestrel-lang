@@ -68,7 +68,7 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 
 - **parse:*** — Parser (syntax) errors. Example: `parse:unexpected_token`.
 - **resolve:*** — Module resolution. Examples: `resolve:module_not_found`, `resolve:stdlib_not_configured`.
-- **type:*** — Typechecker. Examples: `type:unknown_variable`, `type:unify`, `type:non_exhaustive_match`.
+- **type:*** — Typechecker. Examples: `type:unknown_variable`, `type:unify`, `type:non_exhaustive_match`, `type:break_outside_loop`, `type:continue_outside_loop`.
 - **export:*** — Export/import mismatch. Example: `export:not_exported`.
 - **file:*** — Package/file system. Examples: `file:read_error`, `file:circular_import`.
 
@@ -85,6 +85,8 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 | `type:unify` | Type mismatch (unification failed). |
 | `type:non_exhaustive_match` | Match is not exhaustive. |
 | `type:check` | General type-check error. |
+| `type:break_outside_loop` | `break` is not inside a `while` body. |
+| `type:continue_outside_loop` | `continue` is not inside a `while` body. |
 | `export:not_exported` | Module does not export the requested name. |
 | `file:read_error` | Could not read file. |
 | `file:circular_import` | Circular import detected. |

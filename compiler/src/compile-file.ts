@@ -40,13 +40,15 @@ function countLambdasInExpr(e: Expr): number {
     }, 0);
     case 'RecordExpr': return (e.spread ? countLambdasInExpr(e.spread) : 0) + e.fields.reduce((n, f) => n + countLambdasInExpr(f.value), 0);
     case 'TemplateExpr': return e.parts.reduce((n, p) => n + (p.type === 'interp' ? countLambdasInExpr(p.expr) : 0), 0);
+    case 'NeverExpr':
+      return 0;
     case 'BlockExpr': {
       let n = countLambdasInExpr(e.result);
       for (const s of e.stmts) {
         if (s.kind === 'ExprStmt') n += countLambdasInExpr(s.expr);
         else if (s.kind === 'AssignStmt') n += countLambdasInExpr(s.target) + countLambdasInExpr(s.value);
         else if (s.kind === 'FunStmt') n += 1 + countLambdasInExpr(s.body);
-        else n += countLambdasInExpr(s.value);
+        else if (s.kind === 'ValStmt' || s.kind === 'VarStmt') n += countLambdasInExpr(s.value);
       }
       return n;
     }

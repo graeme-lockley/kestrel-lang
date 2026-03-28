@@ -29,7 +29,8 @@ export class TypeCheckError extends Error {
   constructor(
     message: string,
     public node?: unknown,
-    public suggestion?: string
+    public suggestion?: string,
+    public diagnosticCode?: string
   ) {
     super(message);
     this.name = 'TypeCheckError';
@@ -61,6 +62,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
   const opaqueTypes = new Set<string>();
   const exportedTypeVisibility = new Map<string, 'local' | 'opaque' | 'export'>();
   let inAsyncContext = false; // Track if we're in an async function
+  let loopDepth = 0;
   const sourceFile = options?.sourceFile ?? '';
   const sourceContent = options?.sourceContent;
   /** Current expression for UnifyError location (spec 10). */
@@ -587,7 +589,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
       case 'WhileExpr': {
         const condT = inferExpr(expr.cond);
         unifyWithBlame(condT, tBool, expr);
+        loopDepth++;
         inferExpr(expr.body);
+        loopDepth--;
         setInferredType(expr, tUnit);
         return tUnit;
       }
@@ -702,6 +706,26 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
             env.set(stmt.name, apply(t));
           } else if (stmt.kind === 'ExprStmt') {
             inferExpr(stmt.expr);
+          } else if (stmt.kind === 'BreakStmt') {
+            if (loopDepth <= 0) {
+              throw new TypeCheckError(
+                '`break` may only be used inside a loop body',
+                stmt,
+                undefined,
+                CODES.type.break_outside_loop
+              );
+            }
+            setInferredType(stmt, tUnit);
+          } else if (stmt.kind === 'ContinueStmt') {
+            if (loopDepth <= 0) {
+              throw new TypeCheckError(
+                '`continue` may only be used inside a loop body',
+                stmt,
+                undefined,
+                CODES.type.continue_outside_loop
+              );
+            }
+            setInferredType(stmt, tUnit);
           } else {
             const targetT = inferExpr(stmt.target);
             const v = inferExpr(stmt.value);
@@ -1113,6 +1137,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
         setInferredType(expr, result);
         return result;
       }
+      case 'NeverExpr': {
+        // Polymorphic "bottom": unifies with whatever context expects (e.g. function return type).
+        result = freshVar();
+        setInferredType(expr, result);
+        return result;
+      }
       default:
         result = freshVar();
         setInferredType(expr, result);
@@ -1420,7 +1450,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): { ok: t
     } else if (e instanceof TypeCheckError) {
       diagnostics.push({
         severity: 'error',
-        code: e.suggestion != null ? CODES.type.unknown_variable : CODES.type.check,
+        code:
+          e.diagnosticCode ??
+          (e.suggestion != null ? CODES.type.unknown_variable : CODES.type.check),
         message: e.message,
         location: locFor(e.node),
         suggestion: e.suggestion,
