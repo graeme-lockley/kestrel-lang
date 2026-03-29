@@ -70,7 +70,7 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or VM with non
 ./kestrel run <script.ks> [args...]
 
 # Disassemble bytecode
-./kestrel dis <script.ks>
+./kestrel dis [--verbose|--code-only] <script.ks>
 
 # Build compiler and VM (optionally compile a script)
 ./kestrel build [script.ks]

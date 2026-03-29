@@ -35,10 +35,16 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.2 dis
 
-**Usage:** `kestrel dis <script[.ks]>`
+**Usage:** `kestrel dis [--verbose|--code-only] <script[.ks]>`
 
 - **Effect:** Compiles the named script if needed (same freshness rules as `run`; output cached under `~/.kestrel/kbc/` as for `run`), then unpacks the `.kbc` and prints the disassembled bytecode in mnemonic form.
-- **Output:** Each instruction is printed with its byte offset and mnemonic (e.g. `LOAD_CONST 0`, `ADD`, `RET`). Format follows [04-bytecode-isa.md](04-bytecode-isa.md) instruction encoding. When the bytecode includes a non-empty debug section (03 §8), the disassembler may annotate instructions with source file and line (e.g. `; line N` or section comments `; --- file:line ---`).
+- **Output modes:**
+  - **Default:** Shows code section with function boundaries (`; --- function "name" (arity N, offset 0xABC) ---`), debug annotations when present (`; --- file:line ---`), and constant comments.
+  - **`--verbose`:** Additionally shows import table, shape table, and ADT table before the code section.
+  - **`--code-only`:** Shows only raw instruction lines without comments, headers, or table dumps.
+- **Function boundaries:** When the bytecode contains a function table (03 §6.1), the disassembler marks each function's code region with a boundary comment. The module initializer (top-level code) is labeled `"<module>"` if no function claims offset 0.
+- **Table dumps (--verbose only):** Imports list module specifiers; shapes show field names and types; ADTs show constructor names and payload status.
+- **Format:** Each instruction is printed with its byte offset and mnemonic (e.g. `LOAD_CONST 0`, `ADD`, `RET`). Format follows [04-bytecode-isa.md](04-bytecode-isa.md) instruction encoding. When the bytecode includes a non-empty debug section (03 §8), instructions are annotated with source file and line.
 - **Purpose:** Debugging and inspection of emitted bytecode.
 
 ### 2.3 build

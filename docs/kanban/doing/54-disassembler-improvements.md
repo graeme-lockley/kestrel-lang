@@ -62,7 +62,7 @@ The `kestrel dis` command provides basic bytecode disassembly but could be enhan
 
 ## Tasks
 
-- [ ] Implement parsing of section 2 through §6.1 (after `n_globals`, read `function_count` and 24-byte entries: `name_index`, `arity`, `code_offset`, flags, reserved, `type_index`) using string table for names. Sort or walk by `code_offset` to emit boundaries in address order (spec does not require sorted function table; disassembler should order by `code_offset` for listing).
+- [x] Implement parsing of section 2 through §6.1 (after `n_globals`, read `function_count` and 24-byte entries: `name_index`, `arity`, `code_offset`, flags, reserved, `type_index`) using string table for names. Sort or walk by `code_offset` to emit boundaries in address order (spec does not require sorted function table; disassembler should order by `code_offset` for listing).
 - [ ] Implement skip/parse through §6.5: read `import_count` and specifier string indices; resolve via string table for the import listing.
 - [ ] Parse section 5 (shape table) per 03 §9: for each shape, list field names (string table) in `--verbose` (and default if spec/task agreement: prefer **verbose-only** for large tables to match acceptance “full table dumps”).
 - [ ] Parse section 6 (ADT table) per 03 §10: type name, each constructor name, note payload vs. none (`0xFFFF_FFFF`).
@@ -72,6 +72,18 @@ The `kestrel dis` command provides basic bytecode disassembly but could be enhan
 - [ ] Update `scripts/kestrel` usage and `cmd_dis` to forward flags to `disasm.js`.
 - [ ] Align `OP_NAMES` / operand decoding with 04 for any missing opcodes encountered in real `.kbc` files (e.g. `KIND_IS` and others).
 - [ ] Run `cd compiler && npm run build && npm test` and spot-check `./kestrel dis` on a small script and one with imports/shapes/ADTs.
+
+## Build notes
+
+- Implemented parsing of section 2 (function table, import table), section 5 (shape table), and section 6 (ADT table)
+- Added function boundary markers in disassembly output with format `--- function "name" (arity N, offset 0xABC) ---`
+- Added module initializer boundary `--- function "<module>" (arity 0, offset 0x00000000) ---` when no function claims offset 0
+- Added CLI flags: `--verbose` for full table dumps (imports, shapes, ADTs), `--code-only` for minimal instruction-only output
+- Fixed readU32 to handle unsigned 32-bit values correctly (was returning signed due to JS bitwise ops)
+- Added KIND_IS opcode support (0x25)
+- Updated scripts/kestrel to forward flags to disassembler
+- All existing compiler tests pass
+- Tested on various scripts: empty.ks, records.test.ks, functions.test.ks
 
 ## Tests to add
 

@@ -44,10 +44,11 @@ const OP_NAMES: Record<number, string> = {
   0x22: 'MAKE_CLOSURE',
   0x23: 'LOAD_IMPORTED_FN',
   0x24: 'CONSTRUCT_IMPORT',
+  0x25: 'KIND_IS',
 };
 
 function readU32(data: Uint8Array, offset: number): number {
-  return data[offset]! | (data[offset + 1]! << 8) | (data[offset + 2]! << 16) | (data[offset + 3]! << 24);
+  return (data[offset]! | (data[offset + 1]! << 8) | (data[offset + 2]! << 16) | (data[offset + 3]! << 24)) >>> 0;
 }
 
 function readI32(data: Uint8Array, offset: number): number {
@@ -173,16 +174,164 @@ function parseDebugSection(
   return map;
 }
 
+/** Parse section 2 (function table and related) and return metadata. */
+function parseSection2(
+  data: Uint8Array,
+  section2Start: number,
+  section2End: number,
+  strings: string[]
+): {
+  functions: Array<{ name: string; arity: number; codeOffset: number; flags: number; typeIndex: number }>;
+  imports: string[];
+  shapeTable: Array<{ fields: Array<{ name: string; typeIndex: number }> }>;
+  adtTable: Array<{ name: string; constructors: Array<{ name: string; payloadTypeIndex: number }> }>;
+} {
+  const result = {
+    functions: [] as Array<{ name: string; arity: number; codeOffset: number; flags: number; typeIndex: number }>,
+    imports: [] as string[],
+    shapeTable: [] as Array<{ fields: Array<{ name: string; typeIndex: number }> }>,
+    adtTable: [] as Array<{ name: string; constructors: Array<{ name: string; payloadTypeIndex: number }> }>
+  };
+
+  if (section2Start + 8 > section2End) return result;
+
+  // n_globals (u32), function_count (u32)
+  const nGlobals = readU32(data, section2Start);
+  const functionCount = readU32(data, section2Start + 4);
+  let o = section2Start + 8;
+
+  // Function table: function_count × 24 bytes
+  for (let i = 0; i < functionCount && o + 24 <= section2End; i++) {
+    const nameIndex = readU32(data, o);
+    const arity = readU32(data, o + 4);
+    const codeOffset = readU32(data, o + 8);
+    const flags = readU32(data, o + 12);
+    const reserved = readU32(data, o + 16);
+    const typeIndex = readU32(data, o + 20);
+    const name = nameIndex < strings.length ? strings[nameIndex]! : `?(${nameIndex})`;
+    result.functions.push({ name, arity, codeOffset, flags, typeIndex });
+    o += 24;
+  }
+
+  // Type table: type_count (u32), then offsets (u32 × (type_count + 1)), then blob
+  if (o + 4 > section2End) return result;
+  const typeCount = readU32(data, o);
+  o += 4;
+  if (o + (typeCount + 1) * 4 > section2End) return result;
+  const typeOffsets: number[] = [];
+  for (let i = 0; i <= typeCount; i++) {
+    typeOffsets.push(readU32(data, o));
+    o += 4;
+  }
+  const blobStart = o;
+  const blobEnd = Math.min(blobStart + typeOffsets[typeCount]!, section2End);
+  o = align4(blobEnd);
+
+  // Exported type declarations: exported_type_count (u32), then pairs
+  if (o + 4 > section2End) return result;
+  const exportedTypeCount = readU32(data, o);
+  o += 4;
+  o += exportedTypeCount * 8; // Skip name_index, type_index pairs
+  o = align4(o);
+
+  // Import table: import_count (u32), then import_count × u32
+  if (o + 4 > section2End) return result;
+  const importCount = readU32(data, o);
+  o += 4;
+  for (let i = 0; i < importCount && o + 4 <= section2End; i++) {
+    const strIndex = readU32(data, o);
+    o += 4;
+    const importName = strIndex < strings.length ? strings[strIndex]! : `?(${strIndex})`;
+    result.imports.push(importName);
+  }
+
+  // Imported function table: imported_function_count (u32), then pairs
+  if (o + 4 > section2End) return result;
+  const importedFunctionCount = readU32(data, o);
+  o += 4;
+  o += importedFunctionCount * 8; // Skip import_index, function_index pairs
+
+  return result;
+}
+
+/** Parse section 5 (shape table). */
+function parseShapeTable(
+  data: Uint8Array,
+  section5Start: number,
+  section5End: number,
+  strings: string[]
+): Array<{ fields: Array<{ name: string; typeIndex: number }> }> {
+  const shapes: Array<{ fields: Array<{ name: string; typeIndex: number }> }> = [];
+  if (section5Start + 4 > section5End) return shapes;
+  const shapeCount = readU32(data, section5Start);
+  let o = section5Start + 4;
+  for (let i = 0; i < shapeCount && o + 4 <= section5End; i++) {
+    o = align4(o);
+    if (o + 4 > section5End) break;
+    const fieldCount = readU32(data, o);
+    o += 4;
+    const fields: Array<{ name: string; typeIndex: number }> = [];
+    for (let j = 0; j < fieldCount && o + 8 <= section5End; j++) {
+      const nameIndex = readU32(data, o);
+      const typeIndex = readU32(data, o + 4);
+      o += 8;
+      const name = nameIndex < strings.length ? strings[nameIndex]! : `?(${nameIndex})`;
+      fields.push({ name, typeIndex });
+    }
+    shapes.push({ fields });
+  }
+  return shapes;
+}
+
+/** Parse section 6 (ADT table). */
+function parseAdtTable(
+  data: Uint8Array,
+  section6Start: number,
+  section6End: number,
+  strings: string[]
+): Array<{ name: string; constructors: Array<{ name: string; payloadTypeIndex: number }> }> {
+  const adts: Array<{ name: string; constructors: Array<{ name: string; payloadTypeIndex: number }> }> = [];
+  if (section6Start + 4 > section6End) return adts;
+  const adtCount = readU32(data, section6Start);
+  let o = section6Start + 4;
+  for (let i = 0; i < adtCount && o + 8 <= section6End; i++) {
+    o = align4(o);
+    if (o + 8 > section6End) break;
+    const nameIndex = readU32(data, o);
+    const constructorCount = readU32(data, o + 4);
+    o += 8;
+    const name = nameIndex < strings.length ? strings[nameIndex]! : `?(${nameIndex})`;
+    const constructors: Array<{ name: string; payloadTypeIndex: number }> = [];
+    for (let j = 0; j < constructorCount && o + 8 <= section6End; j++) {
+      const ctorNameIndex = readU32(data, o);
+      const payloadTypeIndex = readU32(data, o + 4);
+      o += 8;
+      const ctorName = ctorNameIndex < strings.length ? strings[ctorNameIndex]! : `?(${ctorNameIndex})`;
+      constructors.push({ name: ctorName, payloadTypeIndex });
+    }
+    adts.push({ name, constructors });
+  }
+  return adts;
+}
+
 function disasm(
   data: Uint8Array,
   codeStart: number,
   codeEnd: number,
   constantComments: string[] = [],
-  debugByOffset: Map<number, { file: string; line: number }> = new Map()
+  debugByOffset: Map<number, { file: string; line: number }> = new Map(),
+  functions: Array<{ name: string; arity: number; codeOffset: number; flags: number; typeIndex: number }> = [],
+  verbose: boolean = false
 ): string[] {
   const lines: string[] = [];
   let pc = codeStart;
   let lastLine: { file: string; line: number } | null = null;
+
+  // Sort functions by code offset for boundary detection
+  const sortedFunctions = [...functions].sort((a, b) => a.codeOffset - b.codeOffset);
+
+  // Check if there's a function at offset 0 (module initializer)
+  const hasInitializerFunction = sortedFunctions.some(f => f.codeOffset === 0);
 
   /** Find debug info for code offset (relative to code section): last entry with code_offset <= offset. */
   function getDebug(codeOffset: number): { file: string; line: number } | undefined {
@@ -209,6 +358,18 @@ function disasm(
   while (pc < codeEnd) {
     const base = pc;
     const codeOffset = base - codeStart;
+
+    // Check for module initializer at offset 0
+    if (codeOffset === 0 && !hasInitializerFunction) {
+      lines.push(`; --- function "<module>" (arity 0, offset 0x00000000) ---`);
+    }
+
+    // Check for function boundary
+    const funcAtOffset = sortedFunctions.find(f => f.codeOffset === codeOffset);
+    if (funcAtOffset) {
+      lines.push(`; --- function "${funcAtOffset.name}" (arity ${funcAtOffset.arity}, offset 0x${funcAtOffset.codeOffset.toString(16).padStart(8, '0')}) ---`);
+    }
+
     const rawDebug = getDebug(codeOffset);
     const debug = effectiveDebug(rawDebug ?? undefined, codeOffset);
     if (debug && (!lastLine || lastLine.line !== debug.line || lastLine.file !== debug.file)) {
@@ -251,6 +412,7 @@ function disasm(
       case 0x21: // LOAD_FN
       case 0x22: // MAKE_CLOSURE
       case 0x23: // LOAD_IMPORTED_FN
+      case 0x25: // KIND_IS
         operands = ` ${readU32(data, pc)}`;
         pc += 4;
         break;
@@ -303,12 +465,31 @@ function disasm(
 
 function main(): void {
   const args = process.argv.slice(2);
-  if (args.length < 1) {
-    process.stderr.write('Usage: disasm <file.kbc>\n');
+  let verbose = false;
+  let codeOnly = false;
+  let inputPath = '';
+
+  // Parse flags
+  for (const arg of args) {
+    if (arg === '--verbose') {
+      verbose = true;
+    } else if (arg === '--code-only') {
+      codeOnly = true;
+    } else if (!arg.startsWith('-')) {
+      inputPath = arg;
+    } else {
+      process.stderr.write(`disasm: unknown flag ${arg}\n`);
+      process.stderr.write('Usage: disasm [--verbose|--code-only] <file.kbc>\n');
+      process.exit(1);
+    }
+  }
+
+  if (!inputPath) {
+    process.stderr.write('Usage: disasm [--verbose|--code-only] <file.kbc>\n');
     process.exit(1);
   }
 
-  const path = args[0]!;
+  const path = inputPath;
   let data: Uint8Array;
   try {
     const buf = readFileSync(path);
@@ -338,8 +519,11 @@ function main(): void {
   const section3 = readU32(data, 20);
   const section4 = readU32(data, 24);
   const section5 = readU32(data, 28);
+  const section6 = readU32(data, 32);
   const codeEnd = Math.min(section4, data.length);
   const section4End = Math.min(section5, data.length);
+  const section5End = Math.min(section6, data.length);
+  const section6End = Math.min(data.length, data.length); // Last section goes to end
 
   const strings =
     section0 < data.length && section1 > section0
@@ -349,15 +533,75 @@ function main(): void {
     section1 < data.length && section2 > section1
       ? parseConstantPool(data, section1, section2, strings)
       : [];
+  const section2Data =
+    section2 < data.length && section3 > section2
+      ? parseSection2(data, section2, section3, strings)
+      : { functions: [], imports: [], shapeTable: [], adtTable: [] };
   const debugByOffset =
     section4 < data.length && section4End > section4
       ? parseDebugSection(data, section4, section4End, strings)
       : new Map<number, { file: string; line: number }>();
 
-  const lines = disasm(data, section3, codeEnd, constantComments, debugByOffset);
-  process.stdout.write(`; Code section (offset ${section3}, ${codeEnd - section3} bytes)\n`);
-  for (const line of lines) {
-    process.stdout.write(line + '\n');
+  // Output verbose sections if requested
+  if (verbose && !codeOnly) {
+    // Import table
+    if (section2Data.imports.length > 0) {
+      process.stdout.write('; Imports:\n');
+      for (let i = 0; i < section2Data.imports.length; i++) {
+        process.stdout.write(`;   ${i}: ${section2Data.imports[i]}\n`);
+      }
+      process.stdout.write('\n');
+    }
+
+    // Shape table
+    const shapeTable =
+      section5 < data.length && section5End > section5
+        ? parseShapeTable(data, section5, section5End, strings)
+        : [];
+    if (shapeTable.length > 0) {
+      process.stdout.write('; Shape table:\n');
+      for (let i = 0; i < shapeTable.length; i++) {
+        process.stdout.write(`;   Shape ${i}:\n`);
+        for (const field of shapeTable[i]!.fields) {
+          process.stdout.write(`;     ${field.name}: type ${field.typeIndex}\n`);
+        }
+      }
+      process.stdout.write('\n');
+    }
+
+    // ADT table
+    const adtTable =
+      section6 < data.length && section6End > section6
+        ? parseAdtTable(data, section6, section6End, strings)
+        : [];
+    if (adtTable.length > 0) {
+      process.stdout.write('; ADT table:\n');
+      for (let i = 0; i < adtTable.length; i++) {
+        process.stdout.write(`;   ADT ${i}: ${adtTable[i]!.name}\n`);
+        for (let j = 0; j < adtTable[i]!.constructors.length; j++) {
+          const ctor = adtTable[i]!.constructors[j]!;
+          const payload = ctor.payloadTypeIndex === 0xFFFF_FFFF ? 'none' : `type ${ctor.payloadTypeIndex}`;
+          process.stdout.write(`;     ${j}: ${ctor.name} (${payload})\n`);
+        }
+      }
+      process.stdout.write('\n');
+    }
+  }
+
+  if (!codeOnly) {
+    const lines = disasm(data, section3, codeEnd, constantComments, debugByOffset, section2Data.functions, verbose);
+    process.stdout.write(`; Code section (offset ${section3}, ${codeEnd - section3} bytes)\n`);
+    for (const line of lines) {
+      process.stdout.write(line + '\n');
+    }
+  } else {
+    // Code-only mode: just the raw instruction lines
+    const lines = disasm(data, section3, codeEnd, constantComments, debugByOffset, section2Data.functions, verbose);
+    for (const line of lines) {
+      if (!line.startsWith(';')) {
+        process.stdout.write(line + '\n');
+      }
+    }
   }
 }
 
