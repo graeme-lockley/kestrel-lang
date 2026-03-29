@@ -162,6 +162,23 @@ fun combineSurrogate(hi: Int, lo: Int): Int =
 fun appendCodePoint(acc: String, u: Int): String =
   Str.append(acc, Char.charToString(Char.fromCode(u)))
 
+/** After a high surrogate `\uHHHH`, parse optional `\uLLLL` and combine (JSON UTF-16 pair → one scalar). */
+fun parseLowSurrogateAfterHigh(s: String, j: Int, hi: Int): Result<(String, Int), JsonParseError> =
+  if (j + 1 < Str.length(s) & Str.codePointAt(s, j) == 92 & Str.codePointAt(s, j + 1) == 117) {
+    val rl = parseHex4(s, j + 2)
+    match (rl) {
+      Err(_) => Err(InvalidUnicodeEscape(j))
+      Ok(pl) => {
+        val loVal = pl.0
+        val afterLow = pl.1
+        if (isLowSurrogate(loVal)) {
+          val cp = combineSurrogate(hi, loVal)
+          if (cp > 1114111) Err(InvalidUnicodeEscape(j)) else Ok((appendCodePoint("", cp), afterLow))
+        } else Err(InvalidUnicodeEscape(j))
+      }
+    }
+  } else Err(InvalidUnicodeEscape(j))
+
 fun parseUnicodeEscape(s: String, i: Int): Result<(String, Int), JsonParseError> =
   if (i >= Str.length(s) | Str.codePointAt(s, i) != 117) Err(InvalidUnicodeEscape(i))
   else {
@@ -171,20 +188,8 @@ fun parseUnicodeEscape(s: String, i: Int): Result<(String, Int), JsonParseError>
       Ok(pu) => {
         val u = pu.0
         val j = pu.1
-        if (isHighSurrogate(u)) {
-          if (j + 1 < Str.length(s) & Str.codePointAt(s, j) == 92 & Str.codePointAt(s, j + 1) == 117) {
-            val rl = parseHex4(s, j + 2)
-            match (rl) {
-              Err(_) => Err(InvalidUnicodeEscape(j))
-              Ok(pl) => {
-                if (isLowSurrogate(pl.0)) {
-                  val cp = combineSurrogate(u, pl.0)
-                  if (cp > 1114111) Err(InvalidUnicodeEscape(j)) else Ok((appendCodePoint("", cp), pl.1))
-                } else Err(InvalidUnicodeEscape(j))
-              }
-            }
-          } else Err(InvalidUnicodeEscape(j))
-        } else {
+        if (isHighSurrogate(u)) parseLowSurrogateAfterHigh(s, j, u)
+        else {
           if (isLowSurrogate(u)) Err(InvalidUnicodeEscape(i + 1))
           else Ok((appendCodePoint("", u), j))
         }
