@@ -56,6 +56,8 @@ zig build test
 
 ### End-to-End Tests
 
+Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or VM with non-zero exit; see `tests/e2e/scenarios/negative/README.md`) and `tests/e2e/scenarios/positive/*.ks` (stdout compared to `*.expected`). `./scripts/test-all.sh` runs `./scripts/run-e2e.sh` after compiler and VM tests.
+
 ```bash
 # Run E2E tests (from project root)
 ./scripts/run-e2e.sh

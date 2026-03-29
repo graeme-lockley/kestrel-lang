@@ -1,8 +1,10 @@
 # E2E tests
 
-E2E runs **negative tests only**: scenarios that must **fail** (at compile time or at runtime).
+`./scripts/run-e2e.sh` runs **two** scenario directories:
 
-- **Negative scenarios**: `scenarios/negative/*.ks` — see `scenarios/negative/README.md`.
-- **Positive behaviour** (compile + run successfully) is covered by **Kestrel unit tests** in `tests/unit/*.test.ks`, run via `./scripts/kestrel test`. Those unit tests are full compile-and-execute tests with assertions; only failure cases remain in E2E.
+- **Negative** (`tests/e2e/scenarios/negative/*.ks`): each file must **fail** — either the compiler rejects it, or the VM exits non-zero. Some scenarios use companion modules under `negative/_fixtures/` (not picked up as top-level scenarios; only `*.ks` directly in `negative/` are run). Optional first-line marker `// E2E_EXPECT_STACK_TRACE` requests extra stderr checks for uncaught-exception-style diagnostics (see `scripts/run-e2e.sh`).
+- **Positive** (`tests/e2e/scenarios/positive/*.ks`): must compile, run with exit code 0, and match sibling `*.expected` stdout goldens.
 
-Run E2E: `./scripts/run-e2e.sh`
+Negative scenarios are indexed in `scenarios/negative/README.md`. Broader language coverage lives in `tests/unit/*.test.ks` (via `./scripts/kestrel test`) and under `tests/conformance/`.
+
+Run E2E from the repo root: `./scripts/run-e2e.sh`. The same script is invoked by `./scripts/test-all.sh` after compiler and VM tests.

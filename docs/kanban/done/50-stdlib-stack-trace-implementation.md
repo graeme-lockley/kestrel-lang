@@ -18,7 +18,7 @@ The `kestrel:stack` module provides `format()` and `print()` but `trace()` is de
 
 - **Follows** `docs/kanban/done/46-stdlib-stack-implementation.md` (format/print shipped; trace explicitly deferred).
 - **Independent of** later roadmap items (51–64); no hard ordering dependency beyond normal stdlib/compiler/VM sequencing.
-- **May reuse patterns from** existing E2E negative coverage (`tests/e2e/scenarios/negative/uncaught_exception.ks`) for stderr stack traces; **caught** exception + programmatic `trace()` should be covered primarily by **`./scripts/kestrel test`** (stdlib / unit harness). Optional **positive** E2E under `tests/e2e/scenarios/positive/` (with `.expected`) also exercises `./scripts/run-e2e.sh` if the team wants that layer.
+- **May reuse patterns from** existing E2E negative coverage (`tests/e2e/scenarios/negative/uncaught_throw.ks`, `E2E_EXPECT_STACK_TRACE`) for stderr stack traces; **caught** exception + programmatic `trace()` should be covered primarily by **`./scripts/kestrel test`** (stdlib / unit harness). Optional **positive** E2E under `tests/e2e/scenarios/positive/` (with `.expected`) also exercises `./scripts/run-e2e.sh` if the team wants that layer.
 
 ## Goals
 

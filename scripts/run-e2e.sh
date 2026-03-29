@@ -51,6 +51,11 @@ for f in "${files[@]}"; do
   kbc="$out_dir/$name.kbc"
   mkdir -p "$out_dir"
 
+  expect_stack_stderr=false
+  if grep -qE '^//.*E2E_EXPECT_STACK_TRACE' "$f"; then
+    expect_stack_stderr=true
+  fi
+
   if ! node "$COMPILER/dist/cli.js" "$f" -o "$kbc" 2>/dev/null; then
     # Expected: compile failed
     echo "  $name.ks OK (compile failed as expected)"
@@ -58,7 +63,7 @@ for f in "${files[@]}"; do
   fi
 
   if [ ! -f "$kbc" ]; then
-    echo "E2E $name: expected compile to fail" >&2
+    echo "E2E negative $name: expected compile to fail" >&2
     exit 1
   fi
 
@@ -67,16 +72,24 @@ for f in "${files[@]}"; do
   "$ROOT/vm/zig-out/bin/kestrel" "$kbc" 2>"$out_stderr" || exit_code=$?
   if [ "$exit_code" -ne 0 ]; then
     echo "  $name.ks OK (runtime exit $exit_code as expected)"
-    if [ "$name" = "uncaught_exception" ]; then
-      if ! grep -q "Uncaught exception" "$out_stderr" || ! grep -q " at " "$out_stderr"; then
-        echo "E2E $name: expected stack trace with file:line in stderr" >&2
+    if [ "$expect_stack_stderr" = true ]; then
+      ok_st=0
+      if grep -q "Uncaught exception" "$out_stderr" && grep -q " at " "$out_stderr"; then
+        ok_st=1
+      elif grep -q "Operand stack overflow" "$out_stderr" && grep -q " at " "$out_stderr"; then
+        ok_st=1
+      elif grep -q "stack overflow (exceeded" "$out_stderr"; then
+        ok_st=1
+      fi
+      if [ "$ok_st" -ne 1 ]; then
+        echo "E2E negative $name: expected stderr diagnostic (uncaught/stack trace or frame limit) per E2E_EXPECT_STACK_TRACE" >&2
         echo "stderr was:" >&2
         cat "$out_stderr" >&2
         exit 1
       fi
     fi
   else
-    echo "E2E $name: expected compile or runtime failure, but program succeeded" >&2
+    echo "E2E negative $name: expected compile or runtime failure, but program succeeded" >&2
     exit 1
   fi
 done

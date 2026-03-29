@@ -98,5 +98,5 @@ When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
 - [05-runtime-model.md](05-runtime-model.md) – VM execution semantics
 - [06-typesystem.md](06-typesystem.md) – Type checking during compile
 - [07-modules.md](07-modules.md) – Module resolution (future multi-file support)
-- [08-tests.md](08-tests.md) – Test harnesses; `scripts/run-e2e.sh` uses compiler and VM directly for E2E
+- [08-tests.md](08-tests.md) – Test harnesses; `scripts/run-e2e.sh` drives the compiler (`dist/cli.js`) and Zig VM on `tests/e2e/scenarios/negative/*.ks` (expect failure) and `tests/e2e/scenarios/positive/*.ks` (stdout vs `*.expected`)
 - [10-compile-diagnostics.md](10-compile-diagnostics.md) – Compile-time diagnostics and error reporting (format, API, CLI)

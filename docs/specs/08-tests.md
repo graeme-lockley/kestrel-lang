@@ -89,14 +89,18 @@ tests/
       invalid/
     runtime/       # .ks files run by VM; compare stdout/stderr/exit
   e2e/
-    scenarios/     # .ks files; expected stdout in-file as // under each print
+    scenarios/
+      negative/    # .ks files: compile failure OR VM non-zero; optional E2E_EXPECT_STACK_TRACE stderr checks
+      positive/    # .ks files with sibling *.expected stdout goldens
   golden/          # optional: separate expected files if not in-source
     source/        # .ks files
     expected/      # .stdout, .stderr, .exit (or one combined .golden per test)
   fixtures/        # Shared .ks modules used by tests
 ```
 
-Expected output may be stored either in separate golden files (`expected/<name>.stdout`, etc.) or **in-file**: in the Kestrel implementation, E2E scenarios keep expected stdout in the same file as the test by placing a comment line (e.g. `// <expected value>`) immediately after each `print(...)`; the runner collects those lines and compares them to actual stdout so that each scenario and its expected output live in one file.
+Expected output may be stored either in separate golden files (`expected/<name>.stdout`, etc.) or **in-file**: for **positive** E2E under `tests/e2e/scenarios/positive/`, expected stdout lives in a sibling `*.expected` file; the runner compares VM stdout to that file.
+
+**Negative E2E** (`tests/e2e/scenarios/negative/`): `./scripts/run-e2e.sh` compiles each top-level `*.ks` with `node compiler/dist/cli.js` and, if compilation succeeds, runs `vm/zig-out/bin/kestrel` on the emitted `.kbc`. The scenario passes if compilation fails **or** the VM exits non-zero. Selected scenarios may include `E2E_EXPECT_STACK_TRACE` in a top comment so the harness asserts stderr shape (uncaught exception / stack trace, operand stack overflow, or call-depth limit) — see `scripts/run-e2e.sh`.
 
 ### 3.3 Running Golden Tests
 
@@ -104,6 +108,7 @@ Expected output may be stored either in separate golden files (`expected/<name>.
 - **Run** the bytecode in the VM with defined stdin (e.g. empty or fixed).
 - **Capture** stdout, stderr, and exit code.
 - **Compare** to golden files (byte-for-byte or normalized). Diff on mismatch fails the test. Tests should use fixed stdin and, where possible, a deterministic environment (e.g. no reliance on wall-clock time or random) so that goldens are stable across runs.
+- **E2E runner:** From the repo root, `./scripts/run-e2e.sh` runs all `tests/e2e/scenarios/negative/*.ks` as above, then all `tests/e2e/scenarios/positive/*.ks` against their `*.expected` files. `./scripts/test-all.sh` includes this step after compiler and VM unit tests.
 
 ### 3.4 Updating Goldens
 
@@ -113,7 +118,7 @@ When behaviour is intentionally changed, goldens must be updated (e.g. `UPDATE_G
 
 - **Core language:** At least one golden (or conformance) test per major feature: literals (all bases, strings with interpolation, chars), conditionals, **`is` type tests and narrowing** (`tests/unit/narrowing.test.ks`, conformance `narrowing_*.ks`), **blocks in statement vs expression context** (01 §3.3: e.g. implicit **Unit** after the last `:=` / `val` / `var` / `fun` in `while` bodies and top-level expression statements; parse rejection when the same shape appears in expression position—see compiler `parse.test.ts`), match (including exhaustiveness), try/catch, lambdas, **nested functions and closures** (block-local `fun`, capture of block/function scope, CALL_INDIRECT, LOAD_FN, MAKE_CLOSURE; recursive nested fun with full signature, by-reference capture of `var`, return-type checking and expected type error for mismatch, chained call of returned closure e.g. `makeAdd(2)(3)`; see [functions.test.ks](../../tests/unit/functions.test.ks) and compiler typecheck/parse tests such as typecheck-conformance and nested_fun_return_type_mismatch), **top-level recursion** (self-recursion and mutual recursion: top-level functions calling each other regardless of declaration order), **tail-call optimization** on the VM (deep self-tail in [tail_self_recursion.test.ks](../../tests/unit/tail_self_recursion.test.ks); mutual tail and indirect fallback in [tail_mutual_recursion.test.ks](../../tests/unit/tail_mutual_recursion.test.ks); compiler bytecode checks in `compiler/test/unit/mutual-tail-codegen.test.ts`), records, ADTs, pipelines (`|>`/`<|`), async/await.
 - **Stdlib:** At least one test that calls each standard module’s main entry points (e.g. string ops, **`kestrel:stack`** `format` / `print` / **`trace`** with a caught exception — see **`stdlib/kestrel/stack.test.ks`**; http server start/stop; `kestrel:json` `parse` / `stringify` / `Result` error paths; fs read).
-- **Errors:** Golden or conformance tests for expected compile and runtime errors (e.g. type error message, uncaught exception, overflow).
+- **Errors:** Conformance and unit tests cover expected compile and runtime errors (e.g. type error messages via `tests/conformance/typecheck/invalid/`). **Negative E2E** under `tests/e2e/scenarios/negative/` adds full **compiler emit → `.kbc` → Zig VM** checks for representative failures (compile rejections and non-zero VM exits), with optional stderr assertions for uncaught-exception-style output where marked.
 
 ---
 
