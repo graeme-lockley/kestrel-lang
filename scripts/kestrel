@@ -34,7 +34,7 @@ TARGET="${KESTREL_TARGET:-vm}"
 usage() {
   echo "Usage: kestrel <command> [options]" >&2
   echo "  run   [--target vm|jvm] <script[.ks]> [args...]  Compile if needed, then execute" >&2
-  echo "  dis   <script[.ks]>            Compile if needed, then disassemble bytecode" >&2
+  echo "  dis   [--verbose|--code-only] <script[.ks]>  Compile if needed, then disassemble bytecode" >&2
   echo "  build [--target vm|jvm] [script.ks]  Build compiler and VM; optionally compile script" >&2
   echo "  test  [--target vm|jvm] [--verbose|--summary] [files...]   Run unit tests (default: compact output)" >&2
   echo "  test-both [files...]           Run unit tests on VM and JVM; compare results and wall time" >&2
@@ -154,7 +154,7 @@ needs_compile_jvm() {
       if [ -f "$dep" ]; then
         dep_mtime=$(stat -f '%m' "$dep" 2>/dev/null || stat -c '%Y' "$dep" 2>/dev/null)
         class_mtime=$(stat -f '%m' "$class_file" 2>/dev/null || stat -c '%Y' "$class_file" 2>/dev/null)
-        [ -n "$dep_mtime" ] && [ -n "$class_mtime" ] && [ "$dep_mtime" -ge "$class_mtime" ] && return 0
+        [ -n "$dep_mtime" ] && [ -n "$class_mtime" ] && [ "$dep_mtime" -gt "$class_mtime" ] && return 0
       fi
     done < "$deps"
     return 1
@@ -170,7 +170,7 @@ needs_compile() {
   return 1
 }
 
-# Stale if .kbc missing, or (when .kbc.deps exists) any listed path is newer than .kbc; else fall back to entry-only check.
+# Stale if .kbc missing, or (when .kbc.deps exists) any listed path is strictly newer than .kbc; else fall back to entry-only check.
 needs_compile_with_deps() {
   local ks="$1" kbc="$2"
   [ ! -f "$kbc" ] && return 0
@@ -182,10 +182,10 @@ needs_compile_with_deps() {
       dep="${dep%"${dep##*[![:space:]]}"}"
       [ -z "$dep" ] && continue
       if [ ! -f "$dep" ]; then continue; fi
-      # Use explicit mtime comparison (dep >= kbc) so we recompile when dep is newer or same second
+      # Use explicit mtime comparison (dep > kbc) so we recompile when dep is strictly newer
       dep_mtime=$(stat -f '%m' "$dep" 2>/dev/null || stat -c '%Y' "$dep" 2>/dev/null)
       kbc_mtime=$(stat -f '%m' "$kbc" 2>/dev/null || stat -c '%Y' "$kbc" 2>/dev/null)
-      if [ -n "$dep_mtime" ] && [ -n "$kbc_mtime" ] && [ "$dep_mtime" -ge "$kbc_mtime" ]; then
+      if [ -n "$dep_mtime" ] && [ -n "$kbc_mtime" ] && [ "$dep_mtime" -gt "$kbc_mtime" ]; then
         return 0
       fi
     done < "$deps"
@@ -209,7 +209,7 @@ write_stale_file() {
     if [ -f "$dep" ]; then
       dep_mtime=$(stat -f '%m' "$dep" 2>/dev/null || stat -c '%Y' "$dep" 2>/dev/null)
       kbc_mtime=$(stat -f '%m' "$kbc" 2>/dev/null || stat -c '%Y' "$kbc" 2>/dev/null)
-      [ -n "$dep_mtime" ] && [ -n "$kbc_mtime" ] && [ "$dep_mtime" -ge "$kbc_mtime" ] && echo "$dep" >> "$stale"
+      [ -n "$dep_mtime" ] && [ -n "$kbc_mtime" ] && [ "$dep_mtime" -gt "$kbc_mtime" ] && echo "$dep" >> "$stale"
     fi
   done < "$deps"
   echo "$stale"
@@ -451,7 +451,21 @@ cmd_run() {
 }
 
 cmd_dis() {
-  if [ -z "${1:-}" ]; then
+  local verbose=false
+  local code_only=false
+  local script=""
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --verbose) verbose=true ;;
+      --code-only) code_only=true ;;
+      -*) echo "kestrel: unknown dis flag: $1" >&2; usage ;;
+      *) script="$1" ;;
+    esac
+    shift
+  done
+
+  if [ -z "$script" ]; then
     usage
   fi
   ensure_tools
@@ -459,9 +473,9 @@ cmd_dis() {
     build_compiler_vm
   fi
   local resolved
-  resolved=$(resolve_script "$1")
+  resolved=$(resolve_script "$script")
   if [ -z "$resolved" ]; then
-    echo "kestrel: script not found: $1" >&2
+    echo "kestrel: script not found: $script" >&2
     exit 1
   fi
   local kbc
@@ -470,7 +484,12 @@ cmd_dis() {
     mkdir -p "$(dirname "$kbc")"
     do_compile "$resolved" "$kbc"
   fi
-  exec node "$DISASM" "$kbc"
+
+  local args=("$DISASM")
+  if $verbose; then args+=(--verbose); fi
+  if $code_only; then args+=(--code-only); fi
+  args+=("$kbc")
+  exec node "${args[@]}"
 }
 
 cmd_test() {

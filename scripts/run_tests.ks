@@ -115,7 +115,11 @@ val generatedSource =
   "${genHead}${impLines}${genMid}${outputModeStr}${genRest}${calls}${genTail}"
 
 val generatedPath = "${rootDir}/.kestrel_test_runner.ks"
-writeText(generatedPath, generatedSource)
+
+// Write to a temp file, then only replace if content changed (preserves timestamp to avoid recompilation)
+val tmpPath = "${generatedPath}.new"
+writeText(tmpPath, generatedSource)
+val _cmp = runProcess("sh", ["-c", "cmp -s '${tmpPath}' '${generatedPath}' 2>/dev/null && rm '${tmpPath}' || mv '${tmpPath}' '${generatedPath}'"])
 
 val exitCode = runProcess("./scripts/kestrel", ["run", generatedPath])
 exit(exitCode)

@@ -975,10 +975,15 @@ export function compileFile(
 
     const runtimeKsPathForDeps = pathResolve(stdlibDir, 'kestrel/runtime.ks');
     if (getOutputPaths && existsSync(runtimeKsPathForDeps) && filePath !== runtimeKsPathForDeps) {
-      const rtOut = compileOne(runtimeKsPathForDeps);
-      if (!rtOut.ok) {
-        visited.delete(filePath);
-        return rtOut;
+      // Only compile runtime.ks if its .kti is stale; otherwise reuse the cached bytecode
+      // to avoid updating runtime.kbc's timestamp and cascading recompilation.
+      const rtPaths = getOutputPaths(runtimeKsPathForDeps);
+      if (!isTypesFileFresh(rtPaths.kti, runtimeKsPathForDeps, rtPaths.kbc)) {
+        const rtOut = compileOne(runtimeKsPathForDeps);
+        if (!rtOut.ok) {
+          visited.delete(filePath);
+          return rtOut;
+        }
       }
     }
 
