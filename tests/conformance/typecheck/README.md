@@ -5,6 +5,13 @@
 
 The compiler test suite runs these under `compiler/test/integration/typecheck-conformance.test.ts`.
 
+## Other conformance trees
+
+- **Parse** — `tests/conformance/parse/` ([README](../parse/README.md)); Vitest: `compiler/test/integration/parse-conformance.test.ts`.
+- **Runtime (VM)** — `tests/conformance/runtime/valid/` ([README](../runtime/README.md)); Vitest: `compiler/test/integration/runtime-conformance.test.ts`.
+
+All three drivers run as part of **`cd compiler && npm test`**.
+
 ## Relationship to compiler unit tests (Vitest)
 
 **Decision:** Keep **both** conformance `.ks` files and **TypeScript** unit/integration tests under `compiler/test/`. They are complementary, not redundant.

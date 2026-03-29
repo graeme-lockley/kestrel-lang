@@ -100,4 +100,13 @@ describe('parse then typecheck (multi-declaration)', () => {
     const tc = typecheck(parse(tokenize(source)));
     expect(tc.ok).toBe(false);
   });
+
+  it('rejects assignment to immutable record field inside a block', () => {
+    const source = 'val _ = { val r = { x = 1 }; r.x := 2; () }';
+    const tc = typecheck(parse(tokenize(source)));
+    expect(tc.ok).toBe(false);
+    if (!tc.ok) {
+      expect(tc.diagnostics.some((d) => d.message.includes('immutable field'))).toBe(true);
+    }
+  });
 });

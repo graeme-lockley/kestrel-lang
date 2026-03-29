@@ -154,7 +154,7 @@ export class ParseError extends Error {
 #### Testing (Vitest)
 
 - Tests go in `compiler/test/unit/` and `compiler/test/integration/`
-- **Typecheck conformance** lives in `tests/conformance/typecheck/` (`.ks` files); the compiler runs them via `typecheck-conformance.test.ts`. See [tests/conformance/typecheck/README.md](tests/conformance/typecheck/README.md) for how that relates to Vitest unit tests (both are kept: TS tests for precise assertions, `.ks` corpus for readable snippets and `// EXPECT:` on invalid cases).
+- **Conformance corpora** (`.ks` files under `tests/conformance/`): **parse** (`parse/` — `parse-conformance.test.ts`), **typecheck** (`typecheck/` — `typecheck-conformance.test.ts`), **runtime VM** (`runtime/valid/` — `runtime-conformance.test.ts`). All are run by **`cd compiler && npm test`**. See [tests/conformance/typecheck/README.md](tests/conformance/typecheck/README.md) (links to parse/runtime READMEs) for layout, `// EXPECT:` on invalid cases, and in-file `println` + `//` stdout goldens for runtime.
 - Use `describe` blocks for grouping related tests
 - Use `it` or `test` for individual test cases
 - Use `expect` with matchers

@@ -108,7 +108,11 @@ Expected output may be stored either in separate golden files (`expected/<name>.
 - **Run** the bytecode in the VM with defined stdin (e.g. empty or fixed).
 - **Capture** stdout, stderr, and exit code.
 - **Compare** to golden files (byte-for-byte or normalized). Diff on mismatch fails the test. Tests should use fixed stdin and, where possible, a deterministic environment (e.g. no reliance on wall-clock time or random) so that goldens are stable across runs.
-- **E2E runner:** From the repo root, `./scripts/run-e2e.sh` runs all `tests/e2e/scenarios/negative/*.ks` as above, then all `tests/e2e/scenarios/positive/*.ks` against their `*.expected` files. `./scripts/test-all.sh` includes this step after compiler and VM unit tests.
+- **Conformance corpora in CI (compiler Vitest):** From the repo root, `cd compiler && npm run build && npm test` runs:
+  - **Parse** corpus under `tests/conformance/parse/` (`parse-conformance.test.ts`).
+  - **Typecheck** corpus under `tests/conformance/typecheck/` (`typecheck-conformance.test.ts`).
+  - **Runtime (VM)** corpus under `tests/conformance/runtime/valid/` (`runtime-conformance.test.ts`), compiling with `dist/cli.js` and executing `vm/zig-out/bin/kestrel`, comparing stdout to in-file `//` golden lines after each `println` (see `tests/conformance/runtime/README.md`).
+- **E2E runner:** From the repo root, `./scripts/run-e2e.sh` runs all `tests/e2e/scenarios/negative/*.ks` as above, then all `tests/e2e/scenarios/positive/*.ks` against their `*.expected` files. `./scripts/test-all.sh` includes this step after compiler and VM unit tests. **`run-e2e.sh` does not execute `tests/conformance/runtime/`**; runtime conformance is covered by the compiler Vitest module above.
 
 ### 3.4 Updating Goldens
 
@@ -124,7 +128,7 @@ When behaviour is intentionally changed, goldens must be updated (e.g. `UPDATE_G
 
 ## 4. CI and Conformance Statement
 
-- **CI:** Run the full conformance and golden suite on every commit (or on every PR). Fail the build if any test fails or if goldens differ unless explicitly updated. The “official conformance suite” is the canonical set of tests (layout and cases as described in §2–§3) that may be published alongside the spec; until then, implementors use this document as the test plan.
+- **CI:** Run the full conformance and golden suite on every commit (or on every PR). Fail the build if any test fails or if goldens differ unless explicitly updated. **`./scripts/test-all.sh`** runs compiler tests (`cd compiler && npm test`, which includes parse, typecheck, and runtime conformance per §3.3), VM unit tests, E2E (`run-e2e.sh`), and Kestrel harness tests as defined in the project scripts. The “official conformance suite” is the canonical set of tests (layout and cases as described in §2–§3) that may be published alongside the spec; until then, implementors use this document as the test plan.
 - **Conformance statement:** Implementations may claim “Kestrel v1 conformant” only if they pass the official conformance suite (when published) and do not contradict the contracts in specs 01–08. Implementations may extend behaviour where the specs allow it (e.g. additional stdlib modules or functions per 02).
 
 ---

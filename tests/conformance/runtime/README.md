@@ -1,13 +1,21 @@
-# Runtime conformance tests (spec 08 §2.4, §2.5, §3.2)
+# Runtime conformance (spec 08 §2.4–2.5, §3.2)
 
-VM behaviour verification per [05-runtime-model.md](../../../docs/specs/05-runtime-model.md).
+- **valid/** — `.ks` programs that must **compile**, run on the Zig VM with **exit code 0**, and produce **stdout** that matches golden lines derived from the source file.
 
-- **valid/** — `.ks` programs that must compile, run on the VM, and produce expected stdout. Expected output is given by `//` comment lines immediately after each `print(...)` (same convention as E2E scenarios).
+## Golden stdout lines
 
-Scenarios cover:
+After each **`println(...)`**, expected output is given on following **`//`** comment lines. The test harness collects `//` lines in source order, skipping documentation-style comments (e.g. lines starting with `Runtime conformance:`, `For now:`, `EXPECT:`, `Parse note:`, etc. — see `compiler/test/integration/helpers/runtime-stdout-goldens.ts`).
 
-- **Exception throw/catch** — bytecode that throws and catches; stack unwinding and result.
-- **GC stress** — many short-lived allocations; no leaks, no use-after-free.
-- **Async/await** — when supported; suspension and resumption.
+Each non-empty stdout line from the VM (after trimming a trailing newline) must equal the corresponding golden line, in order.
 
-The test harness runs these via `scripts/run-e2e.sh` (runtime conformance is executed together with E2E scenarios). `scripts/test-all.sh` runs the full suite including runtime conformance.
+## CI execution
+
+These scenarios run under **`cd compiler && npm test`** via `compiler/test/integration/runtime-conformance.test.ts`.
+
+Compilation uses `node compiler/dist/cli.js <file.ks> -o <kbc>` with **`KESTREL_CACHE`** pointing at a per-run temp directory whose layout matches `scripts/kestrel` (`KBC_CACHE` + absolute source directory + basename `.kbc`), so multi-module programs resolve the same way as `kestrel run`.
+
+The VM binary is **`vm/zig-out/bin/kestrel`** (built **ReleaseSafe** in the test `beforeAll`).
+
+**Note:** `./scripts/run-e2e.sh` exercises `tests/e2e/scenarios/*` only; it does **not** run this tree.
+
+See also: [../parse/README.md](../parse/README.md), [../typecheck/README.md](../typecheck/README.md).

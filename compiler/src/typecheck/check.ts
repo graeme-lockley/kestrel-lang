@@ -920,10 +920,22 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
               );
             }
             setInferredType(stmt, tUnit);
-          } else {
+          } else if (stmt.kind === 'AssignStmt') {
             const targetT = inferExpr(stmt.target);
-            const v = inferExpr(stmt.value);
-            unifyWithBlame(v, targetT, stmt.value, stmt.target, { relation: 'subtype' });
+            const valueT = inferExpr(stmt.value);
+            const target = stmt.target;
+            if (target.kind === 'FieldExpr') {
+              const objT = apply(getInferredType(target.object) ?? targetT);
+              if (objT.kind === 'record') {
+                const field = objT.fields.find((f) => f.name === target.field);
+                if (field == null) throw new TypeCheckError(`Unknown field: ${target.field}`, target);
+                if (!field.mut) throw new TypeCheckError(`Cannot assign to immutable field: ${target.field}`, target);
+                unifyWithBlame(valueT, field.type, stmt.value, target, { relation: 'subtype' });
+              }
+            } else if (target.kind === 'IdentExpr') {
+              const lhs = env.get(target.name);
+              if (lhs != null) unifyWithBlame(valueT, lhs, stmt.value, target, { relation: 'subtype' });
+            }
           }
         }
         result = inferExpr(expr.result);
