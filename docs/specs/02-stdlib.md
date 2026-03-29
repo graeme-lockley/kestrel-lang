@@ -126,7 +126,7 @@ Immutable list utilities (in addition to list syntax and `List<T>` in §Library 
 |----------|-----------|-------------|
 | `length` | `(List<X>) -> Int` | Number of elements |
 | `isEmpty` | `(List<X>) -> Bool` | True for `[]` |
-| `drop` | `(Int, List<T>) -> List<T>` | Drop first `n` elements (`n <= 0` leaves list unchanged) |
+| `drop` | `(List<T>, Int) -> List<T>` | Drop first `n` elements (`n <= 0` leaves list unchanged); list first for piping |
 | `map` | `(List<A>, (A) -> B) -> List<B>` | Element-wise map |
 | `filter` | `(List<A>, (A) -> Bool) -> List<A>` | Keep elements satisfying predicate |
 | `foldl` | `(List<A>, B, (B, A) -> B) -> B` | Left fold |
@@ -138,7 +138,8 @@ Immutable list utilities (in addition to list syntax and `List<T>` in §Library 
 | `intersperse` | `(A, List<A>) -> List<A>` | Insert separator between elements |
 | `repeat` | `(Int, A) -> List<A>` | `n` copies of `x` |
 | `range` | `(Int, Int) -> List<Int>` | Inclusive `lo`..`hi` |
-| `take` / `takeWhile` / `dropWhile` | … | Standard list prefixes / scanning |
+| `take` | `(List<A>, Int) -> List<A>` | First `n` elements; list first for piping |
+| `takeWhile` / `dropWhile` | … | Standard list prefixes / scanning |
 | `zip` | `(List<A>, List<B>) -> List<(A, B)>` | Pair elements while both lists non-empty |
 | `map2`–`map5` | … | Zipping maps (pairwise / triple / …) |
 | `filterMap` | `(List<A>, (A) -> Option<B>) -> List<B>` | Map and drop `None` |

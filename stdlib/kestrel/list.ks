@@ -52,18 +52,18 @@ export fun repeat<A>(n: Int, x: A): List<A> = repList(n, x, [])
 export fun range(lo: Int, hi: Int): List<Int> =
   if (lo > hi) [] else lo :: range(lo + 1, hi)
 
-export fun drop(n: Int, xs: List<T>): List<T> =
+export fun drop(xs: List<T>, n: Int): List<T> =
   if (n <= 0) xs
   else match (xs) {
     [] => [],
-    _ :: tl => drop(n - 1, tl)
+    _ :: tl => drop(tl, n - 1)
   }
 
-export fun take<A>(n: Int, xs: List<A>): List<A> =
+export fun take<A>(xs: List<A>, n: Int): List<A> =
   if (n <= 0) []
   else match (xs) {
     [] => []
-    h :: t => h :: take(n - 1, t)
+    h :: t => h :: take(t, n - 1)
   }
 
 export fun takeWhile<A>(xs: List<A>, pred: (A) -> Bool): List<A> = match (xs) {
@@ -255,7 +255,7 @@ export fun head<A>(xs: List<A>): Option<A> = match (xs) {
   h :: _ => Some(h)
 }
 
-export fun tail<A>(xs: List<A>): Option<List<A>> = match (xs) {
-  [] => None
-  _ :: t => Some(t)
+export fun tail<A>(xs: List<A>): List<A> = match (xs) {
+  [] => []
+  _ :: t => t
 }

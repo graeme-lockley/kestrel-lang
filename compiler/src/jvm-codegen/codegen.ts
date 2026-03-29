@@ -1470,6 +1470,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 const slot = nextLocal++;
                 env.set(varName, slot);
                 mb.emit1b(JvmOp.ASTORE, slot);
+              } else {
+                // Some(_) / wildcard: discard payload so stack is empty before body (fixes VerifyError).
+                mb.emit1(JvmOp.POP);
               }
               const xferSome = emitExpr(c.body, mb, tcT);
               if (varName) env.delete(varName);
@@ -2054,6 +2057,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 const slot = nextLocal++;
                 env.set(varName, slot);
                 mb.emit1b(JvmOp.ASTORE, slot);
+              } else {
+                mb.emit1(JvmOp.POP);
               }
               const xferTrySome = emitExpr(c.body, mb, tcT);
               if (varName) env.delete(varName);

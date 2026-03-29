@@ -31,4 +31,20 @@ export fun main(): Unit = println(Str.length("hi"))
       rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it('JVM-compiles kestrel:option (Some(_) must POP payload; avoids VerifyError)', () => {
+    const srcPath = join(stdlibDir, 'kestrel', 'option.ks');
+    const tmpDir = join(compilerRoot, 'test', 'integration', '_tmp_jvm_option');
+    mkdirSync(tmpDir, { recursive: true });
+    try {
+      const result = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpDir,
+      });
+      expect(result.ok).toBe(true);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -1,16 +1,14 @@
 import { getProcess, runProcess } from "kestrel:process"
 import { listDir, writeText } from "kestrel:fs"
 import * as Lst from "kestrel:list"
+import * as Opt from "kestrel:option"
 import * as Str from "kestrel:string"
 
 val proc = getProcess()
 val cwd = proc.cwd
 
 fun getRootDir(args: List<String>, fallback: String): String =
-  match (Lst.take(1, Lst.drop(2, args))) {
-    [] => fallback,
-    hd :: _ => hd
-  }
+  args |> Lst.drop(2) |> Lst.head |> Opt.withDefault(fallback)
   
 val rootDir = getRootDir(proc.args, cwd)
 
@@ -54,7 +52,7 @@ fun checkTestOutputFlags(args: List<String>): Unit = {
 }
 
 // argv layout must match VM: [vm binary, .kbc path, project root, ...paths]. JVM entry pads with "" "".
-fun getPathArgs(allArgs: List<String>): List<String> = excludeTestFlags(Lst.drop(3, allArgs))
+fun getPathArgs(allArgs: List<String>): List<String> = excludeTestFlags(Lst.drop(allArgs, 3))
 
 fun filterToTestFiles(paths: List<String>): List<String> =
   Lst.filter(paths, (p: String) => hasSuffix(p, ".test.ks"))
@@ -83,7 +81,9 @@ fun buildCalls(count: Int, idx: Int): String =
 
 val unitDir = "${rootDir}/tests/unit"
 val stdlibDir = "${rootDir}/stdlib/kestrel"
-val _flagsOk = checkTestOutputFlags(proc.args)
+
+checkTestOutputFlags(proc.args)
+
 val pathArgs = getPathArgs(proc.args)
 val outputModeStr =
   if (hasFlag(proc.args, "--summary")) "outputSummary"

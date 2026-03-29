@@ -25,14 +25,14 @@ export fun run(s: Suite): Unit = {
     })
 
     group(s1, "drop", (sg: Suite) => {
-      eq(sg, "drop 0", List.drop(0, [1, 2, 3]), [1, 2, 3])
-      eq(sg, "drop negative", List.drop(-1, [1, 2, 3]), [1, 2, 3])
-      eq(sg, "drop 1", List.drop(1, [1, 2, 3]), [2, 3])
-      eq(sg, "drop 2", List.drop(2, [1, 2, 3]), [3])
-      eq(sg, "drop 3", List.drop(3, [1, 2, 3]), emptyInts())
-      eq(sg, "drop past length", List.drop(10, [1, 2, 3]), emptyInts())
-      eq(sg, "drop from empty", List.drop(2, emptyInts()), emptyInts())
-      eq(sg, "drop 2 strings", List.drop(2, ["a", "b", "c"]), ["c"])
+      eq(sg, "drop 0", List.drop([1, 2, 3], 0), [1, 2, 3])
+      eq(sg, "drop negative", List.drop([1, 2, 3], -1), [1, 2, 3])
+      eq(sg, "drop 1", List.drop([1, 2, 3], 1), [2, 3])
+      eq(sg, "drop 2", List.drop([1, 2, 3], 2), [3])
+      eq(sg, "drop 3", List.drop([1, 2, 3], 3), emptyInts())
+      eq(sg, "drop past length", List.drop([1, 2, 3], 10), emptyInts())
+      eq(sg, "drop from empty", List.drop(emptyInts(), 2), emptyInts())
+      eq(sg, "drop 2 strings", List.drop(["a", "b", "c"], 2), ["c"])
     })
 
     group(s1, "map", (sg: Suite) => {
@@ -90,10 +90,10 @@ export fun run(s: Suite): Unit = {
       eq(sg, "range", List.range(1, 3), [1, 2, 3])
       eq(sg, "range singleton", List.range(5, 5), [5])
       eq(sg, "range empty", List.range(3, 1), emptyInts())
-      eq(sg, "take", List.take(2, [1, 2, 3]), [1, 2])
-      eq(sg, "take zero", List.take(0, [1, 2, 3]), emptyInts())
-      eq(sg, "take past", List.take(99, [1, 2]), [1, 2])
-      eq(sg, "take empty", List.take(3, emptyInts()), emptyInts())
+      eq(sg, "take", List.take([1, 2, 3], 2), [1, 2])
+      eq(sg, "take zero", List.take([1, 2, 3], 0), emptyInts())
+      eq(sg, "take past", List.take([1, 2], 99), [1, 2])
+      eq(sg, "take empty", List.take(emptyInts(), 3), emptyInts())
     })
 
     group(s1, "foldr concatMap", (sg: Suite) => {
@@ -144,9 +144,9 @@ export fun run(s: Suite): Unit = {
     group(s1, "head tail filterMap map2", (sg: Suite) => {
       eq(sg, "head", List.head([5, 6]), Some(5))
       eq(sg, "head empty", List.head(emptyInts()), None)
-      eq(sg, "tail", List.tail([5, 6, 7]), Some([6, 7]))
-      eq(sg, "tail empty", List.tail(emptyInts()), None)
-      eq(sg, "tail singleton", List.tail([9]), Some(emptyInts()))
+      eq(sg, "tail", List.tail([5, 6, 7]), [6, 7])
+      eq(sg, "tail empty", List.tail(emptyInts()), emptyInts())
+      eq(sg, "tail singleton", List.tail([9]), emptyInts())
       fun dub(n: Int): Option<Int> = if (n % 2 == 0) Some(n) else None
       eq(sg, "filterMap", List.filterMap([1, 2, 3, 4], dub), [2, 4])
       eq(sg, "filterMap none", List.filterMap([1, 3, 5], dub), emptyInts())
@@ -189,6 +189,5 @@ export fun run(s: Suite): Unit = {
       eq(sg, "dropWhile all", List.dropWhile([2, 4], isEven), emptyInts())
       eq(sg, "dropWhile none", List.dropWhile([1, 2], isEven), [1, 2])
     })
-
   })
 }
