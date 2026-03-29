@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 import {
   getOrElse,
   withDefault,
@@ -31,10 +31,10 @@ export fun run(s: Suite): Unit =
       eq(sg, "getOrElse None 0", getOrElse(None, 0), 0)
       eq(sg, "getOrElse None 100", getOrElse(None, 100), 100)
       eq(sg, "withDefault", withDefault(Some(2), 9), 2)
-      eq(sg, "isSome Some(1)", isSome(Some(1)), True)
-      eq(sg, "isSome None", isSome(None), False)
-      eq(sg, "isNone None", isNone(None), True)
-      eq(sg, "isNone Some(1)", isNone(Some(1)), False)
+      isTrue(sg, "isSome Some(1)", isSome(Some(1)))
+      isFalse(sg, "isSome None", isSome(None))
+      isTrue(sg, "isNone None", isNone(None))
+      isFalse(sg, "isNone Some(1)", isNone(Some(1)))
     })
 
     group(s1, "polymorphic string", (sg: Suite) => {

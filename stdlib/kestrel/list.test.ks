@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 import { append, fromInt } from "kestrel:string"
 import * as List from "kestrel:list"
 
@@ -19,9 +19,9 @@ export fun run(s: Suite): Unit = {
     })
 
     group(s1, "isEmpty", (sg: Suite) => {
-      eq(sg, "empty", List.isEmpty(emptyInts()), True)
-      eq(sg, "non-empty", List.isEmpty([1, 2, 3]), False)
-      eq(sg, "singleton", List.isEmpty(["Hello"]), False)
+      isTrue(sg, "empty", List.isEmpty(emptyInts()))
+      isFalse(sg, "non-empty", List.isEmpty([1, 2, 3]))
+      isFalse(sg, "singleton", List.isEmpty(["Hello"]))
     })
 
     group(s1, "drop", (sg: Suite) => {
@@ -102,15 +102,15 @@ export fun run(s: Suite): Unit = {
     })
 
     group(s1, "member any all", (sg: Suite) => {
-      eq(sg, "member", List.member(2, [1, 2, 3]), True)
-      eq(sg, "not member", List.member(9, [1, 2, 3]), False)
-      eq(sg, "member empty", List.member(1, emptyInts()), False)
-      eq(sg, "any", List.any([1, 2, 3], (n: Int) => n > 2), True)
-      eq(sg, "any false", List.any([1, 2, 3], (n: Int) => n > 9), False)
-      eq(sg, "any empty", List.any(emptyInts(), (n: Int) => True), False)
-      eq(sg, "all", List.all([1, 2, 3], (n: Int) => n > 0), True)
-      eq(sg, "all false", List.all([1, 2, 3], (n: Int) => n < 2), False)
-      eq(sg, "all empty", List.all(emptyInts(), (n: Int) => False), True)
+      isTrue(sg, "member", List.member(2, [1, 2, 3]))
+      isFalse(sg, "not member", List.member(9, [1, 2, 3]))
+      isFalse(sg, "member empty", List.member(1, emptyInts()))
+      isTrue(sg, "any", List.any([1, 2, 3], (n: Int) => n > 2))
+      isFalse(sg, "any false", List.any([1, 2, 3], (n: Int) => n > 9))
+      isFalse(sg, "any empty", List.any(emptyInts(), (n: Int) => True))
+      isTrue(sg, "all", List.all([1, 2, 3], (n: Int) => n > 0))
+      isFalse(sg, "all false", List.all([1, 2, 3], (n: Int) => n < 2))
+      isTrue(sg, "all empty", List.all(emptyInts(), (n: Int) => False))
     })
 
     group(s1, "product max min", (sg: Suite) => {

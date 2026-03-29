@@ -370,13 +370,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     return: { kind: 'prim', name: 'Unit' },
   }, new Set()));
 
-  const eqA = freshVar(); const eqB = freshVar();
-  env.set('__equals', generalize({
-    kind: 'arrow',
-    params: [eqA, eqB],
-    return: tBool,
-  }, new Set()));
-
   const processRetT = freshVar();
   env.set('__get_process', generalize({
     kind: 'arrow',

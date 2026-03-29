@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 
 export fun run(s: Suite): Unit =
   group(s, "literals", (s1: Suite) => {
@@ -8,8 +8,8 @@ export fun run(s: Suite): Unit =
       eq(sg, "large", 1000000, 1000000)
     })
     group(s1, "booleans", (sg: Suite) => {
-      eq(sg, "True", True, True)
-      eq(sg, "False", False, False)
+      isTrue(sg, "True", True)
+      isFalse(sg, "False", False)
     })
     group(s1, "strings", (sg: Suite) => {
       eq(sg, "basic literal", "hello", "hello")

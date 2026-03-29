@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, gte, isTrue, isFalse } from "kestrel:test"
 import {
   identity,
   always,
@@ -16,11 +16,16 @@ import {
   abs,
   sqrt,
   isNaN,
-  isInfinite
+  isInfinite,
+  nowMs
 } from "kestrel:basics"
 
 export fun run(s: Suite): Unit =
   group(s, "basics", (s1: Suite) => {
+    group(s1, "time", (sg: Suite) => {
+      gte(sg, "nowMs non-negative", nowMs(), 0)
+    })
+
     group(s1, "pure", (sg: Suite) => {
       eq(sg, "identity", identity(7), 7)
       eq(sg, "always", always(1, 2), 1)
@@ -30,9 +35,9 @@ export fun run(s: Suite): Unit =
       eq(sg, "negate", negate(4), -4)
       eq(sg, "modBy sign of divisor", modBy(5, -12), 3)
       eq(sg, "remainderBy", remainderBy(5, -12), -2)
-      eq(sg, "xor ff", xor(False, False), False)
-      eq(sg, "xor ft", xor(False, True), True)
-      eq(sg, "not", not(False), True)
+      isFalse(sg, "xor ff", xor(False, False))
+      isTrue(sg, "xor ft", xor(False, True))
+      isTrue(sg, "not", not(False))
     })
 
     group(s1, "float", (sg: Suite) => {
@@ -42,7 +47,7 @@ export fun run(s: Suite): Unit =
       eq(sg, "round int", round(toFloat(7)), 7)
       eq(sg, "abs neg", abs(toFloat(-3)), toFloat(3))
       eq(sg, "sqrt 4", truncate(sqrt(toFloat(16))), 4)
-      eq(sg, "isNaN sqrt -1", isNaN(sqrt(toFloat(-1))), True)
-      eq(sg, "isFinite not nan", isNaN(toFloat(0)), False)
+      isTrue(sg, "isNaN sqrt -1", isNaN(sqrt(toFloat(-1))))
+      isFalse(sg, "isFinite not nan", isNaN(toFloat(0)))
     })
   })

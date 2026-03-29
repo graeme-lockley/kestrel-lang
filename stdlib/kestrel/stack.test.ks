@@ -1,4 +1,4 @@
-import { Suite, group, eq, gt } from "kestrel:test"
+import { Suite, group, eq, gt, isTrue } from "kestrel:test"
 import { format, print } from "kestrel:stack"
 
 export fun run(s: Suite): Unit =
@@ -18,6 +18,6 @@ export fun run(s: Suite): Unit =
     group(s1, "print smoke", (sg: Suite) => {
       print(7);
       print("smoke");
-      eq(sg, "no throw", True, True);
+      isTrue(sg, "no throw", True);
     });
   })

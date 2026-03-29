@@ -1122,12 +1122,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
-          if (name === '__equals' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
-            return false;
-          }
           if (name === '__string_length' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringLength', '(Ljava/lang/Object;)Ljava/lang/Long;'));

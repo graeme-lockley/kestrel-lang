@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:test"
 
 fun makePair(): (Int * Int) = (7, 8)
 
@@ -15,7 +15,7 @@ export fun run(s: Suite): Unit =
       val mixed = (1, "hello", True)
       eq(mt, "mixed.0", mixed.0, 1)
       eq(mt, "mixed.1", mixed.1, "hello")
-      eq(mt, "mixed.2", mixed.2, True)
+      isTrue(mt, "mixed.2", mixed.2)
     })
 
     group(s1, "from function", (ff: Suite) => {

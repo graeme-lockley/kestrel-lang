@@ -58,3 +58,6 @@ export fun sqrt(f: Float): Float = __float_sqrt(f)
 export fun isNaN(f: Float): Bool = __float_is_nan(f)
 
 export fun isInfinite(f: Float): Bool = __float_is_infinite(f)
+
+/** Wall-clock time in milliseconds (VM `__now_ms`). */
+export fun nowMs(): Int = __now_ms()

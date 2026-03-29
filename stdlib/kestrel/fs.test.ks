@@ -40,7 +40,7 @@ export async fun run(s: Suite): Task<Unit> = {
 
     group(s1, "listDir missing", (sg: Suite) => {
       val entries = Fs.listDir("${cwd}/tests/fixtures/fs/__nope_dir_missing__");
-      eq(sg, "empty", Lst.isEmpty(entries), True);
+      isTrue(sg, "empty", Lst.isEmpty(entries));
     });
   });
   ()

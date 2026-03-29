@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 import { getOrElse as optGet } from "kestrel:option"
 import {
   getOrElse,
@@ -33,17 +33,17 @@ export fun run(s: Suite): Unit =
       eq(sg, "getOrElse Err(1) 0", getOrElse(Err(1), 0), 0)
       eq(sg, "getOrElse Err(1) 100", getOrElse(Err(1), 100), 100)
       eq(sg, "withDefault", withDefault(Ok(2), 9), 2)
-      eq(sg, "isOk Ok(1)", isOk(Ok(1)), True)
-      eq(sg, "isOk Err(1)", isOk(Err(1)), False)
-      eq(sg, "isErr Err(1)", isErr(Err(1)), True)
-      eq(sg, "isErr Ok(1)", isErr(Ok(1)), False)
+      isTrue(sg, "isOk Ok(1)", isOk(Ok(1)))
+      isFalse(sg, "isOk Err(1)", isOk(Err(1)))
+      isTrue(sg, "isErr Err(1)", isErr(Err(1)))
+      isFalse(sg, "isErr Ok(1)", isErr(Ok(1)))
     })
 
     group(s1, "polymorphic (distinct T and E)", (sg: Suite) => {
       eq(sg, "getOrElse Ok string", getOrElse(Ok("hi"), "no"), "hi")
       eq(sg, "getOrElse Err string default", getOrElse(Err("bad"), "no"), "no")
-      eq(sg, "isOk Ok string", isOk(Ok("a")), True)
-      eq(sg, "isErr Err int payload", isErr(Err(99)), True)
+      isTrue(sg, "isOk Ok string", isOk(Ok("a")))
+      isTrue(sg, "isErr Err int payload", isErr(Err(99)))
     })
 
     group(s1, "map mapError andThen", (sg: Suite) => {
@@ -57,7 +57,7 @@ export fun run(s: Suite): Unit =
 
     group(s1, "map2 map3", (sg: Suite) => {
       eq(sg, "map2 both Ok", getOrElse(map2(Ok(1), Ok(2), (a: Int, b: Int) => a + b), 0), 3)
-      eq(sg, "map2 first Err", isErr(map2(Err(1), Ok(2), (a: Int, b: Int) => a + b)), True)
+      isTrue(sg, "map2 first Err", isErr(map2(Err(1), Ok(2), (a: Int, b: Int) => a + b)))
       eq(
         sg,
         "map3",

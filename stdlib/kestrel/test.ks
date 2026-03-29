@@ -1,140 +1,142 @@
-import { GREEN, RED, DIM, RESET, CHECK, CROSS } from "kestrel:console"
+import * as Basics from "kestrel:basics"
+import * as Console from "kestrel:console"
+import * as Lst from "kestrel:list"
+import * as Stk from "kestrel:stack"
+import * as Str from "kestrel:string"
 
 export type Suite = { depth: Int, summaryOnly: Bool, counts: { passed: mut Int, failed: mut Int, startTime: mut Int } }
 
-fun indent(n: Int): String =
-  if (n <= 0) ""
-  else "  ${indent(n - 1)}"
+fun indent(n: Int): String = Str.concat(Lst.repeat(n, "  "))
 
 export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
-  val start = __now_ms();
+  val start = Basics.nowMs();
   val passedStart = s.counts.passed;
   val failedStart = s.counts.failed;
   val child = { depth = s.depth + 1, summaryOnly = s.summaryOnly, counts = s.counts };
 
   if (!s.summaryOnly) {
-    println("${indent(s.depth)}${DIM}${name}${RESET}")
+    println("${indent(s.depth)}${Console.DIM}${name}${Console.RESET}")
   }
 
   body(child);
 
-  val elapsed = __now_ms() - start;
+  val elapsed = Basics.nowMs() - start;
   val p = s.counts.passed - passedStart;
   val f = s.counts.failed - failedStart;
   if (!s.summaryOnly) {
     val countStr = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
-    println("${indent(s.depth)}${DIM}${countStr} (${elapsed}ms)${RESET}")
+    println("${indent(s.depth)}${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}")
   }
 }
 
-/** Equality assertion using deep structural equality (`__equals`). On failure, prints labelled lines so boolean, Int, Unit, String, etc. stay distinguishable via the runtime value printer. */
+/** Equality assertion using `==` (semantic / deep equality; same notion as the VM comparison for structured values). On failure, prints labelled lines so boolean, Int, Unit, String, etc. stay distinguishable via the runtime value printer. */
 export fun eq(s: Suite, desc: String, actual: X, expected: X): Unit =
-  if (__equals(actual, expected)) {
+  if (actual == expected) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
-      println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
+      println("${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}")
     }
   } else {
     s.counts.failed := s.counts.failed + 1;
-    println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
-    println("${indent(s.depth)}  expected (right): ${__format_one(expected)}");
-    println("${indent(s.depth)}  actual (left):   ${__format_one(actual)}");
+    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+    println("${indent(s.depth)}  expected (right): ${Stk.format(expected)}");
+    println("${indent(s.depth)}  actual (left):   ${Stk.format(actual)}");
     println("${indent(s.depth)}  (deep equality / same value shape)")
   }
 
 export fun neq(s: Suite, desc: String, actual: X, notExpected: X): Unit =
-  if (!__equals(actual, notExpected)) {
+  if (actual != notExpected) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
-      println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
+      println("${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}")
     }
   } else {
     s.counts.failed := s.counts.failed + 1;
-    println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
+    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
     println("${indent(s.depth)}  expected: values must differ (deep inequality)");
-    println("${indent(s.depth)}  both sides: ${__format_one(actual)}")
+    println("${indent(s.depth)}  both sides: ${Stk.format(actual)}")
   }
 
 export fun isTrue(s: Suite, desc: String, value: Bool): Unit =
   if (value) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
-      println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
+      println("${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}")
     }
   } else {
     s.counts.failed := s.counts.failed + 1;
-    println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
+    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
     println("${indent(s.depth)}  expected (Bool): true");
-    println("${indent(s.depth)}  actual (Bool):   ${__format_one(value)}")
+    println("${indent(s.depth)}  actual (Bool):   ${Stk.format(value)}")
   }
 
 export fun isFalse(s: Suite, desc: String, value: Bool): Unit =
   if (!value) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
-      println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
+      println("${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}")
     }
   } else {
     s.counts.failed := s.counts.failed + 1;
-    println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
+    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
     println("${indent(s.depth)}  expected (Bool): false");
-    println("${indent(s.depth)}  actual (Bool):   ${__format_one(value)}")
+    println("${indent(s.depth)}  actual (Bool):   ${Stk.format(value)}")
   }
 
 export fun gt(s: Suite, desc: String, left: Int, right: Int): Unit =
   if (left > right) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
-      println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
+      println("${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}")
     }
   } else {
     s.counts.failed := s.counts.failed + 1;
-    println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
+    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
     println("${indent(s.depth)}  need: left > right (strict total order on Int)");
-    println("${indent(s.depth)}  left (Int):  ${__format_one(left)}");
-    println("${indent(s.depth)}  right (Int): ${__format_one(right)}")
+    println("${indent(s.depth)}  left (Int):  ${Stk.format(left)}");
+    println("${indent(s.depth)}  right (Int): ${Stk.format(right)}")
   }
 
 export fun lt(s: Suite, desc: String, left: Int, right: Int): Unit =
   if (left < right) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
-      println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
+      println("${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}")
     }
   } else {
     s.counts.failed := s.counts.failed + 1;
-    println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
+    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
     println("${indent(s.depth)}  need: left < right (strict total order on Int)");
-    println("${indent(s.depth)}  left (Int):  ${__format_one(left)}");
-    println("${indent(s.depth)}  right (Int): ${__format_one(right)}")
+    println("${indent(s.depth)}  left (Int):  ${Stk.format(left)}");
+    println("${indent(s.depth)}  right (Int): ${Stk.format(right)}")
   }
 
 export fun gte(s: Suite, desc: String, left: Int, right: Int): Unit =
   if (left >= right) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
-      println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
+      println("${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}")
     }
   } else {
     s.counts.failed := s.counts.failed + 1;
-    println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
+    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
     println("${indent(s.depth)}  need: left >= right (total order on Int)");
-    println("${indent(s.depth)}  left (Int):  ${__format_one(left)}");
-    println("${indent(s.depth)}  right (Int): ${__format_one(right)}")
+    println("${indent(s.depth)}  left (Int):  ${Stk.format(left)}");
+    println("${indent(s.depth)}  right (Int): ${Stk.format(right)}")
   }
 
 export fun lte(s: Suite, desc: String, left: Int, right: Int): Unit =
   if (left <= right) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
-      println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
+      println("${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}")
     }
   } else {
     s.counts.failed := s.counts.failed + 1;
-    println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
+    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
     println("${indent(s.depth)}  need: left <= right (total order on Int)");
-    println("${indent(s.depth)}  left (Int):  ${__format_one(left)}");
-    println("${indent(s.depth)}  right (Int): ${__format_one(right)}")
+    println("${indent(s.depth)}  left (Int):  ${Stk.format(left)}");
+    println("${indent(s.depth)}  right (Int): ${Stk.format(right)}")
   }
 
 /**
@@ -152,11 +154,11 @@ export fun throws(s: Suite, desc: String, thunk: (Unit) -> Unit): Unit = {
   if (threw) {
     s.counts.passed := s.counts.passed + 1;
     if (!s.summaryOnly) {
-      println("${indent(s.depth)}${GREEN}${CHECK} ${desc}${RESET}")
+      println("${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}")
     }
   } else {
     s.counts.failed := s.counts.failed + 1;
-    println("${indent(s.depth)}${RED}${CROSS} ${desc}${RESET}");
+    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
     println("${indent(s.depth)}  expected: callee throws an exception");
     println("${indent(s.depth)}  actual:   completed normally (no exception)")
   }
@@ -165,12 +167,12 @@ export fun throws(s: Suite, desc: String, thunk: (Unit) -> Unit): Unit = {
 export fun printSummary(counts: { passed: mut Int, failed: mut Int, startTime: mut Int }): Unit = {
   val p = counts.passed;
   val f = counts.failed;
-  val totalElapsed = __now_ms() - counts.startTime;
+  val totalElapsed = Basics.nowMs() - counts.startTime;
   println("");
   if (f > 0) {
-    println("${RED}${f} failed${RESET}, ${p} passed (${totalElapsed}ms)");
+    println("${Console.RED}${f} failed${Console.RESET}, ${p} passed (${totalElapsed}ms)");
     exit(1)
   } else {
-    println("${GREEN}${p} passed${RESET} (${totalElapsed}ms)")
+    println("${Console.GREEN}${p} passed${Console.RESET} (${totalElapsed}ms)")
   }
 }

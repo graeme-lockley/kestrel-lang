@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:test"
 
 export fun run(s: Suite): Unit =
   group(s, "float", (s1: Suite) => {
@@ -21,11 +21,11 @@ export fun run(s: Suite): Unit =
     })
 
     group(s1, "comparison", (sg: Suite) => {
-      eq(sg, "1.5 == 1.5", 1.5 == 1.5, True)
-      eq(sg, "1.5 != 2.5", 1.5 != 2.5, True)
-      eq(sg, "1.0 < 2.0", 1.0 < 2.0, True)
-      eq(sg, "3.0 > 2.0", 3.0 > 2.0, True)
-      eq(sg, "2.0 <= 2.0", 2.0 <= 2.0, True)
-      eq(sg, "2.0 >= 2.0", 2.0 >= 2.0, True)
+      isTrue(sg, "1.5 == 1.5", 1.5 == 1.5)
+      isTrue(sg, "1.5 != 2.5", 1.5 != 2.5)
+      isTrue(sg, "1.0 < 2.0", 1.0 < 2.0)
+      isTrue(sg, "3.0 > 2.0", 3.0 > 2.0)
+      isTrue(sg, "2.0 <= 2.0", 2.0 <= 2.0)
+      isTrue(sg, "2.0 >= 2.0", 2.0 >= 2.0)
     })
   })

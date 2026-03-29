@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:test"
 
 fun optLen(o: Option<Int>): Int =
   if (o is None) { 0 } else {
@@ -21,7 +21,7 @@ export fun run(s: Suite): Unit =
     eq(sg, "Some branch", optLen(Some(5)), 5)
     eq(sg, "ADT Apple", fruitTag(Apple), 1)
     eq(sg, "ADT Orange", fruitTag(Orange), 2)
-    eq(sg, "prim is Int", (42 is Int), True)
-    eq(sg, "record subset field", (narrowRec is { x: Int }), True)
-    eq(sg, "record full shape", (narrowRec is { x: Int, y: Int }), True)
+    isTrue(sg, "prim is Int", (42 is Int))
+    isTrue(sg, "record subset field", (narrowRec is { x: Int }))
+    isTrue(sg, "record full shape", (narrowRec is { x: Int, y: Int }))
   })

@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 
 fun getValue(): Int = 42
 fun negate(x: Int): Int = -x
@@ -23,12 +23,12 @@ export fun run(s: Suite): Unit =
     })
     
     group(s1, "not", (sg: Suite) => {
-      eq(sg, "!True", !True, False)
-      eq(sg, "!False", !False, True)
-      eq(sg, "!!True", !!True, True)
-      eq(sg, "!(3>5)", !(3 > 5), True)
-      eq(sg, "!(2<4)", !(2 < 4), False)
-      eq(sg, "!True & False", !True & False, False)
-      eq(sg, "True | !False", True | !False, True)
+      isFalse(sg, "!True", !True)
+      isTrue(sg, "!False", !False)
+      isTrue(sg, "!!True", !!True)
+      isTrue(sg, "!(3>5)", !(3 > 5))
+      isFalse(sg, "!(2<4)", !(2 < 4))
+      isFalse(sg, "!True & False", !True & False)
+      isTrue(sg, "True | !False", True | !False)
     })
   })

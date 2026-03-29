@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 
 // Opaque ADT - within the same module, we have full access
 opaque type Token = Num(Int) | Op(String) | Eof
@@ -27,8 +27,8 @@ export fun run(s: Suite): Unit =
 
     group(s1, "opaque generic", (sg: Suite) => {
       val r1 = MyOk(42)
-      eq(sg, "myResultIsOk Ok", myResultIsOk(r1), True)
+      isTrue(sg, "myResultIsOk Ok", myResultIsOk(r1))
       val r2 = MyErr
-      eq(sg, "myResultIsOk Err", myResultIsOk(r2), False)
+      isFalse(sg, "myResultIsOk Err", myResultIsOk(r2))
     })
   })

@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:test"
 
 // Mutual tail-call optimization: direct calls between top-level functions in tail position.
 fun isEven(n: Int): Bool = if (n == 0) True else isOdd(n - 1)
@@ -20,12 +20,12 @@ fun isOddClosure(n: Int): Bool = if (n == 0) False else isEvenClosure(n - 1)
 export fun run(s: Suite): Unit =
   group(s, "tail_mutual_recursion", (s1: Suite) => {
     group(s1, "mutual_tail_optimized", (sg: Suite) => {
-      eq(sg, "isEven deep", isEven(300000), True)
-      eq(sg, "isOdd deep", isOdd(300001), True)
+      isTrue(sg, "isEven deep", isEven(300000))
+      isTrue(sg, "isOdd deep", isOdd(300001))
       eq(sg, "three-state machine", state0(90000, 0), 180000)
     })
     group(s1, "indirect_fallback_shallow", (sg: Suite) => {
-      eq(sg, "closure bridge small", isEvenClosure(42), True)
-      eq(sg, "closure bridge odd small", isOddClosure(7), True)
+      isTrue(sg, "closure bridge small", isEvenClosure(42))
+      isTrue(sg, "closure bridge odd small", isOddClosure(7))
     })
   })

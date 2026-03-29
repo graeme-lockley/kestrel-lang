@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 import * as Dict from "kestrel:dict"
 import * as Opt from "kestrel:option"
 
@@ -6,13 +6,13 @@ export fun run(s: Suite): Unit = {
   group(s, "dict", (s1: Suite) => {
     group(s1, "int core", (sg: Suite) => {
       val d0 = Dict.emptyIntDict()
-      eq(sg, "isEmpty", Dict.isEmpty(d0), True)
+      isTrue(sg, "isEmpty", Dict.isEmpty(d0))
       val d1 = Dict.insert(d0, 1, 10)
       eq(sg, "get hit", Opt.getOrElse(Dict.get(d1, 1), 0), 10)
       val d2 = Dict.insert(d1, 2, 20)
       eq(sg, "size", Dict.size(d2), 2)
       val d3 = Dict.remove(d2, 1)
-      eq(sg, "remove", Dict.member(d3, 1), False)
+      isFalse(sg, "remove", Dict.member(d3, 1))
       val d4 = Dict.update(d3, 2, (o: Option<Int>) =>
         match (o) {
           None => None

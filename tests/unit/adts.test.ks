@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 
 // Nullary constructors
 type Color = Red | Green | Blue
@@ -135,13 +135,13 @@ export fun run(s: Suite): Unit =
       eq(sg, "evalExpr Neg", evalExpr(Neg(Lit(5))), -5)
       val nested = Add(Mul(Lit(2), Lit(3)), Lit(1))
       eq(sg, "evalExpr nested", evalExpr(nested), 7)
-      eq(sg, "evalCond CTrue", evalCond(CTrue), True)
-      eq(sg, "evalCond CFalse", evalCond(CFalse), False)
-      eq(sg, "evalCond Not", evalCond(Not(CTrue)), False)
-      eq(sg, "evalCond Not false", evalCond(Not(CFalse)), True)
-      eq(sg, "evalCond And", evalCond(And(CTrue, CTrue)), True)
-      eq(sg, "evalCond And false", evalCond(And(CTrue, CFalse)), False)
-      eq(sg, "evalCond Eqq true", evalCond(Eqq(Lit(1), Lit(1))), True)
+      isTrue(sg, "evalCond CTrue", evalCond(CTrue))
+      isFalse(sg, "evalCond CFalse", evalCond(CFalse))
+      isFalse(sg, "evalCond Not", evalCond(Not(CTrue)))
+      isTrue(sg, "evalCond Not false", evalCond(Not(CFalse)))
+      isTrue(sg, "evalCond And", evalCond(And(CTrue, CTrue)))
+      isFalse(sg, "evalCond And false", evalCond(And(CTrue, CFalse)))
+      isTrue(sg, "evalCond Eqq true", evalCond(Eqq(Lit(1), Lit(1))))
 
       // Note: Eqq(Lit(1), Lit(2)) returning False test has a known issue - 
       // it appears to be inferring Eqq incorrectly - skipping for now
@@ -154,12 +154,12 @@ export fun run(s: Suite): Unit =
       eq(sg, "Add2", evalExpr2(Add2(Lit2(3), Lit2(4))), 7)
       eq(sg, "If2 true branch", evalExpr2(If2(True2, Lit2(10), Lit2(20))), 10)
       eq(sg, "If2 false branch", evalExpr2(If2(False2, Lit2(10), Lit2(20))), 20)
-      eq(sg, "Eq2 true", evalCond2(Eq2(Lit2(1), Lit2(1))), True)
-      eq(sg, "Eq2 false", evalCond2(Eq2(Lit2(1), Lit2(2))), False)
-      eq(sg, "Lt2 true", evalCond2(Lt2(Lit2(1), Lit2(2))), True)
-      eq(sg, "Lt2 false", evalCond2(Lt2(Lit2(2), Lit2(1))), False)
-      eq(sg, "Not2", evalCond2(Not2(False2)), True)
-      eq(sg, "And2", evalCond2(And2(True2, True2)), True)
+      isTrue(sg, "Eq2 true", evalCond2(Eq2(Lit2(1), Lit2(1))))
+      isFalse(sg, "Eq2 false", evalCond2(Eq2(Lit2(1), Lit2(2))))
+      isTrue(sg, "Lt2 true", evalCond2(Lt2(Lit2(1), Lit2(2))))
+      isFalse(sg, "Lt2 false", evalCond2(Lt2(Lit2(2), Lit2(1))))
+      isTrue(sg, "Not2", evalCond2(Not2(False2)))
+      isTrue(sg, "And2", evalCond2(And2(True2, True2)))
 
       // Nested: If with Eq inside
       val condExpr = If2(Eq2(Add2(Lit2(1), Lit2(1)), Lit2(2)), Lit2(100), Lit2(200))

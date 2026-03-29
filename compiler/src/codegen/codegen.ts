@@ -1488,11 +1488,6 @@ function makeEmitExpr(
           emitCall(0xFFFFFF00, 1);
           break;
         }
-        if (expr.callee.name === '__equals' && expr.args.length === 2) {
-          for (const arg of expr.args) emitExpr(arg, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
-          emitCall(0xFFFFFF0E, 2);
-          break;
-        }
         if (expr.callee.name === '__get_process' && expr.args.length === 0) {
           emitCall(0xFFFFFF0F, 0);
           break;

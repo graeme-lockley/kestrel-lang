@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 
 // Minimal nested fun to trigger VM path (desugared to block val + lambda)
 fun outerWithNested(): Int = { fun inner(): Int = 1; inner() }
@@ -74,10 +74,10 @@ export fun run(s: Suite): Unit =
       eq(sg, "fib(5) == 5", fib(5), 5)
       eq(sg, "fib(10) == 55", fib(10), 55)
       eq(sg, "sumList([1,2,3])", sumList([1, 2, 3]), 6)
-      eq(sg, "mutual recursion isEven(4)", isEven(4), True)
-      eq(sg, "mutual recursion isEven(5)", isEven(5), False)
-      eq(sg, "mutual recursion isOdd(3)", isOdd(3), True)
-      eq(sg, "mutual recursion isOdd(4)", isOdd(4), False)
+      isTrue(sg, "mutual recursion isEven(4)", isEven(4))
+      isFalse(sg, "mutual recursion isEven(5)", isEven(5))
+      isTrue(sg, "mutual recursion isOdd(3)", isOdd(3))
+      isFalse(sg, "mutual recursion isOdd(4)", isOdd(4))
     })
 
     group(s1, "composition", (sg: Suite) => {
@@ -128,8 +128,8 @@ export fun run(s: Suite): Unit =
       eq(sg, "nested fun return type ok", { fun ok(): Int = 42; ok() }, 42)
 
       // Block-level mutual recursion: two nested funs calling each other (two separate blocks in same scope)
-      eq(sg, "block-level mutual recursion even(10)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); even(10) }, True)
-      eq(sg, "block-level mutual recursion odd(5)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); odd(5) }, True)
+      isTrue(sg, "block-level mutual recursion even(10)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); even(10) })
+      isTrue(sg, "block-level mutual recursion odd(5)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); odd(5) })
     })
 
     group(s1, "closures", (sg: Suite) => {

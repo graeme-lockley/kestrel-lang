@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 import { isDigit } from "kestrel:char"
 import * as List from "kestrel:list"
 import {
@@ -116,9 +116,9 @@ export fun run(s: Suite): Unit =
     })
 
     group(s1, "equals", (sg: Suite) => {
-      eq(sg, "same", equals("a", "a"), True)
-      eq(sg, "different", equals("a", "b"), False)
-      eq(sg, "empty", equals("", ""), True)
+      isTrue(sg, "same", equals("a", "a"))
+      isFalse(sg, "different", equals("a", "b"))
+      isTrue(sg, "empty", equals("", ""))
     })
     
     group(s1, "toUpperCase", (sg: Suite) => {
@@ -136,8 +136,8 @@ export fun run(s: Suite): Unit =
     })
 
     group(s1, "isEmpty", (sg: Suite) => {
-      eq(sg, "empty", isEmpty(""), True)
-      eq(sg, "non-empty", isEmpty("x"), False)
+      isTrue(sg, "empty", isEmpty(""))
+      isFalse(sg, "non-empty", isEmpty("x"))
     })
 
     group(s1, "codePointAt", (sg: Suite) => {
@@ -253,12 +253,12 @@ export fun run(s: Suite): Unit =
 
     group(s1, "lines contains starts ends", (sg: Suite) => {
       eq(sg, "lines", lines("a\nb"), ["a", "b"])
-      eq(sg, "contains", contains("ll", "hello"), True)
-      eq(sg, "not contains", contains("z", "hello"), False)
-      eq(sg, "startsWith", startsWith("he", "hello"), True)
-      eq(sg, "starts too long", startsWith("hello!", "hi"), False)
-      eq(sg, "endsWith", endsWith("lo", "hello"), True)
-      eq(sg, "ends mismatch", endsWith("x", "hello"), False)
+      isTrue(sg, "contains", contains("ll", "hello"))
+      isFalse(sg, "not contains", contains("z", "hello"))
+      isTrue(sg, "startsWith", startsWith("he", "hello"))
+      isFalse(sg, "starts too long", startsWith("hello!", "hi"))
+      isTrue(sg, "endsWith", endsWith("lo", "hello"))
+      isFalse(sg, "ends mismatch", endsWith("x", "hello"))
     })
 
     group(s1, "indexes", (sg: Suite) => {
@@ -292,11 +292,11 @@ export fun run(s: Suite): Unit =
     })
 
     group(s1, "anyChar allChars", (sg: Suite) => {
-      eq(sg, "any false", anyChar("abc", isDigit), False)
-      eq(sg, "any true", anyChar("a1", isDigit), True)
-      eq(sg, "any empty", anyChar("", isDigit), False)
-      eq(sg, "all true", allChars("12", isDigit), True)
-      eq(sg, "all false", allChars("1a", isDigit), False)
-      eq(sg, "all empty", allChars("", isDigit), True)
+      isFalse(sg, "any false", anyChar("abc", isDigit))
+      isTrue(sg, "any true", anyChar("a1", isDigit))
+      isFalse(sg, "any empty", anyChar("", isDigit))
+      isTrue(sg, "all true", allChars("12", isDigit))
+      isFalse(sg, "all false", allChars("1a", isDigit))
+      isTrue(sg, "all empty", allChars("", isDigit))
     })
   })

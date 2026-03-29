@@ -241,7 +241,7 @@ Both operators require operands of the **same** type (after inference); the type
 
 **`==` — semantic (deep) equality**
 
-`==` compares values by meaning, not by object identity (where a heap representation exists). It is the same notion of equality as the runtime’s deep-equality primitive used for `__equals` / structural comparisons:
+`==` compares values by meaning, not by object identity (where a heap representation exists). The compiler and runtimes implement it with the same structural deep-equality as the VM’s `EQ` instruction / JVM `KRuntime.equals` (there is no separate user-callable `__equals`; use `==` / `!=`).
 
 | Kind | `==` is true when |
 |------|-------------------|

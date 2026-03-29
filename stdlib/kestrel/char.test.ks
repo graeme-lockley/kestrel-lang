@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 import { equals as stringEquals } from "kestrel:string"
 import {
   codePoint,
@@ -34,43 +34,43 @@ export fun run(s: Suite): Unit =
     })
 
     group(s1, "charToString", (sg: Suite) => {
-      eq(sg, "A one char", stringEquals(charToString('A'), "A"), True)
-      eq(sg, "emoji one char", stringEquals(charToString('\u{1F600}'), "\u{1F600}"), True)
+      isTrue(sg, "A one char", stringEquals(charToString('A'), "A"))
+      isTrue(sg, "emoji one char", stringEquals(charToString('\u{1F600}'), "\u{1F600}"))
     })
 
     group(s1, "isDigit", (sg: Suite) => {
-      eq(sg, "zero", isDigit('0'), True)
-      eq(sg, "nine", isDigit('9'), True)
-      eq(sg, "letter", isDigit('a'), False)
-      eq(sg, "space", isDigit(' '), False)
+      isTrue(sg, "zero", isDigit('0'))
+      isTrue(sg, "nine", isDigit('9'))
+      isFalse(sg, "letter", isDigit('a'))
+      isFalse(sg, "space", isDigit(' '))
     })
 
     group(s1, "isUpper isLower", (sg: Suite) => {
-      eq(sg, "A upper", isUpper('A'), True)
-      eq(sg, "Z upper", isUpper('Z'), True)
-      eq(sg, "a not upper", isUpper('a'), False)
-      eq(sg, "a lower", isLower('a'), True)
-      eq(sg, "z lower", isLower('z'), True)
-      eq(sg, "A not lower", isLower('A'), False)
+      isTrue(sg, "A upper", isUpper('A'))
+      isTrue(sg, "Z upper", isUpper('Z'))
+      isFalse(sg, "a not upper", isUpper('a'))
+      isTrue(sg, "a lower", isLower('a'))
+      isTrue(sg, "z lower", isLower('z'))
+      isFalse(sg, "A not lower", isLower('A'))
     })
 
     group(s1, "isAlpha isAlphaNum", (sg: Suite) => {
-      eq(sg, "space not alpha", isAlpha(' '), False)
-      eq(sg, "digit not alpha", isAlpha('5'), False)
-      eq(sg, "A alpha", isAlpha('A'), True)
-      eq(sg, "5 alnum", isAlphaNum('5'), True)
-      eq(sg, "b alnum", isAlphaNum('b'), True)
+      isFalse(sg, "space not alpha", isAlpha(' '))
+      isFalse(sg, "digit not alpha", isAlpha('5'))
+      isTrue(sg, "A alpha", isAlpha('A'))
+      isTrue(sg, "5 alnum", isAlphaNum('5'))
+      isTrue(sg, "b alnum", isAlphaNum('b'))
     })
 
     group(s1, "isOctDigit", (sg: Suite) => {
-      eq(sg, "7", isOctDigit('7'), True)
-      eq(sg, "8", isOctDigit('8'), False)
+      isTrue(sg, "7", isOctDigit('7'))
+      isFalse(sg, "8", isOctDigit('8'))
     })
 
     group(s1, "isHexDigit", (sg: Suite) => {
-      eq(sg, "f", isHexDigit('f'), True)
-      eq(sg, "F", isHexDigit('F'), True)
-      eq(sg, "g", isHexDigit('g'), False)
+      isTrue(sg, "f", isHexDigit('f'))
+      isTrue(sg, "F", isHexDigit('F'))
+      isFalse(sg, "g", isHexDigit('g'))
     })
 
     group(s1, "toUpper toLower", (sg: Suite) => {

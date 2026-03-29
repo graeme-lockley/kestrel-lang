@@ -88,6 +88,7 @@ Numeric, boolean, and general utilities. **Int remainder note:** `%` on `Int` fo
 | `abs` | `(Float) -> Float` | `__float_abs` |
 | `sqrt` | `(Float) -> Float` | `__float_sqrt` (NaN for negative input) |
 | `isNaN` / `isInfinite` | `(Float) -> Bool` | `__float_is_nan` / `__float_is_infinite` |
+| `nowMs` | `() -> Int` | Wall-clock milliseconds (`__now_ms`); also used by `kestrel:http` `nowMs` |
 
 ---
 
@@ -228,7 +229,7 @@ HTTP server and client. Server-oriented API.
 | `bodyText` | `(Request) -> Task<String>` | Request body as text |
 | `queryParam` | `(Request, String) -> Option<String>` | Query parameter by name |
 | `requestId` | `(Request) -> String` | Request ID |
-| `nowMs` | `() -> Int` | Current time in milliseconds |
+| `nowMs` | `() -> Int` | Current time in milliseconds (forwards to `kestrel:basics` `nowMs`) |
 
 ---
 
@@ -259,7 +260,7 @@ File system. `readText` is **async-shaped** (`Task<String>`) so callers use `awa
 
 ## kestrel:test
 
-Assertions and reporting for the Kestrel unit-test harness (`kestrel test`, `scripts/run_tests.ks`). Imports `kestrel:console` for styled output (✓/✗, colours, dim group labels).
+Assertions and reporting for the Kestrel unit-test harness (`kestrel test`, `scripts/run_tests.ks`). Imports `kestrel:basics` (`nowMs`), `kestrel:console`, `kestrel:list`, `kestrel:stack` (`format`), and `kestrel:string` (`concat`, `repeat`) for implementation (namespace imports); styled output uses console ANSI constants (✓/✗, colours, dim group labels).
 
 ### Suite
 
@@ -269,7 +270,7 @@ Assertions and reporting for the Kestrel unit-test harness (`kestrel test`, `scr
 |-------|------|------|
 | `depth` | `Int` | Nesting depth for indentation of group labels and assertion lines |
 | `summaryOnly` | `Bool` | When `True`, passing assertions and `group` headers/footers do not print; **failed** assertions still print. Counters always update. |
-| `counts` | `{ passed: mut Int, failed: mut Int, startTime: mut Int }` | Shared mutable tallies and harness start time (`__now_ms()` at suite creation) |
+| `counts` | `{ passed: mut Int, failed: mut Int, startTime: mut Int }` | Shared mutable tallies and harness start time (`Basics.nowMs()` at suite creation) |
 
 The harness constructs one root `Suite` (typically `depth = 1` or as in `run_tests.ks`) whose `counts` is passed to `printSummary` after all `run(s)` calls.
 
@@ -278,12 +279,12 @@ The harness constructs one root `Suite` (typically `depth = 1` or as in `run_tes
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `group` | `(Suite, String, (Suite) -> Unit) -> Unit` | Runs `body` with a child suite (depth + 1, same `summaryOnly` and `counts`). Unless `summaryOnly`, prints a dim group title and a footer with pass/fail delta for the group and elapsed ms. |
-| `eq` | `(Suite, String, X, X) -> Unit` | Success when `__equals(actual, expected)`. On failure: increments `failed`, prints ✗ and three indented lines — `expected (right):`, `actual (left):` (values via `__format_one`), then `(deep equality / same value shape)`. |
-| `neq` | `(Suite, String, X, X) -> Unit` | Success when values are **not** deeply equal. On failure: prints ✗, `expected: values must differ (deep inequality)`, `both sides: …` (`__format_one`). |
-| `isTrue` | `(Suite, String, Bool) -> Unit` | Success when `value` is `True`. On failure: `expected (Bool): true`, `actual (Bool): …`. |
-| `isFalse` | `(Suite, String, Bool) -> Unit` | Success when `value` is `False`. On failure: `expected (Bool): false`, `actual (Bool): …`. |
-| `gt` / `lt` | `(Suite, String, Int, Int) -> Unit` | Strict order on `Int` (`left > right` / `left < right`). On failure: requirement line (`need: left > right` or `left < right`, “strict total order on Int”), then `left (Int):` / `right (Int):` with `__format_one`. **Float is not in scope** for these helpers. |
-| `gte` / `lte` | `(Suite, String, Int, Int) -> Unit` | Non-strict order (`>=` / `<=`). On failure: `need: left >= right` or `left <= right` (“total order on Int”), then labelled `Int` lines. |
+| `eq` | `(Suite, String, X, X) -> Unit` | Success when `actual == expected` (semantic / deep equality; language §3.2.1). On failure: increments `failed`, prints ✗ and three indented lines — `expected (right):`, `actual (left):` (values via `kestrel:stack` `format`), then `(deep equality / same value shape)`. |
+| `neq` | `(Suite, String, X, X) -> Unit` | Success when `actual != notExpected`. On failure: prints ✗, `expected: values must differ (deep inequality)`, `both sides: …` (`format`). |
+| `isTrue` | `(Suite, String, Bool) -> Unit` | Success when `value` is `True`. On failure: `expected (Bool): true`, `actual (Bool): …` (`format`). |
+| `isFalse` | `(Suite, String, Bool) -> Unit` | Success when `value` is `False`. On failure: `expected (Bool): false`, `actual (Bool): …` (`format`). |
+| `gt` / `lt` | `(Suite, String, Int, Int) -> Unit` | Strict order on `Int` (`left > right` / `left < right`). On failure: requirement line (`need: left > right` or `left < right`, “strict total order on Int”), then `left (Int):` / `right (Int):` with `format`. **Float is not in scope** for these helpers. |
+| `gte` / `lte` | `(Suite, String, Int, Int) -> Unit` | Non-strict order (`>=` / `<=`). On failure: `need: left >= right` or `left <= right` (“total order on Int”), then labelled `Int` lines (`format`). |
 | `throws` | `(Suite, String, (Unit) -> Unit) -> Unit` | Invokes `thunk(())`. Success if the call throws any exception (catch-all `_`); failure if it returns normally. On failure: `expected: callee throws an exception`, `actual: completed normally (no exception)`. **Note:** The surface type is `(Unit) -> Unit` because the language does not accept `() -> T` in type position for a zero-parameter function type; callers use e.g. `(_: Unit) => { … }`. |
 | `printSummary` | `({ passed: mut Int, failed: mut Int, startTime: mut Int }) -> Unit` | Prints a blank line, then total elapsed ms. If `failed > 0`: red `M failed, N passed (…ms)` and **`exit(1)`**. If `failed == 0`: green `N passed (…ms)`. |
 

@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:test"
 import * as Str from "kestrel:string"
 import * as Console from "kestrel:console"
 import * as Helper from "../fixtures/export_var_helper.ks"
@@ -10,7 +10,7 @@ export fun run(s: Suite): Unit =
       eq(s2, "Str.length", Str.length("hello"), 5)
       eq(s2, "Str.slice", Str.slice("hello", 0, 2), "he")
       eq(s2, "Str.indexOf", Str.indexOf("hello", "ll"), 2)
-      eq(s2, "Str.equals", Str.equals("a", "a"), True)
+      isTrue(s2, "Str.equals", Str.equals("a", "a"))
       eq(s2, "Str.toUpperCase", Str.toUpperCase("hello"), "HELLO")
     })
     group(s1, "value bindings", (s2: Suite) => {
