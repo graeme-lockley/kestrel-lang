@@ -187,7 +187,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     return: { kind: 'prim', name: 'Unit' },
   }, new Set()));
 
-  // Built-in ADT constructors (Option, Result, Value) so they type-check without import
+  // Built-in ADT constructors (Option, Result) so they type-check without import
   const optT = freshVar();
   env.set('None', generalize({ kind: 'app', name: 'Option', args: [optT] }, new Set()));
   const someT = freshVar();
@@ -207,33 +207,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     kind: 'arrow',
     params: [resE],
     return: { kind: 'app', name: 'Result', args: [resT, resE] },
-  }, new Set()));
-  const valueType = { kind: 'app' as const, name: 'Value', args: [] as InternalType[] };
-  env.set('Null', generalize(valueType, new Set()));
-  env.set('Bool', generalize({ kind: 'arrow', params: [tBool], return: valueType }, new Set()));
-  env.set('Int', generalize({ kind: 'arrow', params: [tInt], return: valueType }, new Set()));
-  env.set('Float', generalize({ kind: 'arrow', params: [tFloat], return: valueType }, new Set()));
-  env.set('String', generalize({ kind: 'arrow', params: [tString], return: valueType }, new Set()));
-  env.set('Array', generalize({
-    kind: 'arrow',
-    params: [{ kind: 'app', name: 'List', args: [valueType] }],
-    return: valueType,
-  }, new Set()));
-  env.set('Object', generalize({
-    kind: 'arrow',
-    params: [{ kind: 'app', name: 'List', args: [{ kind: 'tuple', elements: [tString, valueType] }] }],
-    return: valueType,
-  }, new Set()));
-  // JSON primitives (stdlib kestrel:json calls these)
-  env.set('__json_parse', generalize({
-    kind: 'arrow',
-    params: [tString],
-    return: valueType,
-  }, new Set()));
-  env.set('__json_stringify', generalize({
-    kind: 'arrow',
-    params: [valueType],
-    return: tString,
   }, new Set()));
   env.set('__read_file_async', generalize({
     kind: 'arrow',
@@ -623,7 +596,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       List: new Set(['Nil', 'Cons']),
       Option: new Set(['None', 'Some']),
       Result: new Set(['Err', 'Ok']),
-      Value: new Set(['Null', 'Bool', 'Int', 'Float', 'String', 'Array', 'Object']),
     };
     
     let required: Set<string> | undefined = requiredSets[appType.name];
@@ -1137,10 +1109,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
                 const payloadT = pattern.name === 'Ok' ? t : e;
                 for (const field of pattern.fields || []) {
                   if (field.pattern) bound.push(...bindPattern(field.pattern, payloadT));
-                }
-              } else if (applied.name === 'Value') {
-                for (const field of pattern.fields || []) {
-                  if (field.pattern) bound.push(...bindPattern(field.pattern, freshVar()));
                 }
               } else {
                 // User-defined ADT - look up constructor arity

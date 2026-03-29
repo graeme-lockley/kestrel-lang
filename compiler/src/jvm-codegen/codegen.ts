@@ -42,7 +42,6 @@ function subJvmTail(parent: JvmEmitTailContext | undefined, childIsTail: boolean
   return { self: parent.self, inTail: childIsTail && parent.inTail };
 }
 const K_OK = 'kestrel/runtime/KOk';
-const K_VNULL = 'kestrel/runtime/KVNull';
 const K_FUNCTION = 'kestrel/runtime/KFunction';
 const K_FUNCTION_REF = 'kestrel/runtime/KFunctionRef';
 const K_EXCEPTION = 'kestrel/runtime/KException';
@@ -81,7 +80,6 @@ function jvmBuiltinCtorInfo(name: string, arity: number): { arity: number } | nu
   switch (name) {
     case 'None':
     case 'Nil':
-    case 'Null':
       return arity === 0 ? { arity: 0 } : null;
     case 'Some':
     case 'Ok':
@@ -668,10 +666,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
           return false;
         }
-        if (expr.name === 'Null') {
-          mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_VNULL, 'INSTANCE', 'Lkestrel/runtime/KVNull;'));
-          return false;
-        }
         throw new Error(`JVM codegen: unknown variable ${expr.name}`);
       }
       case 'BinaryExpr': {
@@ -1243,16 +1237,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           if (name === '__char_from_code' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charFromCode', '(Ljava/lang/Object;)Ljava/lang/Integer;'));
-            return false;
-          }
-          if (name === '__json_parse' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'jsonParse', '(Ljava/lang/Object;)Lkestrel/runtime/KValue;'));
-            return false;
-          }
-          if (name === '__json_stringify' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'jsonStringify', '(Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__read_file_async' && expr.args.length === 1) {
@@ -2136,8 +2120,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NONE, 'INSTANCE', 'Lkestrel/runtime/KNone;'));
             } else if (tested.name === 'Nil') {
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
-            } else if (tested.name === 'Null') {
-              mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_VNULL, 'INSTANCE', 'Lkestrel/runtime/KVNull;'));
             } else {
               throw new Error(`JVM codegen: is ${tested.name}`);
             }
@@ -2164,8 +2146,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NONE, 'INSTANCE', 'Lkestrel/runtime/KNone;'));
               } else if (tested.name === 'Nil') {
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
-              } else if (tested.name === 'Null') {
-                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_VNULL, 'INSTANCE', 'Lkestrel/runtime/KVNull;'));
               } else {
                 throw new Error(`JVM codegen: is ${tested.name}`);
               }

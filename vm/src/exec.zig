@@ -803,22 +803,6 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                             return false;
                         }
                         continue;
-                    } else if (fn_id == 0xFFFFFF05 and arity == 1) {
-                        const arg = stack[sp - 1];
-                        sp -= 1;
-                        if (!pushOperand(&stack, &sp, primitives.jsonParse(&gc, arg, current_module.module_index))) {
-                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
-                            return false;
-                        }
-                        continue;
-                    } else if (fn_id == 0xFFFFFF06 and arity == 1) {
-                        const arg = stack[sp - 1];
-                        sp -= 1;
-                        if (!pushOperand(&stack, &sp, primitives.jsonStringify(&gc, arg))) {
-                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
-                            return false;
-                        }
-                        continue;
                     } else if (fn_id == 0xFFFFFF07 and arity == 1) {
                         const arg = stack[sp - 1];
                         sp -= 1;

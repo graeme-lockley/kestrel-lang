@@ -5,20 +5,13 @@ const gc_mod = @import("gc.zig");
 const load_mod = @import("load.zig");
 const GC = gc_mod.GC;
 
-// Value ADT constructor tags (spec 02, codegen.ts)
-const VALUE_NULL: u32 = 0;
-const VALUE_BOOL: u32 = 1;
-const VALUE_INT: u32 = 2;
-const VALUE_FLOAT: u32 = 3;
-const VALUE_STRING: u32 = 4;
-const VALUE_ARRAY: u32 = 5;
-const VALUE_OBJECT: u32 = 6;
 // List ADT
 const LIST_NIL: u32 = 0;
 const LIST_CONS: u32 = 1;
-// ADT table indices (codegen: List=0, Option=1, Result=2, Value=3)
+// ADT table indices (codegen: List=0, Option=1, Result=2)
 const LIST_ADT_ID: u32 = 0;
-const VALUE_ADT_ID: u32 = 3;
+
+const page_alloc = std.heap.page_allocator;
 
 fn appendSlice(buf: []u8, pos: *usize, s: []const u8) bool {
     if (pos.* + s.len > buf.len) return false;
@@ -270,25 +263,6 @@ fn utf8ByteOffsetForCodepoint(s: []const u8, cp_index: usize) ?usize {
     return null;
 }
 
-/// Allocate a Value ADT (Null, Bool, Int, String, Array; Object and Float stubbed). Uses current ADT layout (layout_ver 1).
-fn allocValueAdt(gc: *GC, module_index: u32, ctor: u32, payload: ?Value) !Value {
-    const arity: u32 = if (payload != null) 1 else 0;
-    const mem = try gc.allocObject(gc_mod.ADT_HEADER + arity * 8);
-    @memset(mem, 0);
-    mem[0] = gc_mod.ADT_KIND;
-    mem[1] = 0;
-    mem[2] = 1;
-    std.mem.writeInt(u32, mem[4..8], module_index, .little);
-    std.mem.writeInt(u32, mem[8..12], VALUE_ADT_ID, .little);
-    std.mem.writeInt(u32, mem[12..16], ctor, .little);
-    std.mem.writeInt(u32, mem[16..20], arity, .little);
-    if (payload) |p| {
-        const fields = @as([*]Value, @alignCast(@ptrCast(mem.ptr + gc_mod.ADT_HEADER)));
-        fields[0] = p;
-    }
-    return Value.ptr(@intFromPtr(mem.ptr));
-}
-
 /// Allocate a List ADT (Nil or Cons). Uses current ADT layout (layout_ver 1).
 fn allocListAdt(gc: *GC, module_index: u32, ctor: u32, head: ?Value, tail: ?Value) !Value {
     const arity: u32 = if (ctor == LIST_CONS) 2 else 0;
@@ -318,123 +292,6 @@ fn allocString(gc: *GC, slice: []const u8) !Value {
     std.mem.writeInt(u32, mem[4..8], @as(u32, @intCast(slice.len)), .little);
     @memcpy(mem[8..][0..slice.len], slice);
     return Value.ptr(@intFromPtr(mem.ptr));
-}
-
-fn jsonToValue(gc: *GC, j: std.json.Value, module_index: u32) !Value {
-    return switch (j) {
-        .null => allocValueAdt(gc, module_index, VALUE_NULL, null),
-        .bool => |b| allocValueAdt(gc, module_index, VALUE_BOOL, Value.boolVal(b)),
-        .integer => |i| allocValueAdt(gc, module_index, VALUE_INT, Value.int(@intCast(i))),
-        .float => |f| blk: {
-            const float_val = gc.allocFloat(f) catch break :blk try allocValueAdt(gc, module_index, VALUE_NULL, null);
-            break :blk try allocValueAdt(gc, module_index, VALUE_FLOAT, float_val);
-        },
-        .number_string => |s| allocValueAdt(gc, module_index, VALUE_STRING, try allocString(gc, s)),
-        .string => |s| allocValueAdt(gc, module_index, VALUE_STRING, try allocString(gc, s)),
-        .array => |arr| blk: {
-            var tail: Value = try allocListAdt(gc, module_index, LIST_NIL, null, null);
-            const items = arr.items;
-            var i = items.len;
-            while (i > 0) {
-                i -= 1;
-                const head = try jsonToValue(gc, items[i], module_index);
-                tail = try allocListAdt(gc, module_index, LIST_CONS, head, tail);
-            }
-            break :blk allocValueAdt(gc, module_index, VALUE_ARRAY, tail);
-        },
-        .object => allocValueAdt(gc, module_index, VALUE_OBJECT, try allocListAdt(gc, module_index, LIST_NIL, null, null)), // stub: empty list
-    };
-}
-
-/// Parse JSON string to Value ADT. Returns Null on parse error. module_index is the current module for ADT identity.
-pub fn jsonParse(gc: *GC, string_val: Value, module_index: u32) Value {
-    const slice = getStringSlice(string_val) orelse return allocValueAdt(gc, module_index, VALUE_NULL, null) catch Value.ptr(0);
-    var parsed = std.json.parseFromSlice(std.json.Value, std.heap.page_allocator, slice, .{ .allocate = .alloc_always }) catch return allocValueAdt(gc, module_index, VALUE_NULL, null) catch Value.ptr(0);
-    defer parsed.deinit();
-    return jsonToValue(gc, parsed.value, module_index) catch return allocValueAdt(gc, module_index, VALUE_NULL, null) catch Value.ptr(0);
-}
-
-fn valueAdtCtor(base: [*]const u8) u32 {
-    return std.mem.readInt(u32, base[12..16], .little);
-}
-
-fn valueAdtPayload(base: [*]const u8) Value {
-    const fields = @as([*]const Value, @alignCast(@ptrCast(base + gc_mod.ADT_HEADER)));
-    return fields[0];
-}
-
-const page_alloc = std.heap.page_allocator;
-
-fn valueToString(gc: *GC, val: Value, out: *std.ArrayList(u8)) !void {
-    if (val.tag != .ptr) return;
-    const addr = Value.ptrTo(val);
-    if (addr == 0) return;
-    const base = @as([*]const u8, @ptrFromInt(addr));
-    if (base[0] != gc_mod.ADT_KIND or base[2] != 1) return;
-    const ctor = valueAdtCtor(base);
-    switch (ctor) {
-        VALUE_NULL => try out.appendSlice(page_alloc, "null"),
-        VALUE_BOOL => {
-            const p = valueAdtPayload(base);
-            if (p.payload != 0) try out.appendSlice(page_alloc, "true") else try out.appendSlice(page_alloc, "false");
-        },
-        VALUE_INT => {
-            const p = valueAdtPayload(base);
-            try std.fmt.format(out.writer(page_alloc), "{d}", .{Value.intTo(p)});
-        },
-        VALUE_FLOAT => {
-            const p = valueAdtPayload(base);
-            if (p.tag != .ptr) return;
-            const float_addr = Value.ptrTo(p);
-            if (float_addr == 0) return;
-            const fbase = @as([*]const u8, @ptrFromInt(float_addr));
-            if (fbase[0] != gc_mod.FLOAT_KIND) return;
-            const f = @as(*const f64, @alignCast(@ptrCast(fbase + gc_mod.FLOAT_HEADER))).*;
-            try std.fmt.format(out.writer(page_alloc), "{d}", .{f});
-        },
-        VALUE_STRING => {
-            const p = valueAdtPayload(base);
-            const s = getStringSlice(p) orelse return;
-            try out.append(page_alloc, '"');
-            for (s) |c| {
-                switch (c) {
-                    '"' => try out.appendSlice(page_alloc, "\\\""),
-                    '\\' => try out.appendSlice(page_alloc, "\\\\"),
-                    '\n' => try out.appendSlice(page_alloc, "\\n"),
-                    '\r' => try out.appendSlice(page_alloc, "\\r"),
-                    '\t' => try out.appendSlice(page_alloc, "\\t"),
-                    else => try out.append(page_alloc, c),
-                }
-            }
-            try out.append(page_alloc, '"');
-        },
-        VALUE_ARRAY => {
-            try out.appendSlice(page_alloc, "[");
-            var list = valueAdtPayload(base);
-            var first = true;
-            while (list.tag == .ptr and Value.ptrTo(list) != 0) {
-                const list_base = @as([*]const u8, @ptrFromInt(Value.ptrTo(list)));
-                if (list_base[0] != gc_mod.ADT_KIND or list_base[2] != 1) break;
-                if (valueAdtCtor(list_base) != LIST_CONS) break;
-                const fields = @as([*]const Value, @alignCast(@ptrCast(list_base + gc_mod.ADT_HEADER)));
-                if (!first) try out.appendSlice(page_alloc, ",");
-                try valueToString(gc, fields[0], out);
-                first = false;
-                list = fields[1];
-            }
-            try out.appendSlice(page_alloc, "]");
-        },
-        VALUE_OBJECT => try out.appendSlice(page_alloc, "{}"), // stub
-        else => {},
-    }
-}
-
-/// Serialise Value ADT to JSON string. Allocates result string on GC.
-pub fn jsonStringify(gc: *GC, value_val: Value) Value {
-    var out = std.ArrayList(u8).initCapacity(std.heap.page_allocator, 4096) catch return Value.ptr(0);
-    defer out.deinit(std.heap.page_allocator);
-    valueToString(gc, value_val, &out) catch return Value.ptr(0);
-    return allocString(gc, out.items) catch return Value.ptr(0);
 }
 
 /// Read file contents as UTF-8; returns a completed Task<String>. Synchronous for now.

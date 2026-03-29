@@ -1,89 +1,85 @@
-import { Suite, group, eq, isTrue } from "kestrel:test"
-import { parse, stringify } from "kestrel:json"
-import { isNull, isBool, isInt, isFloat, isString, isArray, isObject } from "kestrel:value"
-import * as List from "kestrel:list"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
+import { parse, parseOrNull, stringify, errorAsString, describeParse, isNull, isBool, isInt, isFloat, isString, isArray, isObject, jsonNull, regressionErrorMessagesNonEmpty, asInt, asBool, asStrVal, objectPairCount } from "kestrel:json"
+import * as Opt from "kestrel:option"
+import * as Res from "kestrel:result"
+import * as Str from "kestrel:string"
 
-// Reference VM: failed JSON parse yields the same Value tag as JSON null (`Null`), so invalid input
-// cannot be distinguished from the literal JSON `null` without a separate error channel.
+fun intVal(v: Value, n: Int): Bool = Opt.getOrElse(asInt(v), n + 90210) == n
 
-fun intVal(v: Value, n: Int): Bool = match (v) {
-  Int(x) => x == n
-  _ => False
-}
+fun boolVal(v: Value, b: Bool): Bool = Opt.getOrElse(asBool(v), !b) == b
 
-fun boolVal(v: Value, b: Bool): Bool = match (v) {
-  Bool(x) => x == b
-  _ => False
-}
+fun strVal(v: Value, s: String): Bool = Str.equals(Opt.getOrElse(asStrVal(v), "__missing__"), s)
 
-fun strVal(v: Value, s: String): Bool = match (v) {
-  String(x) => __string_equals(x, s)
-  _ => False
-}
-
-fun objectEntryCount(v: Value): Int = match (v) {
-  Object(pairs) => List.length(pairs)
-  _ => -1
-}
+fun unwrapOk(r): Value = Res.getOrElse(r, jsonNull())
 
 export fun run(s: Suite): Unit =
   group(s, "json", (s1: Suite) => {
-    group(s1, "parse literals", (sg: Suite) => {
-      isTrue(sg, "null", isNull(parse("null")));
-      isTrue(sg, "true", boolVal(parse("true"), True));
-      isTrue(sg, "false", boolVal(parse("false"), False));
-      isTrue(sg, "int", intVal(parse("42"), 42));
-      isTrue(sg, "negative int", intVal(parse("-3"), -3));
-      isTrue(sg, "float", isFloat(parse("2.5")));
-      isTrue(sg, "string", strVal(parse("\"ab\""), "ab"));
+    group(s1, "parse literals and Result", (sg: Suite) => {
+      isTrue(sg, "null Ok", isNull(unwrapOk(parse("null"))));
+      isTrue(sg, "true Ok", boolVal(unwrapOk(parse("true")), True));
+      isTrue(sg, "false Ok", boolVal(unwrapOk(parse("false")), False));
+      isTrue(sg, "int Ok", intVal(unwrapOk(parse("42")), 42));
+      isTrue(sg, "negative int", intVal(unwrapOk(parse("-3")), -3));
+      isTrue(sg, "float", isFloat(unwrapOk(parse("2.5"))));
+      isTrue(sg, "string", strVal(unwrapOk(parse("\"ab\"")), "ab"));
+      isTrue(sg, "invalid is error", Res.isErr(parse("{")));
+      eq(sg, "empty input message", describeParse(""), "empty JSON input");
+      eq(sg, "whitespace only", describeParse("   "), "empty JSON input");
+    })
+
+    group(s1, "parseOrNull", (sg: Suite) => {
+      isTrue(sg, "Some on null", Opt.isSome(parseOrNull("null")) & isNull(Res.getOrElse(parse("null"), jsonNull())));
+      isTrue(sg, "None on bad", Opt.isNone(parseOrNull("{")));
+    })
+
+    group(s1, "errorAsString regression", (sg: Suite) => {
+      isTrue(sg, "all variants non-empty", regressionErrorMessagesNonEmpty());
     })
 
     group(s1, "parse arrays", (sg: Suite) => {
-      isTrue(sg, "empty", isArray(parse("[]")));
-      val flat = parse("[1,2,3]");
+      isTrue(sg, "empty", isArray(unwrapOk(parse("[]"))));
+      val flat = unwrapOk(parse("[1,2,3]"));
       isTrue(sg, "is array", isArray(flat));
       eq(sg, "stringify flat", stringify(flat), "[1,2,3]");
-      val nested = parse("[[1],[2,3]]");
+      val nested = unwrapOk(parse("[[1],[2,3]]"));
       isTrue(sg, "nested is array", isArray(nested));
       eq(sg, "stringify nested", stringify(nested), "[[1],[2,3]]");
     })
 
-    group(s1, "parse object stub", (sg: Suite) => {
-      val o = parse("{\"a\":1,\"b\":2}");
+    group(s1, "parse object", (sg: Suite) => {
+      val o = unwrapOk(parse("{\"a\":1,\"b\":2}"));
       isTrue(sg, "is object", isObject(o));
-      eq(sg, "entries not preserved yet", objectEntryCount(o), 0);
-      eq(sg, "stringify object stub", stringify(o), "{}");
+      eq(sg, "two entries", objectPairCount(o), 2);
+      val st = stringify(o);
+      isTrue(sg, "stringify contains keys", Str.indexOf(st, "\"a\"") >= 0 & Str.indexOf(st, "\"b\"") >= 0);
     })
 
-    group(s1, "stringify round-trip kinds", (sg: Suite) => {
-      val n = parse("null");
+    group(s1, "duplicate keys last wins", (sg: Suite) => {
+      val o = unwrapOk(parse("{\"x\":1,\"x\":2}"));
+      isTrue(sg, "one key", objectPairCount(o) == 1);
+      val st = stringify(o);
+      isTrue(sg, "value 2", Str.indexOf(st, ":2") >= 0);
+    })
+
+    group(s1, "trailing garbage", (sg: Suite) => {
+      isTrue(sg, "describeParse notes garbage", Str.indexOf(describeParse("null "), "trailing") >= 0);
+    })
+
+    group(s1, "round-trip", (sg: Suite) => {
+      val n = unwrapOk(parse("null"));
       eq(sg, "null rt", stringify(n), "null");
-      val t = parse("true");
-      eq(sg, "bool rt", stringify(t), "true");
-      val num = parse("-7");
-      eq(sg, "int rt", stringify(num), "-7");
-      val st = parse("\"z\"");
-      eq(sg, "string rt", stringify(st), "\"z\"");
-      val arr = parse("[1,2]");
-      eq(sg, "array rt", stringify(parse(stringify(arr))), "[1,2]");
+      val arr = unwrapOk(parse("[1,2]"));
+      isTrue(sg, "array rt", Res.isOk(parse(stringify(arr))));
     })
 
-    group(s1, "parse invalid", (sg: Suite) => {
-      isTrue(sg, "garbage is Null", isNull(parse("{")));
-      isTrue(sg, "literal null still Null", isNull(parse("null")));
-      // Both cases above are `Null`; callers cannot tell parse failure from JSON null.
+    group(s1, "invalid json", (sg: Suite) => {
+      isTrue(sg, "truncated object", Res.isErr(parse("{")));
+      isTrue(sg, "bad keyword", Res.isErr(parse("tru")));
+      isTrue(sg, "trailing comma array", Res.isErr(parse("[1,]")));
     })
 
-    group(s1, "string escapes and unicode", (sg: Suite) => {
-      isTrue(sg, "newline escape", strVal(parse("\"a\\nb\""), "a\nb"));
-      isTrue(sg, "unicode escape", strVal(parse("\"\\u00e9\""), "\u{00E9}"));
-    })
-
-    group(s1, "object stringify parse documented path", (sg: Suite) => {
-      val o = parse("{\"x\":1}");
-      eq(sg, "parse then stringify", stringify(o), "{}");
-      val o2 = parse(stringify(o));
-      isTrue(sg, "still object", isObject(o2));
-      eq(sg, "still empty payload", objectEntryCount(o2), 0);
+    group(s1, "escapes and unicode", (sg: Suite) => {
+      isTrue(sg, "newline escape", strVal(unwrapOk(parse("\"a\\nb\"")), "a\nb"));
+      isTrue(sg, "unicode escape", strVal(unwrapOk(parse("\"\\u00e9\"")), "\u{00E9}"));
     })
   })

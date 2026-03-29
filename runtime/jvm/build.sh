@@ -22,14 +22,6 @@ javac -d "$OUT_DIR" -source 11 -target 11 \
   "$SRC_DIR/kestrel/runtime/KResult.java" \
   "$SRC_DIR/kestrel/runtime/KErr.java" \
   "$SRC_DIR/kestrel/runtime/KOk.java" \
-  "$SRC_DIR/kestrel/runtime/KValue.java" \
-  "$SRC_DIR/kestrel/runtime/KVNull.java" \
-  "$SRC_DIR/kestrel/runtime/KVBool.java" \
-  "$SRC_DIR/kestrel/runtime/KVInt.java" \
-  "$SRC_DIR/kestrel/runtime/KVFloat.java" \
-  "$SRC_DIR/kestrel/runtime/KVString.java" \
-  "$SRC_DIR/kestrel/runtime/KVArray.java" \
-  "$SRC_DIR/kestrel/runtime/KVObject.java" \
   "$SRC_DIR/kestrel/runtime/KMath.java" \
   "$SRC_DIR/kestrel/runtime/KRuntime.java"
 cd "$OUT_DIR"

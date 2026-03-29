@@ -10,8 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.HashMap;
-
 /**
  * Kestrel runtime primitives — equivalent to VM built-in CALL 0xFFFFFFxx.
  * Generated code sets mainArgs via setMainArgs() before running.
@@ -372,126 +370,6 @@ public final class KRuntime {
         if (o instanceof Long) return ((Long) o).intValue();
         if (o instanceof Number) return ((Number) o).intValue();
         throw new IllegalArgumentException("expected number");
-    }
-
-    public static KValue jsonParse(Object s) {
-        if (!(s instanceof String)) throw new IllegalArgumentException("jsonParse expects String");
-        // Minimal JSON parsing to produce KValue tree. For full impl use a JSON library.
-        String str = ((String) s).trim();
-        if (str.equals("null")) return KVNull.INSTANCE;
-        if (str.equals("true")) return new KVBool(true);
-        if (str.equals("false")) return new KVBool(false);
-        if (str.startsWith("\"") && str.endsWith("\"")) {
-            return new KVString(str.substring(1, str.length() - 1).replace("\\\"", "\""));
-        }
-        if (str.startsWith("[") && str.endsWith("]")) {
-            List<Object> list = new ArrayList<>();
-            String inner = str.substring(1, str.length() - 1).trim();
-            if (!inner.isEmpty()) {
-                // Simple split by comma (does not handle nested commas correctly)
-                for (String part : splitTopLevel(inner, ',')) {
-                    list.add(jsonParse(part.trim()));
-                }
-            }
-            return new KVArray(list);
-        }
-        if (str.startsWith("{") && str.endsWith("}")) {
-            Map<String, Object> map = new HashMap<>();
-            String inner = str.substring(1, str.length() - 1).trim();
-            if (!inner.isEmpty()) {
-                for (String pair : splitTopLevel(inner, ',')) {
-                    int colon = pair.indexOf(':');
-                    if (colon < 0) continue;
-                    String key = pair.substring(0, colon).trim();
-                    Object val = jsonParse(pair.substring(colon + 1).trim());
-                    if (key.startsWith("\"") && key.endsWith("\"")) {
-                        key = key.substring(1, key.length() - 1);
-                    }
-                    map.put(key, val);
-                }
-            }
-            return new KVObject(map);
-        }
-        try {
-            if (str.contains(".")) {
-                return new KVFloat(Double.parseDouble(str));
-            }
-            return new KVInt(Long.parseLong(str));
-        } catch (NumberFormatException e) {
-            return KVNull.INSTANCE;
-        }
-    }
-
-    private static List<String> splitTopLevel(String s, char delim) {
-        List<String> out = new ArrayList<>();
-        int depth = 0;
-        int start = 0;
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '{' || c == '[' || c == '"') {
-                if (c == '"') {
-                    i++;
-                    while (i < s.length() && s.charAt(i) != '"') {
-                        if (s.charAt(i) == '\\') i++;
-                        i++;
-                    }
-                } else {
-                    depth++;
-                }
-            } else if (c == '}' || c == ']') {
-                depth--;
-            } else if (c == delim && depth == 0) {
-                out.add(s.substring(start, i));
-                start = i + 1;
-            }
-        }
-        out.add(s.substring(start));
-        return out;
-    }
-
-    public static String jsonStringify(Object v) {
-        if (v == null || v == KVNull.INSTANCE) return "null";
-        if (v instanceof KVBool) return ((KVBool) v).value ? "true" : "false";
-        if (v instanceof KVInt) return Long.toString(((KVInt) v).value);
-        if (v instanceof KVFloat) return Double.toString(((KVFloat) v).value);
-        if (v instanceof KVString) return "\"" + escapeJson(((KVString) v).value) + "\"";
-        if (v instanceof KVArray) {
-            StringBuilder sb = new StringBuilder("[");
-            boolean first = true;
-            for (Object x : ((KVArray) v).value) {
-                if (!first) sb.append(",");
-                sb.append(jsonStringify(x));
-                first = false;
-            }
-            sb.append("]");
-            return sb.toString();
-        }
-        if (v instanceof KVObject) {
-            StringBuilder sb = new StringBuilder("{");
-            boolean first = true;
-            for (Map.Entry<String, Object> e : ((KVObject) v).value.entrySet()) {
-                if (!first) sb.append(",");
-                sb.append("\"").append(escapeJson(e.getKey())).append("\":").append(jsonStringify(e.getValue()));
-                first = false;
-            }
-            sb.append("}");
-            return sb.toString();
-        }
-        return "\"" + escapeJson(formatOne(v)) + "\"";
-    }
-
-    private static String escapeJson(String s) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '"') sb.append("\\\"");
-            else if (c == '\\') sb.append("\\\\");
-            else if (c == '\n') sb.append("\\n");
-            else if (c == '\r') sb.append("\\r");
-            else if (c == '\t') sb.append("\\t");
-            else sb.append(c);
-        }
-        return sb.toString();
     }
 
     public static Object readFileAsync(Object path) {

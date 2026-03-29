@@ -165,11 +165,10 @@ export interface DebugEntry {
   line: number;
 }
 
-/** Built-in ADT indices (List=0, Option=1, Result=2, Value=3). */
+/** Built-in ADT indices (List=0, Option=1, Result=2). */
 export const ADT_LIST = 0;
 export const ADT_OPTION = 1;
 export const ADT_RESULT = 2;
-export const ADT_VALUE = 3;
 
 /** Constructor lookup: name -> (adtId, ctorIndex, arity). Built after adts array is populated. */
 let constructorLookup: Map<string, { adtId: number; ctor: number; arity: number }> | null = null;
@@ -198,20 +197,6 @@ function getConstructor(
       return argCount === 1 ? { adtId: ADT_RESULT, ctor: 0, arity: 1 } : null;
     case 'Ok':
       return argCount === 1 ? { adtId: ADT_RESULT, ctor: 1, arity: 1 } : null;
-    case 'Null':
-      return argCount === 0 ? { adtId: ADT_VALUE, ctor: 0, arity: 0 } : null;
-    case 'Bool':
-      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 1, arity: 1 } : null;
-    case 'Int':
-      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 2, arity: 1 } : null;
-    case 'Float':
-      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 3, arity: 1 } : null;
-    case 'String':
-      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 4, arity: 1 } : null;
-    case 'Array':
-      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 5, arity: 1 } : null;
-    case 'Object':
-      return argCount === 1 ? { adtId: ADT_VALUE, ctor: 6, arity: 1 } : null;
   }
   
   return null;
@@ -266,13 +251,6 @@ function getMatchConfig(scrutineeType: { kind: string; name?: string } | undefin
   }
   if (name === 'Result') {
     return { size: 2, ctorToTag: { Err: 0, Ok: 1 }, ctorArity: { Err: 1, Ok: 1 } };
-  }
-  if (name === 'Value') {
-    return {
-      size: 7,
-      ctorToTag: { Null: 0, Bool: 1, Int: 2, Float: 3, String: 4, Array: 5, Object: 6 },
-      ctorArity: { Null: 0, Bool: 1, Int: 1, Float: 1, String: 1, Array: 1, Object: 1 },
-    };
   }
   if (name === 'Bool') {
     return { size: 2, ctorToTag: { False: 0, True: 1 }, ctorArity: { False: 0, True: 0 } };
@@ -674,7 +652,7 @@ function makeEmitExpr(
         if (varNames?.has(expr.name)) emitGetField(0);
         break;
       }
-      // 0-ary constructors: None, Null, and user-defined nullary constructors
+      // 0-ary constructors: None, Nil, and user-defined nullary constructors
       if (adts != null) {
         const ctor = getConstructor(expr.name, 0, adts);
         if (ctor != null) {
@@ -1344,16 +1322,6 @@ function makeEmitExpr(
           emitCall(0xFFFFFF02, 1);
           break;
         }
-        if (expr.callee.name === '__json_parse' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
-          emitCall(0xFFFFFF05, 1);
-          break;
-        }
-        if (expr.callee.name === '__json_stringify' && expr.args.length === 1) {
-          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
-          emitCall(0xFFFFFF06, 1);
-          break;
-        }
         if (expr.callee.name === '__read_file_async' && expr.args.length === 1) {
           emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
           emitCall(0xFFFFFF07, 1);
@@ -1520,7 +1488,7 @@ function makeEmitExpr(
           break;
         }
 
-        // Built-in ADT constructors: Some(x), Ok(x), Err(e), Null(), Bool(x), Int(x), etc.
+        // Built-in ADT constructors: Some(x), Ok(x), Err(e), etc.
         // Also handles user-defined ADT constructors
         if (adts != null) {
           const ctor = getConstructor(expr.callee.name, expr.args.length, adts);
@@ -2436,7 +2404,7 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   const shapes: ShapeEntry[] = [];
   const userAdtConfigs = new Map<string, MatchConfig>();
 
-  // Initialize ADT table: List(0), Option(1), Result(2), Value(3) per spec 02
+  // Initialize ADT table: List(0), Option(1), Result(2)
   const adts: AdtEntry[] = [
     {
       nameIndex: stringIndex('List'),
@@ -2457,18 +2425,6 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
       constructors: [
         { nameIndex: stringIndex('Err'), payloadTypeIndex: 0xFFFFFFFF },
         { nameIndex: stringIndex('Ok'), payloadTypeIndex: 0xFFFFFFFF },
-      ],
-    },
-    {
-      nameIndex: stringIndex('Value'),
-      constructors: [
-        { nameIndex: stringIndex('Null'), payloadTypeIndex: 0xFFFFFFFF },
-        { nameIndex: stringIndex('Bool'), payloadTypeIndex: 0xFFFFFFFF },
-        { nameIndex: stringIndex('Int'), payloadTypeIndex: 0xFFFFFFFF },
-        { nameIndex: stringIndex('Float'), payloadTypeIndex: 0xFFFFFFFF },
-        { nameIndex: stringIndex('String'), payloadTypeIndex: 0xFFFFFFFF },
-        { nameIndex: stringIndex('Array'), payloadTypeIndex: 0xFFFFFFFF },
-        { nameIndex: stringIndex('Object'), payloadTypeIndex: 0xFFFFFFFF },
       ],
     },
   ];
@@ -2518,9 +2474,9 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
     });
   }
 
-  // Build constructor lookup map for user-defined ADTs
+  // Build constructor lookup map for user-defined ADTs (built-ins: List=0, Option=1, Result=2)
   constructorLookup = new Map();
-  for (let adtId = 4; adtId < adts.length; adtId++) {
+  for (let adtId = 3; adtId < adts.length; adtId++) {
     const adt = adts[adtId]!;
     const adtName = stringTable[adt.nameIndex]!;
     const ctorToTag: Record<string, number> = {};

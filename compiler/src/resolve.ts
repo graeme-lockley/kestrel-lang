@@ -8,7 +8,7 @@ import { existsSync } from 'fs';
 /** Stdlib module names from spec 02 / 07. */
 const STDLIB_NAMES = [
   'kestrel:string', 'kestrel:char', 'kestrel:stack', 'kestrel:http', 'kestrel:json', 'kestrel:fs',
-  'kestrel:option', 'kestrel:result', 'kestrel:list', 'kestrel:value', 'kestrel:test',
+  'kestrel:option', 'kestrel:result', 'kestrel:list', 'kestrel:test',
   'kestrel:process', 'kestrel:console',
   'kestrel:tuple', 'kestrel:basics', 'kestrel:dict', 'kestrel:set',
   'kestrel:runtime',

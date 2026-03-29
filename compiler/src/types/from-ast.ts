@@ -23,7 +23,6 @@ export function astTypeToInternalWithScope(
     case 'PrimType':
       return prim(ast.name as PrimName);
     case 'IdentType': {
-      if (ast.name === 'Value') return { kind: 'app', name: 'Value', args: [] };
       const alias = typeAliases?.get(ast.name);
       if (alias != null) return alias;
       let t = scope.get(ast.name);
@@ -81,7 +80,6 @@ export function astTypeToInternal(ast: Type, typeAliases?: Map<string, InternalT
     case 'PrimType':
       return prim(ast.name as PrimName);
     case 'IdentType':
-      if (ast.name === 'Value') return { kind: 'app', name: 'Value', args: [] };
       // Look up user-defined types (including ADTs)
       if (typeAliases && typeAliases.has(ast.name)) {
         return typeAliases.get(ast.name)!;
