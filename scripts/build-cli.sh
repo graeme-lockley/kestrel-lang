@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# Drive unplanned kanban stories through review → implementation → verification → commit/push
+# Drive planned kanban stories through review → implementation → verification → commit/push
 # using the Cursor Agent CLI (non-interactive).
+#
+# Only processes files in docs/kanban/planned/ (build-ready planning gate). Stories must be
+# promoted from unplanned per docs/kanban/README.md before this script will pick them up.
 #
 # Environment:
 #   CURSOR_CLI   — Agent binary (default: cursor-agent). Must support the flags used below.
@@ -19,7 +22,7 @@ cd "$REPO_ROOT"
 
 : "${CURSOR_CLI:=cursor-agent}"
 MAX_STEP2_ATTEMPTS=5
-UNPLANNED_DIR="$REPO_ROOT/docs/kanban/unplanned"
+PLANNED_DIR="$REPO_ROOT/docs/kanban/planned"
 DONE_DIR="$REPO_ROOT/docs/kanban/done"
 
 die() {
@@ -107,7 +110,7 @@ process_one_story() {
   log_stage "Story $index/$total — $base_name"
 
   local p1 p2 p3 p6
-  p1="please review the unplanned story ${base_name} in great detail and ensure that it is accurate and complete.  Specifically, make sure that all docs that need to be updated are update and included in the acceptance criteria, and all unit tests are echaustive and this requirement is included in the acceptance criteria."
+  p1="please review the planned story docs/kanban/planned/${base_name} in great detail and ensure that it is accurate and complete for implementation. Specifically, make sure that all docs that need to be updated are listed (Documentation and specs to update) and reflected in acceptance criteria where appropriate, and that Tests to add covers an exhaustive set of unit/integration checks. Follow docs/kanban/README.md planned exit criteria before moving the story to docs/kanban/doing/."
 
   p3="please verify that the feature ${slug} is complete and all tests pass"
 
@@ -121,7 +124,7 @@ process_one_story() {
 
   while (( attempt <= MAX_STEP2_ATTEMPTS )); do
     log_step "2/7 — Feature delivery (Kestrel feature delivery skill) — attempt $attempt/$MAX_STEP2_ATTEMPTS ($base_name)"
-    p2="use the Kestrel feature delivery skill on story ${base_name} and complete the story making sure that all the acceptance criteria are complete and all tests are run and successfullly pass${failure_context}"
+    p2="use the Kestrel feature delivery skill on story ${base_name}. The story file starts in docs/kanban/planned/${base_name}; move it to docs/kanban/doing/ per kestrel-kanban-story-migrate before coding. Complete: meet acceptance criteria, all tests run and pass, move the file to docs/kanban/done/${base_name}.${failure_context}"
     run_cursor_cli "$p2" || die "Cursor Agent exited non-zero on feature delivery (attempt $attempt)."
 
     log_step "3/7 — Verification via Cursor Agent ($base_name)"
@@ -185,34 +188,39 @@ process_one_story() {
 }
 
 main() {
-  log_stage "Discover unplanned stories"
+  log_stage "Discover planned stories"
   local -a stories=()
-  if [[ ! -d "$UNPLANNED_DIR" ]]; then
-    die "Missing directory: $UNPLANNED_DIR"
+  if [[ ! -d "$PLANNED_DIR" ]]; then
+    die "Missing directory: $PLANNED_DIR"
   fi
   shopt -s nullglob
-  local -a raw=("$UNPLANNED_DIR"/*.md)
+  local -a raw=("$PLANNED_DIR"/*.md)
   shopt -u nullglob
-  local line
-  if ((${#raw[@]} > 0)); then
+  local f line
+  local -a story_files=()
+  for f in "${raw[@]}"; do
+    [[ "$(basename "$f")" == "README.md" ]] && continue
+    story_files+=("$f")
+  done
+  if ((${#story_files[@]} > 0)); then
     while IFS= read -r line; do
       [[ -n "$line" ]] && stories+=("$line")
-    done < <(printf '%s\n' "${raw[@]}" | sort)
+    done < <(printf '%s\n' "${story_files[@]}" | sort)
   fi
 
   if ((${#stories[@]} == 0)); then
-    echo "No unplanned stories in $UNPLANNED_DIR — nothing to do."
+    echo "No planned stories in $PLANNED_DIR — nothing to do."
     exit 0
   fi
 
-  echo "Found ${#stories[@]} unplanned story/stories (sorted by filename)."
+  echo "Found ${#stories[@]} planned story/stories (sorted by filename)."
   local i=1
   for f in "${stories[@]}"; do
     process_one_story "$f" "$i" "${#stories[@]}"
     i=$((i + 1))
   done
 
-  log_stage "All listed unplanned stories processed"
+  log_stage "All listed planned stories processed"
   echo "Done."
 }
 

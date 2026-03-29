@@ -5,39 +5,37 @@ alwaysApply: true
 
 # Kanban Workflow
 
-Stories live in `docs/kanban/` with folders: **unplanned**, **backlog**, **doing**, **done**.
+Stories live in `docs/kanban/` with folders: **unplanned**, **planned**, **doing**, **done**.
+
+Flow: **unplanned → planned → doing → done**. Skipping **planned** requires explicit team agreement (trivial fixes only).
 
 ## Roadmap and priority
 
 - The **ordered roadmap** is in **`docs/kanban/unplanned/`**.
 - Filenames use **`NN-slug.md`**; **`NN`** is the **priority sequence** (01 = highest). Work through lower numbers first unless the story is verification-only or explicitly deferred (see tier in each file).
-- **`docs/kanban/backlog/`** is **optional staging** and is usually empty. Do not assume “ready work” lives only there.
+- The same filename is **moved** between folders as the story advances; sequence does not change.
 
-## Workflow
+## Phases (short)
 
-1. **unplanned** — Full prioritized list. Pick the next story by **lowest sequence** that still needs implementation.
-2. **backlog** (optional) — Move a story here if the team uses it as a short “about to start” buffer.
-3. **doing** — Active work. When starting a story, move it here.
-4. **done** — Completed. When finished, move the story here.
+| Folder | Role |
+|--------|------|
+| **unplanned** | High-level intent, state, relationships, acceptance, spec refs—not build-ready. |
+| **planned** | Above plus impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**—still pre-code. |
+| **doing** | Active implementation; tick tasks; add **Build notes**. |
+| **done** | All tasks `[x]`, acceptance met, **tests passing**. |
 
-## When Picking Up a Story
+## Gate rules
 
-1. Move the story file from `docs/kanban/unplanned/` or `docs/kanban/backlog/` to `docs/kanban/doing/`.
-2. Add a **Tasks** section to the story with concrete checkboxes, e.g.:
-   ```markdown
-   ## Tasks
-   - [ ] Task 1
-   - [ ] Task 2
-   ```
-3. Tick off tasks as you complete them: `- [x] Task 1`.
+**Unplanned → planned:** summary, current state, relationships, acceptance criteria, and spec references are complete. No detailed task grid yet (that is added in planned).
 
-## When Completing a Story
+**Planned → doing:** impact analysis, Tasks, Tests to add, Documentation/specs lists are filled in.
 
-1. Ensure all tasks are ticked.
-2. Move the story from `docs/kanban/doing/` to `docs/kanban/done/`.
+**Doing → done:** every task complete, build notes as needed, required test commands green per `AGENTS.md`.
 
-## Story Format
+**Deprecated:** `docs/kanban/backlog/` — use **`planned/`** instead.
 
-Stories are markdown files. Include: title, summary, current state, acceptance criteria, spec references, and tasks (once in doing).
+Full entry/exit criteria and templates: **`docs/kanban/README.md`**.
 
-See `docs/kanban/README.md` for the tier table and sequence meaning.
+Skills: **`kestrel-kanban-story-create`**, **`kestrel-kanban-story-migrate`** in `.cursor/skills/`.
+
+Subagents: **`.cursor/agents/kanban-*.md`**.

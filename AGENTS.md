@@ -202,32 +202,34 @@ Before marking a task complete:
 
 ## Kanban Workflow (from Cursor rules)
 
-Stories live in `docs/kanban/` with folders: **unplanned**, **backlog**, **doing**, **done**.
+Stories live in `docs/kanban/` with folders: **unplanned**, **planned**, **doing**, **done**.
 
-The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named `NN-slug.md` (01 = highest priority). See `docs/kanban/README.md` for the tier table. **`backlog/`** is optional staging and is usually empty.
+The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named `NN-slug.md` (01 = highest priority). See `docs/kanban/README.md` for the tier table, entry/exit criteria, and templates. The same file is **moved** between folders as work progresses. **`docs/kanban/backlog/`** is **deprecated**; use **`planned/`** instead.
 
 ### Workflow
 
-1. **unplanned** — Full ordered roadmap. Pick the lowest **sequence** number that still needs work.
-2. **backlog** — Optional “about to start” buffer; not required for picking up work.
-3. **doing** — Active work. When starting a story, move it here.
-4. **done** — Completed. When a story is complete, move it here.
+1. **unplanned** — High-level feature stories on the ordered roadmap (summary, state, relationships, acceptance, spec refs).
+2. **planned** — Scoped but not yet built: adds impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**.
+3. **doing** — Active implementation; tick tasks; add **Build notes** as needed.
+4. **done** — All tasks ticked, acceptance satisfied, and **required tests passing**.
 
-### When Picking Up a Story
+### When promoting a story
 
-1. Move the story file from `docs/kanban/unplanned/` or `docs/kanban/backlog/` to `docs/kanban/doing/`.
-2. Add a **Tasks** section to the story with concrete checkboxes, e.g.:
-   ```markdown
-   ## Tasks
-   - [ ] Task 1
-   - [ ] Task 2
-   ```
-3. Tick off tasks as you complete them: `- [x] Task 1`.
+- **unplanned → planned** — Meet unplanned exit criteria in `docs/kanban/README.md`; move the file to `docs/kanban/planned/`.
+- **planned → doing** — Meet planned exit criteria (tasks and test/doc lists complete); move to `docs/kanban/doing/`.
+- **doing → done** — Meet doing exit criteria; run verification commands; move to `docs/kanban/done/`.
 
-### When Completing a Story
+### When implementing (in `doing/`)
 
-1. Ensure all tasks are ticked.
-2. Move the story from `docs/kanban/doing/` to `docs/kanban/done/`.
+1. Tick tasks as you complete them: `- [x] Task 1`.
+2. Add tasks if scope discovers new work; finish them before closing.
+3. Append dated lines under **Build notes** when decisions or surprises matter for the record.
+
+### When completing a story
+
+1. Ensure all tasks are ticked and acceptance criteria are met.
+2. Confirm tests pass (`npm test`, `./scripts/kestrel test`, `zig build test`, and any story-specific suites).
+3. Move the story from `docs/kanban/doing/` to `docs/kanban/done/`.
 
 ---
 
@@ -241,6 +243,7 @@ The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named `NN-slug.m
 - **CLI**: `scripts/kestrel`
 - **Specs**: `docs/specs/` (01-language, 09-tools, etc.)
 - **Kestrel tests**: `tests/e2e/`, `tests/conformance/`
+- **Kanban**: `docs/kanban/README.md` (phases and gates); skills `.cursor/skills/kestrel-kanban-story-create/`, `kestrel-kanban-story-migrate/`; subagents `.cursor/agents/kanban-*.md`
 
 ---
 

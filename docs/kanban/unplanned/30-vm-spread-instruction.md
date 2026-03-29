@@ -22,7 +22,7 @@ The compiler emits the **SPREAD** opcode (`0x19`) for record spread expressions 
 
 - [ ] Confirm SPREAD opcode is handled in `exec.zig` and matches spec 04 §1.8 behaviour.
 - [ ] Confirm E2E or unit coverage exists for `{ ...r, field = value }` on the default VM target.
-- [ ] If all confirmed: move this file to `docs/kanban/done/` or delete after noting merge with done story (project preference).
+- [ ] If all confirmed: move through **planned** (if any new tasks/tests/docs are needed) and **doing**, then to `docs/kanban/done/`, or delete after noting merge with done story (project preference).
 
 ## Spec References
 

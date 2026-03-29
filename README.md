@@ -1,6 +1,6 @@
 # Kestrel
 
-Kestrel is a statically typed language with Hindley–Milner type inference. You write programs that feel like scripts; the compiler checks them carefully, emits bytecode (`.kbc`), and you can run them on the included stack VM or on a JVM backend. The project is under active development; language details live in [docs/specs/](docs/specs/), and planned work is tracked in [docs/kanban/unplanned/](docs/kanban/unplanned/) (see [docs/kanban/README.md](docs/kanban/README.md)).
+Kestrel is a statically typed language with Hindley–Milner type inference. You write programs that feel like scripts; the compiler checks them carefully, emits bytecode (`.kbc`), and you can run them on the included stack VM or on a JVM backend. The project is under active development; language details live in [docs/specs/](docs/specs/), and work is tracked in the Kanban under [docs/kanban/](docs/kanban/) (roadmap in [unplanned/](docs/kanban/unplanned/); see [docs/kanban/README.md](docs/kanban/README.md) for **unplanned → planned → doing → done**).
 
 ## What you need
 

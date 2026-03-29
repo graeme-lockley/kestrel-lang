@@ -1,5 +1,10 @@
-# Backlog (staging)
+# Backlog (deprecated)
 
-This folder is **empty by default**. The full roadmap lives in **`../unplanned/`**, ordered by filename (`01-…` through `26-…`).
+This folder is **deprecated** in favour of **`../planned/`**.
 
-When you are about to start a story, you may **move it here** as a short “ready to pull” buffer, or move it straight to **`../doing/`**. The canonical priority order is always the sequence number in `unplanned/`, not the presence of files in this folder.
+- **Before:** Optional “next up” buffer between `unplanned/` and `doing/`.
+- **Now:** Use **`planned/`** for stories that are prioritized and fully scoped but not yet under active implementation.
+
+The canonical priority order remains the **`NN`** prefix in filenames under `unplanned/` (and the same name as files move through `planned/`, `doing/`, `done/`).
+
+See [docs/kanban/README.md](../README.md).

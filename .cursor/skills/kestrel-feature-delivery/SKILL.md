@@ -10,20 +10,18 @@ description: >-
 
 # Kestrel feature delivery
 
-Use this workflow for **kanban-driven** or **spec-driven** features in this repo. It complements [AGENTS.md](../../../AGENTS.md) and [.cursor/rules/kanban-workflow.mdc](../../rules/kanban-workflow.mdc).
+Use this workflow for **kanban-driven** or **spec-driven** features in this repo. It complements [AGENTS.md](../../../AGENTS.md), [.cursor/rules/kanban-workflow.mdc](../../rules/kanban-workflow.mdc), and the kanban skills **kestrel-kanban-story-create** / **kestrel-kanban-story-migrate**.
 
 ## Phase 1 — Review the feature
 
 Before writing code:
 
-1. **Locate the story** — Usually `docs/kanban/unplanned/NN-slug.md` (ordered by `NN`), or `doing/` if already started. Read summary, **current state**, **acceptance criteria**, **spec references**.
-2. **Extract concrete requirements** — Turn acceptance criteria into a mental or written checklist (implementation, tests, spec files to update).
+1. **Locate the story** — Implementation happens only when the file is in **`docs/kanban/doing/`**. Read **`planned/`** first if the story is still being scoped; if it is only in **`unplanned/`**, use **kestrel-kanban-story-migrate** to promote through **planned** before coding. Read summary, **current state**, **acceptance criteria**, **spec references**, plus **Impact analysis**, **Tasks**, **Tests to add**, and **Documentation and specs to update** from **planned/doing**.
+2. **Extract concrete requirements** — Turn acceptance criteria and the planned test list into a mental or written checklist (implementation, tests, spec files to update).
 3. **Read impacted specs** — Open the linked `docs/specs/*.md` sections so implementation and docs stay aligned (language, typesystem, bytecode, runtime, tests).
 4. **Skim the codebase** — Find existing handlers (e.g. parser → `check.ts` → `codegen/codegen.ts` → `jvm-codegen/codegen.ts`). Note gaps vs the story.
-5. **Refine the story** - Update the story to ensure that it is complete and the references in the story are accurate.  Ask any clarifying questions.  Pay particular attention to:
-  - expand the acceptance criteria to amke refernce to an exhaustive set of unit tests to verify the automation, and
-  - expand the acceptable criteria to update the list of impacted specs
-6. **Kanban** — When starting work: move the story to `docs/kanban/doing/`, add a **Tasks** section with checkboxes; tick as you go. On completion: all tasks done → `docs/kanban/done/`.
+5. **Refine the story (in doing/)** — Keep the story accurate: expand acceptance criteria if you discover missing test coverage; update impacted spec lists if scope shifts. Ask clarifying questions when gates are unclear.
+6. **Kanban** — **Planned → doing:** move the file to `docs/kanban/doing/`, add or keep **Build notes**, tick **Tasks** as you go; add tasks if scope grows. **Doing → done:** all tasks `[x]`, tests green → move to `docs/kanban/done/` (see **kestrel-kanban-story-migrate**). Do not skip **planned** without explicit team agreement.
 
 ## Phase 2 — Build the feature
 
@@ -80,13 +78,13 @@ Fix failures before merging or handing off.
 
 ### Story closure
 
-- Acceptance criteria and kanban **Tasks** are ticked.
-- Story file is in `docs/kanban/done/` with completed tasks.
+- Acceptance criteria and kanban **Tasks** are ticked (including any tasks added during **doing**).
+- Story file is in `docs/kanban/done/` with completed tasks and up-to-date **Build notes** if decisions were recorded during implementation.
 
 ## Quick copy-paste checklist
 
 ```
-Review: [ ] story read  [ ] specs read  [ ] code locations found  [ ] kanban in doing/
+Review: [ ] story read  [ ] specs read  [ ] code locations found  [ ] kanban in doing/ (from planned)
 Build:  [ ] typecheck  [ ] codegen  [ ] jvm-codegen (if applicable)  [ ] vm (if applicable)
 Tests:  [ ] compiler npm test  [ ] kestrel test  [ ] conformance .ks  [ ] zig test (if applicable)
 Docs:   [ ] docs/specs updated  [ ] story → done  [ ] e2e (if applicable)

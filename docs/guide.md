@@ -667,6 +667,6 @@ This guide covered the core language. There is more to explore:
 - **Specifications** — the [docs/specs/](specs/) directory contains normative specs for the language, type system, bytecode format, and standard library.
 - **Standard library source** — read the implementations in [stdlib/kestrel/](../stdlib/kestrel/) to see idiomatic Kestrel.
 - **Test suite** — the [tests/unit/](../tests/unit/) directory has runnable examples of every language feature.
-- **Planned work** — [docs/kanban/unplanned/](kanban/unplanned/) lists the prioritized roadmap (`01-…` through `26-…`); see [docs/kanban/README.md](kanban/README.md).
+- **Kanban** — [docs/kanban/unplanned/](kanban/unplanned/) lists the prioritized roadmap (`01-…` onward); stories progress through **planned**, **doing**, and **done** as described in [docs/kanban/README.md](kanban/README.md).
 
 Kestrel is under active development. Contributions are welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md).
