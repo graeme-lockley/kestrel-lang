@@ -310,7 +310,7 @@ For float literal patterns, NaN is a special case: a NaN pattern must match NaN 
 
 ## 7. Built-in primitive `CALL` ids (0xFFFFFF00 range)
 
-When **`fn_id`** in **CALL** is in **`0xFFFFFF00` … `0xFFFFFF26`** (inclusive), the VM treats the call as a **host primitive** rather than a function-table index. Arity and behaviour are fixed per id. (Existing ids `0xFFFFFF00`–`0xFFFFFF1B` cover I/O, strings, process, etc.; the reference VM extends the range through **`0xFFFFFF26`**.)
+When **`fn_id`** in **CALL** is in **`0xFFFFFF00` … `0xFFFFFF27`** (inclusive), the VM treats the call as a **host primitive** rather than a function-table index. Arity and behaviour are fixed per id. (Existing ids `0xFFFFFF00`–`0xFFFFFF1B` cover I/O, strings, process, etc.; the reference VM extends the range through **`0xFFFFFF27`**.)
 
 | `fn_id` | Builtin (compiler name) | Arity | Result (summary) |
 |---------|-------------------------|-------|------------------|
@@ -325,8 +325,9 @@ When **`fn_id`** in **CALL** is in **`0xFFFFFF00` … `0xFFFFFF26`** (inclusive)
 | `0xFFFFFF24` | `__float_abs` | 1 | `(Float) -> Float` |
 | `0xFFFFFF25` | `__char_from_code` | 1 | `(Int) -> Char` (invalid / surrogate → `U+0000`) |
 | `0xFFFFFF26` | *(compiler-internal)* | 1 | Pops the async function body value (typically `()`), pushes a **completed** `Task<Unit>`. Emitted only as the epilogue of **`async fun` / `export async fun`** whose return type is `Task<Unit>`. Not surfaced as a user-callable name. |
+| `0xFFFFFF27` | `__capture_trace` | 1 | Pops one value (the exception / payload to pair). Pushes a **`StackTrace`-shaped** heap **record** as defined in **02** (`value` + `frames`), built from the **current** call stack at the primitive call site, using the debug section for **file** / **line** when present. **GC-safe.** Used only from **`kestrel:stack`** `trace` (and typechecked via prelude). |
 
-The JVM backend maps the user-facing primitives in this table to `KRuntime` static methods with the same semantics, except **`0xFFFFFF26`**, which is VM-only (the JVM backend lowers `async fun` without this call).
+The JVM backend maps the user-facing primitives in this table to `KRuntime` static methods with the same semantics where noted, except **`0xFFFFFF26`**, which is VM-only (the JVM backend lowers `async fun` without this call). **`0xFFFFFF27`** maps to **`KRuntime.captureTrace`** (Java `StackTraceElement`–based frames; same **record** surface shape as the VM).
 
 ---
 

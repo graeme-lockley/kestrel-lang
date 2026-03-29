@@ -107,6 +107,18 @@ export interface ShapeEntry {
   nameIndices: number[];
 }
 
+/** Shapes the VM needs for `__capture_trace` (0xFFFFFF27) in *this* module — importers may inline `trace`. */
+function ensureCaptureTraceShapes(shapes: ShapeEntry[], stringIndex: (s: string) => number): void {
+  const frameShape = ['file', 'line', 'function'].map((n) => stringIndex(n));
+  const traceShape = ['value', 'frames'].map((n) => stringIndex(n));
+  const has = (want: number[]) =>
+    shapes.some(
+      (s) => s.nameIndices.length === want.length && s.nameIndices.every((n, i) => n === want[i]!)
+    );
+  if (!has(frameShape)) shapes.push({ nameIndices: frameShape });
+  if (!has(traceShape)) shapes.push({ nameIndices: traceShape });
+}
+
 /** Nearest enclosing `while` for `break`/`continue` (emitExpr closure in makeEmitExpr). */
 interface LoopCodegenLayer {
   breakPatches: number[];
@@ -1456,6 +1468,12 @@ function makeEmitExpr(
           emitCall(0xFFFFFF00, 1);
           break;
         }
+        if (expr.callee.name === '__capture_trace' && expr.args.length === 1) {
+          if (shapes) ensureCaptureTraceShapes(shapes, stringIndex);
+          emitExpr(expr.args[0]!, env, funNameToId, shapes, adts, captures, varNames, undefined, tcNon);
+          emitCall(0xffffff27, 1);
+          break;
+        }
         if (expr.callee.name === '__get_process' && expr.args.length === 0) {
           emitCall(0xFFFFFF0F, 0);
           break;
@@ -2407,6 +2425,22 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
   codeStart();
   const shapes: ShapeEntry[] = [];
   const userAdtConfigs = new Map<string, MatchConfig>();
+
+  // Record type aliases (`type R = { a: T, ... }`) need shape table entries even when no `RecordLit`
+  // appears in this module (e.g. `__capture_trace` builds the layout in the VM).
+  for (const node of program.body) {
+    if (node == null || node.kind !== 'TypeDecl') continue;
+    if (node.body.kind !== 'TypeAliasBody') continue;
+    const rhs = node.body.type;
+    if (rhs.kind !== 'RecordType') continue;
+    const nameIndices = rhs.fields.map((f) => stringIndex(f.name));
+    const existing = shapes.findIndex(
+      (s) =>
+        s.nameIndices.length === nameIndices.length &&
+        s.nameIndices.every((n, i) => n === nameIndices[i]!)
+    );
+    if (existing < 0) shapes.push({ nameIndices });
+  }
 
   // Initialize ADT table: List(0), Option(1), Result(2)
   const adts: AdtEntry[] = [

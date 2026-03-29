@@ -1,5 +1,9 @@
 import { Suite, group, eq, gt, isTrue } from "kestrel:test"
-import { format, print } from "kestrel:stack"
+import { format, print, trace } from "kestrel:stack"
+import { ArithmeticOverflow } from "kestrel:runtime"
+
+fun throwDeep(): Unit = throw ArithmeticOverflow
+fun callDeep(): Unit = throwDeep()
 
 export fun run(s: Suite): Unit =
   group(s, "stack", (s1: Suite) => {
@@ -19,5 +23,18 @@ export fun run(s: Suite): Unit =
       print(7);
       print("smoke");
       isTrue(sg, "no throw", True);
+    });
+
+    group(s1, "trace", (sg: Suite) => {
+      try {
+        callDeep();
+        isTrue(sg, "callDeep should throw", False)
+      } catch {
+        e => {
+          val msg = format(trace(e))
+          gt(sg, "formatted trace lists frames (at lines)", __string_index_of(msg, "  at "), -1);
+          gt(sg, "formatted trace includes exception", __string_index_of(msg, "ArithmeticOverflow"), -1);
+        }
+      }
     });
   })

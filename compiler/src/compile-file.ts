@@ -24,6 +24,7 @@ import { tUnit } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
 import { CODES, locationFromSpan, locationFileOnly } from './diagnostics/types.js';
 import type { Span } from './lexer/types.js';
+import { uniqueDependencyPaths } from './dependency-paths.js';
 
 /** Count all LambdaExpr nodes in an expression tree (used to predict function table size). */
 function countLambdasInExpr(e: Expr): number {
@@ -1016,9 +1017,10 @@ export function compileFile(
       if (!dependencyPaths.includes(runtimeKsPathForDeps)) dependencyPaths.push(runtimeKsPathForDeps);
       if (!dependencyPaths.includes(rp.kbc)) dependencyPaths.push(rp.kbc);
     }
+    const dependencyPathsUnique = uniqueDependencyPaths(dependencyPaths);
     if (getOutputPaths) {
       const paths = getOutputPaths(filePath);
-      writeFileSync(paths.kbc + '.deps', dependencyPaths.join('\n') + '\n');
+      writeFileSync(paths.kbc + '.deps', dependencyPathsUnique.join('\n') + '\n');
     }
     cache.set(filePath, {
       program,
@@ -1026,7 +1028,7 @@ export function compileFile(
       exportedTypeAliases: tc.exportedTypeAliases,
       exportedConstructors: tc.exportedConstructors,
       codegenResult: mainResult,
-      dependencyPaths,
+      dependencyPaths: dependencyPathsUnique,
       exportFunctionSlotByName,
     });
     visited.delete(filePath);
@@ -1041,7 +1043,7 @@ export function compileFile(
       exportedConstructors: tc.exportedConstructors,
       exportedTypeVisibility: tc.exportedTypeVisibility,
       codegenResult: mainResult,
-      dependencyPaths,
+      dependencyPaths: dependencyPathsUnique,
       exportFunctionSlotByName,
     };
   }

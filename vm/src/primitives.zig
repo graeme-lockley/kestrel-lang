@@ -88,6 +88,46 @@ fn formatInto(val: Value, buf: []u8, start: usize, module_cache: ?[]const *const
                     const shape_id = std.mem.readInt(u32, base[8..12], .little);
                     if (mod_idx < cache.len and cache[mod_idx].*.shapes.len > shape_id) {
                         const shape = &cache[mod_idx].*.shapes[shape_id];
+                        if (field_count == 2 and shape.field_names.len >= 2 and
+                            std.mem.eql(u8, shape.field_names[0], "value") and
+                            std.mem.eql(u8, shape.field_names[1], "frames"))
+                        {
+                            var st_pos = start;
+                            const nh = formatInto(fields[0], buf, st_pos, module_cache) orelse return null;
+                            st_pos = nh;
+                            if (!appendSlice(buf, &st_pos, "\n")) return null;
+                            var tailv = fields[1];
+                            while (true) {
+                                const taddr = Value.ptrTo(tailv);
+                                if (taddr == 0) break;
+                                const tb = @as([*]const u8, @ptrFromInt(taddr));
+                                if (tb[0] != gc_mod.ADT_KIND or tb[2] != 1) break;
+                                const tctor = std.mem.readInt(u32, tb[12..16], .little);
+                                if (tctor == 0) break;
+                                if (tctor != 1) break;
+                                const tf = @as([*]const Value, @alignCast(@ptrCast(tb + gc_mod.ADT_HEADER)));
+                                const head = tf[0];
+                                const ha = Value.ptrTo(head);
+                                if (ha != 0) {
+                                    const hb = @as([*]const u8, @ptrFromInt(ha));
+                                    if (hb[0] == gc_mod.RECORD_KIND) {
+                                        const fc = std.mem.readInt(u32, hb[12..16], .little);
+                                        const ffs = @as([*]const Value, @alignCast(@ptrCast(hb + gc_mod.RECORD_HEADER)));
+                                        if (fc >= 3) {
+                                            const file_slc = getStringSlice(ffs[0]) orelse "?";
+                                            const ln = Value.intTo(ffs[1]);
+                                            if (!appendSlice(buf, &st_pos, "  at ")) return null;
+                                            if (!appendSlice(buf, &st_pos, file_slc)) return null;
+                                            var lbuf: [32]u8 = undefined;
+                                            const ls = std.fmt.bufPrint(&lbuf, ":{d}\n", .{ln}) catch return null;
+                                            if (!appendSlice(buf, &st_pos, ls)) return null;
+                                        }
+                                    }
+                                }
+                                tailv = tf[1];
+                            }
+                            return st_pos;
+                        }
                         if (!appendSlice(buf, &pos, "{ ")) return null;
                         var i: usize = 0;
                         while (i < field_count) : (i += 1) {
@@ -800,6 +840,64 @@ fn allocRecord(gc: *GC, module_index: u32, shape_id: u32, fields: []const Value)
         fld[i] = v;
     }
     return Value.ptr(@intFromPtr(mem.ptr));
+}
+
+pub const TraceSite = struct {
+    pc: usize,
+    module: *const load_mod.Module,
+};
+
+fn findStackFrameShapeId(mod: *const load_mod.Module) ?u32 {
+    for (mod.shapes, 0..) |sh, i| {
+        if (sh.field_names.len != 3) continue;
+        if (std.mem.eql(u8, sh.field_names[0], "file") and
+            std.mem.eql(u8, sh.field_names[1], "line") and
+            std.mem.eql(u8, sh.field_names[2], "function"))
+        {
+            return @intCast(i);
+        }
+    }
+    return null;
+}
+
+fn findStackTraceRecordShapeId(mod: *const load_mod.Module) ?u32 {
+    for (mod.shapes, 0..) |sh, i| {
+        if (sh.field_names.len != 2) continue;
+        if (std.mem.eql(u8, sh.field_names[0], "value") and
+            std.mem.eql(u8, sh.field_names[1], "frames"))
+        {
+            return @intCast(i);
+        }
+    }
+    return null;
+}
+
+/// Build `StackTrace<T>` record for `__capture_trace` (0xFFFFFF27); shapes must match `stdlib/kestrel/stack.ks`.
+pub fn captureTraceFromFrames(
+    gc: *GC,
+    value: Value,
+    owning_module: *const load_mod.Module,
+    sites: []const TraceSite,
+) Value {
+    const trace_shape = findStackTraceRecordShapeId(owning_module) orelse return Value.unit();
+    const frame_shape = findStackFrameShapeId(owning_module) orelse return Value.unit();
+    const mod_idx: u32 = owning_module.module_index;
+
+    var list = allocListAdt(gc, mod_idx, LIST_NIL, null, null) catch return Value.unit();
+    var si = sites.len;
+    while (si > 0) {
+        si -= 1;
+        const site = sites[si];
+        const loc = load_mod.lookupDebugLine(site.module, site.pc);
+        const file_slice: []const u8 = if (loc) |l| l.file else "?";
+        const line_val = if (loc) |l| Value.int(@as(i64, @intCast(l.line))) else Value.int(0);
+        const file_val = allocString(gc, file_slice) catch return Value.unit();
+        const fn_val = allocString(gc, "<unknown>") catch return Value.unit();
+        const frame_rec = allocRecord(gc, mod_idx, frame_shape, &[_]Value{ file_val, line_val, fn_val }) catch return Value.unit();
+        list = allocListAdt(gc, mod_idx, LIST_CONS, frame_rec, list) catch return Value.unit();
+    }
+
+    return allocRecord(gc, mod_idx, trace_shape, &[_]Value{ value, list }) catch Value.unit();
 }
 
 /// Build a List<T> from a Zig slice (constructs Cons/Nil chain). module_index 0 is usually the entry module.

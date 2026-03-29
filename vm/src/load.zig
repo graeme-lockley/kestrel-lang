@@ -71,6 +71,26 @@ pub const Module = struct {
     debug_entries: []const DebugEntry,
 };
 
+/// Look up (file, line) for a code offset using debug section (03 §8). Binary search for last entry where code_offset <= target.
+pub fn lookupDebugLine(module: *const Module, code_offset: usize) ?struct { file: []const u8, line: u32 } {
+    const entries = module.debug_entries;
+    if (entries.len == 0) return null;
+    var lo: usize = 0;
+    var hi: usize = entries.len;
+    while (lo < hi) {
+        const mid = lo + (hi - lo) / 2;
+        if (entries[mid].code_offset <= code_offset) {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if (lo == 0) return null;
+    const entry = entries[lo - 1];
+    if (entry.file_index >= module.debug_files.len) return null;
+    return .{ .file = module.debug_files[entry.file_index], .line = entry.line };
+}
+
 fn align4(n: usize) usize {
     return (n + 3) & ~@as(usize, 3);
 }

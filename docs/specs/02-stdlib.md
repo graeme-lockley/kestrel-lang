@@ -211,9 +211,18 @@ Stack traces and basic I/O formatting. This module is for stack-trace and format
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `trace` | `(T) -> StackTrace<T>` | Stack trace for the thrown value of type `T` |
+| `trace` | `(T) -> StackTrace<T>` | Captures the **current** call stack at the call site, paired with the given value (typically the caught exception). Implemented via host primitive `__capture_trace` (04 §7). |
 | `print` | `(T) -> Unit` | Print value (e.g. to stdout); polymorphic in argument type (stdlib wrapper; distinct from built-in `print`) |
 | `format` | `(T) -> String` | Format value as string (used implicitly in template interpolation); polymorphic in argument type |
+
+**Types (exported from this module):**
+
+| Type | Definition (contract) |
+|------|------------------------|
+| `StackFrame` | Record `{ file: String, line: Int, function: String }`. **`file`** / **`line`** come from the debug section (03 §8) when available; otherwise **`file`** may be `"?"` and **`line`** `0`. **`function`** is a placeholder (`"<unknown>"` in the reference VM) until symbol information exists. |
+| `StackTrace<T>` | Record `{ value: T, frames: List<StackFrame> }`. **`frames`** order is **innermost-first** (same order as uncaught-exception stderr lines in 05 §5). |
+
+**Formatting `StackTrace<T>`:** `format` (via `__format_one`) produces a multi-line string: one line for `format(value)`, then one line per frame, each `  at file:line\n` (two leading spaces, same shape as stderr traces). Other values use the usual polymorphic formatting rules.
 
 ---
 
@@ -313,9 +322,9 @@ Types referenced in the above signatures are part of the standard contract:
 - `Task<T>` – Async computation
 - `Value` – JSON value ADT exported from `kestrel:json` (see below)
 - `Server`, `Request`, `Response` – HTTP types
-- `StackTrace<T>` – Stack trace for a thrown value of type `T`
+- `StackTrace<T>` – Stack trace for a thrown value of type `T` (see **kestrel:stack** above; reference stdlib uses the record shape `{ value, frames }`).
 
-Their concrete definitions (ADT vs built-in) are implementation-defined as long as the function signatures are satisfied.
+Their concrete definitions are implementation-defined as long as the function signatures are satisfied; **`StackTrace<T>`** in the reference stdlib matches the record layout described under **kestrel:stack**.
 
 ---
 

@@ -63,6 +63,9 @@ public final class KRuntime {
         if (v instanceof String) return (String) v;
         if (v instanceof KRecord) {
             KRecord r = (KRecord) v;
+            if (r.getFields().size() == 2 && r.get("value") != null && r.get("frames") != null) {
+                return formatCapturedStackTrace(r);
+            }
             StringBuilder sb = new StringBuilder("{ ");
             boolean first = true;
             for (Map.Entry<String, Object> e : r.getFields().entrySet()) {
@@ -108,6 +111,71 @@ public final class KRuntime {
             return sb.toString();
         }
         return String.valueOf(v);
+    }
+
+    /** Stdlib `__print_one`: format to stdout without newline. */
+    public static void printOne(Object x) {
+        System.out.print(formatOne(x));
+    }
+
+    /**
+     * Stdlib `__capture_trace`: JVM uses Java stack frames; shape matches VM ({@code value} + {@code frames} list of records).
+     */
+    public static Object captureTrace(Object value) {
+        StackTraceElement[] st = Thread.currentThread().getStackTrace();
+        int start = 0;
+        while (start < st.length) {
+            String cn = st[start].getClassName();
+            String mn = st[start].getMethodName();
+            if ("getStackTrace".equals(mn) && "java.lang.Thread".equals(cn)) {
+                start++;
+                continue;
+            }
+            if ("captureTrace".equals(mn) && "kestrel.runtime.KRuntime".equals(cn)) {
+                start++;
+                continue;
+            }
+            break;
+        }
+        KList list = KNil.INSTANCE;
+        for (int i = st.length - 1; i >= start; i--) {
+            StackTraceElement e = st[i];
+            String file = e.getFileName() != null ? e.getFileName() : "?";
+            long line = e.getLineNumber() >= 0 ? (long) e.getLineNumber() : 0L;
+            KRecord fr = new KRecord();
+            fr.set("file", file);
+            fr.set("line", Long.valueOf(line));
+            fr.set("function", "<unknown>");
+            list = new KCons(fr, list);
+        }
+        KRecord tr = new KRecord();
+        tr.set("value", value);
+        tr.set("frames", list);
+        return tr;
+    }
+
+    private static String formatCapturedStackTrace(KRecord r) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(formatOne(r.get("value")));
+        sb.append('\n');
+        Object frames = r.get("frames");
+        if (frames instanceof KList) {
+            KList xs = (KList) frames;
+            while (xs instanceof KCons) {
+                KCons c = (KCons) xs;
+                Object head = c.head;
+                if (head instanceof KRecord) {
+                    KRecord fr = (KRecord) head;
+                    sb.append("  at ");
+                    sb.append(formatOne(fr.get("file")));
+                    sb.append(':');
+                    sb.append(formatOne(fr.get("line")));
+                    sb.append('\n');
+                }
+                xs = c.tail;
+            }
+        }
+        return sb.toString();
     }
 
     private static String formatDouble(Double d) {

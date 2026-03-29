@@ -343,6 +343,33 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     return: { kind: 'prim', name: 'Unit' },
   }, new Set()));
 
+  const captureArgT = freshVar();
+  const stackFrameRow: InternalType = {
+    kind: 'record',
+    fields: [
+      { name: 'file', mut: false, type: tString },
+      { name: 'line', mut: false, type: tInt },
+      { name: 'function', mut: false, type: tString },
+    ],
+  };
+  env.set(
+    '__capture_trace',
+    generalize(
+      {
+        kind: 'arrow',
+        params: [captureArgT],
+        return: {
+          kind: 'record',
+          fields: [
+            { name: 'value', mut: false, type: captureArgT },
+            { name: 'frames', mut: false, type: { kind: 'app', name: 'List', args: [stackFrameRow] } },
+          ],
+        },
+      },
+      new Set()
+    )
+  );
+
   const processRetT = freshVar();
   env.set('__get_process', generalize({
     kind: 'arrow',

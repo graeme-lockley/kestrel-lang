@@ -248,26 +248,6 @@ const CallFrame = struct {
     discard_return: bool = false,
 };
 
-/// Look up (file, line) for a code offset using debug section (03 §8). Binary search for last entry where code_offset <= target.
-fn lookupDebugLine(module: *const load_mod.Module, code_offset: usize) ?struct { file: []const u8, line: u32 } {
-    const entries = module.debug_entries;
-    if (entries.len == 0) return null;
-    var lo: usize = 0;
-    var hi: usize = entries.len;
-    while (lo < hi) {
-        const mid = lo + (hi - lo) / 2;
-        if (entries[mid].code_offset <= code_offset) {
-            lo = mid + 1;
-        } else {
-            hi = mid;
-        }
-    }
-    if (lo == 0) return null;
-    const entry = entries[lo - 1];
-    if (entry.file_index >= module.debug_files.len) return null;
-    return .{ .file = module.debug_files[entry.file_index], .line = entry.line };
-}
-
 /// Print uncaught exception and stack trace to stderr using debug section for file:line.
 fn printUncaughtException(
     exception: Value,
@@ -282,13 +262,13 @@ fn printUncaughtException(
     std.debug.print("Uncaught exception: {s}\n", .{name});
     var i: usize = frame_sp;
     const code_offset = @as(usize, @intCast(throw_pc));
-    if (lookupDebugLine(current_module, code_offset)) |loc| {
+    if (load_mod.lookupDebugLine(current_module, code_offset)) |loc| {
         std.debug.print("  at {s}:{d}\n", .{ loc.file, loc.line });
     }
     while (i > 0) {
         i -= 1;
         const frame = call_frames[i];
-        if (lookupDebugLine(frame.module, frame.pc)) |loc| {
+        if (load_mod.lookupDebugLine(frame.module, frame.pc)) |loc| {
             std.debug.print("  at {s}:{d}\n", .{ loc.file, loc.line });
         }
     }
@@ -310,13 +290,13 @@ fn operandStackOverflowReport(
 ) void {
     std.debug.print("Operand stack overflow (limit {d} entries)\n", .{operand_stack_slots});
     var i: usize = frame_sp;
-    if (lookupDebugLine(current_module, fault_pc)) |loc| {
+    if (load_mod.lookupDebugLine(current_module, fault_pc)) |loc| {
         std.debug.print("  at {s}:{d}\n", .{ loc.file, loc.line });
     }
     while (i > 0) {
         i -= 1;
         const frame = call_frames[i];
-        if (lookupDebugLine(frame.module, frame.pc)) |loc| {
+        if (load_mod.lookupDebugLine(frame.module, frame.pc)) |loc| {
             std.debug.print("  at {s}:{d}\n", .{ loc.file, loc.line });
         }
     }
@@ -731,7 +711,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 pc += 8;
 
                 // Check for primitive functions (0xFFFFFF00 range)
-                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF26 and sp >= arity) {
+                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF27 and sp >= arity) {
                     if (fn_id == 0xFFFFFF00 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, false, module_ptrs.items);
@@ -1055,6 +1035,32 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const arg = stack[sp - 1];
                         sp -= 1;
                         if (!pushOperand(&stack, &sp, primitives.taskReturnUnit(&gc, arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
+                        continue;
+                    } else if (fn_id == 0xFFFFFF27 and arity == 1) {
+                        const val = stack[sp - 1];
+                        sp -= 1;
+                        const n_sites = frame_sp + 1;
+                        const sites = allocator.alloc(primitives.TraceSite, n_sites) catch {
+                            if (!pushOperand(&stack, &sp, Value.unit())) {
+                                operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                                return false;
+                            }
+                            continue;
+                        };
+                        defer allocator.free(sites);
+                        sites[0] = .{ .pc = instr_pc, .module = current_module };
+                        var j: usize = 1;
+                        var fi = frame_sp;
+                        while (fi > 0) {
+                            fi -= 1;
+                            sites[j] = .{ .pc = call_frames[fi].pc, .module = call_frames[fi].module };
+                            j += 1;
+                        }
+                        const cap = primitives.captureTraceFromFrames(&gc, val, current_module, sites[0..j]);
+                        if (!pushOperand(&stack, &sp, cap)) {
                             operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
                             return false;
                         }

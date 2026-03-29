@@ -16,6 +16,7 @@ import type { InternalType } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
 import { CODES, locationFromSpan, locationFileOnly } from './diagnostics/types.js';
 import type { Span } from './lexer/types.js';
+import { uniqueDependencyPaths } from './dependency-paths.js';
 
 export interface CompileFileJvmOptions {
   projectRoot?: string;
@@ -485,6 +486,8 @@ export function compileFileJvm(
       }
     }
 
+    const dependencyPathsUnique = uniqueDependencyPaths(dependencyPaths);
+
     if (getClassOutputDir) {
       const classDir = getClassOutputDir(filePath);
       mkdirSync(classDir, { recursive: true });
@@ -498,13 +501,13 @@ export function compileFileJvm(
       }
       const depsPath = pathResolve(classDir, jvmResult.className + '.class.deps');
       mkdirSync(dirname(depsPath), { recursive: true });
-      writeFileSync(depsPath, dependencyPaths.join('\n') + '\n');
+      writeFileSync(depsPath, dependencyPathsUnique.join('\n') + '\n');
     }
 
     cache.set(filePath, {
       program,
       jvmResult,
-      dependencyPaths,
+      dependencyPaths: dependencyPathsUnique,
       className,
       exports: tc.exports,
       exportedTypeAliases: tc.exportedTypeAliases,
@@ -517,7 +520,7 @@ export function compileFileJvm(
       ok: true,
       program,
       jvmResult,
-      dependencyPaths,
+      dependencyPaths: dependencyPathsUnique,
       className,
       exports: tc.exports,
       exportedTypeAliases: tc.exportedTypeAliases,
