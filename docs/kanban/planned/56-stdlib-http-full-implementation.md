@@ -65,3 +65,67 @@ The `kestrel:http` module currently only exports `nowMs()`. [docs/specs/02-stdli
 1. **Client vs server TLS:** **`get`** supports **`https://`**; **server** (`listen` / `createServer`) stays **HTTP only** for this story.
 2. **Backends:** **VM and JVM implemented together**—no VM-first drop that defers JVM.
 3. **`queryParam` duplicate keys:** **Last value wins**; update **02-stdlib** with a short normative line when implementing.
+
+## Impact analysis
+
+Incorporates **Risks / notes** above (55 ordering, dual backend, TLS, concurrency, security, URL parsing, errors). Roll forward in **lockstep VM + JVM**; avoid shipping primitives on only one backend.
+
+| Area | Files / subsystems (indicative) | Change | Risk |
+|------|----------------------------------|--------|------|
+| **Prerequisite** | [55-async-await-suspension-event-loop.md](55-async-await-suspension-event-loop.md) | **56 starts only after 55** delivers real `Task` suspension, event loop, and non-blocking I/O hooks HTTP can register with | **Blocker** if ignored |
+| **VM (Zig)** | `vm/src/primitives.zig`, `vm/src/exec.zig`, new or extended I/O modules (sockets, TLS client), `vm/src/gc.zig` if new object kinds | TCP listen/accept, HTTP/1.1 request/response parse + serialize (server, plain HTTP); outbound GET with optional TLS (`https`); integrate completions with **55** loop; optional new opcode(s) or reuse TASK + host callbacks | **High**: parsing edge cases, TLS on Zig, GC roots for live connections |
+| **Bytecode / ISA** | `docs/specs/04-bytecode-isa.md` | Document any new calls or TASK-related behaviour for HTTP primitives | Low–medium |
+| **Compiler (TS)** | `compiler/src/typecheck/check.ts` (new `__*` bindings, `Task<Result<…>>` if used), `compiler/src/codegen/codegen.ts`, `compiler/src/jvm-codegen/codegen.ts` | Wire builtins used from `stdlib/kestrel/http.ks`; align VM and JVM primitive indices / KRuntime entry points | Medium |
+| **JVM runtime** | `runtime/jvm/src/kestrel/runtime/KRuntime.java` (and related classes) | **Mirror VM**: `HttpServer`/`HttpClient` (names TBD), non-blocking or loop-driven completion consistent with **55**, `HttpsURLConnection` or equivalent for `get` TLS | **High**: parity with VM, platform TLS |
+| **Stdlib** | `stdlib/kestrel/http.ks`, optional `stdlib/kestrel/http.test.ks` | Implement full **02** surface: types + exports; thin wrappers over `__` primitives | Medium |
+| **CLI / scripts** | `scripts/kestrel`, `scripts/build-cli.sh` if JVM classpath changes | Only if new native deps or flags; otherwise unchanged | Low |
+| **Tests** | `tests/e2e/scenarios/positive/`, `tests/unit/*.test.ks`, `tests/conformance/` as needed, `compiler/test/`, `vm` tests | HTTPS may need local cert fixture or conditional skip; **`./scripts/kestrel test-both`** on shared `.ks` | Medium |
+| **Docs** | `docs/specs/02-stdlib.md`, `05-runtime-model.md`, `09-tools.md`, `08-tests.md`, `AGENTS.md` if verification changes | `queryParam` duplicate-key rule; HTTP/TLS defaults; server HTTP-only; VM+JVM parity expectations | Low |
+
+**Rollback:** Prefer feature branches; if TLS blocks release, document explicit deferral of `https` only with team agreement (contradicts current acceptance—avoid without amending story).
+
+## Tasks
+
+- [ ] **Gate:** Confirm **55** is **done** (or explicitly list remaining 55 items that block HTTP integration); re-read `05` / `04` for TASK + idle semantics.
+- [ ] **Design note:** Record **concurrency model** for the server (e.g. single-threaded loop, one handler at a time vs per-connection serialization) in **02** or **05**; align VM and JVM.
+- [ ] **Spec pass:** Update **02-stdlib** — `queryParam` **last duplicate wins**; clarify **server = HTTP only**, **`get`** supports **http + https**; document TLS verification (default: system trust), SNI, and error surfacing (`Task<Result<…>>` or exceptions per **55** contract).
+- [ ] **VM:** Add TCP server path (bind, listen, accept) integrated with event loop; HTTP/1.1 request parsing and response writing for handler API; no TLS on listen.
+- [ ] **VM:** Add outbound HTTP GET (`http://`) and **TLS** (`https://`) client; complete tasks on loop; failures map to agreed error model.
+- [ ] **VM:** Expose minimal **opaque or record** representation for `Server`, `Request`, `Response` consistent with stdlib (handles, tags, or records per existing patterns).
+- [ ] **Stdlib:** Implement `createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, `nowMs` in `stdlib/kestrel/http.ks` using new primitives; define exported **Request** / **Response** / **Server** shapes.
+- [ ] **Compiler:** Register primitive names, arities, and types in typecheck + **kbc** codegen + **JVM** codegen for every `__http_*` (or chosen split) builtin.
+- [ ] **JVM:** Implement matching server and client behaviour in `KRuntime` (or decomposed classes), driven by same **55** event-loop semantics as VM.
+- [ ] **Tests (Kestrel):** Add `stdlib/kestrel/http.test.ks` or `tests/unit/` cases for `queryParam`, `requestId`, handler response shaping (no ordering dependence unless documented).
+- [ ] **E2E:** Add positive scenario: local HTTP server + client request + assertions; add **HTTPS** `get` path (e.g. `https://` to test endpoint with known cert, or documented `SKIP_HTTPS_E2E` with CI policy).
+- [ ] **Dual backend:** Run shared programs with **`./scripts/kestrel test-both`** (or extend `scripts/jvm-smoke.mjs` if appropriate); fix drift until both pass.
+- [ ] **Conformance / Vitest:** Add or extend conformance for `kestrel:http` types and imports if valuable; fix compiler tests for new builtins.
+- [ ] **Zig:** VM unit/integration tests for parser edge cases or primitive wiring where feasible without full stdlib.
+- [ ] **Verification:** `cd compiler && npm run build && npm test`; `cd vm && zig build test`; `./scripts/kestrel test`; `./scripts/kestrel test-both` on HTTP tests; `./scripts/run-e2e.sh` when E2E added.
+
+## Tests to add
+
+| Layer | Path / mechanism | Intent |
+|-------|------------------|--------|
+| **Zig** | `vm` tests (e.g. `vm/src/main.zig` registered tests) | HTTP parse/format helpers; primitive smoke if isolable |
+| **Vitest** | `compiler/test/unit/`, `compiler/test/integration/` | New primitive typing; `http.ks` module resolves; codegen symbol presence |
+| **Kestrel unit** | `stdlib/kestrel/http.test.ks`, `tests/unit/*.test.ks` | `queryParam` last-wins; body/headers; handler builds `Response` |
+| **Conformance** | `tests/conformance/runtime/` or `typecheck/` if shapes warrant | Optional: import `kestrel:http` and call `nowMs` + new APIs behind feature availability |
+| **Dual backend** | `./scripts/kestrel test-both` | **Same** `.ks` sources on **VM and JVM** for HTTP scenarios |
+| **E2E** | `tests/e2e/scenarios/positive/*.ks` + `.expected` | Server up → request → response; **`get`** over **HTTPS** per CI policy |
+| **Smoke** | `scripts/jvm-smoke.mjs` | Extend if quick JVM sanity for HTTP path is useful |
+
+## Documentation and specs to update
+
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — **kestrel:http**: full function descriptions; **duplicate query keys: last wins**; **HTTP server only**; **`get`**: http + https; type contracts for `Request`/`Response`/`Server` as implemented.
+- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — How HTTP I/O registers with the event loop (if not already implied by **55**); server concurrency model.
+- [ ] [docs/specs/04-bytecode-isa.md](../../specs/04-bytecode-isa.md) — Any new or documented `CALL` targets / HTTP-related op behaviour.
+- [ ] [docs/specs/09-tools.md](../../specs/09-tools.md) — CLI or flags only if this story adds them (e.g. trust store path—prefer avoid unless needed).
+- [ ] [docs/specs/08-tests.md](../../specs/08-tests.md) — E2E / HTTPS testing notes, skips, or fixtures if non-obvious.
+- [ ] [AGENTS.md](../../AGENTS.md) — Only if verification commands or required suites change.
+
+## Notes
+
+- **HTTPS in CI:** Prefer a fixed **localhost** TLS test server (self-signed cert committed under `tests/` or generated in script) and document **`curl -k` equivalent** behaviour (default **verify** on; test may use pinned cert or test-only trust). If full verification is too brittle initially, record a **time-boxed** follow-up—**do not** silently ship `https` without tests.
+- **`bodyText` / `get` errors:** Follow **55**’s **`Task<Result<…>>`** (or documented equivalent) for network/TLS failures; avoid reintroducing empty-string sentinels for new surfaces.
+- **Keep-alive / chunked encoding:** Out of scope unless required for minimal interop; document “first request/response per connection” if implementing the simplest server.
+- **Relationship to 65–67:** No new public module names required for **56**; Tier 8 later adds `kestrel:socket`, pooling, etc., without renaming core `kestrel:http` entry points unless specs change.
