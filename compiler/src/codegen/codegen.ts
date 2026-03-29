@@ -96,6 +96,20 @@ function nextPatternBindSlot(env: Map<string, number>, scrutineeSlot: number): n
   return Math.max(nextLocalSlot(env), scrutineeSlot + 1);
 }
 
+/**
+ * `BlockExpr` lowering uses a `blockEnv` Map for locals plus reserved keys (not user bindings):
+ * - `$discard` (`BLOCK_ENV_DISCARD_KEY`): when the block has `ExprStmt` or `AssignStmt`, holds the slot used to store discarded values (including the **Unit** left by **SET_FIELD** and similar) so the operand stack stays balanced across statements.
+ * - `\x00_record` / `\x00_closure` / `\x00_unit` (`BLOCK_ENV_*`): temps for mutual/single recursive `fun` lowering — shared capture record, closure scratch, and (multi-`fun` path) explicit pop of **SET_FIELD**’s Unit without clobbering the record.
+ * Slot indices for `ValStmt` / `VarStmt` are allocated with an explicit `nextBlockSlot` counter (historically `Map.size` was bumped with padding keys; that hack is removed).
+ */
+/** First local index block-level bindings may use inside an enclosing closure: 0 = `__env`, 1 = first parameter of that closure (see `liftedEnv.set('__env', 0)` and `liftedEnv.set(param, i + 1)` in mutual/single `FunStmt` lowering). */
+const CLOSURE_BLOCK_FIRST_FREE_LOCAL = 2;
+
+const BLOCK_ENV_DISCARD_KEY = '$discard';
+const BLOCK_ENV_RECORD_KEY = '\x00_record';
+const BLOCK_ENV_CLOSURE_KEY = '\x00_closure';
+const BLOCK_ENV_UNIT_KEY = '\x00_unit';
+
 export interface FunctionEntry {
   nameIndex: number;
   arity: number;
@@ -824,30 +838,31 @@ function makeEmitExpr(
       const hasExprStmt = expr.stmts.some((s) => s.kind === 'ExprStmt');
       const hasAssignStmt = expr.stmts.some((s) => s.kind === 'AssignStmt');
       const needsDiscard = hasExprStmt || hasAssignStmt;
-      // When inside a closure, reserve slots 0 and 1 for env and first param so block locals don't overwrite them
-      const blockLocalStart = captures != null ? Math.max(blockEnv.size, 2) : blockEnv.size;
+      // `$discard` must not share a slot with the first Val/Var: reserve `blockLocalStart`, then allocate user slots from `blockLocalStart + 1` via `nextBlockSlot`.
+      const blockLocalStart =
+        captures != null ? Math.max(blockEnv.size, CLOSURE_BLOCK_FIRST_FREE_LOCAL) : blockEnv.size;
+      let nextBlockSlot = blockEnv.size;
       if (needsDiscard) {
-        blockEnv.set('$discard', blockLocalStart);
-        // Pad so next VarStmt/ValStmt gets blockLocalStart + 1 (so $discard and first var don't collide)
-        for (let i = blockEnv.size; i < blockLocalStart + 1; i++) blockEnv.set(`\x00_${i}`, i);
+        blockEnv.set(BLOCK_ENV_DISCARD_KEY, blockLocalStart);
+        nextBlockSlot = blockLocalStart + 1;
       }
       // Bind all block-level fun names so any later statement (including ExprStmt/result) can reference them
       const funStmts = expr.stmts.filter((s): s is FunStmt => s.kind === 'FunStmt');
-      // When there are block-level funs, never use slot 1: the enclosing closure may have param at 1 (e.g. sg);
-      // storing the closure in slot 1 would overwrite it and cause wrong env/ptr → bus error.
-      let nextSlot = funStmts.length > 0 ? Math.max(blockEnv.size, 2) : blockEnv.size;
+      const funBase =
+        funStmts.length > 0 ? Math.max(nextBlockSlot, CLOSURE_BLOCK_FIRST_FREE_LOCAL) : nextBlockSlot;
+      let funSlotCursor = funBase;
       for (const s of funStmts) {
-        blockEnv.set(s.name, nextSlot);
-        nextSlot++;
+        blockEnv.set(s.name, funSlotCursor);
+        funSlotCursor++;
       }
-/** Use the block's own sharedRecordTemp so the record slot is in block scope and doesn't collide with caller (second block in same scope was reading a caller slot when using fixed high slot). */
-      const sharedRecordTemp = nextSlot;
-      const closureTemp = nextSlot + 1;
-      const unitTemp = nextSlot + 2; // for mutual recursion: pop SET_FIELD Unit without overwriting record
-      // Reserve these slots so Phase 1 (ValStmt/VarStmt) doesn't use them
-      blockEnv.set('\x00_record', sharedRecordTemp);
-      blockEnv.set('\x00_closure', closureTemp);
-      blockEnv.set('\x00_unit', unitTemp);
+      // Use the block's own sharedRecordTemp so the record slot is in block scope and doesn't collide with caller (second block in same scope was reading a caller slot when using fixed high slot).
+      const sharedRecordTemp = funSlotCursor;
+      const closureTemp = funSlotCursor + 1;
+      const unitTemp = funSlotCursor + 2; // mutual recursion: **SET_FIELD** leaves Unit — store in unitTemp so the record local is not overwritten
+      blockEnv.set(BLOCK_ENV_RECORD_KEY, sharedRecordTemp);
+      blockEnv.set(BLOCK_ENV_CLOSURE_KEY, closureTemp);
+      blockEnv.set(BLOCK_ENV_UNIT_KEY, unitTemp);
+      nextBlockSlot = unitTemp + 1;
 
       // Phase 1: iterate stmts in source order, emitting val/var/expr/assign as they appear.
       // FunStmt closures (Phase 2) are emitted lazily: the moment the first ExprStmt or
@@ -861,7 +876,7 @@ function makeEmitExpr(
       const emitPhase2 = () => {
         if (phase2Emitted) return;
         phase2Emitted = true;
-      if (funStmts.length >= 2 && shapes) {
+        if (funStmts.length >= 2 && shapes) {
         // Mutual recursion: one shared record, same shape for all closures
         const funNames = funStmts.map((s) => s.name);
         mutualFunNames.push(...funNames);
@@ -965,7 +980,7 @@ function makeEmitExpr(
           emitGetField(i);
           emitStoreLocal(slot);
         }
-      } else {
+        } else {
         // Single fun or no fun: process each FunStmt with current behavior
         const extendedScope = new Map(blockEnv);
         if (captures) for (const name of captures.keys()) if (!extendedScope.has(name)) extendedScope.set(name, 0);
@@ -1078,13 +1093,15 @@ function makeEmitExpr(
       for (const stmt of expr.stmts) {
         if (stmt.kind === 'ValStmt') {
           emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
-          const slot = blockEnv.size;
+          const slot = nextBlockSlot;
+          nextBlockSlot++;
           blockEnv.set(stmt.name, slot);
           emitStoreLocal(slot);
         } else if (stmt.kind === 'VarStmt') {
           if (!shapes) break;
           const refShapeId = getRefShapeId(shapes, stringIndex);
-          const slot = blockEnv.size;
+          const slot = nextBlockSlot;
+          nextBlockSlot++;
           blockEnv.set(stmt.name, slot);
           emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
           emitAllocRecord(refShapeId);
@@ -1092,7 +1109,7 @@ function makeEmitExpr(
         } else if (stmt.kind === 'ExprStmt') {
           if (seenFunStmtInSource) emitPhase2();
           emitExpr(stmt.expr, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
-          const discardSlot = blockEnv.get('$discard');
+          const discardSlot = blockEnv.get(BLOCK_ENV_DISCARD_KEY);
           if (discardSlot !== undefined) emitStoreLocal(discardSlot);
         } else if (stmt.kind === 'AssignStmt') {
           if (seenFunStmtInSource) emitPhase2();
@@ -1106,13 +1123,15 @@ function makeEmitExpr(
             if (fieldSlot >= 0) {
               emitExpr(target.object, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
               emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
-              emitSetField(fieldSlot);
+              emitSetField(fieldSlot); // leaves Unit on stack (ISA §1.8); discard when AssignStmt is a “statement” in this block
+              const discardSlotField = blockEnv.get(BLOCK_ENV_DISCARD_KEY);
+              if (discardSlotField !== undefined) emitStoreLocal(discardSlotField);
             } else if (objType?.kind === 'namespace' && target.object.kind === 'IdentExpr') {
               const setterId = namespaceVarSetterIds?.get(target.object.name)?.get(target.field);
               if (setterId !== undefined) {
                 emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
                 emitCall(setterId, 1);
-                const discardSlot = blockEnv.get('$discard');
+                const discardSlot = blockEnv.get(BLOCK_ENV_DISCARD_KEY);
                 if (discardSlot !== undefined) emitStoreLocal(discardSlot);
               }
             }
@@ -1122,21 +1141,21 @@ function makeEmitExpr(
               emitLoadLocal(0);
               emitGetField(cap.index);
               emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
-              emitSetField(0);
-              const discardSlotCap = blockEnv.get('$discard');
+              emitSetField(0); // Unit on stack
+              const discardSlotCap = blockEnv.get(BLOCK_ENV_DISCARD_KEY);
               if (discardSlotCap !== undefined) emitStoreLocal(discardSlotCap);
             } else {
               const localSlot = blockEnv.get(target.name);
               if (localSlot !== undefined && nextVarNames.has(target.name)) {
                 emitLoadLocal(localSlot);
                 emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
-                emitSetField(0);
-                const discardSlot = blockEnv.get('$discard');
+                emitSetField(0); // ref cell: Unit on stack
+                const discardSlot = blockEnv.get(BLOCK_ENV_DISCARD_KEY);
                 if (discardSlot !== undefined) emitStoreLocal(discardSlot);
               } else {
                 emitExpr(stmt.value, blockEnv, funNameToId, shapes, adts, captures, nextVarNames, undefined, tcNon);
                 if (localSlot !== undefined) {
-                  emitStoreLocal(localSlot);
+                  emitStoreLocal(localSlot); // value consumed; no SET_FIELD — no extra Unit
                 } else {
                   const gSlot = moduleGlobals.get(target.name);
                   if (gSlot !== undefined) {
@@ -1145,7 +1164,7 @@ function makeEmitExpr(
                     const setterId = importedVarSetterIds?.get(target.name);
                     if (setterId !== undefined) {
                       emitCall(setterId, 1);
-                      const discardSlot = blockEnv.get('$discard');
+                      const discardSlot = blockEnv.get(BLOCK_ENV_DISCARD_KEY);
                       if (discardSlot !== undefined) emitStoreLocal(discardSlot);
                     }
                   }
