@@ -13,7 +13,7 @@ Use this for **new** work that enters the roadmap at **`docs/kanban/unplanned/`*
 ## Before you write
 
 1. Read [docs/kanban/README.md](../../../docs/kanban/README.md) for **unplanned entry/exit** criteria and the **tier table**.
-2. Pick the next free **`NN`** in the roadmap (or an explicit sequence agreed with the team). Filename: **`NN-slug.md`** (two digits, hyphen, short kebab-case slug).
+2. Pick the next free **global `NN`** (see [docs/kanban/README.md](../../../docs/kanban/README.md): roadmap queue is **50–64** today; new items use **65** onward). Filename: **`NN-slug.md`** (two digits or more as needed, hyphen, short kebab-case slug).
 3. Check for **duplicates** or **superseded** stories in `unplanned/` and `done/`.
 
 ## File location and name

@@ -4,26 +4,30 @@ Stories live in `docs/kanban/` with folders: **unplanned**, **planned**, **doing
 
 Work flows **in order**: `unplanned` → `planned` → `doing` → `done`. Do not skip **planned** unless the team explicitly agrees (for example a trivial regression or doc-only fix).
 
-## Roadmap order (`unplanned/`)
+## Global sequence (`NN-slug.md`)
 
-The **prioritized feature list** lives in **`unplanned/`**. Files are named **`NN-slug.md`** where **`NN` is the priority sequence** (01 first, then 02, …). Lower numbers are higher priority.
+Every story file is named **`NN-slug.md`** where **`NN` is a globally unique sequence** across **unplanned**, **planned**, **doing**, and **done**. The number never changes when a file moves between folders.
 
-This order matches the “usable language” plan:
+- **`docs/kanban/done/`** — **01–49** (completed stories; lower numbers are not “newer,” they are the global index assigned at renumbering).
+- **`docs/kanban/unplanned/`** — **50–64** (current roadmap queue). **Lower numbers are higher priority** within this band (50 first, then 51, …).
+- **New roadmap items** use the next free integer (**65** onward) so IDs stay unique project-wide.
+
+Each story file should include **`## Sequence:`** (same value as **`NN`**), **`## Tier:`**, and **`## Former ID:`** where useful (for example the previous filename prefix before a renumber, or `(none)` if there was no numeric prefix).
+
+### Roadmap tiers (`unplanned/`, sequences 50–64)
 
 | Tier | Sequences | Focus |
 |------|-----------|--------|
-| **1** | 01–07 | Fix broken language (pattern matching gaps, while loops, tail optimization) |
-| **2** | 08–10 | Harden the runtime (safety, VM tests, overflow/divzero tests) |
-| **3** | 11–14 | Complete the core language (modules, narrowing, unions) |
-| **4** | 15–17 | Stdlib and test harness depth |
-| **5** | 18–19 | Broader test coverage (E2E negative, conformance) |
-| **6** | 20–21 | Polish (codegen cleanup, disassembler) |
-| **7** | 22–26 | Deferred large work (async, HTTP, arrays, URL, lockfile) |
-| **Optional** | 27–30 | Language sugar, VM verification, fixtures, archival spread note |
+| **4** | 50 | Stdlib stack `trace()` / stack traces |
+| **5** | 51–52 | Broader test coverage (E2E negative, conformance) |
+| **6** | 53–54 | Polish (block-expression codegen, disassembler) |
+| **7** | 55–59 | Deferred large work (async, HTTP, arrays, URL, lockfile) |
+| **Optional** | 60–63 | Language sugar, VM float work, fixtures, spread follow-up |
+| **(follow-up)** | 64 | JSON / `Result` errors, remove `value` builtins |
 
-Each story file should include **`## Sequence:`**, **`## Tier:`**, and often **`## Former ID:`** (the old numeric filename prefix, if any).
+Completed stories in **`done/`** retain their **`## Tier:`** lines from delivery; there is no separate tier table for **01–49** here—open the file for context.
 
-The **`planned/`** folder holds the same filenames (moved from `unplanned/` when promoted); **`doing/`** and **`done/`** likewise. **Sequence and tier do not change** when a file moves—priority remains defined by the original `NN` in the name.
+The **`planned/`** folder holds the same filenames (moved from `unplanned/` when promoted); **`doing/`** and **`done/`** likewise.
 
 ## Phases (gates)
 
@@ -38,7 +42,7 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 **Entry criteria**
 
-- The idea is captured as a single markdown story with a title and assigned **`NN-slug.md`** (sequence reflects priority in the roadmap).
+- The idea is captured as a single markdown story with a title and assigned **`NN-slug.md`** (`NN` is globally unique; on the roadmap, lower `NN` means higher priority within the unplanned queue).
 - Initial **Tier** is chosen (or “Optional / verification”).
 
 **Exit criteria (before moving to `planned/`)**

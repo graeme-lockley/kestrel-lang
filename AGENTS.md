@@ -204,7 +204,7 @@ Before marking a task complete:
 
 Stories live in `docs/kanban/` with folders: **unplanned**, **planned**, **doing**, **done**.
 
-The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named `NN-slug.md` (01 = highest priority). See `docs/kanban/README.md` for the tier table, entry/exit criteria, and templates. The same file is **moved** between folders as work progresses. **`docs/kanban/backlog/`** is **deprecated**; use **`planned/`** instead.
+The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named `NN-slug.md`; **`NN` is globally unique** (current queue **50–64**, lower = higher priority). See `docs/kanban/README.md` for the tier table, entry/exit criteria, and templates. The same file is **moved** between folders as work progresses. **`docs/kanban/backlog/`** is **deprecated**; use **`planned/`** instead.
 
 ### Workflow
 

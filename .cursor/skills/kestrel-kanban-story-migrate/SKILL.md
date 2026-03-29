@@ -13,7 +13,7 @@ Canonical rules: **[docs/kanban/README.md](../../../docs/kanban/README.md)**. Th
 ## Conventions
 
 - **Move** the file (same `NN-slug.md` name): `unplanned/` → `planned/` → `doing/` → `done/`.
-- **Never** change `NN` in the filename when moving (priority stays tied to the roadmap).
+- **Never** change `NN` in the filename when moving (`NN` is **globally unique**; the story keeps the same id through **planned** / **doing** / **done**).
 - Update the markdown **in place** as required by the target phase.
 
 ---

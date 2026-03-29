@@ -12,7 +12,7 @@ Flow: **unplanned → planned → doing → done**. Skipping **planned** require
 ## Roadmap and priority
 
 - The **ordered roadmap** is in **`docs/kanban/unplanned/`**.
-- Filenames use **`NN-slug.md`**; **`NN`** is the **priority sequence** (01 = highest). Work through lower numbers first unless the story is verification-only or explicitly deferred (see tier in each file).
+- Filenames use **`NN-slug.md`**; **`NN`** is a **globally unique** story id. On the roadmap (`unplanned/`), **lower `NN` = higher priority** within the current queue (see `docs/kanban/README.md`). Work through lower numbers first unless the story is verification-only or explicitly deferred (see tier in each file).
 - The same filename is **moved** between folders as the story advances; sequence does not change.
 
 ## Phases (short)
