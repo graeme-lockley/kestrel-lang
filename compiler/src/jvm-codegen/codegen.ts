@@ -195,7 +195,9 @@ function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, num
         return;
       case 'LiteralExpr':
       case 'ThrowExpr':
+        return;
       case 'AwaitExpr':
+        walk(e.value);
         return;
       case 'TryExpr':
         walk(e.body);
@@ -541,7 +543,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     return innerCf.toBytes();
   }
 
-  function emitExpr(expr: Expr, mb: MethodBuilder, tailCtx?: JvmEmitTailContext): boolean {
+  function emitExpr(expr: Expr, mb: MethodBuilder, tailCtx?: JvmEmitTailContext, stackDepth: number = 0): boolean {
     const tcN = subJvmTail(tailCtx, false);
     const tcT = subJvmTail(tailCtx, true);
     switch (expr.kind) {
@@ -680,35 +682,35 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
           };
           if (expr.op === '&') {
-            emitExpr(expr.left, mb, tcN);
+            emitExpr(expr.left, mb, tcN, stackDepth);
             unboxBool();
             const ifeqStart = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
-            mb.addBranchTarget(mb.length(), frameState(env, nextLocal));
-            emitExpr(expr.right, mb, tcN);
+            mb.addBranchTarget(mb.length(), frameState(env, nextLocal, undefined, stackDepth));
+            emitExpr(expr.right, mb, tcN, stackDepth);
             const gotoEnd = mb.length();
             mb.emit1s(JvmOp.GOTO, 0);
             const pushFalse = mb.length();
-            mb.addBranchTarget(pushFalse, frameState(env, nextLocal));
+            mb.addBranchTarget(pushFalse, frameState(env, nextLocal, undefined, stackDepth));
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'FALSE', 'Ljava/lang/Boolean;'));
             const afterAnd = mb.length();
-            mb.addBranchTarget(afterAnd, frameState(env, nextLocal, undefined, 1));
+            mb.addBranchTarget(afterAnd, frameState(env, nextLocal, undefined, stackDepth + 1));
             patchShort(mb, ifeqStart + 1, pushFalse - ifeqStart);
             patchShort(mb, gotoEnd + 1, afterAnd - gotoEnd);
           } else {
-            emitExpr(expr.left, mb, tcN);
+            emitExpr(expr.left, mb, tcN, stackDepth);
             unboxBool();
             const ifeqStart = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
-            mb.addBranchTarget(mb.length(), frameState(env, nextLocal));
+            mb.addBranchTarget(mb.length(), frameState(env, nextLocal, undefined, stackDepth));
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'TRUE', 'Ljava/lang/Boolean;'));
             const gotoSkip = mb.length();
             mb.emit1s(JvmOp.GOTO, 0);
             const rightStart = mb.length();
-            mb.addBranchTarget(rightStart, frameState(env, nextLocal));
-            emitExpr(expr.right, mb, tcN);
+            mb.addBranchTarget(rightStart, frameState(env, nextLocal, undefined, stackDepth));
+            emitExpr(expr.right, mb, tcN, stackDepth);
             const afterOr = mb.length();
-            mb.addBranchTarget(afterOr, frameState(env, nextLocal, undefined, 1));
+            mb.addBranchTarget(afterOr, frameState(env, nextLocal, undefined, stackDepth + 1));
             patchShort(mb, ifeqStart + 1, rightStart - ifeqStart);
             patchShort(mb, gotoSkip + 1, afterOr - gotoSkip);
           }
@@ -720,11 +722,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         const isChar =
           (leftPrim === 'Char' || leftPrim === 'Rune') && (rightPrim === 'Char' || rightPrim === 'Rune');
         const isFloat = leftPrim === 'Float' || rightPrim === 'Float';
-        emitExpr(expr.left, mb, tcN);
+        emitExpr(expr.left, mb, tcN, stackDepth);
         if (isInt) mb.emit1s(JvmOp.CHECKCAST, cf.classRef(LONG));
         else if (isFloat) mb.emit1s(JvmOp.CHECKCAST, cf.classRef(DOUBLE));
         else if (isChar) mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Integer'));
-        emitExpr(expr.right, mb, tcN);
+        emitExpr(expr.right, mb, tcN, stackDepth + 1);
         if (isInt) mb.emit1s(JvmOp.CHECKCAST, cf.classRef(LONG));
         else if (isFloat) mb.emit1s(JvmOp.CHECKCAST, cf.classRef(DOUBLE));
         else if (isChar) mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Integer'));
@@ -739,15 +741,15 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
           const ifneEqual = mb.length();
           mb.emit1s(JvmOp.IFNE, 0); // values equal -> != is False
-          mb.addBranchTarget(mb.length(), frameState(env, nextLocal));
+          mb.addBranchTarget(mb.length(), frameState(env, nextLocal, undefined, stackDepth));
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'TRUE', 'Ljava/lang/Boolean;'));
           const gotoEnd = mb.length();
           mb.emit1s(JvmOp.GOTO, 0);
           const pushFalse = mb.length();
-          mb.addBranchTarget(pushFalse, frameState(env, nextLocal));
+          mb.addBranchTarget(pushFalse, frameState(env, nextLocal, undefined, stackDepth));
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'FALSE', 'Ljava/lang/Boolean;'));
           const afterNe = mb.length();
-          mb.addBranchTarget(afterNe, frameState(env, nextLocal, undefined, 1));
+          mb.addBranchTarget(afterNe, frameState(env, nextLocal, undefined, stackDepth + 1));
           patchShort(mb, ifneEqual + 1, pushFalse - ifneEqual);
           patchShort(mb, gotoEnd + 1, afterNe - gotoEnd);
           break;
@@ -804,22 +806,22 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       }
       case 'IfExpr': {
         const ifResultSlot = 53;
-        emitExpr(expr.cond, mb, tcN);
+        emitExpr(expr.cond, mb, tcN, stackDepth);
         mb.emit1s(JvmOp.CHECKCAST, cf.classRef(BOOLEAN));
         mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
-        const ifBranchState = frameState(env, nextLocal);
-        const ifEndState = frameState(env, nextLocal, [ifResultSlot]);
+        const ifBranchState = frameState(env, nextLocal, undefined, stackDepth);
+        const ifEndState = frameState(env, nextLocal, [ifResultSlot], stackDepth);
         const ifeqPos = mb.length();
         mb.emit1s(JvmOp.IFEQ, 0);
         mb.addBranchTarget(mb.length(), ifBranchState);
-        emitExpr(expr.then, mb, tcN);
+        emitExpr(expr.then, mb, tcN, stackDepth);
         mb.emit1b(JvmOp.ASTORE, ifResultSlot);
         const gotoPos = mb.length();
         mb.emit1s(JvmOp.GOTO, 0);
         const elseStart = mb.length();
         mb.addBranchTarget(elseStart, ifBranchState);
         if (expr.else !== undefined) {
-          emitExpr(expr.else, mb, tcN);
+          emitExpr(expr.else, mb, tcN, stackDepth);
         } else {
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
         }
@@ -832,10 +834,10 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         return false;
       }
       case 'WhileExpr': {
-        const loopState = frameState(env, nextLocal);
+        const loopState = frameState(env, nextLocal, undefined, stackDepth);
         const loopHead = mb.length();
         mb.addBranchTarget(loopHead, loopState);
-        emitExpr(expr.cond, mb, tcN);
+        emitExpr(expr.cond, mb, tcN, stackDepth);
         mb.emit1s(JvmOp.CHECKCAST, cf.classRef(BOOLEAN));
         mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
         const ifeqPos = mb.length();
@@ -843,7 +845,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.addBranchTarget(mb.length(), loopState);
         const layer = { breakJumps: [] as number[], loopHead };
         loopBreakStack.push(layer);
-        emitExpr(expr.body, mb, tcN);
+        emitExpr(expr.body, mb, tcN, stackDepth);
         loopBreakStack.pop();
         mb.emit1(JvmOp.POP);
         const gotoPos = mb.length();
@@ -874,7 +876,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         for (const stmt of expr.stmts) {
           for (const [k, v] of blockEnv) env.set(k, v);
           if (stmt.kind === 'ValStmt') {
-            emitExpr(stmt.value, mb, tcN);
+            emitExpr(stmt.value, mb, tcN, stackDepth);
             blockEnv.set(stmt.name, slot);
             env.set(stmt.name, slot);
             mb.emit1b(JvmOp.ASTORE, slot);
@@ -885,7 +887,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(KRECORD, '<init>', '()V'));
             mb.emit1(JvmOp.DUP);
             mb.emit1s(JvmOp.LDC_W, cf.string('0'));
-            emitExpr(stmt.value, mb, tcN);
+            emitExpr(stmt.value, mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
             blockEnv.set(stmt.name, slot);
             env.set(stmt.name, slot);
@@ -981,7 +983,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 mb.emit1b(JvmOp.ALOAD, s);
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
                 mb.emit1s(JvmOp.LDC_W, cf.string('0'));
-                emitExpr(stmt.value, mb, tcN);
+                emitExpr(stmt.value, mb, tcN, stackDepth);
                 mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
@@ -991,24 +993,24 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 mb.emit1(JvmOp.AALOAD);
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
                 mb.emit1s(JvmOp.LDC_W, cf.string('0'));
-                emitExpr(stmt.value, mb, tcN);
+                emitExpr(stmt.value, mb, tcN, stackDepth);
                 mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
               } else if (s !== undefined) {
-                emitExpr(stmt.value, mb, tcN);
+                emitExpr(stmt.value, mb, tcN, stackDepth);
                 mb.emit1b(JvmOp.ASTORE, s);
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
               } else {
-                emitExpr(stmt.value, mb, tcN);
+                emitExpr(stmt.value, mb, tcN, stackDepth);
                 mb.emit1(JvmOp.POP);
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
               }
             } else if (stmt.target.kind === 'FieldExpr') {
-              emitExpr(stmt.value, mb, tcN);
-              emitExpr(stmt.target.object, mb, tcN);
+              emitExpr(stmt.value, mb, tcN, stackDepth);
+              emitExpr(stmt.target.object, mb, tcN, stackDepth + 1);
               mb.emit1s(JvmOp.LDC_W, cf.string(stmt.target.field));
               mb.emit1(JvmOp.DUP2_X1);
               mb.emit1(JvmOp.SWAP);
@@ -1016,7 +1018,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
               mb.emit1(JvmOp.POP);
             } else {
-              emitExpr(stmt.value, mb, tcN);
+              emitExpr(stmt.value, mb, tcN, stackDepth);
               mb.emit1(JvmOp.POP);
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
               mb.emit1(JvmOp.POP);
@@ -1034,7 +1036,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.GOTO, 0);
             patchShort(mb, gotoPos + 1, top.loopHead - gotoPos);
           } else if (stmt.kind === 'ExprStmt') {
-            emitExpr(stmt.expr, mb, tcN);
+            emitExpr(stmt.expr, mb, tcN, stackDepth);
             mb.emit1(JvmOp.POP);
           }
           // Nested emitExpr uses `nextLocal` for new locals; sync after each stmt so bindings do not
@@ -1043,7 +1045,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         }
         for (const [k, v] of blockEnv) env.set(k, v);
         nextLocal = slot;
-        const blockTail = emitExpr(expr.result, mb, tcT);
+        const blockTail = emitExpr(expr.result, mb, tcT, stackDepth);
         env.clear();
         for (const [k, v] of outerEnv) env.set(k, v);
         nextLocal = outerNextLocal;
@@ -1055,14 +1057,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           if (name === 'Some' && expr.args.length === 1) {
             mb.emit1s(JvmOp.NEW, cf.classRef(K_SOME));
             mb.emit1(JvmOp.DUP);
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_SOME, '<init>', '(Ljava/lang/Object;)V'));
             return false;
           }
           if (name === 'Cons' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1b(JvmOp.ASTORE, 60);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[1], mb, tcN, stackDepth);
             mb.emit1b(JvmOp.ASTORE, 61);
             mb.emit1s(JvmOp.NEW, cf.classRef(K_CONS));
             mb.emit1(JvmOp.DUP);
@@ -1074,20 +1076,20 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           if (name === 'Err' && expr.args.length === 1) {
             mb.emit1s(JvmOp.NEW, cf.classRef(K_ERR));
             mb.emit1(JvmOp.DUP);
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_ERR, '<init>', '(Ljava/lang/Object;)V'));
             return false;
           }
           if (name === 'Ok' && expr.args.length === 1) {
             mb.emit1s(JvmOp.NEW, cf.classRef(K_OK));
             mb.emit1(JvmOp.DUP);
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_OK, '<init>', '(Ljava/lang/Object;)V'));
             return false;
           }
           if (name === 'println' || name === 'print') {
             const runtimeMethod = name === 'println' ? 'println' : 'print';
-            for (const arg of expr.args) emitExpr(arg, mb, tcN);
+            for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
             const n = expr.args.length;
             const ARG_BASE = 60;
             for (let i = 0; i < n; i++) mb.emit1b(JvmOp.ASTORE, ARG_BASE + i);
@@ -1104,76 +1106,76 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             return false;
           }
           if (name === 'exit' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'exit', '(Ljava/lang/Object;)V'));
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
             return false;
           }
           if (name === '__format_one' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'formatOne', '(Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === 'concat' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__equals' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
             return false;
           }
           if (name === '__string_length' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringLength', '(Ljava/lang/Object;)Ljava/lang/Long;'));
             return false;
           }
           if (name === '__string_slice' && expr.args.length === 3) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
-            emitExpr(expr.args[2], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
+            emitExpr(expr.args[2], mb, tcN, stackDepth + 2);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringSlice', '(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__string_index_of' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringIndexOf', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;'));
             return false;
           }
           if (name === '__string_equals' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringEquals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
             return false;
           }
           if (name === '__string_concat' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__string_upper' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringUpper', '(Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__string_lower' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringLower', '(Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__string_trim' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringTrim', '(Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__string_code_point_at' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(
               JvmOp.INVOKESTATIC,
               cf.methodref(RUNTIME, 'stringCodePointAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;')
@@ -1181,13 +1183,13 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             return false;
           }
           if (name === '__char_code_point' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charCodePoint', '(Ljava/lang/Object;)Ljava/lang/Long;'));
             return false;
           }
           if (name === '__string_char_at' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(
               JvmOp.INVOKESTATIC,
               cf.methodref(RUNTIME, 'stringCharAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Integer;')
@@ -1195,83 +1197,83 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             return false;
           }
           if (name === '__char_to_string' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charToString', '(Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__int_to_float' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'intToFloat', '(Ljava/lang/Object;)Ljava/lang/Double;'));
             return false;
           }
           if (name === '__float_to_int' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatToInt', '(Ljava/lang/Object;)Ljava/lang/Long;'));
             return false;
           }
           if (name === '__float_floor' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatFloor', '(Ljava/lang/Object;)Ljava/lang/Long;'));
             return false;
           }
           if (name === '__float_ceil' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatCeil', '(Ljava/lang/Object;)Ljava/lang/Long;'));
             return false;
           }
           if (name === '__float_round' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatRound', '(Ljava/lang/Object;)Ljava/lang/Long;'));
             return false;
           }
           if (name === '__float_sqrt' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatSqrt', '(Ljava/lang/Object;)Ljava/lang/Double;'));
             return false;
           }
           if (name === '__float_is_nan' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsNan', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
             return false;
           }
           if (name === '__float_is_infinite' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsInfinite', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
             return false;
           }
           if (name === '__float_abs' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatAbs', '(Ljava/lang/Object;)Ljava/lang/Double;'));
             return false;
           }
           if (name === '__char_from_code' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charFromCode', '(Ljava/lang/Object;)Ljava/lang/Integer;'));
             return false;
           }
           if (name === '__json_parse' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'jsonParse', '(Ljava/lang/Object;)Lkestrel/runtime/KValue;'));
             return false;
           }
           if (name === '__json_stringify' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'jsonStringify', '(Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__read_file_async' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'readFileAsync', '(Ljava/lang/Object;)Ljava/lang/Object;'));
             return false;
           }
           if (name === '__list_dir' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'listDir', '(Ljava/lang/Object;)Lkestrel/runtime/KList;'));
             return false;
           }
           if (name === '__write_text' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'writeText', '(Ljava/lang/Object;Ljava/lang/Object;)V'));
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
             return false;
@@ -1293,8 +1295,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             return false;
           }
           if (name === '__run_process' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN);
-            emitExpr(expr.args[1], mb, tcN);
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'runProcess', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;'));
             return false;
           }
@@ -1318,24 +1320,24 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               expr.args.length === st.arity &&
               funArities.get(name) === st.arity
             ) {
-              for (const arg of expr.args) emitExpr(arg, mb, tcN);
+              for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
               for (let i = st.arity - 1; i >= 0; i--) mb.emit1b(JvmOp.ASTORE, i);
               const gpos = mb.length();
               mb.emit1s(JvmOp.GOTO, 0);
               patchShort(mb, gpos + 1, st.loopHead - gpos);
               return true;
             }
-            for (const arg of expr.args) emitExpr(arg, mb, tcN);
+            for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(targetClass, jvmMangleName(methodName), descriptor(arity)));
             return false;
           }
         }
-        emitExpr(expr.callee, mb, tcN);
+        emitExpr(expr.callee, mb, tcN, stackDepth);
         const n = expr.args.length;
         const CALLEE_TEMP = 60;
         const ARG_TEMP_BASE = 61;
         mb.emit1b(JvmOp.ASTORE, CALLEE_TEMP);
-        for (const arg of expr.args) emitExpr(arg, mb, tcN);
+        for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + 1 + ai);
         for (let i = 0; i < n; i++) mb.emit1b(JvmOp.ASTORE, ARG_TEMP_BASE + i);
         mb.emit1s(JvmOp.LDC_W, cf.constantInt(n));
         mb.emit1s(JvmOp.ANEWARRAY, cf.classRef('java/lang/Object'));
@@ -1771,39 +1773,39 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             expr.right.kind === 'CallExpr'
               ? { kind: 'CallExpr', callee: expr.right.callee, args: [expr.left, ...expr.right.args], span: expr.span }
               : { kind: 'CallExpr', callee: expr.right, args: [expr.left], span: expr.span };
-          return emitExpr(call, mb, tailCtx);
+          return emitExpr(call, mb, tailCtx, stackDepth);
         }
         const call: Expr =
           expr.left.kind === 'CallExpr'
             ? { kind: 'CallExpr', callee: expr.left.callee, args: [...expr.left.args, expr.right], span: expr.span }
             : { kind: 'CallExpr', callee: expr.left, args: [expr.right], span: expr.span };
-        return emitExpr(call, mb, tailCtx);
+        return emitExpr(call, mb, tailCtx, stackDepth);
       }
       case 'UnaryExpr': {
         if (expr.op === '-') {
           mb.emit1s(JvmOp.LDC2_W, cf.constantLong(0n));
           mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(LONG, 'valueOf', '(J)Ljava/lang/Long;'));
-          emitExpr(expr.operand, mb, tcN);
+          emitExpr(expr.operand, mb, tcN, stackDepth + 1);
           mb.emit1s(JvmOp.CHECKCAST, cf.classRef(LONG));
           mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(KMATH, 'sub', '(Ljava/lang/Long;Ljava/lang/Long;)Ljava/lang/Long;'));
         } else if (expr.op === '!') {
-          emitExpr(expr.operand, mb, tcN);
+          emitExpr(expr.operand, mb, tcN, stackDepth);
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'TRUE', 'Ljava/lang/Boolean;'));
           const ifeqPos = mb.length();
           mb.emit1s(JvmOp.IF_ACMPEQ, 0);
-          mb.addBranchTarget(mb.length(), frameState(env, nextLocal));
+          mb.addBranchTarget(mb.length(), frameState(env, nextLocal, undefined, stackDepth));
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'TRUE', 'Ljava/lang/Boolean;'));
           const gotoEnd = mb.length();
           mb.emit1s(JvmOp.GOTO, 0);
           const falseLabel = mb.length();
-          mb.addBranchTarget(falseLabel, frameState(env, nextLocal));
+          mb.addBranchTarget(falseLabel, frameState(env, nextLocal, undefined, stackDepth));
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'FALSE', 'Ljava/lang/Boolean;'));
           const afterNot = mb.length();
-          mb.addBranchTarget(afterNot, frameState(env, nextLocal, undefined, 1));
+          mb.addBranchTarget(afterNot, frameState(env, nextLocal, undefined, stackDepth + 1));
           patchShort(mb, ifeqPos + 1, falseLabel - ifeqPos);
           patchShort(mb, gotoEnd + 1, afterNot - gotoEnd);
         } else {
-          emitExpr(expr.operand, mb, tcN);
+          emitExpr(expr.operand, mb, tcN, stackDepth);
         }
         return false;
       }
@@ -2202,6 +2204,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       case 'NeverExpr':
         // Unreachable tail after `break`/`continue` in the same block.
         return false;
+      case 'AwaitExpr':
+        // JVM I/O primitives (e.g. readFileAsync) return the payload directly; completed Task<T> is not boxed.
+        return emitExpr(expr.value, mb, tcN);
       default:
         throw new Error(`JVM codegen: unsupported expr ${(expr as Expr).kind}`);
     }

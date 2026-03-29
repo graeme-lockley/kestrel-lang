@@ -241,15 +241,19 @@ JSON parsing and serialisation.
 | `parse` | `(String) -> Value` | Parse JSON string to `Value` |
 | `stringify` | `(Value) -> String` | Serialise `Value` to JSON string |
 
+**Observable behaviour (reference VM):** On parse failure (invalid JSON, truncated input, etc.), `parse` returns the `Value` constructor **`Null`** — the same tag as the JSON literal `null`. Callers cannot distinguish a failed parse from valid JSON `null` until a dedicated error channel exists. Object values: the reference VM may yield an `Object` with an **empty** key–value payload when object entries are not yet preserved end-to-end; `stringify` of such values may produce `{}` regardless of the original input shape.
+
 ---
 
 ## kestrel:fs
 
-File system (async).
+File system. `readText` is **async-shaped** (`Task<String>`) so callers use `await` inside `async` functions; the reference VM may complete the task synchronously.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `readText` | `(String) -> Task<String>` | Read file contents as UTF-8 text |
+| `readText` | `(String) -> Task<String>` | Read file contents as UTF-8 text. On missing path, unreadable path, or read failure, the completed task carries an **empty string** (no distinct error type in the surface API). |
+| `writeText` | `(String, String) -> Unit` | Write UTF-8 text to a path (creates or truncates the file per host semantics). |
+| `listDir` | `(String) -> List<String>` | Non-recursive directory listing. Each element is `"<fullPath>\\tfile"` or `"<fullPath>\\tdir"` for a regular file or directory entry. If the path cannot be opened, returns an **empty** list. |
 
 ---
 

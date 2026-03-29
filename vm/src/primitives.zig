@@ -438,14 +438,21 @@ pub fn jsonStringify(gc: *GC, value_val: Value) Value {
 }
 
 /// Read file contents as UTF-8; returns a completed Task<String>. Synchronous for now.
+/// On missing path, unreadable path, or read failure, completes with an empty string (spec 02 / stdlib contract).
 pub fn readFileAsync(gc: *GC, path_val: Value) Value {
-    const path_slice = getStringSlice(path_val) orelse return completedTaskWith(gc, Value.ptr(0));
-    const file = std.fs.cwd().openFile(path_slice, .{}) catch return completedTaskWith(gc, Value.ptr(0));
+    const empty = allocString(gc, "") catch return completedTaskWith(gc, Value.ptr(0));
+    const path_slice = getStringSlice(path_val) orelse return completedTaskWith(gc, empty);
+    const file = std.fs.cwd().openFile(path_slice, .{}) catch return completedTaskWith(gc, empty);
     defer file.close();
-    const content = file.readToEndAlloc(std.heap.page_allocator, 1024 * 1024) catch return completedTaskWith(gc, Value.ptr(0));
+    const content = file.readToEndAlloc(std.heap.page_allocator, 1024 * 1024) catch return completedTaskWith(gc, empty);
     defer std.heap.page_allocator.free(content);
-    const str_val = allocString(gc, content) catch return completedTaskWith(gc, Value.ptr(0));
+    const str_val = allocString(gc, content) catch return completedTaskWith(gc, empty);
     return completedTaskWith(gc, str_val);
+}
+
+/// Async function epilogue: drop the body result (typically `()`) and push a completed `Task<Unit>`.
+pub fn taskReturnUnit(gc: *GC, _: Value) Value {
+    return completedTaskWith(gc, Value.unit());
 }
 
 fn completedTaskWith(gc: *GC, result: Value) Value {

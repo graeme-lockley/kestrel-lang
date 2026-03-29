@@ -469,11 +469,13 @@ export class ClassFileBuilder {
             for (const s of existing.objectSlots) {
               if (frameState.objectSlots.has(s)) mergedSlots.add(s);
             }
-            const stackDepth = frameState.stackDepth ?? existing.stackDepth;
+            // Stack depth must be the maximum over all paths to this offset. Using `??` is wrong:
+            // e.g. existing.stackDepth=3 then merge with stackDepth=0 yields 0 (0 is not nullish).
+            const mergedStackDepth = Math.max(existing.stackDepth ?? 0, frameState.stackDepth ?? 0);
             branchTargetFrameState.set(offset, {
               numLocals: Math.max(existing.numLocals, frameState.numLocals),
               objectSlots: mergedSlots,
-              ...(stackDepth !== undefined && { stackDepth }),
+              ...(mergedStackDepth > 0 ? { stackDepth: mergedStackDepth } : {}),
             });
           } else {
             branchTargetFrameState.set(offset, frameState);

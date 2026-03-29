@@ -2687,6 +2687,10 @@ export function codegen(program: Program, options?: CodegenOptions): CodegenResu
       inTail: true,
     };
     emitExpr(decl.body, fnEnv, funNameToId, shapes, adts, undefined, undefined, userAdtConfigs, selfTailCtx);
+    if (decl.async) {
+      // Completed Task<T> for async return: consume body result (T), push Task<T> (VM primitive).
+      emitCall(0xffffff26, 1);
+    }
     emitRet();
     const fnCode = codeSlice();
     functionTable.push({

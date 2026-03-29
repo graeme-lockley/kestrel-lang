@@ -310,7 +310,7 @@ For float literal patterns, NaN is a special case: a NaN pattern must match NaN 
 
 ## 7. Built-in primitive `CALL` ids (0xFFFFFF00 range)
 
-When **`fn_id`** in **CALL** is in **`0xFFFFFF00` … `0xFFFFFF25`** (inclusive), the VM treats the call as a **host primitive** rather than a function-table index. Arity and behaviour are fixed per id. (Existing ids `0xFFFFFF00`–`0xFFFFFF1B` cover I/O, strings, process, etc.; the reference VM extends the range through **`0xFFFFFF25`**.)
+When **`fn_id`** in **CALL** is in **`0xFFFFFF00` … `0xFFFFFF26`** (inclusive), the VM treats the call as a **host primitive** rather than a function-table index. Arity and behaviour are fixed per id. (Existing ids `0xFFFFFF00`–`0xFFFFFF1B` cover I/O, strings, process, etc.; the reference VM extends the range through **`0xFFFFFF26`**.)
 
 | `fn_id` | Builtin (compiler name) | Arity | Result (summary) |
 |---------|-------------------------|-------|------------------|
@@ -324,8 +324,9 @@ When **`fn_id`** in **CALL** is in **`0xFFFFFF00` … `0xFFFFFF25`** (inclusive)
 | `0xFFFFFF23` | `__float_is_infinite` | 1 | `(Float) -> Bool` |
 | `0xFFFFFF24` | `__float_abs` | 1 | `(Float) -> Float` |
 | `0xFFFFFF25` | `__char_from_code` | 1 | `(Int) -> Char` (invalid / surrogate → `U+0000`) |
+| `0xFFFFFF26` | *(compiler-internal)* | 1 | Pops the async function body value (typically `()`), pushes a **completed** `Task<Unit>`. Emitted only as the epilogue of **`async fun` / `export async fun`** whose return type is `Task<Unit>`. Not surfaced as a user-callable name. |
 
-The JVM backend maps these to `KRuntime` static methods with the same semantics.
+The JVM backend maps the user-facing primitives in this table to `KRuntime` static methods with the same semantics, except **`0xFFFFFF26`**, which is VM-only (the JVM backend lowers `async fun` without this call).
 
 ---
 

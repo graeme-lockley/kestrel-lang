@@ -153,6 +153,7 @@ class Parser {
       if (this.at('keyword', 'export')) {
         body.push(this.parseExport());
       } else if (
+        this.at('keyword', 'async') ||
         this.at('keyword', 'fun') ||
         this.at('keyword', 'type') ||
         this.at('keyword', 'opaque') ||
@@ -276,7 +277,7 @@ class Parser {
       }
       return { kind: 'ExceptionDecl', name, fields, exported };
     }
-    if (this.at('keyword', 'fun')) {
+    if (this.at('keyword', 'async') || this.at('keyword', 'fun')) {
       return this.parseFunDecl(exported);
     }
     if (this.at('keyword', 'type') || this.at('keyword', 'opaque')) {

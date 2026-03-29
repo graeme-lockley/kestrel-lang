@@ -1,6 +1,7 @@
 import { getProcess, runProcess } from "kestrel:process"
 import { listDir, writeText } from "kestrel:fs"
 import { drop } from "kestrel:list"
+import { fromInt } from "kestrel:string"
 
 val proc = getProcess()
 val cwd = proc.cwd
@@ -73,18 +74,22 @@ fun buildImports(tests: List<String>, idx: Int): String =
   match (tests) {
     [] => "",
     hd :: tl => {
-      val line = "import { run as run${idx} } from \"${hd}\"\n";
+      val alias = __string_concat("run", fromInt(idx));
+      val line = __string_concat(
+        __string_concat(__string_concat(__string_concat("import { run as ", alias), " } from \""), hd),
+        "\"\n"
+      );
       val rest = buildImports(tl, idx + 1);
-      "${line}${rest}"
+      __string_concat(line, rest)
     }
   }
 
 fun buildCalls(count: Int, idx: Int): String =
   if (idx >= count) ""
   else {
-    val line = "run${idx}(root)\n";
+    val line = __string_concat(__string_concat(__string_concat("run", fromInt(idx)), "(root)"), "\n");
     val rest = buildCalls(count, idx + 1);
-    "${line}${rest}"
+    __string_concat(line, rest)
   }
 
 fun listLength(lst: List<String>): Int =
@@ -112,12 +117,20 @@ val tests = if (listLength(pathArgs) == 0) {
 } else resolvePaths(rootDir, filterToTestFiles(pathArgs))
 val testCount = listLength(tests)
 
-val imports = buildImports(tests, 0)
+val impLines = buildImports(tests, 0)
 val calls = buildCalls(testCount, 0)
 
 val summaryVal = if (summaryOnly) "True" else "False"
 
-val generatedSource = "import { printSummary } from \"kestrel:test\"\n${imports}\nval counts = { mut passed = 0, mut failed = 0, mut startTime = __now_ms() }\nval root = { depth = 1, summaryOnly = ${summaryVal}, counts = counts }\n\n${calls}\nprintSummary(counts)\n"
+val genHead = "import { printSummary } from \"kestrel:test\"\n";
+val genMid =
+  "\nval counts = { mut passed = 0, mut failed = 0, mut startTime = __now_ms() }\nval root = { depth = 1, summaryOnly = ";
+val genRest = ", counts = counts }\n\n";
+val genTail = "printSummary(counts)\n";
+val generatedSource = __string_concat(
+  __string_concat(__string_concat(__string_concat(__string_concat(genHead, impLines), genMid), summaryVal), genRest),
+  __string_concat(calls, genTail)
+)
 
 val generatedPath = "${rootDir}/.kestrel_test_runner.ks"
 writeText(generatedPath, generatedSource)

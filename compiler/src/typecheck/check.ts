@@ -1447,7 +1447,16 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             );
           }
         }
-        unifyWithBlame(bodyT, returnT, node.body, undefined, { relation: 'subtype' });
+        if (
+          node.async &&
+          returnApplied.kind === 'app' &&
+          returnApplied.name === 'Task' &&
+          returnApplied.args.length === 1
+        ) {
+          unifyWithBlame(bodyT, returnApplied.args[0]!, node.body, undefined, { relation: 'subtype' });
+        } else {
+          unifyWithBlame(bodyT, returnT, node.body, undefined, { relation: 'subtype' });
+        }
 
         // Restore async context
         inAsyncContext = wasAsync;

@@ -495,11 +495,11 @@ public final class KRuntime {
     }
 
     public static Object readFileAsync(Object path) {
-        if (!(path instanceof String)) throw new IllegalArgumentException("readFileAsync expects String");
+        if (!(path instanceof String)) return "";
         try {
             return new String(Files.readAllBytes(Paths.get((String) path)), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            throw new RuntimeException("readFileAsync: " + e.getMessage());
+            return "";
         }
     }
 

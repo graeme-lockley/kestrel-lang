@@ -731,7 +731,7 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                 pc += 8;
 
                 // Check for primitive functions (0xFFFFFF00 range)
-                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF25 and sp >= arity) {
+                if (fn_id >= 0xFFFFFF00 and fn_id <= 0xFFFFFF26 and sp >= arity) {
                     if (fn_id == 0xFFFFFF00 and arity >= 1) {
                         const args = stack[sp - arity .. sp];
                         primitives.printN(args, false, module_ptrs.items);
@@ -1063,6 +1063,14 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                         const arg = stack[sp - 1];
                         sp -= 1;
                         if (!pushOperand(&stack, &sp, primitives.charFromCode(arg))) {
+                            operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
+                            return false;
+                        }
+                        continue;
+                    } else if (fn_id == 0xFFFFFF26 and arity == 1) {
+                        const arg = stack[sp - 1];
+                        sp -= 1;
+                        if (!pushOperand(&stack, &sp, primitives.taskReturnUnit(&gc, arg))) {
                             operandStackOverflowReport(instr_pc, current_module, call_frames, frame_sp);
                             return false;
                         }

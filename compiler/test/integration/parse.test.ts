@@ -80,6 +80,18 @@ describe('parse (integration)', () => {
     expect(ast.body[0]).toMatchObject({ kind: 'FunDecl', exported: true, name: 'id' });
   });
 
+  it('parses export async fun decl', () => {
+    const ast = parse(tokenize('export async fun run(s): Task<Unit> = ()'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'FunDecl', exported: true, async: true, name: 'run' });
+  });
+
+  it('parses top-level async fun', () => {
+    const ast = parse(tokenize('async fun f(): Task<Int> = 1'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'FunDecl', async: true, name: 'f' });
+  });
+
   it('parses fun decl with typed param', () => {
     const ast = parse(tokenize('fun id(x: Int): Int = 1'));
     expect(ast.kind).toBe('Program');
