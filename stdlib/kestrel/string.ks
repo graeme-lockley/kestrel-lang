@@ -262,9 +262,11 @@ export fun fromList(cs: List<Char>): String = match (cs) {
 }
 
 export fun anyChar(s: String, pred: (Char) -> Bool): Bool = anyCharLoop(s, 0, length(s), pred)
+
 fun anyCharLoop(s: String, i: Int, n: Int, pred: (Char) -> Bool): Bool =
   if (i >= n) False else if (pred(charAt(s, i))) True else anyCharLoop(s, i + 1, n, pred)
 
 export fun allChars(s: String, pred: (Char) -> Bool): Bool = allCharLoop(s, 0, length(s), pred)
+
 fun allCharLoop(s: String, i: Int, n: Int, pred: (Char) -> Bool): Bool =
   if (i >= n) True else if (!pred(charAt(s, i))) False else allCharLoop(s, i + 1, n, pred)

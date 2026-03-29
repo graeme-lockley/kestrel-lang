@@ -51,18 +51,18 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.4 test
 
-**Usage:** `kestrel test [--target vm|jvm] [files...]`
+**Usage:** `kestrel test [--target vm|jvm] [--verbose|--summary] [files...]`
 
-- **Effect:** Runs the Kestrel unit test suite. If no arguments are given, discovers all `*.test.ks` files under `tests/unit/` and `stdlib/kestrel/`. If one or more arguments are given, runs only those files (paths are relative to the current working directory). Each test file is compiled (with stdlib resolution so that `kestrel:test`, `kestrel:option`, etc. resolve) and executed via the selected target runtime (`vm` ⇒ Zig VM, `jvm` ⇒ JVM).
-- **Output:** For each test file, prints a line with PASS (green) or FAIL (red). At the end, prints a summary line: “Tests: X passed, Y failed, Z total” with colour (green for passed count, red for failed count when Y &gt; 0).
-- **Exit code:** 0 if all tests passed; 1 if any test failed or did not compile.
+- **Effect:** Runs the Kestrel unit test suite via [`scripts/run_tests.ks`](../../scripts/run_tests.ks), which compiles dependencies, writes a generated runner (e.g. `.kestrel_test_runner.ks` under the project root), and executes it on the chosen backend. If no file arguments are given, the runner discovers all `*.test.ks` under `tests/unit/` and `stdlib/kestrel/`. With file arguments, only those tests run (paths relative to the current working directory). **`--verbose` and `--summary` together** are rejected with a non-zero exit before tests run (see [02-stdlib.md](02-stdlib.md) **kestrel:test**).
+- **Output:** While compiling, the compiler may print short “Compiling …” lines. Test output comes from **`kestrel:test`**: default **compact** mode prints a nested tree (group summaries, green ✓ counts, dim timing, etc.); **`--verbose`** prints per-assertion lines; **`--summary`** suppresses passing chrome. The run ends with a blank line and a total line such as green `N passed (…ms)` or red `M failed, N passed (…ms)` from `printSummary`.
+- **Exit code:** 0 if all tests passed; 1 if any test failed, did not compile, or flag validation failed.
 
 ### 2.5 test-both
 
 **Usage:** `kestrel test-both [files...]`
 
 - **Effect:** Runs the same unit test selection as `kestrel test` twice: once on the Zig VM and once on the JVM (same file list and discovery rules as §2.4). Requires `node`, `zig`, `java`, `javac`, and `perl` on `PATH`. Builds the compiler and VM and the JVM runtime jar when missing, as for `run` / `test`.
-- **Output:** Prints only a compact comparison, using the same ANSI styling vocabulary as the test harness ([`stdlib/kestrel/console.ks`](../../stdlib/kestrel/console.ks)): dim labels, **bold** for emphasis, green for success and faster timing, red for failures and non-zero exit, and ✓/✗ where failures are listed. Content: wall-clock time for each full run (including any compile steps), a relative speed line (which backend was faster and by how much, with a simple ratio), and parsed pass/fail counts plus in-harness elapsed milliseconds from the test framework’s final summary line ([`stdlib/kestrel/test.ks`](../../stdlib/kestrel/test.ks) `printSummary`). The harness still parses that summary the same way if individual assertions use `eq`, `neq`, `isTrue`/`isFalse`, ordering helpers, or `throws` (all update the same `Suite.counts`). If any assertion printed a failure (✗), lists those descriptions per backend and, when both backends had failures, a sorted `comm` diff of descriptions that appear on only one side.
+- **Output:** Prints only a compact comparison, using the same ANSI styling vocabulary as the test harness ([`stdlib/kestrel/console.ks`](../../stdlib/kestrel/console.ks)): default-weight and dim text, **bold** for emphasis, green for success and faster timing, red for failures and non-zero exit, and ✓/✗ where failures are listed. Content: wall-clock time for each full run (including any compile steps), a relative speed line (which backend was faster and by how much, with a simple ratio), and parsed pass/fail counts plus in-harness elapsed milliseconds from the test framework’s final summary line ([`stdlib/kestrel/test.ks`](../../stdlib/kestrel/test.ks) `printSummary`). The harness still parses that summary the same way if individual assertions use `eq`, `neq`, `isTrue`/`isFalse`, ordering helpers, or `throws` (all update the same `Suite.counts`). If any assertion printed a failure (✗), lists those descriptions per backend and, when both backends had failures, a sorted `comm` diff of descriptions that appear on only one side.
 - **Exit code:** 0 only if **both** runs exited 0; otherwise 1.
 
 ### 2.6 Compiler options (diagnostics)

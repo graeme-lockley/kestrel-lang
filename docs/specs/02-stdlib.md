@@ -135,7 +135,7 @@ Immutable list utilities (in addition to list syntax and `List<T>` in §Library 
 | `append` | `(List<T>, List<T>) -> List<T>` | Concatenate (immutable) |
 | `concat` | `(List<List<T>>) -> List<T>` | Flatten one level |
 | `foldr` | `(List<A>, B, (A, B) -> B) -> B` | Right fold |
-| `intersperse` | `(A, List<A>) -> List<A>` | Insert separator between elements |
+| `intersperse` | `(List<A>, A) -> List<A>` | Insert separator between elements; list first for piping |
 | `repeat` | `(Int, A) -> List<A>` | `n` copies of `x` |
 | `range` | `(Int, Int) -> List<Int>` | Inclusive `lo`..`hi` |
 | `take` | `(List<A>, Int) -> List<A>` | First `n` elements; list first for piping |
@@ -145,7 +145,7 @@ Immutable list utilities (in addition to list syntax and `List<T>` in §Library 
 | `filterMap` | `(List<A>, (A) -> Option<B>) -> List<B>` | Map and drop `None` |
 | `concatMap` | `(List<A>, (A) -> List<B>) -> List<B>` | `concat` of `map` |
 | `indexedMap` | `(List<A>, (Int, A) -> B) -> List<B>` | Map with index |
-| `member` | `(A, List<A>) -> Bool` | True if any element is `==` to the value |
+| `member` | `(List<A>, A) -> Bool` | True if any element is `==` to the value; list first for piping |
 | `any` / `all` | … | Short-circuit predicates |
 | `product` | `(List<Int>) -> Int` | Product; `[]` → `1` |
 | `maximum` / `minimum` | `(List<Int>) -> Option<Int>` | |

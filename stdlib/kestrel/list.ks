@@ -32,7 +32,7 @@ export fun foldr<A, B>(xs: List<A>, z: B, f: (A, B) -> B): B = match (xs) {
 export fun concat(xss: List<List<T>>): List<T> =
   foldl(xss, [], (acc: List<T>, xs: List<T>) => append(acc, xs))
 
-export fun intersperse<A>(sep: A, xs: List<A>): List<A> = match (xs) {
+export fun intersperse<A>(xs: List<A>, sep: A): List<A> = match (xs) {
   [] => []
   h :: t => intersperseHelp(sep, h, t)
 }
@@ -187,9 +187,9 @@ export fun sum(xs: List<Int>): Int = foldl(xs, 0, (a: Int, b: Int) => a + b)
 
 export fun product(xs: List<Int>): Int = foldl(xs, 1, (a: Int, b: Int) => a * b)
 
-export fun member<A>(x: A, xs: List<A>): Bool = match (xs) {
+export fun member<A>(xs: List<A>, x: A): Bool = match (xs) {
   [] => False
-  h :: t => x == h | member(x, t)
+  h :: t => x == h | member(t, x)
 }
 
 export fun any<A>(xs: List<A>, pred: (A) -> Bool): Bool = match (xs) {

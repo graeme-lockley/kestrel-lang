@@ -52,9 +52,9 @@ export fun run(s: Suite): Unit = {
     })
 
     group(s1, "intersperse repeat", (sg: Suite) => {
-      eq(sg, "intersperse", List.intersperse(0, [1, 2, 3]), [1, 0, 2, 0, 3])
-      eq(sg, "intersperse singleton", List.intersperse(0, [1]), [1])
-      eq(sg, "intersperse empty", List.intersperse(0, emptyInts()), emptyInts())
+      eq(sg, "intersperse", List.intersperse([1, 2, 3], 0), [1, 0, 2, 0, 3])
+      eq(sg, "intersperse singleton", List.intersperse([1], 0), [1])
+      eq(sg, "intersperse empty", List.intersperse(emptyInts(), 0), emptyInts())
       eq(sg, "repeat", List.repeat(3, 7), [7, 7, 7])
       eq(sg, "repeat zero", List.repeat(0, 7), emptyInts())
       eq(sg, "repeat one", List.repeat(1, 9), [9])
@@ -102,9 +102,9 @@ export fun run(s: Suite): Unit = {
     })
 
     group(s1, "member any all", (sg: Suite) => {
-      isTrue(sg, "member", List.member(2, [1, 2, 3]))
-      isFalse(sg, "not member", List.member(9, [1, 2, 3]))
-      isFalse(sg, "member empty", List.member(1, emptyInts()))
+      isTrue(sg, "member", List.member([1, 2, 3], 2))
+      isFalse(sg, "not member", List.member([1, 2, 3], 9))
+      isFalse(sg, "member empty", List.member(emptyInts(), 1))
       isTrue(sg, "any", List.any([1, 2, 3], (n: Int) => n > 2))
       isFalse(sg, "any false", List.any([1, 2, 3], (n: Int) => n > 9))
       isFalse(sg, "any empty", List.any(emptyInts(), (n: Int) => True))
