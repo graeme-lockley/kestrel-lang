@@ -31,13 +31,15 @@ Use the template from `docs/kanban/README.md`. Every unplanned story must have:
 - `## Former ID:` if migrating from an old id scheme
 - `## Summary`
 - `## Current State`
-- `## Relationship to other stories`
+- `## Relationship to other stories` (or explicit **None** / **N/A** if isolated)
+- `## Goals` — concrete numbered or bulleted outcomes (what you want beyond pass/fail acceptance lines)
 - `## Acceptance Criteria` (testable bullets; can use `- [ ]` for tracking while still unplanned if useful)
 - `## Spec References` (concrete `docs/specs/…` pointers)
+- `## Risks / Notes` — hazards, constraints, performance, JVM/VM/host concerns, open questions, links; optional one-line pointer that **Tasks** / **Tests to add** land in **planned**
 
 ## Do not add (yet)
 
-- **Impact analysis**, **Tasks** checklist, **Tests to add**, **Documentation and specs to update** — those belong in **`planned/`** when the story is promoted.
+- **Impact analysis**, **Tasks** checkbox grid, **Tests to add**, **Documentation and specs to update** — those belong in **`planned/`** when the story is promoted.
 
 ## After the file exists
 

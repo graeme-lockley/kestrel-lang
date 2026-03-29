@@ -208,7 +208,7 @@ The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named `NN-slug.m
 
 ### Workflow
 
-1. **unplanned** — High-level feature stories on the ordered roadmap (summary, state, relationships, acceptance, spec refs).
+1. **unplanned** — High-level feature stories on the ordered roadmap (summary, state, relationships, **goals**, acceptance, spec refs, **risks / notes**).
 2. **planned** — Scoped but not yet built: adds impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**.
 3. **doing** — Active implementation; tick tasks; add **Build notes** as needed.
 4. **done** — All tasks ticked, acceptance satisfied, and **required tests passing**.

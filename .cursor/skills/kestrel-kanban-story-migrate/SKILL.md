@@ -22,17 +22,17 @@ Canonical rules: **[docs/kanban/README.md](../../../docs/kanban/README.md)**. Th
 
 ### Preconditions (unplanned exit)
 
-Story has complete: Summary, Current State, Relationship to other stories, Acceptance criteria, Spec references.
+Story has complete: Summary, Current State, Relationship to other stories, **Goals**, Acceptance criteria, Spec references, **Risks / notes**.
 
 ### Actions
 
 1. Move `docs/kanban/unplanned/NN-slug.md` → `docs/kanban/planned/NN-slug.md`.
 2. Add sections (if missing):
-   - `## Impact analysis` — areas touched (compiler, VM, stdlib, scripts), risks, compatibility.
+   - `## Impact analysis` — areas touched (compiler, VM, stdlib, scripts), risks, compatibility; **merge or reference** bullets from unplanned **Risks / notes** (do not drop them silently).
    - `## Tasks` — concrete `- [ ]` items covering implementation and verification.
    - `## Tests to add` — list planned tests by layer (Vitest paths, `tests/unit/*.test.ks`, conformance, Zig, E2E) and what each proves.
    - `## Documentation and specs to update` — explicit `docs/specs/` and other doc paths.
-3. Optional: `## Notes` — spikes, links, open questions.
+3. Optional: `## Notes` — planning spikes, extra links, or questions **beyond** what is already under **Risks / notes**.
 
 ### Stop here until
 

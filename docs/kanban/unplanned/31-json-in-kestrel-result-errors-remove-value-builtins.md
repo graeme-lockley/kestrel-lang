@@ -15,6 +15,10 @@ Reimplement `kestrel:json` entirely in Kestrel: `parse` returns `Result` with a 
 - VM implements JSON parse/stringify against the built-in `Value` representation (`primitives.zig` and related).
 - `docs/specs/02-stdlib.md` documents current behaviour and the null/failure conflation.
 
+## Relationship to other stories
+
+- None identified beyond normal stdlib/compiler/VM sequencing; if URL/import or lockfile work lands first, ensure `kestrel:json` public surface stays stable for importers.
+
 ## Goals
 
 1. **Pure Kestrel implementation** of JSON parsing and stringification (no `__json_*` primitives).
@@ -51,7 +55,4 @@ Reimplement `kestrel:json` entirely in Kestrel: `parse` returns `Result` with a 
 - **VM value representation:** Today the host may tag JSON values specially. Moving to a pure Kestrel ADT requires the VM to represent that ADT like any other user ADT (constructors, pattern match). Verify GC and equality (`==`) on the new `Value` match expectations.
 - **Performance:** Pure Kestrel parser will be slower than native primitives; acceptable for this story unless benchmarks dictate a later hybrid.
 - **JVM:** Ensure `stringify` / `parse` paths do not rely on removed intrinsics; `KRuntime` JSON helpers may need removal or replacement.
-
-## Tasks
-
-_Add **Tasks**, **Tests to add**, and **Documentation and specs to update** when this story moves to `planned/` (see `docs/kanban/README.md`)._
+- When promoting to **`planned/`**, add **Tasks**, **Tests to add**, and **Documentation and specs to update** per `docs/kanban/README.md` (no **Tasks** grid remains in unplanned).

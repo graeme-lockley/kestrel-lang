@@ -29,8 +29,8 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 | Phase | Meaning |
 |-------|---------|
-| **unplanned** | High-level feature intent: what it is, where things stand, how it relates to other work, acceptance criteria, spec pointers. **Not** build-ready. |
-| **planned** | Same content as unplanned, plus impact analysis, concrete **Tasks**, tests to add, docs/specs to touch, and optional **Notes**. Still **not** executing implementation—this is the planning gate before code. |
+| **unplanned** | High-level feature intent: **summary**, **current state**, **relationships**, **goals**, **acceptance criteria**, **spec references**, and **risks / notes**. **Not** build-ready. |
+| **planned** | Same content as unplanned, plus **impact analysis**, concrete **Tasks**, **Tests to add**, **Documentation and specs to update**, and optional **Notes** (may absorb or extend unplanned risks). Still **not** executing implementation—this is the planning gate before code. |
 | **doing** | Implementation in progress. Tasks are ticked (and may be added) as the build proceeds; append **Build notes** as you learn. |
 | **done** | Complete: every task checked, acceptance satisfied, **all required tests passing** (see exit criteria). |
 
@@ -45,11 +45,13 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 - **Summary** states the outcome in one place.
 - **Current state** explains what exists today (compiler, VM, stdlib, tests) and gaps.
-- **Relationship to other stories** calls out dependencies, ordering, or merges (by sequence or path).
+- **Relationship to other stories** calls out dependencies, ordering, or merges (by sequence or path), or states **None** if truly isolated.
+- **Goals** list the concrete outcomes you want (numbered or bulleted)—the “why and what” before the pass/fail **Acceptance criteria**.
 - **Acceptance criteria** are testable and agreed (even if high level).
 - **Spec references** list the `docs/specs/` areas that must stay authoritative.
+- **Risks / notes** capture known hazards, constraints, performance or compatibility concerns, open technical questions, and links—anything that informs planning and implementation.
 
-**Must not** include: detailed implementation tasks, exhaustive test matrices, or impact tables—those belong in **planned**.
+**Must not** include: a **Tasks** checkbox grid, exhaustive per-layer test matrices, or full **Impact analysis** tables—those belong in **planned**. A one-line reminder that tasks will be added in **planned** is fine inside **Risks / notes** if helpful.
 
 ### `planned/`
 
@@ -60,13 +62,13 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 **Exit criteria (before moving to `doing/`)**
 
-- **Impact analysis** covers compiler, VM, stdlib, scripts, and tests as applicable (what files/areas change, risk, roll-forward/rollback).
+- **Impact analysis** covers compiler, VM, stdlib, scripts, and tests as applicable (what files/areas change, risk, roll-forward/rollback). It should **incorporate or reference** bullet risks from unplanned **Risks / notes** (expand into file-level impact where needed).
 - **Tasks** section exists with concrete checkboxes (implementation + verification steps).
 - **Tests to add** lists harness layers (e.g. Vitest paths, `tests/unit/*.test.ks`, conformance files, `zig build test`) with intent per item.
 - **Documentation and specs to update** lists every `docs/specs/` (and other docs) file to change.
-- **Notes** (optional) holds research spikes, open questions, or links—anything useful for the implementer.
+- **Notes** (optional) holds research spikes, planning-only open questions, or links—anything useful for the implementer beyond what is already under **Risks / notes**.
 
-**Optional section: `## Notes`** — free-form; does not replace acceptance criteria or tasks.
+**Optional section: `## Notes`** — free-form; does not replace acceptance criteria or tasks. Unplanned **Risks / notes** stay in the file when you promote; add **Notes** if you need a separate planning scratchpad.
 
 ### `doing/`
 
@@ -118,9 +120,13 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 ## Relationship to other stories
 
+## Goals
+
 ## Acceptance Criteria
 
 ## Spec References
+
+## Risks / Notes
 ```
 
 ### Planned additions (keep all unplanned sections; add)

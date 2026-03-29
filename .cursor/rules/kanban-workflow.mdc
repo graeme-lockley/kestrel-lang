@@ -19,14 +19,14 @@ Flow: **unplanned → planned → doing → done**. Skipping **planned** require
 
 | Folder | Role |
 |--------|------|
-| **unplanned** | High-level intent, state, relationships, acceptance, spec refs—not build-ready. |
+| **unplanned** | High-level intent, state, relationships, **goals**, acceptance, spec refs, **risks / notes**—not build-ready. |
 | **planned** | Above plus impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**—still pre-code. |
 | **doing** | Active implementation; tick tasks; add **Build notes**. |
 | **done** | All tasks `[x]`, acceptance met, **tests passing**. |
 
 ## Gate rules
 
-**Unplanned → planned:** summary, current state, relationships, acceptance criteria, and spec references are complete. No detailed task grid yet (that is added in planned).
+**Unplanned → planned:** summary, current state, relationships, **goals**, acceptance criteria, spec references, and **risks / notes** are complete. No detailed task grid yet (that is added in planned).
 
 **Planned → doing:** impact analysis, Tasks, Tests to add, Documentation/specs lists are filled in.
 

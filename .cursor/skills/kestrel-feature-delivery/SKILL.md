@@ -16,8 +16,8 @@ Use this workflow for **kanban-driven** or **spec-driven** features in this repo
 
 Before writing code:
 
-1. **Locate the story** — Implementation happens only when the file is in **`docs/kanban/doing/`**. Read **`planned/`** first if the story is still being scoped; if it is only in **`unplanned/`**, use **kestrel-kanban-story-migrate** to promote through **planned** before coding. Read summary, **current state**, **acceptance criteria**, **spec references**, plus **Impact analysis**, **Tasks**, **Tests to add**, and **Documentation and specs to update** from **planned/doing**.
-2. **Extract concrete requirements** — Turn acceptance criteria and the planned test list into a mental or written checklist (implementation, tests, spec files to update).
+1. **Locate the story** — Implementation happens only when the file is in **`docs/kanban/doing/`**. Read **`planned/`** first if the story is still being scoped; if it is only in **`unplanned/`**, use **kestrel-kanban-story-migrate** to promote through **planned** before coding. Read **summary**, **current state**, **relationships**, **goals**, **risks / notes**, **acceptance criteria**, **spec references**, plus **Impact analysis**, **Tasks**, **Tests to add**, and **Documentation and specs to update** from **planned/doing**.
+2. **Extract concrete requirements** — Turn **goals** and acceptance criteria (and the planned test list) into a mental or written checklist (implementation, tests, spec files to update). Treat **risks / notes** as non-functional constraints and verification targets (e.g. performance, JVM parity, GC).
 3. **Read impacted specs** — Open the linked `docs/specs/*.md` sections so implementation and docs stay aligned (language, typesystem, bytecode, runtime, tests).
 4. **Skim the codebase** — Find existing handlers (e.g. parser → `check.ts` → `codegen/codegen.ts` → `jvm-codegen/codegen.ts`). Note gaps vs the story.
 5. **Refine the story (in doing/)** — Keep the story accurate: expand acceptance criteria if you discover missing test coverage; update impacted spec lists if scope shifts. Ask clarifying questions when gates are unclear.
