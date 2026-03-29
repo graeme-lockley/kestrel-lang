@@ -9,12 +9,12 @@ Work flows **in order**: `unplanned` → `planned` → `doing` → `done`. Do no
 Every story file is named **`NN-slug.md`** where **`NN` is a globally unique sequence** across **unplanned**, **planned**, **doing**, and **done**. The number never changes when a file moves between folders.
 
 - **`docs/kanban/done/`** — **01–49** (completed stories; lower numbers are not “newer,” they are the global index assigned at renumbering).
-- **`docs/kanban/unplanned/`** — **50–64** (current roadmap queue). **Lower numbers are higher priority** within this band (50 first, then 51, …).
-- **New roadmap items** use the next free integer (**65** onward) so IDs stay unique project-wide.
+- **`docs/kanban/unplanned/`** — **50–67** (current roadmap queue). **Lower numbers are higher priority** within this band (50 first, then 51, …).
+- **New roadmap items** use the next free integer (**68** onward) so IDs stay unique project-wide.
 
 Each story file should include **`## Sequence:`** (same value as **`NN`**), **`## Tier:`**, and **`## Former ID:`** where useful (for example the previous filename prefix before a renumber, or `(none)` if there was no numeric prefix).
 
-### Roadmap tiers (`unplanned/`, sequences 50–64)
+### Roadmap tiers (`unplanned/`, sequences 50–67)
 
 | Tier | Sequences | Focus |
 |------|-----------|--------|
@@ -24,6 +24,7 @@ Each story file should include **`## Sequence:`** (same value as **`NN`**), **`#
 | **7** | 55–59 | Deferred large work (async, HTTP, arrays, URL, lockfile) |
 | **Optional** | 60–63 | Language sugar, VM float work, fixtures, spread follow-up |
 | **(follow-up)** | 64 | JSON / `Result` errors, remove `value` builtins |
+| **8** | 65–67 | Networking expansion: TCP/TLS sockets (`kestrel:socket`), REST-capable HTTP client (`kestrel:http` extensions), lightweight routing (`kestrel:web` or as specified) |
 
 Completed stories in **`done/`** retain their **`## Tier:`** lines from delivery; there is no separate tier table for **01–49** here—open the file for context.
 

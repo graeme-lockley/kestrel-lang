@@ -89,7 +89,6 @@ The `kestrel:stack` module provides `format()` and `print()` but `trace()` is de
 - `docs/specs/02-stdlib.md` — `kestrel:stack`, `StackTrace<T>` definition, `trace`, formatting rules
 - `docs/specs/04-bytecode-isa.md` §7 — new primitive id and arity/semantics for `__capture_trace`
 - `docs/specs/05-runtime-model.md` §5 — stack trace capture / `trace` wording if implementation uses placeholder function names
-- `docs/IMPLEMENTATION_PLAN.md` — if it still lists `__capture_trace` as future-only; align with shipped behaviour
 
 ## Notes
 
