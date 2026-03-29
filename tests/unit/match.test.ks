@@ -51,15 +51,15 @@ export fun run(s: Suite): Unit =
     group(s1, "option patterns", (sg: Suite) => {
       eq(sg, "fromOption Some(7)", fromOption(Some(7)), 7)
       eq(sg, "fromOption None", fromOption(None), 0)
-      eq(sg, "match Some(10)", match (Some(10)) { None => 0, Some { value = v } => v }, 10)
-      eq(sg, "match None", match (None) { None => 99, Some { value = _ } => 0 }, 99)
+      eq(sg, "match Some(10)", match (Some(10)) { None => 0, Some(v) => v }, 10)
+      eq(sg, "match None", match (None) { None => 99, Some(_) => 0 }, 99)
     })
 
     group(s1, "result patterns", (sg: Suite) => {
       eq(sg, "fromResult Ok(42)", fromResult(Ok(42)), 42)
       eq(sg, "fromResult Err(1)", fromResult(Err(1)), -1)
-      eq(sg, "match Ok(5)", match (Ok(5)) { Err { value = _ } => 0, Ok { value = v } => v }, 5)
-      eq(sg, "match Err(3)", match (Err(3)) { Err { value = e } => e, Ok { value = _ } => 0 }, 3)
+      eq(sg, "match Ok(5)", match (Ok(5)) { Err(_) => 0, Ok(v) => v }, 5)
+      eq(sg, "match Err(3)", match (Err(3)) { Err(e) => e, Ok(_) => 0 }, 3)
     })
 
     group(s1, "primitive literal patterns", (sg: Suite) => {

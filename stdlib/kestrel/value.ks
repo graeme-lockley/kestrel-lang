@@ -4,26 +4,26 @@ export fun isNull(v: Value): Bool = match (v) {
   _ => False
 }
 export fun isBool(v: Value): Bool = match (v) {
-  Bool{ value = _ } => True
+  Bool(_) => True
   _ => False
 }
 export fun isInt(v: Value): Bool = match (v) {
-  Int{ value = _ } => True
+  Int(_) => True
   _ => False
 }
 export fun isFloat(v: Value): Bool = match (v) {
-  Float{ value = _ } => True
+  Float(_) => True
   _ => False
 }
 export fun isString(v: Value): Bool = match (v) {
-  String{ value = _ } => True
+  String(_) => True
   _ => False
 }
 export fun isArray(v: Value): Bool = match (v) {
-  Array{ value = _ } => True
+  Array(_) => True
   _ => False
 }
 export fun isObject(v: Value): Bool = match (v) {
-  Object{ value = _ } => True
+  Object(_) => True
   _ => False
 }

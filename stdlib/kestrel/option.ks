@@ -2,38 +2,38 @@
 
 export fun getOrElse<A>(o: Option<A>, default: A): A = match (o) {
   None => default
-  Some{ value = x } => x
+  Some(x) => x
 }
 
 export fun withDefault<A>(o: Option<A>, default: A): A = getOrElse(o, default)
 
 export fun isNone<A>(o: Option<A>): Bool = match (o) {
   None => True
-  Some{ value = _ } => False
+  Some(_) => False
 }
 
 export fun isSome<A>(o: Option<A>): Bool = match (o) {
   None => False
-  Some{ value = _ } => True
+  Some(_) => True
 }
 
 export fun map<A, B>(o: Option<A>, f: (A) -> B): Option<B> = match (o) {
   None => None
-  Some{ value = x } => Some(f(x))
+  Some(x) => Some(f(x))
 }
 
 export fun andThen<A, B>(o: Option<A>, f: (A) -> Option<B>): Option<B> = match (o) {
   None => None
-  Some{ value = x } => f(x)
+  Some(x) => f(x)
 }
 
 export fun map2<A, B, C>(oa: Option<A>, ob: Option<B>, f: (A, B) -> C): Option<C> =
   match (oa) {
     None => None
-    Some{ value = a } =>
+    Some(a) =>
       match (ob) {
         None => None
-        Some{ value = b } => Some(f(a, b))
+        Some(b) => Some(f(a, b))
       }
   }
 
@@ -45,13 +45,13 @@ export fun map3<A, B, C, D>(
 ): Option<D> =
   match (oa) {
     None => None
-    Some{ value = a } =>
+    Some(a) =>
       match (ob) {
         None => None
-        Some{ value = b } =>
+        Some(b) =>
           match (oc) {
             None => None
-            Some{ value = c } => Some(f(a, b, c))
+            Some(c) => Some(f(a, b, c))
           }
       }
   }
@@ -65,16 +65,16 @@ export fun map4<A, B, C, D, E>(
 ): Option<E> =
   match (oa) {
     None => None
-    Some{ value = a } =>
+    Some(a) =>
       match (ob) {
         None => None
-        Some{ value = b } =>
+        Some(b) =>
           match (oc) {
             None => None
-            Some{ value = c } =>
+            Some(c) =>
               match (od) {
                 None => None
-                Some{ value = d } => Some(f(a, b, c, d))
+                Some(d) => Some(f(a, b, c, d))
               }
           }
       }
@@ -90,19 +90,19 @@ export fun map5<A, B, C, D, E, F>(
 ): Option<F> =
   match (oa) {
     None => None
-    Some{ value = a } =>
+    Some(a) =>
       match (ob) {
         None => None
-        Some{ value = b } =>
+        Some(b) =>
           match (oc) {
             None => None
-            Some{ value = c } =>
+            Some(c) =>
               match (od) {
                 None => None
-                Some{ value = d } =>
+                Some(d) =>
                   match (oe) {
                     None => None
-                    Some{ value = e } => Some(f(a, b, c, d, e))
+                    Some(e) => Some(f(a, b, c, d, e))
                   }
               }
           }

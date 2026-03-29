@@ -156,7 +156,7 @@ export fun filterMap<A, B>(xs: List<A>, f: (A) -> Option<B>): List<B> = match (x
   h :: t =>
     match (f(h)) {
       None => filterMap(t, f)
-      Some{ value = x } => x :: filterMap(t, f)
+      Some(x) => x :: filterMap(t, f)
     }
 }
 
@@ -206,7 +206,7 @@ export fun maximum(xs: List<Int>): Option<Int> =
   foldl(xs, None, (acc: Option<Int>, x: Int) =>
     match (acc) {
       None => Some(x)
-      Some{ value = m } => if (x > m) Some(x) else acc
+      Some(m) => if (x > m) Some(x) else acc
     }
   )
 
@@ -214,7 +214,7 @@ export fun minimum(xs: List<Int>): Option<Int> =
   foldl(xs, None, (acc: Option<Int>, x: Int) =>
     match (acc) {
       None => Some(x)
-      Some{ value = m } => if (x < m) Some(x) else acc
+      Some(m) => if (x < m) Some(x) else acc
     }
   )
 

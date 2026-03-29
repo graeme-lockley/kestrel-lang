@@ -1,44 +1,44 @@
 // kestrel:result — Result helpers (subject first for piping).
 
 export fun getOrElse<T, E>(r: Result<T, E>, default: T): T = match (r) {
-  Err{ value = _ } => default
-  Ok{ value = x } => x
+  Err(_) => default
+  Ok(x) => x
 }
 
 export fun withDefault<T, E>(r: Result<T, E>, default: T): T = getOrElse(r, default)
 
 export fun isOk<T, E>(r: Result<T, E>): Bool = match (r) {
-  Err{ value = _ } => False
-  Ok{ value = _ } => True
+  Err(_) => False
+  Ok(_) => True
 }
 
 export fun isErr<T, E>(r: Result<T, E>): Bool = match (r) {
-  Err{ value = _ } => True
-  Ok{ value = _ } => False
+  Err(_) => True
+  Ok(_) => False
 }
 
 export fun map<T, U, E>(r: Result<T, E>, f: (T) -> U): Result<U, E> = match (r) {
-  Ok{ value = x } => Ok(f(x))
-  Err{ value = e } => Err(e)
+  Ok(x) => Ok(f(x))
+  Err(e) => Err(e)
 }
 
 export fun mapError<T, E, F>(r: Result<T, E>, f: (E) -> F): Result<T, F> = match (r) {
-  Ok{ value = x } => Ok(x)
-  Err{ value = e } => Err(f(e))
+  Ok(x) => Ok(x)
+  Err(e) => Err(f(e))
 }
 
 export fun andThen<T, U, E>(r: Result<T, E>, f: (T) -> Result<U, E>): Result<U, E> = match (r) {
-  Ok{ value = x } => f(x)
-  Err{ value = e } => Err(e)
+  Ok(x) => f(x)
+  Err(e) => Err(e)
 }
 
 export fun map2<A, B, C, E>(ra: Result<A, E>, rb: Result<B, E>, f: (A, B) -> C): Result<C, E> =
   match (ra) {
-    Err{ value = e } => Err(e)
-    Ok{ value = a } =>
+    Err(e) => Err(e)
+    Ok(a) =>
       match (rb) {
-        Err{ value = e } => Err(e)
-        Ok{ value = b } => Ok(f(a, b))
+        Err(e) => Err(e)
+        Ok(b) => Ok(f(a, b))
       }
   }
 
@@ -49,14 +49,14 @@ export fun map3<A, B, C, D, E>(
   f: (A, B, C) -> D
 ): Result<D, E> =
   match (ra) {
-    Err{ value = e } => Err(e)
-    Ok{ value = a } =>
+    Err(e) => Err(e)
+    Ok(a) =>
       match (rb) {
-        Err{ value = e } => Err(e)
-        Ok{ value = b } =>
+        Err(e) => Err(e)
+        Ok(b) =>
           match (rc) {
-            Err{ value = e } => Err(e)
-            Ok{ value = c } => Ok(f(a, b, c))
+            Err(e) => Err(e)
+            Ok(c) => Ok(f(a, b, c))
           }
       }
   }
@@ -69,17 +69,17 @@ export fun map4<A, B, C, D, F, E>(
   fn: (A, B, C, D) -> F
 ): Result<F, E> =
   match (ra) {
-    Err{ value = e } => Err(e)
-    Ok{ value = a } =>
+    Err(e) => Err(e)
+    Ok(a) =>
       match (rb) {
-        Err{ value = e } => Err(e)
-        Ok{ value = b } =>
+        Err(e) => Err(e)
+        Ok(b) =>
           match (rc) {
-            Err{ value = e } => Err(e)
-            Ok{ value = c } =>
+            Err(e) => Err(e)
+            Ok(c) =>
               match (rd) {
-                Err{ value = e } => Err(e)
-                Ok{ value = d } => Ok(fn(a, b, c, d))
+                Err(e) => Err(e)
+                Ok(d) => Ok(fn(a, b, c, d))
               }
           }
       }
@@ -94,20 +94,20 @@ export fun map5<A, B, C, D, E, G, ErrT>(
   fn: (A, B, C, D, E) -> G
 ): Result<G, ErrT> =
   match (ra) {
-    Err{ value = e } => Err(e)
-    Ok{ value = a } =>
+    Err(e) => Err(e)
+    Ok(a) =>
       match (rb) {
-        Err{ value = e } => Err(e)
-        Ok{ value = b } =>
+        Err(e) => Err(e)
+        Ok(b) =>
           match (rc) {
-            Err{ value = e } => Err(e)
-            Ok{ value = c } =>
+            Err(e) => Err(e)
+            Ok(c) =>
               match (rd) {
-                Err{ value = e } => Err(e)
-                Ok{ value = d } =>
+                Err(e) => Err(e)
+                Ok(d) =>
                   match (re) {
-                    Err{ value = e } => Err(e)
-                    Ok{ value = ev } => Ok(fn(a, b, c, d, ev))
+                    Err(e) => Err(e)
+                    Ok(ev) => Ok(fn(a, b, c, d, ev))
                   }
               }
           }
@@ -115,11 +115,11 @@ export fun map5<A, B, C, D, E, G, ErrT>(
   }
 
 export fun toOption<T, E>(r: Result<T, E>): Option<T> = match (r) {
-  Ok{ value = x } => Some(x)
-  Err{ value = _ } => None
+  Ok(x) => Some(x)
+  Err(_) => None
 }
 
 export fun fromOption<T, E>(o: Option<T>, err: E): Result<T, E> = match (o) {
   None => Err(err)
-  Some{ value = x } => Ok(x)
+  Some(x) => Ok(x)
 }

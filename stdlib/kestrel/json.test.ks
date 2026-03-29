@@ -7,22 +7,22 @@ import * as List from "kestrel:list"
 // cannot be distinguished from the literal JSON `null` without a separate error channel.
 
 fun intVal(v: Value, n: Int): Bool = match (v) {
-  Int{ value = x } => x == n
+  Int(x) => x == n
   _ => False
 }
 
 fun boolVal(v: Value, b: Bool): Bool = match (v) {
-  Bool{ value = x } => x == b
+  Bool(x) => x == b
   _ => False
 }
 
 fun strVal(v: Value, s: String): Bool = match (v) {
-  String{ value = x } => __string_equals(x, s)
+  String(x) => __string_equals(x, s)
   _ => False
 }
 
 fun objectEntryCount(v: Value): Int = match (v) {
-  Object{ value = pairs } => List.length(pairs)
+  Object(pairs) => List.length(pairs)
   _ => -1
 }
 

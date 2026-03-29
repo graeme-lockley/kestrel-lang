@@ -48,7 +48,7 @@ export fun get<K, V>(d: Dict<K, V>, k: K): Option<V> =
 export fun member<K, V>(d: Dict<K, V>, k: K): Bool =
   match (get(d, k)) {
     None => False
-    Some{ value = _ } => True
+    Some(_) => True
   }
 
 export fun isEmpty<K, V>(d: Dict<K, V>): Bool =
@@ -63,7 +63,7 @@ export fun size<K, V>(d: Dict<K, V>): Int =
 export fun update<K, V>(d: Dict<K, V>, k: K, f: (Option<V>) -> Option<V>): Dict<K, V> =
   match (f(get(d, k))) {
     None => mkDict(d.hash, d.eq, withoutKey(d.entries, d.eq, k))
-    Some{ value = v } => mkDict(d.hash, d.eq, (k, v) :: withoutKey(d.entries, d.eq, k))
+    Some(v) => mkDict(d.hash, d.eq, (k, v) :: withoutKey(d.entries, d.eq, k))
   }
 
 export fun keys<K, V>(d: Dict<K, V>): List<K> =
@@ -129,7 +129,7 @@ fun intersectLoop<K, V>(d2: Dict<K, V>, entries: List<(K, V)>, acc: Dict<K, V>):
       if (member(d2, h.0)) {
         val v2 = match (get(d2, h.0)) {
           None => h.1
-          Some{ value = x } => x
+          Some(x) => x
         }
         intersectLoop(d2, t, insert(acc, h.0, v2))
       } else intersectLoop(d2, t, acc)

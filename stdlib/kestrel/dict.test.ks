@@ -16,7 +16,7 @@ export fun run(s: Suite): Unit = {
       val d4 = Dict.update(d3, 2, (o: Option<Int>) =>
         match (o) {
           None => None
-          Some { value = v } => Some(v + 1)
+          Some(v) => Some(v + 1)
         }
       )
       eq(sg, "update", Opt.getOrElse(Dict.get(d4, 2), 0), 21)
