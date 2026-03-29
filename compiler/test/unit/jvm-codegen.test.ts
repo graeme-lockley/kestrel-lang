@@ -38,4 +38,21 @@ describe('JVM codegen', () => {
     const jvm = emitJvm(result.ast);
     expect(jvm.classBytes.length).toBeGreaterThan(0);
   });
+
+  it('emits JVM class for break inside if in while (no dead code after break goto)', () => {
+    const src = `fun main(): Unit = {
+  var i = 0
+  while (i < 3) {
+    i := i + 1
+    if (i == 2) {
+      break
+    }
+  }
+}`;
+    const result = compile(src);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const jvm = emitJvm(result.ast);
+    expect(jvm.classBytes.length).toBeGreaterThan(0);
+  });
 });

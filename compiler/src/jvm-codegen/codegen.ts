@@ -110,6 +110,21 @@ function frameState(
   return out;
 }
 
+/**
+ * True if an if-arm ends by falling through with one value on the JVM stack (needs astore / goto glue).
+ * False for arms that always transfer out via break/continue/never without pushing a value.
+ */
+function thenArmPushesValue(thenExpr: Expr): boolean {
+  if (thenExpr.kind === 'NeverExpr') return false;
+  if (thenExpr.kind === 'BlockExpr') {
+    const b = thenExpr as BlockExpr;
+    if (b.stmts.length === 0) return thenArmPushesValue(b.result);
+    const last = b.stmts[b.stmts.length - 1]!;
+    if (last.kind === 'BreakStmt' || last.kind === 'ContinueStmt') return false;
+  }
+  return true;
+}
+
 /** Collect free variables of expr (in scope but not in paramNames), first occurrence order. */
 function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, number>): string[] {
   const result: string[] = [];
@@ -809,9 +824,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1s(JvmOp.IFEQ, 0);
         mb.addBranchTarget(mb.length(), ifBranchState);
         emitExpr(expr.then, mb, tcN, stackDepth);
-        mb.emit1b(JvmOp.ASTORE, ifResultSlot);
-        const gotoPos = mb.length();
-        mb.emit1s(JvmOp.GOTO, 0);
+        let thenSkipToEndPos: number | undefined;
+        if (thenArmPushesValue(expr.then)) {
+          mb.emit1b(JvmOp.ASTORE, ifResultSlot);
+          thenSkipToEndPos = mb.length();
+          mb.emit1s(JvmOp.GOTO, 0);
+        }
         const elseStart = mb.length();
         mb.addBranchTarget(elseStart, ifBranchState);
         if (expr.else !== undefined) {
@@ -823,7 +841,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         const ifEndPos = mb.length();
         mb.addBranchTarget(ifEndPos, ifEndState);
         patchShort(mb, ifeqPos + 1, elseStart - ifeqPos);
-        patchShort(mb, gotoPos + 1, ifEndPos - gotoPos);
+        if (thenSkipToEndPos !== undefined) {
+          patchShort(mb, thenSkipToEndPos + 1, ifEndPos - thenSkipToEndPos);
+        }
         mb.emit1b(JvmOp.ALOAD, ifResultSlot);
         return false;
       }
@@ -1039,7 +1059,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         }
         for (const [k, v] of blockEnv) env.set(k, v);
         nextLocal = slot;
-        const blockTail = emitExpr(expr.result, mb, tcT, stackDepth);
+        const lastStmt = expr.stmts[expr.stmts.length - 1];
+        const endsWithLoopExit =
+          lastStmt !== undefined &&
+          (lastStmt.kind === 'BreakStmt' || lastStmt.kind === 'ContinueStmt');
+        const blockTail = endsWithLoopExit ? false : emitExpr(expr.result, mb, tcT, stackDepth);
         env.clear();
         for (const [k, v] of outerEnv) env.set(k, v);
         nextLocal = outerNextLocal;
