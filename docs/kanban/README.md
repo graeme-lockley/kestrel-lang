@@ -1,12 +1,16 @@
 # Kanban
 
-Stories live in `docs/kanban/` with folders: **unplanned**, **planned**, **doing**, **done**.
+Stories live in `docs/kanban/` with folders: **future**, **unplanned**, **planned**, **doing**, **done**.
 
-Work flows **in order**: `unplanned` → `planned` → `doing` → `done`. Do not skip **planned** unless the team explicitly agrees (for example a trivial regression or doc-only fix).
+Work flows **in order** on the roadmap: `unplanned` → `planned` → `doing` → `done`. Do not skip **planned** unless the team explicitly agrees (for example a trivial regression or doc-only fix).
+
+The **`future/`** folder is **outside** that pipeline: it holds investigations and ideas **before** they become roadmap items (see [Future (investigations and ideas)](#future-investigations-and-ideas)).
 
 ## Global sequence (`NN-slug.md`)
 
-Every story file is named **`NN-slug.md`** where **`NN` is a globally unique sequence** across **unplanned**, **planned**, **doing**, and **done**. The number never changes when a file moves between folders.
+Every **roadmap** story file (in **unplanned**, **planned**, **doing**, or **done**) is named **`NN-slug.md`** where **`NN` is a globally unique sequence**. The number never changes when a file moves between those folders.
+
+**`future/`** does **not** use this prefix: files there are named **`slug.md`** only (kebab-case, no numeric priority). When an item graduates to the roadmap, it is **renamed** to **`NN-slug.md`** and moved to **`unplanned/`**.
 
 - **`docs/kanban/done/`** — **01–49** (completed stories; lower numbers are not “newer,” they are the global index assigned at renumbering).
 - **`docs/kanban/unplanned/`** — **50–67** (current roadmap queue). **Lower numbers are higher priority** within this band (50 first, then 51, …).
@@ -29,6 +33,46 @@ Each story file should include **`## Sequence:`** (same value as **`NN`**), **`#
 Completed stories in **`done/`** retain their **`## Tier:`** lines from delivery; there is no separate tier table for **01–49** here—open the file for context.
 
 The **`planned/`** folder holds the same filenames (moved from `unplanned/` when promoted); **`doing/`** and **`done/`** likewise.
+
+## Future (investigations and ideas)
+
+**`docs/kanban/future/`** captures **ideas under investigation** that are **not** ready to live on the prioritized **unplanned** queue. Use it for performance notes, spikes, “maybe someday” features, and cross-cutting observations where **goals and acceptance are still unclear**.
+
+### Naming
+
+- Filename: **`slug.md`** (short kebab-case slug). **No `NN-` prefix** and **no global sequence** until the item is promoted.
+- Body: free-form, but should make clear this is **not** a committed story (for example a **`## Kind`** line: investigation / idea / spike).
+
+### Relationship to the roadmap
+
+- **`future/`** is **not** ordered by priority. Nothing in this folder is implied to be “next” after a given `NN` in **unplanned/**.
+- Items here **do not** need unplanned entry/exit criteria, tiers, or acceptance tests until promoted.
+
+### Promotion to `unplanned/`
+
+When the team decides an item is real roadmap work:
+
+1. Choose the next free **global `NN`** (same rules as [new roadmap items](#global-sequence-nn-slugmd)).
+2. **Move** and **rename**: `future/slug.md` → `unplanned/NN-slug.md`.
+3. Fill standard **unplanned** sections (including **`## Sequence: NN`**, **`## Tier:`**, **Summary**, **Current State**, **Goals**, **Acceptance criteria**, **Spec references**, **Risks / notes**).
+
+### Future template (minimal)
+
+```markdown
+# <Title>
+
+## Kind
+
+Investigation / idea / spike — not on the numbered roadmap.
+
+## Context
+
+## Questions or opportunities
+
+## Promotion
+
+When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
+```
 
 ## Phases (gates)
 
@@ -103,10 +147,11 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 ## Workflow summary
 
-1. **Draft** in `unplanned/` until unplanned exit criteria are met.
-2. **Plan** in `planned/` until planned exit criteria are met.
-3. **Implement** in `doing/`; tick tasks; append build notes.
-4. **Close** in `done/` when tests pass and tasks are complete.
+1. **Optional:** Capture raw investigations or ideas in **`future/`** (`slug.md`, no `NN-` prefix). Promote to **`unplanned/`** when the work is ready for the roadmap.
+2. **Draft** in `unplanned/` until unplanned exit criteria are met.
+3. **Plan** in `planned/` until planned exit criteria are met.
+4. **Implement** in `doing/`; tick tasks; append build notes.
+5. **Close** in `done/` when tests pass and tasks are complete.
 
 ## Story templates
 
@@ -167,7 +212,7 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 - Cursor rule: `.cursor/rules/kanban-workflow.mdc`
 - Skills: `.cursor/skills/kestrel-kanban-story-create/SKILL.md`, `.cursor/skills/kestrel-kanban-story-migrate/SKILL.md`
-- Subagents: `.cursor/agents/kanban-*.md`
+- Subagents: `.cursor/agents/kanban-*.md` (including **`kanban-future-author`** for **`future/`** items)
 
 ## Deprecated: `backlog/`
 

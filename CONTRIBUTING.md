@@ -86,7 +86,7 @@ cd runtime/jvm && ./build.sh
 ## Where to look next
 
 - **Language and bytecode design:** [docs/specs/](docs/specs/) (numbered specs 01–09).
-- **Kanban / planned work:** roadmap in [docs/kanban/unplanned/](docs/kanban/unplanned/) (`NN-slug.md`); stories move through **planned**, **doing**, and **done** per [docs/kanban/README.md](docs/kanban/README.md).
+- **Kanban / planned work:** investigations and ideas in [docs/kanban/future/](docs/kanban/future/) (`slug.md`, no numeric prefix); prioritized roadmap in [docs/kanban/unplanned/](docs/kanban/unplanned/) (`NN-slug.md`); stories move through **planned**, **doing**, and **done** per [docs/kanban/README.md](docs/kanban/README.md).
 - **Security issues:** do not file them as public issues; see [SECURITY.md](SECURITY.md).
 
 Questions and small fixes are welcome via issues and pull requests. Thank you for helping improve Kestrel.

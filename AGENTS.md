@@ -204,19 +204,21 @@ Before marking a task complete:
 
 ## Kanban Workflow (from Cursor rules)
 
-Stories live in `docs/kanban/` with folders: **unplanned**, **planned**, **doing**, **done**.
+Stories live in `docs/kanban/` with folders: **future**, **unplanned**, **planned**, **doing**, **done**.
 
-The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named `NN-slug.md`; **`NN` is globally unique** (current queue **50–67**, lower = higher priority). See `docs/kanban/README.md` for the tier table, entry/exit criteria, and templates. The same file is **moved** between folders as work progresses. **`docs/kanban/backlog/`** is **deprecated**; use **`planned/`** instead.
+**`future/`** holds pre-roadmap **investigations and ideas** (`slug.md`, **no `NN-` prefix**). The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named **`NN-slug.md`**; **`NN` is globally unique** (current queue **50–67**, lower = higher priority). See `docs/kanban/README.md` for the tier table, **future** lifecycle, entry/exit criteria, and templates. Roadmap files are **moved** between **unplanned**, **planned**, **doing**, and **done** without renaming **`NN`**. **`docs/kanban/backlog/`** is **deprecated**; use **`planned/`** instead.
 
 ### Workflow
 
-1. **unplanned** — High-level feature stories on the ordered roadmap (summary, state, relationships, **goals**, acceptance, spec refs, **risks / notes**).
-2. **planned** — Scoped but not yet built: adds impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**.
-3. **doing** — Active implementation; tick tasks; add **Build notes** as needed.
-4. **done** — All tasks ticked, acceptance satisfied, and **required tests passing**.
+1. **future** (optional) — Capture investigations and ideas before they are roadmap items; promote to **unplanned** with a new **`NN-slug.md`** when scoped.
+2. **unplanned** — High-level feature stories on the ordered roadmap (summary, state, relationships, **goals**, acceptance, spec refs, **risks / notes**).
+3. **planned** — Scoped but not yet built: adds impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**.
+4. **doing** — Active implementation; tick tasks; add **Build notes** as needed.
+5. **done** — All tasks ticked, acceptance satisfied, and **required tests passing**.
 
 ### When promoting a story
 
+- **future → unplanned** — Assign next free global **`NN`**, rename to **`NN-slug.md`**, move to `docs/kanban/unplanned/`, add full unplanned sections per `docs/kanban/README.md`.
 - **unplanned → planned** — Meet unplanned exit criteria in `docs/kanban/README.md`; move the file to `docs/kanban/planned/`.
 - **planned → doing** — Meet planned exit criteria (tasks and test/doc lists complete); move to `docs/kanban/doing/`.
 - **doing → done** — Meet doing exit criteria; run verification commands; move to `docs/kanban/done/`.

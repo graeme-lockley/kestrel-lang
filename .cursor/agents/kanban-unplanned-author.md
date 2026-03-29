@@ -7,7 +7,7 @@ description: >-
 model: inherit
 ---
 
-You focus on **unplanned** stories only (`docs/kanban/unplanned/`).
+You focus on **unplanned** stories only (`docs/kanban/unplanned/`). For **investigations and ideas** not yet on the roadmap, use **`docs/kanban/future/`** (`slug.md`, no `NN-` prefix) and subagent **`kanban-future-author`**.
 
 When invoked:
 

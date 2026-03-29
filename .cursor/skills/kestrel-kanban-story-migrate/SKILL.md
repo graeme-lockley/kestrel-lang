@@ -1,9 +1,9 @@
 ---
 name: kestrel-kanban-story-migrate
 description: >-
-  Moves a Kestrel kanban story between unplanned, planned, doing, and done with
-  the right content updates and entry/exit gates. Use when promoting a story,
-  starting implementation, or closing work.
+  Moves a Kestrel kanban story between future, unplanned, planned, doing, and
+  done with the right content updates and entry/exit gates. Use when promoting
+  a story, starting implementation, or closing work.
 ---
 
 # Kestrel Kanban — migrate a story between phases
@@ -12,9 +12,24 @@ Canonical rules: **[docs/kanban/README.md](../../../docs/kanban/README.md)**. Th
 
 ## Conventions
 
-- **Move** the file (same `NN-slug.md` name): `unplanned/` → `planned/` → `doing/` → `done/`.
-- **Never** change `NN` in the filename when moving (`NN` is **globally unique**; the story keeps the same id through **planned** / **doing** / **done**).
+- **Move** the file (same `NN-slug.md` name) on the roadmap: `unplanned/` → `planned/` → `doing/` → `done/`.
+- **Never** change `NN` in the filename when moving between those folders (`NN` is **globally unique**; the story keeps the same id through **planned** / **doing** / **done**).
 - Update the markdown **in place** as required by the target phase.
+
+---
+
+## 0. `future/slug.md` → `unplanned/NN-slug.md`
+
+### Preconditions
+
+Team agrees the investigation is ready to become a **roadmap** item.
+
+### Actions
+
+1. Pick the next free **global `NN`** across **unplanned**, **planned**, **doing**, and **done** (see [docs/kanban/README.md](../../../docs/kanban/README.md)).
+2. **Move** and **rename**: `docs/kanban/future/slug.md` → `docs/kanban/unplanned/NN-slug.md`.
+3. Add full **unplanned** sections: **`## Sequence: NN`**, **`## Tier:`**, **Summary**, **Current State**, **Relationship to other stories**, **Goals**, **Acceptance criteria**, **Spec references**, **Risks / notes** (merge or expand content from the future file).
+4. Ensure **unplanned exit** criteria are met before later promoting to **planned** (section A below).
 
 ---
 
