@@ -1204,7 +1204,10 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       }
       case 'AwaitExpr': {
         if (!inAsyncContext) {
-          throw new TypeCheckError('await can only be used in async functions', expr);
+          throw new TypeCheckError(
+            'await can only be used in async functions (enclosing body must be Task<T>)',
+            expr
+          );
         }
         const taskT = inferExpr(expr.value);
         const applied = apply(taskT);
