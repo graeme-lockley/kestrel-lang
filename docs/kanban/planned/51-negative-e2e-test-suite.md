@@ -18,7 +18,7 @@ The E2E test infrastructure (`scripts/run-e2e.sh`) supports negative tests but t
 ## Relationship to other stories
 
 - **Done [15](../done/15-overflow-and-division-by-zero-exception-tests.md)** — `tests/unit/overflow_divzero.test.ks` is the canonical overflow/div-by-zero behaviour; the E2E **division-by-zero** scenario should stay consistent with that (uncaught `DivideByZero` at full compile+VM pipeline).
-- **Adjacent roadmap [52](../unplanned/52-conformance-test-coverage-expansion.md)** (if still unplanned) — conformance expands compiler-level invalid corpus; this story is **integration/E2E** via `run-e2e.sh`, not a substitute for conformance files.
+- **Adjacent [52](52-conformance-test-coverage-expansion.md)** (planned) — conformance expands parse/typecheck/runtime corpora under `tests/conformance/`; this story is **integration/E2E** via `run-e2e.sh`, not a substitute for conformance files.
 - **None** blocking: no compiler or VM feature work is required unless a listed scenario is currently impossible (then narrow acceptance or file a follow-up).
 
 ## Goals
