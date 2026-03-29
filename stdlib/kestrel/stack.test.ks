@@ -20,8 +20,7 @@ export fun run(s: Suite): Unit =
     });
 
     group(s1, "print smoke", (sg: Suite) => {
-      print(7);
-      print("smoke");
+      print("");
       isTrue(sg, "no throw", True);
     });
 

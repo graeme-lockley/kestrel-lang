@@ -738,8 +738,15 @@ pub fn run(allocator: std.mem.Allocator, module: *load_mod.Module, entry_path: [
                     } else if (fn_id == 0xFFFFFF03 and arity == 1) {
                         const val = stack[sp - 1];
                         sp -= 1;
-                        var format_buf: [4096]u8 = undefined;
-                        const slice = primitives.formatOne(val, &format_buf, module_ptrs.items);
+                        // String values: copy directly from the heap object. `formatOne` uses a 4KiB stack
+                        // buffer; large strings (e.g. `${impLines}` in generated source) would otherwise
+                        // become the literal "<value>" (formatInto returns null when len > buf.len).
+                        const slice: []const u8 = if (primitives.getStringSlice(val)) |sl|
+                            sl
+                        else blk: {
+                            var format_buf: [4096]u8 = undefined;
+                            break :blk primitives.formatOne(val, &format_buf, module_ptrs.items);
+                        };
                         const total = 8 + slice.len;
                         const obj = gc.allocObject(total) catch {
                             if (!pushOperand(&stack, &sp, Value.unit())) {

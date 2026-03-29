@@ -282,7 +282,21 @@ File system. `readText` is **async-shaped** (`Task<String>`) so callers use `awa
 
 ## kestrel:test
 
-Assertions and reporting for the Kestrel unit-test harness (`kestrel test`, `scripts/run_tests.ks`). Imports `kestrel:basics` (`nowMs`), `kestrel:console`, `kestrel:list`, `kestrel:stack` (`format`), and `kestrel:string` (`concat`, `repeat`) for implementation (namespace imports); styled output uses console ANSI constants (✓/✗, colours, dim group labels).
+Assertions and reporting for the Kestrel unit-test harness (`kestrel test`, `scripts/run_tests.ks`). Imports `kestrel:basics` (`nowMs`), `kestrel:console`, `kestrel:list`, `kestrel:stack` (`format`), and `kestrel:string` (`concat`, `repeat`) for implementation (namespace imports); styled output uses console ANSI constants (✓/✗, colours, default-weight group names, dim for secondary text such as timing and verbose footers).
+
+The CLI (`./scripts/kestrel test`) passes through `scripts/run_tests.ks` flags **`--verbose`** and **`--summary`**. Default output mode is **compact**. **`--verbose` and `--summary` together** are rejected with a non-zero exit before tests run.
+
+### Output mode constants
+
+`Suite.output` is an `Int` discriminator. The module exports:
+
+| Name | Value | Role |
+|------|-------|------|
+| `outputVerbose` | `0` | Verbose tree (per-test ✓ lines, default-weight group titles, dim footers with pass/fail counts and timing). |
+| `outputCompact` | `1` | Default: one summary line per successful `group`: default-weight `name`, **green** `N` + ✓ (same as verbose pass lines), dim ` Tms)`; nested groups print their own lines with indentation. Passing assertions do not print. On first failure in a compact subtree, buffered lines for that subtree flush in execution order (verbose-shaped), then failure diagnostics; further passing assertions in the same outer `group` print green ✓ lines immediately. |
+| `outputSummary` | `2` | Passing assertions and `group` chrome are silent; failed assertions still print. |
+
+Other `Int` values are reserved; treat them as **compact** for forward compatibility.
 
 ### Suite
 
@@ -291,16 +305,26 @@ Assertions and reporting for the Kestrel unit-test harness (`kestrel test`, `scr
 | Field | Type | Role |
 |-------|------|------|
 | `depth` | `Int` | Nesting depth for indentation of group labels and assertion lines |
-| `summaryOnly` | `Bool` | When `True`, passing assertions and `group` headers/footers do not print; **failed** assertions still print. Counters always update. |
-| `counts` | `{ passed: mut Int, failed: mut Int, startTime: mut Int }` | Shared mutable tallies and harness start time (`Basics.nowMs()` at suite creation) |
+| `output` | `Int` | Output mode; use `outputVerbose`, `outputCompact`, or `outputSummary`. |
+| `counts` | See below | Shared mutable tallies, harness timing, and internal compact-buffer state |
 
-The harness constructs one root `Suite` (typically `depth = 1` or as in `run_tests.ks`) whose `counts` is passed to `printSummary` after all `run(s)` calls.
+**`counts`** shape (as constructed by `run_tests.ks` and required by `printSummary`):
+
+| Field | Type | Role |
+|-------|------|------|
+| `passed` | `mut Int` | Total passing assertions |
+| `failed` | `mut Int` | Total failing assertions |
+| `startTime` | `mut Int` | `__now_ms()` at harness start |
+| `compactStackBox` | `mut { frames: List<List<String>> }` | Internal stack of line batches for compact mode (implementation detail; must be present for the harness) |
+| `compactExpanded` | `mut Bool` | Internal: after a compact-mode failure, further passes in the same group print immediately |
+
+The harness constructs one root `Suite` (typically `depth = 1`, `output = outputCompact`, as in `run_tests.ks`) whose `counts` is passed to `printSummary` after all `run(s)` calls.
 
 ### Functions
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `group` | `(Suite, String, (Suite) -> Unit) -> Unit` | Runs `body` with a child suite (depth + 1, same `summaryOnly` and `counts`). Unless `summaryOnly`, prints a dim group title and a footer with pass/fail delta for the group and elapsed ms. |
+| `group` | `(Suite, String, (Suite) -> Unit) -> Unit` | Runs `body` with a child suite (depth + 1, same `output` and `counts`). **Verbose:** default-weight title, green ✓ lines for passes inside the group, dim footer with pass/fail delta and elapsed ms. **Compact:** buffers title and pass lines; on success prints one line: default-weight `name`, green `N✓`, dim ` Tms)`; on failure flushes buffer then dim footer. **Summary:** no group chrome unless failures expand compact (see above). |
 | `eq` | `(Suite, String, X, X) -> Unit` | Success when `actual == expected` (semantic / deep equality; language §3.2.1). On failure: increments `failed`, prints ✗ and three indented lines — `expected (right):`, `actual (left):` (values via `kestrel:stack` `format`), then `(deep equality / same value shape)`. |
 | `neq` | `(Suite, String, X, X) -> Unit` | Success when `actual != notExpected`. On failure: prints ✗, `expected: values must differ (deep inequality)`, `both sides: …` (`format`). |
 | `isTrue` | `(Suite, String, Bool) -> Unit` | Success when `value` is `True`. On failure: `expected (Bool): true`, `actual (Bool): …` (`format`). |
@@ -308,9 +332,9 @@ The harness constructs one root `Suite` (typically `depth = 1` or as in `run_tes
 | `gt` / `lt` | `(Suite, String, Int, Int) -> Unit` | Strict order on `Int` (`left > right` / `left < right`). On failure: requirement line (`need: left > right` or `left < right`, “strict total order on Int”), then `left (Int):` / `right (Int):` with `format`. **Float is not in scope** for these helpers. |
 | `gte` / `lte` | `(Suite, String, Int, Int) -> Unit` | Non-strict order (`>=` / `<=`). On failure: `need: left >= right` or `left <= right` (“total order on Int”), then labelled `Int` lines (`format`). |
 | `throws` | `(Suite, String, (Unit) -> Unit) -> Unit` | Invokes `thunk(())`. Success if the call throws any exception (catch-all `_`); failure if it returns normally. On failure: `expected: callee throws an exception`, `actual: completed normally (no exception)`. **Note:** The surface type is `(Unit) -> Unit` because the language does not accept `() -> T` in type position for a zero-parameter function type; callers use e.g. `(_: Unit) => { … }`. |
-| `printSummary` | `({ passed: mut Int, failed: mut Int, startTime: mut Int }) -> Unit` | Prints a blank line, then total elapsed ms. If `failed > 0`: red `M failed, N passed (…ms)` and **`exit(1)`**. If `failed == 0`: green `N passed (…ms)`. |
+| `printSummary` | `(counts record as above) -> Unit` | Prints a blank line, then total elapsed ms. If `failed > 0`: red `M failed, N passed (…ms)` and **`exit(1)`**. If `failed == 0`: green `N passed (…ms)`. |
 
-Passing assertions increment `passed` and, unless `summaryOnly`, print a green ✓ line with the description.
+Passing assertions increment `passed`. In **verbose** and expanded compact, they print a green ✓ line with the description. In **compact** (before expansion) and **summary**, passing assertions do not print.
 
 ---
 

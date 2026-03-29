@@ -1345,6 +1345,22 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             return false;
           }
         }
+        // `import * as Str from "..."` → calls parse as CallExpr(FieldExpr(Ident Str, length), args).
+        if (expr.callee.kind === 'FieldExpr') {
+          const fe = expr.callee;
+          if (fe.object.kind === 'IdentExpr') {
+            const nsClass = options.namespaceClasses?.get(fe.object.name);
+            if (nsClass != null) {
+              if (nsClass !== className) {
+                mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, '$init', '()V'));
+              }
+              const arity = expr.args.length;
+              for (let ai = 0; ai < arity; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
+              mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, jvmMangleName(fe.field), descriptor(arity)));
+              return false;
+            }
+          }
+        }
         emitExpr(expr.callee, mb, tcN, stackDepth);
         const n = expr.args.length;
         const CALLEE_TEMP = 60;

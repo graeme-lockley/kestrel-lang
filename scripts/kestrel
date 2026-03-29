@@ -36,7 +36,7 @@ usage() {
   echo "  run   [--target vm|jvm] <script[.ks]> [args...]  Compile if needed, then execute" >&2
   echo "  dis   <script[.ks]>            Compile if needed, then disassemble bytecode" >&2
   echo "  build [--target vm|jvm] [script.ks]  Build compiler and VM; optionally compile script" >&2
-  echo "  test  [--target vm|jvm] [files...]   Run unit tests" >&2
+  echo "  test  [--target vm|jvm] [--verbose|--summary] [files...]   Run unit tests (default: compact output)" >&2
   echo "  test-both [files...]           Run unit tests on VM and JVM; compare results and wall time" >&2
   exit 1
 }
