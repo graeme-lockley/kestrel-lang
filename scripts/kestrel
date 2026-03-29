@@ -127,6 +127,35 @@ main_class_for() {
   fi
 }
 
+is_integer() {
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+
+file_mtime() {
+  local path="$1"
+  local out=""
+
+  # GNU coreutils (Linux)
+  out=$(stat -c '%Y' "$path" 2>/dev/null || true)
+  if is_integer "$out"; then
+    echo "$out"
+    return 0
+  fi
+
+  # BSD/macOS
+  out=$(stat -f '%m' "$path" 2>/dev/null || true)
+  if is_integer "$out"; then
+    echo "$out"
+    return 0
+  fi
+
+  echo ""
+  return 1
+}
+
 needs_compile_jvm() {
   local ks="$1" class_dir="$2"
   local abs_ks rel dir base first rest internal_last internal_name class_file deps
@@ -152,8 +181,8 @@ needs_compile_jvm() {
       dep="${dep%"${dep##*[![:space:]]}"}"
       [ -z "$dep" ] && continue
       if [ -f "$dep" ]; then
-        dep_mtime=$(stat -f '%m' "$dep" 2>/dev/null || stat -c '%Y' "$dep" 2>/dev/null)
-        class_mtime=$(stat -f '%m' "$class_file" 2>/dev/null || stat -c '%Y' "$class_file" 2>/dev/null)
+        dep_mtime=$(file_mtime "$dep")
+        class_mtime=$(file_mtime "$class_file")
         [ -n "$dep_mtime" ] && [ -n "$class_mtime" ] && [ "$dep_mtime" -gt "$class_mtime" ] && return 0
       fi
     done < "$deps"
@@ -183,8 +212,8 @@ needs_compile_with_deps() {
       [ -z "$dep" ] && continue
       if [ ! -f "$dep" ]; then continue; fi
       # Use explicit mtime comparison (dep > kbc) so we recompile when dep is strictly newer
-      dep_mtime=$(stat -f '%m' "$dep" 2>/dev/null || stat -c '%Y' "$dep" 2>/dev/null)
-      kbc_mtime=$(stat -f '%m' "$kbc" 2>/dev/null || stat -c '%Y' "$kbc" 2>/dev/null)
+      dep_mtime=$(file_mtime "$dep")
+      kbc_mtime=$(file_mtime "$kbc")
       if [ -n "$dep_mtime" ] && [ -n "$kbc_mtime" ] && [ "$dep_mtime" -gt "$kbc_mtime" ]; then
         return 0
       fi
@@ -207,8 +236,8 @@ write_stale_file() {
     dep="${dep%"${dep##*[![:space:]]}"}"
     [ -z "$dep" ] && continue
     if [ -f "$dep" ]; then
-      dep_mtime=$(stat -f '%m' "$dep" 2>/dev/null || stat -c '%Y' "$dep" 2>/dev/null)
-      kbc_mtime=$(stat -f '%m' "$kbc" 2>/dev/null || stat -c '%Y' "$kbc" 2>/dev/null)
+      dep_mtime=$(file_mtime "$dep")
+      kbc_mtime=$(file_mtime "$kbc")
       [ -n "$dep_mtime" ] && [ -n "$kbc_mtime" ] && [ "$dep_mtime" -gt "$kbc_mtime" ] && echo "$dep" >> "$stale"
     fi
   done < "$deps"
@@ -397,10 +426,34 @@ cmd_build() {
 
 cmd_run() {
   TARGET="${KESTREL_TARGET:-vm}"
-  while [ "${1:-}" = '--target' ]; do
-    [ -z "${2:-}" ] && usage
-    TARGET="$2"
-    shift 2
+  local exit_mode=""
+  while [ $# -gt 0 ]; do
+    case "${1:-}" in
+      --target)
+        [ -z "${2:-}" ] && usage
+        TARGET="$2"
+        shift 2
+        ;;
+      --exit-wait)
+        if [ "$exit_mode" = "no-wait" ]; then
+          echo "kestrel: --exit-wait and --exit-no-wait are mutually exclusive" >&2
+          exit 1
+        fi
+        exit_mode="wait"
+        shift
+        ;;
+      --exit-no-wait)
+        if [ "$exit_mode" = "wait" ]; then
+          echo "kestrel: --exit-wait and --exit-no-wait are mutually exclusive" >&2
+          exit 1
+        fi
+        exit_mode="no-wait"
+        shift
+        ;;
+      *)
+        break
+        ;;
+    esac
   done
   if [ -z "${1:-}" ]; then
     usage
@@ -429,7 +482,11 @@ cmd_run() {
       fi
     fi
     main_class=$(main_class_for "$resolved")
-    exec java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
+    if [ "$exit_mode" = "no-wait" ]; then
+      exec java -Dkestrel.exitWait=false -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
+    else
+      exec java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
+    fi
   fi
   if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
     build_compiler_vm
@@ -447,7 +504,17 @@ cmd_run() {
     mkdir -p "$(dirname "$kbc")"
     do_compile "$resolved" "$kbc"
   fi
-  exec "$VM_BIN" "$kbc" "$@"
+  local vm_exit_flag=""
+  if [ "$exit_mode" = "no-wait" ]; then
+    vm_exit_flag="--exit-no-wait"
+  elif [ "$exit_mode" = "wait" ]; then
+    vm_exit_flag="--exit-wait"
+  fi
+  if [ -n "$vm_exit_flag" ]; then
+    exec "$VM_BIN" "$kbc" "$vm_exit_flag" "$@"
+  else
+    exec "$VM_BIN" "$kbc" "$@"
+  fi
 }
 
 cmd_dis() {
