@@ -246,7 +246,7 @@ Pattern typing for primitive literal patterns: `INTEGER : Int`, `FLOAT : Float`,
 | Spec | Relation |
 |------|----------|
 | **01** | Type grammar (01 §3.6), expressions, blocks (statement- vs expression-oriented endings, 01 §3.3), `if`/`while`, match exhaustiveness, async/await context, exceptions, mut fields. All types and constructs in 01 must have typing rules in this document. |
-| **02** | Option, Result, List, Value, Task are library/built-in types; their constructors and signatures constrain inference. |
+| **02** | Option, Result, List, Task are library types; JSON `Value` / `JsonParseError` and other stdlib ADTs are ordinary exported types (e.g. from `kestrel:json`); their constructors and signatures constrain inference. |
 | **03** | Inferred types are serialised into the bytecode type table (03 §6.2–6.3). The type encoding supports Arrow, Record (shape_index), ADT, Option, List, TypeVar, and primitives. The reference toolchain does **not** encode union/intersection in the `.kbc` blob (03 §6.3); **`.kti`** may still carry them (07 §5). |
 | **04** | Type-checked programs satisfy the ISA: e.g. ADD gets Int; CONSTRUCT gets correct adt_id, ctor, arity; CALL gets correct arity and function type. The type system does not define bytecode; it ensures source-level correctness so the compiler can emit valid 04. |
 | **05** | Runtime values (tagged vs heap) correspond to types: Int, Bool, Unit, Char inline; Float, String, RECORD, ADT, TASK heap. Type safety at compile time implies the VM (05) will not see invalid operand types. |

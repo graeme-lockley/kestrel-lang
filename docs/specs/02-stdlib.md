@@ -235,14 +235,27 @@ HTTP server and client. Server-oriented API.
 
 ## kestrel:json
 
-JSON parsing and serialisation.
+JSON parsing and serialisation implemented **in Kestrel** (no host JSON primitives). Import `Value`, `JsonParseError`, constructors, and helpers from this module; there is **no** separate `kestrel:value` module and no language prelude injection for JSON `Value` constructors.
 
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `parse` | `(String) -> Value` | Parse JSON string to `Value` |
-| `stringify` | `(Value) -> String` | Serialise `Value` to JSON string |
+| Function / type | Signature / role | Description |
+|-----------------|------------------|-------------|
+| `Value` | ADT | JSON value: `Null`, `Bool(Bool)`, `Int(Int)`, `Float(Float)`, `StrVal(String)`, `Array(List<Value>)`, `Object(List<(String, Value)>)`. Constructor **`StrVal`** holds JSON strings (the name avoids clashing with the `String` type in type arguments). |
+| `JsonParseError` | ADT | Parse failure: `EmptyInput`, `UnclosedString(Int)`, `InvalidEscape(Int)`, `InvalidUnicodeEscape(Int)`, `InvalidNumber(Int)`, `UnclosedArray(Int)`, `UnclosedObject(Int)`, `ExpectedColon(Int)`, `ExpectedCommaOrBracket(Int)`, `TrailingGarbage(Int)`, `UnexpectedToken(Int)` — each `Int` is a **code-point index** into the input (`kestrel:string` length and indexing are by Unicode scalar). |
+| `parse` | `(String) -> Result<Value, JsonParseError>` | Parse a single JSON value; **Err** on invalid or truncated input. Valid JSON **`null`** is **`Ok(Null)`**, never conflated with syntax errors. |
+| `parseOrNull` | `(String) -> Option<Value>` | `Some(v)` iff `parse` is `Ok(v)`; otherwise `None`. |
+| `errorAsString` | `(JsonParseError) -> String` | Human-readable message for logging and tests. |
+| `stringify` | `(Value) -> String` | Serialise to JSON text with required escaping. |
+| `describeParse` | `(String) -> String` | `"ok"` if `parse` succeeds, else `errorAsString` of the error. |
 
-**Observable behaviour (reference VM):** On parse failure (invalid JSON, truncated input, etc.), `parse` returns the `Value` constructor **`Null`** — the same tag as the JSON literal `null`. Callers cannot distinguish a failed parse from valid JSON `null` until a dedicated error channel exists. Object values: the reference VM may yield an `Object` with an **empty** key–value payload when object entries are not yet preserved end-to-end; `stringify` of such values may produce `{}` regardless of the original input shape.
+**Objects:** Keys are strings; **duplicate keys** in one object: the **last** occurrence in source order wins (implementation keeps a list and replaces). **`stringify`** emits object entries in **list order** (not sorted by key).
+
+**Surrogates / non-BMP:** `\uXXXX` denotes a UTF-16 code unit; a pair `\uD800`–`\uDFFF` + `\uDC00`–`\uDFFF` may form one supplementary code point. Lone surrogates and invalid scalar values are rejected where the implementation checks them.
+
+**Trailing content:** After a complete top-level value, **no** further non-whitespace is allowed; otherwise **`TrailingGarbage`**. (Leading/trailing **ASCII** whitespace around the whole document is trimmed before parsing; **internal** whitespace between tokens follows JSON rules.)
+
+**Numbers:** Integers and IEEE-754 floats as in JSON; leading-zero and `NaN`/`Infinity` rules follow strict JSON rejection in the reference implementation.
+
+**Migration:** Code that relied on an unqualified prelude `Null` / `Int` / … as JSON `Value` constructors must **import** from `kestrel:json` (or re-export locally).
 
 ---
 
@@ -298,7 +311,7 @@ Types referenced in the above signatures are part of the standard contract:
 
 - `Option<T>` – Optional value (e.g. from `queryParam`)
 - `Task<T>` – Async computation
-- `Value` – JSON value type (ADT; see below)
+- `Value` – JSON value ADT exported from `kestrel:json` (see below)
 - `Server`, `Request`, `Response` – HTTP types
 - `StackTrace<T>` – Stack trace for a thrown value of type `T`
 
@@ -332,7 +345,7 @@ Constructors and functions for Option, Result, and List (e.g. `map`, `flatMap`, 
 
 ### Value (JSON value)
 
-`Value` is an **algebraic data type** representing a JSON value. It is provided by the standard library (e.g. from `kestrel:json`) and is the argument/result type of `parse` and `stringify`. The ADT has one constructor per JSON kind:
+`Value` is an **algebraic data type** representing a JSON value, **defined and exported** from **`kestrel:json`**. It is a normal per-module ADT in bytecode (not a reserved built-in ADT row). The ADT has one constructor per JSON kind:
 
 | Constructor | Payload | JSON equivalent |
 |-------------|---------|------------------|
@@ -340,8 +353,8 @@ Constructors and functions for Option, Result, and List (e.g. `map`, `flatMap`, 
 | `Bool` | `Bool` | `true` / `false` |
 | `Int` | `Int` | integer number |
 | `Float` | `Float` | floating-point number |
-| `String` | `String` | string |
+| `StrVal` | `String` | JSON string (name avoids clashing with the `String` type) |
 | `Array` | `List<Value>` | array `[ ... ]` |
-| `Object` | key–value pairs (e.g. `List<(String, Value)>` or library-defined record) | object `{ ... }` |
+| `Object` | `List<(String, Value)>` | object `{ ... }` |
 
-Exact constructor names and payload types are implementation-defined as long as they correspond to the JSON model above. Pattern matching on `Value` allows programs to inspect and build JSON values in a typed way.
+Pattern matching on `Value` allows programs to inspect and build JSON values in a typed way.

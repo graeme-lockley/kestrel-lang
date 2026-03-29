@@ -115,29 +115,38 @@ fun parseHexDigit(s: String, i: Int): Result<(Int, Int), JsonParseError> =
     if (v < 0) Err(InvalidUnicodeEscape(i)) else Ok((v, i + 1))
   }
 
+fun mergeHex4(a: Int, b: Int, c: Int, d: Int): Int =
+  ((a * 16 + b) * 16 + c) * 16 + d
+
+fun parseHex4After1(s: String, i: Int, d0: Int): Result<(Int, Int), JsonParseError> = {
+  val r1 = parseHexDigit(s, i)
+  match (r1) {
+    Err(_) => r1
+    Ok(p1) => parseHex4After2(s, p1.1, d0, p1.0)
+  }
+}
+
+fun parseHex4After2(s: String, i: Int, d0: Int, d1: Int): Result<(Int, Int), JsonParseError> = {
+  val r2 = parseHexDigit(s, i)
+  match (r2) {
+    Err(_) => r2
+    Ok(p2) => parseHex4After3(s, p2.1, d0, d1, p2.0)
+  }
+}
+
+fun parseHex4After3(s: String, i: Int, d0: Int, d1: Int, d2: Int): Result<(Int, Int), JsonParseError> = {
+  val r3 = parseHexDigit(s, i)
+  match (r3) {
+    Err(_) => r3
+    Ok(p3) => Ok((mergeHex4(d0, d1, d2, p3.0), p3.1))
+  }
+}
+
 fun parseHex4(s: String, i: Int): Result<(Int, Int), JsonParseError> = {
   val r0 = parseHexDigit(s, i)
   match (r0) {
     Err(_) => r0
-    Ok(p0) => {
-      val r1 = parseHexDigit(s, p0.1)
-      match (r1) {
-        Err(_) => r1
-        Ok(p1) => {
-          val r2 = parseHexDigit(s, p1.1)
-          match (r2) {
-            Err(_) => r2
-            Ok(p2) => {
-              val r3 = parseHexDigit(s, p2.1)
-              match (r3) {
-                Err(_) => r3
-                Ok(p3) => Ok(((((p0.0 * 16 + p1.0) * 16 + p2.0) * 16 + p3.0), p3.1))
-              }
-            }
-          }
-        }
-      }
-    }
+    Ok(p0) => parseHex4After1(s, p0.1, p0.0)
   }
 }
 

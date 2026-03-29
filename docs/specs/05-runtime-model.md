@@ -66,7 +66,7 @@ Objects referenced by **PTR** are allocated on the heap and have one of the foll
 | **STRING** | UTF-8 byte sequence; length and exact layout implementation-defined | LOAD_CONST (string constant); string operations; interpolation (01 §2.8) | 03 §0, §5 |
 | **ARRAY**  | Runtime built-in: contiguous elements, length; element type fixed per array (`Array<T>`, 01 §3.6) | Implementation-defined (e.g. VM intrinsic or stdlib); no instruction in 04 | 01, 02 |
 | **RECORD** | Structural record: shape identifier plus array of field slots (tagged values). Field order matches the shape table (03 §9). Used for record literals, tuples (anonymous shape), **closure environments**, and **stdlib dictionary values** (`kestrel:dict` / `kestrel:set`: at runtime a RECORD holding `hash`, `eq`, and `entries` in that order — not a separate heap kind). In source code, `Dict<K, V>` and `Set<E>` (kestrel:set; opaque alias of `Dict<E, Unit>`) are **opaque** exported types in the stdlib contract ([02-stdlib.md](02-stdlib.md)); that opacity is a module-boundary / typing rule, not a different heap representation. | ALLOC_RECORD, SPREAD (04 §1.8) | 03 §9, 04 §1.8, §5.1 |
-| **ADT**    | Algebraic data type: constructor tag (0-based within the ADT) plus payload (fixed number of fields, or none). Tag and shape match the ADT table (03 §10). The value’s **module_index** identifies which package’s ADT table the `adt_id` refers to (current module for **CONSTRUCT**, dependency module for **CONSTRUCT_IMPORT**, 04 §1.7). Covers List (Nil, Cons), Option, Result, Value, and **exception values**. | CONSTRUCT, CONSTRUCT_IMPORT (04 §1.7) | 03 §10, 04 §1.7, 02, 07 §2.3 |
+| **ADT**    | Algebraic data type: constructor tag (0-based within the ADT) plus payload (fixed number of fields, or none). Tag and shape match the ADT table (03 §10). The value’s **module_index** identifies which package’s ADT table the `adt_id` refers to (current module for **CONSTRUCT**, dependency module for **CONSTRUCT_IMPORT**, 04 §1.7). Covers List (Nil, Cons), Option, Result, **stdlib ADTs** (e.g. JSON `Value` / `JsonParseError` from `kestrel:json`), and **exception values**. | CONSTRUCT, CONSTRUCT_IMPORT (04 §1.7) | 03 §10, 04 §1.7, 02, 07 §2.3 |
 | **TASK**   | Async computation: suspended continuation, or completed result. Corresponds to `Task<T>` (01 §5, 02). | Async function call; AWAIT consumes it (04 §1.9) | 01 §5, 04 AWAIT |
 | **CLOSURE** | Capturing lambda or nested function: (module_index, function_index, env). **env** is PTR to a RECORD holding captured values. | MAKE_CLOSURE (04 §1.10) | 01 §3.8, 04 §5.1 |
 
@@ -117,7 +117,7 @@ When resuming the handler, the VM must load **bytecode and constants from the mo
 | Spec | Relation |
 |------|----------|
 | **01** | Int (61-bit), Float (boxed), Bool, Unit, Char/Rune (inline), String (heap); records, ADTs, Task, exceptions (ADT values). |
-| **02** | Option, Result, List, Value are ADT heap objects; Task is TASK heap object; StackTrace from kestrel:stack. |
+| **02** | Option, Result, List, and stdlib ADTs (including JSON `Value` from `kestrel:json`) are ADT heap objects; Task is TASK heap object; StackTrace from kestrel:stack. |
 | **03** | Constant pool tags (Int, Float, Bool, Unit, Char, String) map to tagged or heap representation; shape table defines RECORD layout; ADT table defines constructor tags and payload; debug section for stack trace mapping. |
 | **04** | LOAD_CONST → tagged or PTR; ALLOC_RECORD / GET_FIELD / SET_FIELD / SPREAD → RECORD; CONSTRUCT / MATCH → ADT; THROW / TRY / END_TRY → exception unwind; AWAIT → TASK. Closures use RECORD (env) per closure conversion. |
 | **06** | Type system constrains which values may appear where; runtime does not re-check types but must preserve type safety. |
@@ -133,7 +133,7 @@ The following language and stdlib features have runtime representation or behavi
 | **Literals** (Int, Float, Bool, Unit, Char, String) | §1, §2 | Int 61-bit inline; Float boxed; Bool, Unit, Char inline; String heap. |
 | **Records** (structural, mut fields) | §2 RECORD, §3 | Shape-defined layout; SET_FIELD for mut. |
 | **Tuples** | §2 RECORD | Anonymous shape, field order 0,1,…; `match` tuple patterns project the same indices as field access `.0`, `.1`, … (01 §3.4). |
-| **ADTs** (Option, Result, List, Value, exceptions) | §2 ADT | Constructor tag + payload; exceptions are ADTs. |
+| **ADTs** (Option, Result, List, stdlib ADTs such as JSON `Value`, exceptions) | §2 ADT | Constructor tag + payload; exceptions are ADTs. |
 | **Exceptions** (throw, try/catch) | §2 ADT, §5 | Exception value = ADT; unwind to TRY handler; stack trace via stdlib. |
 | **Task / async / await** | §2 TASK, §6 | TASK heap object; AWAIT semantics; scheduling impl-defined. |
 | **Closures / lambdas** | §2 RECORD, CLOSURE; tagged fn_ref | Non-capturing: fn_ref. Capturing: CLOSURE (env + function index). |

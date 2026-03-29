@@ -513,7 +513,7 @@ The standard library ships as `kestrel:*` modules:
 | `kestrel:char` | Character classification — `isDigit`, `isAlpha`, `toUpper`, `toLower` |
 | `kestrel:tuple` | Pair helpers — `first`, `second`, `mapFirst`, `mapSecond` |
 | `kestrel:basics` | Numeric utilities — `clamp`, `negate`, `toFloat`, `floor`, `sqrt`, `identity` |
-| `kestrel:json` | JSON parsing — `parse`, `stringify` |
+| `kestrel:json` | JSON — `parse` (`Result<Value, JsonParseError>`), `parseOrNull`, `stringify`, `errorAsString`; `Value` and `JsonParseError` ADTs |
 | `kestrel:fs` | File system — `readText`, `writeText`, `listDir` |
 
 ---

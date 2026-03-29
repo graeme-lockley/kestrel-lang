@@ -36,15 +36,15 @@ Reimplement `kestrel:json` entirely in Kestrel: `parse` returns `Result` with a 
 
 ## Acceptance Criteria
 
-- [ ] `parse` returns `Result<Value, JsonParseError>`; valid `null` is never conflated with a syntax error.
-- [ ] `JsonParseError` is an ADT with `errorAsString` covering all variants.
-- [ ] `parseOrNull` provided and tested.
-- [ ] `stringify` round-trips with `parse` for a documented class of values (or documented intentional non-round-trip cases).
-- [ ] No `__json_parse` / `__json_stringify` in compiler, VM, or JVM backend.
-- [ ] No built-in `Value` type in the typechecker prelude; JSON `Value` is the stdlib ADT exported from `kestrel:json` (constructors/predicates live there, not in a separate `kestrel:value` module).
-- [ ] `kestrel:value` removed; repo has no remaining imports of it.
-- [ ] **Specs and docs listed under “Documentation and specs to update”** are updated so they no longer describe builtin JSON `Value`, `kestrel:value`, `__json_*`, or “parse failure → `Null`”; **01-language** reviewed and updated only if it implies a builtin JSON `Value` (today it does not; integer “Value” prose is unrelated). (`docs/IMPLEMENTATION_PLAN.md` is a retired pointer only — no phased plan to maintain.)
-- [ ] Full test pass: `./scripts/kestrel test`, `cd compiler && npm test`, `cd vm && zig build test`, and **`./scripts/run-e2e.sh`** after compiler/VM/stdlib surface changes.
+- [x] `parse` returns `Result<Value, JsonParseError>`; valid `null` is never conflated with a syntax error.
+- [x] `JsonParseError` is an ADT with `errorAsString` covering all variants.
+- [x] `parseOrNull` provided and tested.
+- [x] `stringify` round-trips with `parse` for a documented class of values (or documented intentional non-round-trip cases).
+- [x] No `__json_parse` / `__json_stringify` in compiler, VM, or JVM backend.
+- [x] No built-in `Value` type in the typechecker prelude; JSON `Value` is the stdlib ADT exported from `kestrel:json` (constructors/predicates live there, not in a separate `kestrel:value` module).
+- [x] `kestrel:value` removed; repo has no remaining imports of it.
+- [x] **Specs and docs listed under “Documentation and specs to update”** are updated so they no longer describe builtin JSON `Value`, `kestrel:value`, `__json_*`, or “parse failure → `Null`”; **01-language** reviewed and updated only if it implies a builtin JSON `Value` (today it does not; integer “Value” prose is unrelated). (`docs/IMPLEMENTATION_PLAN.md` is a retired pointer only — no phased plan to maintain.)
+- [x] Full test pass: `./scripts/kestrel test`, `cd compiler && npm test`, `cd vm && zig build test`, and **`./scripts/run-e2e.sh`** after compiler/VM/stdlib surface changes.
 
 ## Spec References
 
@@ -77,16 +77,16 @@ Reimplement `kestrel:json` entirely in Kestrel: `parse` returns `Result` with a 
 
 ## Tasks
 
-- [ ] **Spec first:** In `docs/specs/02-stdlib.md`, define `JsonParseError` variants, `parse` / `parseOrNull` / `stringify` / `errorAsString` signatures, object key ordering, duplicate-key behaviour, UTF-8 / surrogate policy, and round-trip guarantees. Update `04-bytecode-isa.md`, `05-runtime-model.md`, `06-typesystem.md`, `08-tests.md`, and `docs/guide.md` per **Documentation and specs to update** (and `01-language.md` only if a builtin JSON `Value` appears).
-- [ ] **Implement `kestrel:json`:** Add `Value` and `JsonParseError` ADTs, constructors, predicates (`isNull`, …), `parse`, `parseOrNull`, `errorAsString`, `stringify` in Kestrel; split into extra `.ks` only if import cycles require it.
-- [ ] **Retire `kestrel:value`:** Delete `stdlib/kestrel/value.ks`; remove from `resolve.ts`; fix all imports (currently `json.test.ks`).
-- [ ] **Compiler:** Remove JSON primitives and built-in `Value` from `check.ts` prelude and all `Value`-specific typecheck branches that exist only for the builtin; align `from-ast.ts` with stdlib-only `Value`.
-- [ ] **Bytecode codegen:** Remove `__json_*` lowering and built-in `Value` constructor/match wiring (`codegen.ts`: `ADT_VALUE`, `getConstructor`/`getMatchConfig` Value cases, ADT table fourth row).
-- [ ] **JVM codegen + runtime:** Remove `__json_*` emission; remove or simplify `KRuntime` / `KValue` JSON helpers and `isValueKind` if tied to removed layout.
-- [ ] **VM:** Remove primitive call ids `0xFFFFFF05` / `0xFFFFFF06` and associated Zig JSON implementation; update tests/comments that reference JSON builtins.
-- [ ] **Corpus:** Expand `stdlib/kestrel/json.test.ks` per story goals (invalid JSON, escapes, numbers, UTF-8, nesting, `Result`/`Option` behaviour); remove obsolete “parse failure == Null” assertions.
-- [ ] **Docs:** Update `docs/guide.md` and every file under **Documentation and specs to update**. Grep repo for `__json_`, `kestrel:value`, `ADT_VALUE`, `FFFFFF05`, `jsonParse`, `jsonStringify`, `KValue`, `KVNull` until clean or intentionally documented as removed.
-- [ ] **Verification:** `cd compiler && npm run build && npm test`; `./scripts/kestrel test`; `cd vm && zig build test`; `./scripts/run-e2e.sh` (required for this story’s compiler/VM/stdlib/JVM touch set).
+- [x] **Spec first:** In `docs/specs/02-stdlib.md`, define `JsonParseError` variants, `parse` / `parseOrNull` / `stringify` / `errorAsString` signatures, object key ordering, duplicate-key behaviour, UTF-8 / surrogate policy, and round-trip guarantees. Update `04-bytecode-isa.md`, `05-runtime-model.md`, `06-typesystem.md`, `08-tests.md`, and `docs/guide.md` per **Documentation and specs to update** (and `01-language.md` only if a builtin JSON `Value` appears).
+- [x] **Implement `kestrel:json`:** Add `Value` and `JsonParseError` ADTs, constructors, predicates (`isNull`, …), `parse`, `parseOrNull`, `errorAsString`, `stringify` in Kestrel; split into extra `.ks` only if import cycles require it.
+- [x] **Retire `kestrel:value`:** Delete `stdlib/kestrel/value.ks`; remove from `resolve.ts`; fix all imports (currently `json.test.ks`).
+- [x] **Compiler:** Remove JSON primitives and built-in `Value` from `check.ts` prelude and all `Value`-specific typecheck branches that exist only for the builtin; align `from-ast.ts` with stdlib-only `Value`.
+- [x] **Bytecode codegen:** Remove `__json_*` lowering and built-in `Value` constructor/match wiring (`codegen.ts`: `ADT_VALUE`, `getConstructor`/`getMatchConfig` Value cases, ADT table fourth row).
+- [x] **JVM codegen + runtime:** Remove `__json_*` emission; remove or simplify `KRuntime` / `KValue` JSON helpers and `isValueKind` if tied to removed layout.
+- [x] **VM:** Remove primitive call ids `0xFFFFFF05` / `0xFFFFFF06` and associated Zig JSON implementation; update tests/comments that reference JSON builtins.
+- [x] **Corpus:** Expand `stdlib/kestrel/json.test.ks` per story goals (invalid JSON, escapes, numbers, UTF-8, nesting, `Result`/`Option` behaviour); remove obsolete “parse failure == Null” assertions.
+- [x] **Docs:** Update `docs/guide.md` and every file under **Documentation and specs to update**. Grep repo for `__json_`, `kestrel:value`, `ADT_VALUE`, `FFFFFF05`, `jsonParse`, `jsonStringify`, `KValue`, `KVNull` until clean or intentionally documented as removed.
+- [x] **Verification:** `cd compiler && npm run build && npm test`; `./scripts/kestrel test`; `cd vm && zig build test`; `./scripts/run-e2e.sh` (required for this story’s compiler/VM/stdlib/JVM touch set).
 
 ## Tests to add
 
@@ -142,3 +142,4 @@ Every item below should be **edited or explicitly reviewed** so the tree matches
 ## Build notes
 
 - 2026-03-29: Moved from **planned** to **doing** after planned-phase review: expanded **Current state**, **Impact analysis**, **Risks**, **Acceptance criteria**, **Spec references**, **Tests to add**, and **Documentation and specs to update** to match repo reality (`from-ast.ts`, JVM `KValue`/`KRuntime`, spec locations, exhaustive test/doc matrices). Planned exit criteria in `docs/kanban/README.md` satisfied for this story.
+- 2026-03-29: **Completed.** Pure `kestrel:json` with `StrVal` constructor (avoids `String` type name clash), `Result`/`Option`, object duplicate keys (last wins). **Workarounds for codegen local reuse:** read `pk.1` before `objectKeyString(keyVal)` in `parseObjectEntries`; same for array `pair.1` before `pair.0`; split `parseHex4` into `parseHex4After1/2/3` + `mergeHex4` so nested `Ok(p)` bindings do not clobber prior tuple locals. **Trailing garbage:** end-of-input check uses parsed end index without `skipWs` so `"null "` is `Err`. **Tests:** `json.test.ks` uses `Res.isErr` for invalid `{` (incompatible with `unwrapOk` → `jsonNull`). Docs: `02-stdlib`, `04`, `05`, `06`, `08-tests`, `guide.md`. Verification: `./scripts/kestrel test` (932 passed), `npm test` (211), `zig build test` (exit 0), `./scripts/run-e2e.sh`.
