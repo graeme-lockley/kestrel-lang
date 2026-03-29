@@ -1719,8 +1719,12 @@ function makeEmitExpr(
               }
             }
           } else if (matchCase.pattern.kind === 'WildcardPattern') {
-            const firstUncovered = [...Array(jumpTableSize).keys()].find(i => casePositions[i] === undefined);
-            if (firstUncovered !== undefined) casePositions[firstUncovered] = caseStart - matchPos;
+            // Default arm must cover every tag not handled by a constructor arm; otherwise those
+            // slots keep placeholder offsets and fall through into the wrong case (e.g. `Object`
+            // body for `Array` / `Int` when `Object` is emitted before `_`).
+            for (let i = 0; i < jumpTableSize; i++) {
+              if (casePositions[i] === undefined) casePositions[i] = caseStart - matchPos;
+            }
             emitExpr(matchCase.body, env, funNameToId, shapes, adts, captures, varNames, undefined, tcTail);
           }
 

@@ -3,6 +3,9 @@
 import * as Str from "kestrel:string"
 import * as List from "kestrel:list"
 import * as Res from "kestrel:result"
+import * as Char from "kestrel:char"
+import * as Basics from "kestrel:basics"
+import * as Stk from "kestrel:stack"
 
 export type Value = Null | Bool(Bool) | Int(Int) | Float(Float) | StrVal(String) | Array(List<Value>) | Object(List<(String, Value)>)
 
@@ -80,17 +83,17 @@ export fun describeParse(s: String): String =
   }
 
 export fun regressionErrorMessagesNonEmpty(): Bool =
-  __string_length(errorAsString(EmptyInput)) > 0
-    & __string_length(errorAsString(UnclosedString(0))) > 0
-    & __string_length(errorAsString(InvalidEscape(0))) > 0
-    & __string_length(errorAsString(InvalidUnicodeEscape(0))) > 0
-    & __string_length(errorAsString(InvalidNumber(0))) > 0
-    & __string_length(errorAsString(UnclosedArray(0))) > 0
-    & __string_length(errorAsString(UnclosedObject(0))) > 0
-    & __string_length(errorAsString(ExpectedColon(0))) > 0
-    & __string_length(errorAsString(ExpectedCommaOrBracket(0))) > 0
-    & __string_length(errorAsString(TrailingGarbage(0))) > 0
-    & __string_length(errorAsString(UnexpectedToken(0))) > 0
+  Str.length(errorAsString(EmptyInput)) > 0
+    & Str.length(errorAsString(UnclosedString(0))) > 0
+    & Str.length(errorAsString(InvalidEscape(0))) > 0
+    & Str.length(errorAsString(InvalidUnicodeEscape(0))) > 0
+    & Str.length(errorAsString(InvalidNumber(0))) > 0
+    & Str.length(errorAsString(UnclosedArray(0))) > 0
+    & Str.length(errorAsString(UnclosedObject(0))) > 0
+    & Str.length(errorAsString(ExpectedColon(0))) > 0
+    & Str.length(errorAsString(ExpectedCommaOrBracket(0))) > 0
+    & Str.length(errorAsString(TrailingGarbage(0))) > 0
+    & Str.length(errorAsString(UnexpectedToken(0))) > 0
 
 fun cpAt(s: String, i: Int): Int =
   if (i >= Str.length(s)) -1 else Str.codePointAt(s, i)
@@ -157,7 +160,7 @@ fun combineSurrogate(hi: Int, lo: Int): Int =
   (hi - 55296) * 1024 + (lo - 56320) + 65536
 
 fun appendCodePoint(acc: String, u: Int): String =
-  Str.append(acc, __char_to_string(__char_from_code(u)))
+  Str.append(acc, Char.charToString(Char.fromCode(u)))
 
 fun parseUnicodeEscape(s: String, i: Int): Result<(String, Int), JsonParseError> =
   if (i >= Str.length(s) | Str.codePointAt(s, i) != 117) Err(InvalidUnicodeEscape(i))
@@ -201,11 +204,11 @@ fun parseStrChar(s: String, i: Int, acc: String): Result<(String, Int), JsonPars
         if (e == 34) parseStrChar(s, i + 2, Str.append(acc, "\""))
         else if (e == 92) parseStrChar(s, i + 2, Str.append(acc, "\\"))
         else if (e == 47) parseStrChar(s, i + 2, Str.append(acc, "/"))
-        else if (e == 98) parseStrChar(s, i + 2, Str.append(acc, __char_to_string(__char_from_code(8))))
-        else if (e == 102) parseStrChar(s, i + 2, Str.append(acc, __char_to_string(__char_from_code(12))))
-        else if (e == 110) parseStrChar(s, i + 2, Str.append(acc, __char_to_string(__char_from_code(10))))
-        else if (e == 114) parseStrChar(s, i + 2, Str.append(acc, __char_to_string(__char_from_code(13))))
-        else if (e == 116) parseStrChar(s, i + 2, Str.append(acc, __char_to_string(__char_from_code(9))))
+        else if (e == 98) parseStrChar(s, i + 2, Str.append(acc, Char.charToString(Char.fromCode(8))))
+        else if (e == 102) parseStrChar(s, i + 2, Str.append(acc, Char.charToString(Char.fromCode(12))))
+        else if (e == 110) parseStrChar(s, i + 2, Str.append(acc, Char.charToString(Char.fromCode(10))))
+        else if (e == 114) parseStrChar(s, i + 2, Str.append(acc, Char.charToString(Char.fromCode(13))))
+        else if (e == 116) parseStrChar(s, i + 2, Str.append(acc, Char.charToString(Char.fromCode(9))))
         else if (e == 117) {
           val ru = parseUnicodeEscape(s, i + 1)
           match (ru) {
@@ -215,7 +218,7 @@ fun parseStrChar(s: String, i: Int, acc: String): Result<(String, Int), JsonPars
         }
         else Err(InvalidEscape(i + 1))
       }
-    } else parseStrChar(s, i + 1, Str.append(acc, __char_to_string(__char_from_code(c))))
+    } else parseStrChar(s, i + 1, Str.append(acc, Char.charToString(Char.fromCode(c))))
   }
 
 fun mkStrVal(s: String): Value = StrVal(s)
@@ -251,8 +254,8 @@ fun pow10fSigned(exp: Int): Float =
   if (exp >= 0) pow10f(exp) else 1.0 / pow10f(0 - exp)
 
 fun scaleFrac(frac: Int, places: Int): Float =
-  if (places <= 0) __int_to_float(frac)
-  else __int_to_float(frac) / pow10f(places)
+  if (places <= 0) Basics.toFloat(frac)
+  else Basics.toFloat(frac) / pow10f(places)
 
 fun parseNumberValue(s: String, i: Int): Result<(Value, Int), JsonParseError> = {
   val len = Str.length(s)
@@ -275,7 +278,7 @@ fun parseNumberValue(s: String, i: Int): Result<(Value, Int), JsonParseError> = 
               val fr = readDigits(s, after0 + 1, 0)
               val fd = fr.0
               val k = fr.1
-              val fval = __int_to_float(neg) * scaleFrac(fd, k - (after0 + 1))
+              val fval = Basics.toFloat(neg) * scaleFrac(fd, k - (after0 + 1))
               if (k < len & (Str.codePointAt(s, k) == 101 | Str.codePointAt(s, k) == 69)) {
                 val es = readExpSign(s, k + 1)
                 val esg = es.0
@@ -302,7 +305,7 @@ fun parseNumberValue(s: String, i: Int): Result<(Value, Int), JsonParseError> = 
             val fr = readDigits(s, k + 1, 0)
             val fd = fr.0
             val m = fr.1
-            val fbase = __int_to_float(neg * intv) + scaleFrac(fd, m - (k + 1))
+            val fbase = Basics.toFloat(neg * intv) + scaleFrac(fd, m - (k + 1))
             if (m < len & (Str.codePointAt(s, m) == 101 | Str.codePointAt(s, m) == 69)) {
               val es = readExpSign(s, m + 1)
               val er = readDigits(s, es.1, 0)
@@ -313,7 +316,7 @@ fun parseNumberValue(s: String, i: Int): Result<(Value, Int), JsonParseError> = 
             val es = readExpSign(s, k + 1)
             val er = readDigits(s, es.1, 0)
             if (er.1 == es.1) Err(InvalidNumber(es.1))
-            else Ok((Float(__int_to_float(neg * intv) * pow10fSigned(es.0 * er.0)), er.1))
+            else Ok((Float(Basics.toFloat(neg * intv) * pow10fSigned(es.0 * er.0)), er.1))
           } else Ok((Int(neg * intv), k))
         } else Err(InvalidNumber(j))
       }
@@ -429,11 +432,8 @@ export fun parse(s: String): Result<Value, JsonParseError> = {
     })
 }
 
-export fun parseOrNull(s: String): Option<Value> =
-  match (parse(s)) {
-    Ok(v) => Some(v)
-    Err(_) => None
-  }
+export fun parseOrNull(s: String): Option<Value> = 
+  Res.toOption(parse(s))
 
 fun escapeStringBody(s: String, i: Int, acc: String): String =
   if (i >= Str.length(s)) acc
@@ -447,41 +447,20 @@ fun escapeStringBody(s: String, i: Int, acc: String): String =
       else if (c == 10) Str.append(acc, "\\n")
       else if (c == 13) Str.append(acc, "\\r")
       else if (c == 9) Str.append(acc, "\\t")
-      else Str.append(acc, __char_to_string(__char_from_code(c)))
+      else Str.append(acc, Char.charToString(Char.fromCode(c)))
     escapeStringBody(s, i + 1, next)
   }
 
 fun jsonString(s: String): String =
   Str.append(Str.append("\"", escapeStringBody(s, 0, "")), "\"")
 
-fun stringifyPairs(pairs: List<(String, Value)>, acc: String, first: Bool): String =
-  match (pairs) {
-    [] => acc
-    h :: t => {
-      val part =
-        if (first) Str.append(Str.append(Str.append(acc, jsonString(h.0)), ":"), stringify(h.1))
-        else Str.append(Str.append(Str.append(Str.append(acc, ","), jsonString(h.0)), ":"), stringify(h.1))
-      stringifyPairs(t, part, False)
-    }
-  }
-
 export fun stringify(v: Value): String = match (v) {
   Null => "null"
   Bool(b) => if (b) "true" else "false"
   Int(n) => Str.fromInt(n)
-  Float(f) => __format_one(f)
+  Float(f) => Stk.format(f)
   StrVal(s) => jsonString(s)
-  Array(xs) => Str.append(Str.append("[", stringifyList(xs, "", True)), "]")
-  Object(pairs) => Str.append(Str.append("{", stringifyPairs(pairs, "", True)), "}")
+  Array(xs) => Str.append(Str.append("[", Str.join(",", List.map(xs, stringify))), "]")
+  Object(pairs) =>
+    "{${Str.join(",", List.map(pairs, (p: (String, Value)) => "${jsonString(p.0)}:${stringify(p.1)}"))}}"
 }
-
-fun stringifyList(xs: List<Value>, acc: String, first: Bool): String =
-  match (xs) {
-    [] => acc
-    h :: t => {
-      val part =
-        if (first) Str.append(acc, stringify(h))
-        else Str.append(Str.append(acc, ","), stringify(h))
-      stringifyList(t, part, False)
-    }
-  }

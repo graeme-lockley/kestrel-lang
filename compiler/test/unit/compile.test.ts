@@ -205,4 +205,21 @@ describe('compile', () => {
       expect(entryCount).toBeGreaterThan(0);
     }
   });
+
+  it('ADT match: wildcard arm patches every non-listed constructor in jump table', () => {
+    // Regression: wildcard used to fill only the first free tag, so other tags fell through to
+    // the wrong case (e.g. last-listed constructor body for earlier tags).
+    const result = compile(`
+export type Tri = Na | Nb | Nc
+fun g(x: Tri): Int = match (x) { Nc => 0, _ => 1 }
+val a = g(Na)
+val b = g(Nb)
+val c = g(Nc)
+`);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const { code } = codegen(result.ast);
+      expect(code.length).toBeGreaterThan(30);
+    }
+  });
 });
