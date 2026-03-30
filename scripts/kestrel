@@ -109,6 +109,8 @@ jvm_class_dir_for() {
 
 # Java main class name from script path (e.g. mandelbrot.ks -> Mandelbrot)
 # Uses the same naming scheme as `classNameForPath` in the JVM compiler.
+# Each path segment is sanitized: characters that are not letters, digits, or
+# underscores are replaced with '_' so the result is a valid Java identifier.
 main_class_for() {
   local base first rest
   local abs_ks
@@ -118,12 +120,13 @@ main_class_for() {
   rel="${abs_ks#/}"
   dir=$(dirname "$rel")
   base=$(basename "$rel" .ks)
+  base=$(echo "$base" | sed 's/[^a-zA-Z0-9_]/_/g')
   first=$(echo "$base" | cut -c1 | tr 'a-z' 'A-Z')
   rest=$(echo "$base" | cut -c2-)
   if [ "$dir" = "." ]; then
     echo "${first}${rest}"
   else
-    echo "$(echo "$dir" | tr '/' '.').$first$rest"
+    echo "$(echo "$dir" | sed 's/[^a-zA-Z0-9_/]/_/g' | tr '/' '.').$first$rest"
   fi
 }
 
@@ -163,13 +166,14 @@ needs_compile_jvm() {
   rel="${abs_ks#/}"
   dir=$(dirname "$rel")
   base=$(basename "$rel" .ks)
+  base=$(echo "$base" | sed 's/[^a-zA-Z0-9_]/_/g')
   first=$(echo "$base" | cut -c1 | tr 'a-z' 'A-Z')
   rest=$(echo "$base" | cut -c2-)
   internal_last="${first}${rest}"
   if [ "$dir" = "." ]; then
     internal_name="$internal_last"
   else
-    internal_name="${dir}/${internal_last}"
+    internal_name="$(echo "$dir" | sed 's/[^a-zA-Z0-9_/]/_/g')/${internal_last}"
   fi
   class_file="${class_dir}/${internal_name}.class"
   [ ! -f "$class_file" ] && return 0

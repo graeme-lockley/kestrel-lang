@@ -48,3 +48,32 @@ export fun main(): Unit = println(Str.length("hi"))
     }
   });
 });
+
+describe('JVM codegen: class name sanitization', () => {
+  it('generates a valid Java class name when the source path contains hyphens', () => {
+    // Simulate a project checked out into a directory with hyphens (e.g. "kestrel-lang").
+    // The returned mainClass must consist solely of valid Java identifier segments.
+    const tmpDir = join(compilerRoot, 'test', 'integration', '_tmp_jvm-hyphen-dir');
+    mkdirSync(tmpDir, { recursive: true });
+    const srcPath = join(tmpDir, 'hello.ks');
+    writeFileSync(srcPath, 'fun main(): Unit = println("hi")\n');
+    try {
+      const result = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpDir,
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        // mainClass uses '/' as segment separator (JVM internal name).
+        // Each segment must be a valid Java identifier (letters, digits, underscore only).
+        const segments = result.mainClass.split('/');
+        for (const seg of segments) {
+          expect(seg).toMatch(/^[a-zA-Z0-9_]+$/);
+        }
+      }
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});

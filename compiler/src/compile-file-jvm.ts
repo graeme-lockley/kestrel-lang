@@ -206,6 +206,12 @@ function collectJvmNamespaceConstructorDiags(
  * Derive JVM internal class name from the absolute source path.
  * Example:
  * - /Users/me/proj/mandelbrot.ks -> Users/me/proj/Mandelbrot
+ * - /Users/me/my-proj/mandelbrot.ks -> Users/me/my_proj/Mandelbrot
+ *
+ * Each path segment is sanitized so that only characters valid in a Java
+ * identifier remain (letters, digits, underscore); anything else is replaced
+ * with '_'.  This prevents Java from rejecting class names that contain
+ * hyphens or dots from directory names such as "kestrel-lang".
  *
  * This is intentionally stable regardless of:
  * - whether the file is an entry vs dependency
@@ -215,7 +221,7 @@ function classNameForPath(absolutePath: string): string {
   const normalized = pathResolve(absolutePath).replace(/\\/g, '/');
   const rel = normalized.startsWith('/') ? normalized.slice(1) : normalized;
   const withoutExt = rel.endsWith('.ks') ? rel.slice(0, -3) : rel;
-  const parts = withoutExt.split('/');
+  const parts = withoutExt.split('/').map((p: string) => p.replace(/[^a-zA-Z0-9_]/g, '_'));
   const last = parts[parts.length - 1] ?? '';
   const cap = last.charAt(0).toUpperCase() + last.slice(1);
   if (parts.length === 1) return cap;
