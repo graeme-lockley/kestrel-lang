@@ -6,7 +6,7 @@
 
 ## Summary
 
-Extend the standard library **beyond** the current **`kestrel:http`** contract in **02**, which today centres on a server-oriented API and a **`get(url)`** client. Add a **REST-capable client surface**: arbitrary **methods** (GET, POST, PUT, PATCH, DELETE, …), **request headers**, **request body**, **response status**, and **response headers/body**, all integrated with the **`Task`** model once sequence **55** is in effect. Implementations use **native** HTTP client stacks on the Zig VM and JVM (`std.http` / platform TLS on Zig; `java.net.http.HttpClient` or equivalent on the JVM) with **documented** parity goals.
+Extend the standard library **beyond** the current **`kestrel:http`** contract in **02**, which today centres on a server-oriented API and a **`get(url)`** client. Add a **REST-capable client surface**: arbitrary **methods** (GET, POST, PUT, PATCH, DELETE, ...), **request headers**, **request body**, **response status**, and **response headers/body**, all integrated with the **`Task`** model once sequence **56** is in effect. Implementations use **native** HTTP client stacks on the Zig VM and JVM (`std.http` / platform TLS on Zig; `java.net.http.HttpClient` or equivalent on the JVM) with **documented** parity goals.
 
 ## Current State
 
@@ -16,7 +16,7 @@ Extend the standard library **beyond** the current **`kestrel:http`** contract i
 
 ## Relationship to other stories
 
-- **Depends on** sequence **55** for real **`Task` completion** on network I/O (same dependency as **56**).
+- **Depends on** sequence **56** for real **`Task` completion** on network I/O (same dependency as **57**).
 - **Depends on** sequence **56** for **`Request` / `Response` / `Server`** types and the first working HTTP stack; **66** layers **client** ergonomics and **method/header/body** support on those types or on **new** client-specific types that **02** defines.
 - **Optional coordination** with sequence **65** if low-level TLS is exposed via `kestrel:socket`; HTTPS client may remain **implementation-internal** via native HTTP clients.
 - **Distinct from** sequence **58** (compile-time URL imports).

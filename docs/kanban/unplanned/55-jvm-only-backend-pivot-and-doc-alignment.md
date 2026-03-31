@@ -1,6 +1,6 @@
 # JVM-Only Backend Pivot And Documentation Alignment
 
-## Sequence: 69
+## Sequence: 55
 ## Tier: 8
 ## Former ID: (none)
 

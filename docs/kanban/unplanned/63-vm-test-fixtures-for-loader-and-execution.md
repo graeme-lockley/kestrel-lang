@@ -1,6 +1,6 @@
 # VM: Test fixtures for loader and execution
 
-## Sequence: 62
+## Sequence: 63
 ## Tier: Subset of VM testing (often folded into sequence 13)
 ## Former ID: 29
 

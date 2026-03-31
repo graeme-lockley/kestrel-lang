@@ -1,6 +1,6 @@
 # Async/Await: Real Suspension and Event Loop
 
-## Sequence: 55
+## Sequence: 56
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 22
 
@@ -97,7 +97,7 @@ The current AWAIT implementation only handles **completed** tasks (synchronous r
 
 ### Audit scope
 
-- The audit covers **stdlib**, **runtime primitives**, **compiler lowering** if needed, **scripts/CLI** entry, and **tests** that assumed synchronous completion or old error shapes—**limited to code paths that exist today**. **Do not** expand scope to HTTP client/server or other **56** work; the spec may still mention HTTP, but **55** updates only what is already implemented unless a doc fix is needed for consistency.
+- The audit covers **stdlib**, **runtime primitives**, **compiler lowering** if needed, **scripts/CLI** entry, and **tests** that assumed synchronous completion or old error shapes—**limited to code paths that exist today**. **Do not** expand scope to HTTP client/server or other **57** work; the spec may still mention HTTP, but **56** updates only what is already implemented unless a doc fix is needed for consistency.
 
 ## Impact analysis
 

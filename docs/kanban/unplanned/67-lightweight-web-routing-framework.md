@@ -18,7 +18,7 @@ Add a **small, opinionated** standard library module (working name **`kestrel:we
 
 - **Depends on** sequence **56** (`kestrel:http` server path: `createServer`, `listen`, `Request`/`Response`).
 - **Soft dependency** on sequence **66** if handlers need rich **response** helpers (status, JSON body) that align with client types—**planned** should order **67** after **56** minimum, and after **66** if shared **Response** builders are required.
-- **Depends on** sequence **55** indirectly through **56** (async server).
+- **Depends on** sequence **56** indirectly through **57** (async server).
 - **Independent of** sequence **65** (`kestrel:socket`) unless the framework later supports **WebSockets** (out of scope unless added as a follow-up).
 
 ## Goals

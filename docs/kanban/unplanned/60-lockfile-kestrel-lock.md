@@ -1,6 +1,6 @@
 # Lockfile: kestrel.lock
 
-## Sequence: 59
+## Sequence: 60
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 26
 

@@ -1,6 +1,6 @@
 # `ignore` keyword for discarding non-Unit values
 
-## Sequence: 60
+## Sequence: 61
 ## Tier: Optional language sugar (after core tiers 1–6)
 ## Former ID: 27
 

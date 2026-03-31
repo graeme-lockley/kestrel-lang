@@ -16,7 +16,7 @@ Introduce a **user-facing** standard library module for **TCP** sockets (connect
 
 ## Relationship to other stories
 
-- **Depends on** sequence **55** (async/event loop) for non-blocking read/write and accept patterns consistent with `Task` and `await`, unless the first slice is **strictly blocking** with documented limitations (prefer aligning with **55** before closing **65**).
+- **Depends on** sequence **56** (async/event loop) for non-blocking read/write and accept patterns consistent with `Task` and `await`, unless the first slice is **strictly blocking** with documented limitations (prefer aligning with **56** before closing **65**).
 - **Builds on / coordinates with** sequence **56** (`kestrel:http` full implementation): shared low-level code or primitives should be **factored** so HTTP and sockets do not fork incompatible TLS or TCP behaviour.
 - **Related (not duplicate):** sequence **58** (URL import resolution) is **compile-time** fetch; **65** is **runtime** I/O.
 - **Optional later:** WebSockets or other framed protocols may be separate stories on top of **65**.
@@ -31,7 +31,7 @@ Introduce a **user-facing** standard library module for **TCP** sockets (connect
 ## Acceptance Criteria
 
 - [ ] `kestrel:socket` resolves from source like other stdlib modules (`docs/specs/07-modules.md` updated accordingly).
-- [ ] Documented API in `docs/specs/02-stdlib.md` covers at least: client connect (host, port), server listen/bind, accept, close, and byte-oriented send/receive returning **`Task`-shaped** results where **55** requires async I/O (or a documented blocking subset if **55** is not yet done—planning must pick one and stick to it).
+- [ ] Documented API in `docs/specs/02-stdlib.md` covers at least: client connect (host, port), server listen/bind, accept, close, and byte-oriented send/receive returning **`Task`-shaped** results where **56** requires async I/O (or a documented blocking subset if **56** is not yet done—planning must pick one and stick to it).
 - [ ] TLS: documented API for upgrading or creating a **TLS client** stream and **TLS server** context (exact shape left to planned phase but must appear in **02** before **done**).
 - [ ] Zig VM: primitives or host calls implementing the module behaviour; `zig build test` extended as needed.
 - [ ] JVM: equivalent behaviour via `KRuntime` (or documented Java APIs) with the same Kestrel-visible signatures.
