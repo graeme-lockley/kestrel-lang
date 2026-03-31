@@ -241,9 +241,11 @@ on it), the JVM backend is dramatically easier to implement correctly.
 
 ---
 
-## Recommended Approach: Phased Pivot (B → C)
+## Recommended Approach: Phased Pivot (B → Self-Hosting)
 
-Based on this analysis, a two-phase approach balances risk and reward:
+Based on this analysis and subsequent discussion, the chosen direction is a
+two-phase approach: JVM-only first, then a **self-hosting Kestrel compiler**
+(rather than a Kotlin/Java rewrite).
 
 ### Phase 1: JVM-Primary, VM-Deprecated (Option B)
 
@@ -263,23 +265,43 @@ Based on this analysis, a two-phase approach balances risk and reward:
 This gets the biggest wins (halved feature work, better async, ecosystem
 access) with minimal disruption.
 
-### Phase 2: Compiler Rewrite (Option C)
+### Phase 2: Self-Hosting Kestrel Compiler (Replaces Option C)
 
-**Timeline:** After Phase 1 is stable (3-6 months later)  
+**Timeline:** After Phase 1 is stable  
 **Effort:** High  
+**See also:** `future/self-hosting-kestrel-compiler.md`
 
-1. Port the compiler to Kotlin, module by module:
-   - Lexer (336 LOC) — straightforward port
-   - Parser (1,289 LOC) — straightforward port
-   - Type checker (1,894 LOC) — most complex; H-M unification
-   - JVM codegen (2,380 LOC) — benefits most from ASM library
-   - Module resolution, diagnostics, bundling — remaining pieces
-2. Use the existing conformance and e2e tests as a golden corpus.
-3. Ship when all existing tests pass on the Kotlin compiler.
-4. Remove the Zig VM and TypeScript compiler from the repo.
+Instead of rewriting the compiler in Kotlin/Java, the plan is to write a
+**Kestrel compiler in Kestrel itself**. The TypeScript compiler becomes the
+bootstrap compiler only.
 
-Phase 2 is optional and should only proceed if Phase 1 validates the JVM-only
-direction and the maintainer(s) have appetite for the rewrite.
+**Build chain:**
+
+1. TypeScript compiler (bootstrap) compiles the Kestrel compiler source → JVM
+   `.class` files.
+2. The Kestrel compiler (running on JVM) compiles itself → JVM `.class` files.
+3. The output from step 2 is the production compiler; the TypeScript compiler
+   is only needed to rebuild from scratch.
+
+**Benefits over Option C (Kotlin rewrite):**
+
+- Kestrel is its own best test case ("eating your own dog food").
+- Forces the language to be expressive enough for real-world tooling.
+- Proves the JVM backend can handle a non-trivial program.
+- No new language ecosystem to learn (no Kotlin/Gradle dependency).
+- The TypeScript compiler remains as a frozen bootstrap — no rewrite risk.
+
+**Risks:**
+
+- Kestrel may need language features it doesn't yet have (file I/O, string
+  manipulation, data structures) to write a compiler. These become
+  prerequisites.
+- The bootstrap chain is more complex: changes to the language may require
+  updating both the TypeScript bootstrap compiler and the Kestrel compiler.
+- Debugging a self-hosting compiler is harder than debugging a Kotlin port.
+
+Phase 2 is a significant engineering experiment but aligns with the project's
+educational goals and validates Kestrel as a practical language.
 
 ---
 
@@ -326,21 +348,28 @@ To be honest about the costs:
 
 ## Open Questions
 
-1. **Is Kestrel primarily educational or practical?** If educational, the VM
-   has irreplaceable value. If practical, JVM wins decisively.
+1. ~~**Is Kestrel primarily educational or practical?**~~ **Resolved:** Both.
+   The self-hosting approach serves both goals — it's practical (JVM
+   performance, ecosystem) and educational (building a compiler in your own
+   language).
 
-2. **How important is zero-dependency deployment?** If Kestrel targets
-   scripting/CLI tools where users don't have Java, the VM story matters.
-   If it targets server-side development where Java is common, it doesn't.
+2. ~~**How important is zero-dependency deployment?**~~ **Deferred:** JVM
+   dependency is accepted for now. GraalVM native-image remains a future
+   option for standalone binaries.
 
-3. **Is the compiler rewrite (Phase 2) worth it?** The TypeScript compiler
-   works well. The main benefit of a Kotlin rewrite is ecosystem unification
-   and ASM access. This benefit is real but may not justify 3-6 months of work.
+3. ~~**Is the compiler rewrite (Phase 2) worth it?**~~ **Resolved:** Yes, but
+   as a self-hosting Kestrel compiler rather than a Kotlin port. See
+   `future/self-hosting-kestrel-compiler.md`.
 
 4. **GraalVM as a middle ground?** GraalVM native-image could compile the JVM
    output to native binaries, recovering zero-dependency deployment and fast
-   startup. Worth investigating.
+   startup. Worth investigating after Phase 1.
 
-5. **What is the team size?** For a solo developer, maintaining two backends
-   is particularly painful. The "halve the work" argument is strongest when
-   resources are scarce.
+5. ~~**What is the team size?**~~ **Resolved:** Solo developer. Halving backend
+   work (Phase 1) is high priority. Self-hosting (Phase 2) is a longer-term
+   experiment.
+
+6. **What language features does Kestrel need before self-hosting?** The
+   compiler requires file I/O, string manipulation, data structures (maps,
+   arrays), and possibly some form of byte-level output for `.class` file
+   generation. These are prerequisites for Phase 2.
