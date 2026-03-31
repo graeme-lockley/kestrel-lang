@@ -369,7 +369,6 @@ To be honest about the costs:
    work (Phase 1) is high priority. Self-hosting (Phase 2) is a longer-term
    experiment.
 
-6. **What language features does Kestrel need before self-hosting?** The
-   compiler requires file I/O, string manipulation, data structures (maps,
-   arrays), and possibly some form of byte-level output for `.class` file
-   generation. These are prerequisites for Phase 2.
+6. **What language features does Kestrel need before self-hosting?** See the
+   detailed prerequisite table in `future/self-hosting-kestrel-compiler.md`.
+   Key gaps: arrays (story 57), maps, and byte-level I/O.

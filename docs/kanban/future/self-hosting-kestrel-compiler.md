@@ -59,7 +59,7 @@ Kestrel:
 |---------|---------------|-------|
 | String manipulation | ✅ Basic ops | May need more: split, indexOf, substring, char-at |
 | File I/O | ✅ `kestrel:fs` | Read source files, write `.class` output |
-| Byte-level output | ⚠️ Limited | `.class` file generation requires writing raw bytes |
+| Byte-level output | ❌ Not yet | `.class` file generation requires writing raw bytes (u8, u16, u32 big-endian); no byte/buffer type exists |
 | Arrays / mutable collections | ❌ Not yet | Story 57 (array-builtin-type) is prerequisite |
 | Maps / dictionaries | ❌ Not yet | Symbol tables, scope maps, type environments |
 | Pattern matching | ✅ Full | Essential for AST traversal |
