@@ -1,6 +1,11 @@
-// Runtime conformance: async function declarations compile and link (spec 08 §2.3).
-// Full await/Task execution at module top level is covered by stdlib tests; this file only checks VM + codegen for async.
+// Runtime conformance: async + await execute through JVM Task plumbing (spec 08 §2.3).
 async fun double(n: Int): Task<Int> = n * 2
 
-println(42)
+async fun run(): Task<Unit> = {
+	val x = await double(21);
+	println(x);
+	()
+}
+
+run()
 // 42

@@ -23,6 +23,7 @@ const K_NIL = 'kestrel/runtime/KNil';
 const K_LIST = 'kestrel/runtime/KList';
 const K_CONS = 'kestrel/runtime/KCons';
 const K_ERR = 'kestrel/runtime/KErr';
+const K_TASK = 'kestrel/runtime/KTask';
 
 /** Parser `char` token value is the decoded scalar (no quotes); astral scalars may span two UTF-16 units in JS. */
 function charLiteralCodePoint(value: string): number {
@@ -1632,7 +1633,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           }
           if (name === '__read_file_async' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'readFileAsync', '(Ljava/lang/Object;)Ljava/lang/Object;'));
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'readFileAsync', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
             return false;
           }
           if (name === '__list_dir' && expr.args.length === 1) {
@@ -2838,8 +2839,10 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         // Unreachable tail after `break`/`continue` in the same block.
         return false;
       case 'AwaitExpr':
-        // JVM I/O primitives (e.g. readFileAsync) return the payload directly; completed Task<T> is not boxed.
-        return emitExpr(expr.value, mb, tcN);
+        emitExpr(expr.value, mb, tcN);
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_TASK));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(K_TASK, 'get', '()Ljava/lang/Object;'));
+        return false;
       default:
         throw new Error(`JVM codegen: unsupported expr ${(expr as Expr).kind}`);
     }
@@ -2965,10 +2968,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         inTail: true,
       };
       const bodyXfer = emitExpr(member.body, helperMb, helperTailCtx);
-      if (member.async) {
-        helperMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'completedTask', '(Ljava/lang/Object;)Ljava/lang/Object;'));
+      if (!bodyXfer) {
+        if (member.async) {
+          helperMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'completedTask', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
+        }
+        helperMb.emit1(JvmOp.ARETURN);
       }
-      if (!bodyXfer) helperMb.emit1(JvmOp.ARETURN);
     }
     helperMb.setMaxs(32, Math.max(Math.max(group.arity + 1, nextLocal) + 8, 70));
     cf.flushLastMethod();
@@ -3011,7 +3016,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     };
     const funXfer = emitExpr(fun.body, mb, funSelfTail);
     mb.setMaxs(32, Math.max(Math.max(arity, nextLocal) + 8, 70));
-    if (!funXfer) mb.emit1(JvmOp.ARETURN);
+    if (!funXfer) {
+      if (fun.async) {
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'completedTask', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
+      }
+      mb.emit1(JvmOp.ARETURN);
+    }
     cf.flushLastMethod();
     for (const k of paramEnv.keys()) env.delete(k);
     for (const k of fixedParamKeys) env.delete(k);

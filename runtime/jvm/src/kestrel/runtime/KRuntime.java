@@ -475,12 +475,16 @@ public final class KRuntime {
         throw new IllegalArgumentException("expected number");
     }
 
-    public static Object readFileAsync(Object path) {
-        if (!(path instanceof String)) return "";
+    public static KTask completedTask(Object value) {
+        return KTask.completed(value);
+    }
+
+    public static KTask readFileAsync(Object path) {
+        if (!(path instanceof String)) return KTask.completed("");
         try {
-            return new String(Files.readAllBytes(Paths.get((String) path)), StandardCharsets.UTF_8);
+            return KTask.completed(new String(Files.readAllBytes(Paths.get((String) path)), StandardCharsets.UTF_8));
         } catch (Exception e) {
-            return "";
+            return KTask.completed("");
         }
     }
 

@@ -7,6 +7,11 @@ import * as Str from "kestrel:string"
 fun entryContains(entries: List<String>, needle: String): Bool =
   Lst.any(entries, (e: String) => Str.contains(needle, e))
 
+async fun readViaAwait(path: String): Task<String> = {
+  val t = await Fs.readText(path);
+  t
+}
+
 export async fun run(s: Suite): Task<Unit> = {
   group(s, "fs", (s1: Suite) => {
     val cwd = Process.getProcess().cwd;
@@ -21,6 +26,12 @@ export async fun run(s: Suite): Task<Unit> = {
       val bad = "${cwd}/tests/fixtures/fs/__missing__.no_such";
       val t = await Fs.readText(bad);
       eq(sg, "empty string", t, "");
+    });
+
+    group(s1, "readViaAwait helper", (sg: Suite) => {
+      val okPath = "${cwd}/tests/fixtures/fs/read_fixture.txt";
+      val t = await readViaAwait(okPath);
+      eq(sg, "helper contents", t, "hello fixture\n");
     });
 
     group(s1, "writeText readText roundtrip", (sg: Suite) => {

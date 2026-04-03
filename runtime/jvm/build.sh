@@ -19,6 +19,7 @@ javac -d "$OUT_DIR" -source 11 -target 11 \
   "$SRC_DIR/kestrel/runtime/KOption.java" \
   "$SRC_DIR/kestrel/runtime/KNone.java" \
   "$SRC_DIR/kestrel/runtime/KSome.java" \
+  "$SRC_DIR/kestrel/runtime/KTask.java" \
   "$SRC_DIR/kestrel/runtime/KResult.java" \
   "$SRC_DIR/kestrel/runtime/KErr.java" \
   "$SRC_DIR/kestrel/runtime/KOk.java" \

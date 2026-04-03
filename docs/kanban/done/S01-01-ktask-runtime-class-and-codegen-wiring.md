@@ -36,15 +36,15 @@ Introduce a concrete `KTask` Java class in the JVM runtime that wraps `Completab
 
 ## Acceptance Criteria
 
-- [ ] `KTask.java` exists in `runtime/jvm/src/kestrel/runtime/` with `completed(Object)` and `get()` methods.
-- [ ] `KRuntime.completedTask(Object)` returns a `KTask` instance.
-- [ ] `KRuntime.readFileAsync(Object)` returns `KTask.completed(content)` instead of raw `String`.
-- [ ] JVM codegen emits an `INVOKEVIRTUAL`/`INVOKESTATIC` call for `await` expressions instead of being a no-op.
-- [ ] `KTask.get()` for a completed task returns the value immediately (no blocking, no virtual threads).
-- [ ] `KTask.get()` for an incomplete task throws a TODO error: `"TODO: virtual thread suspension (S01-02)"`.
-- [ ] Existing tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
-- [ ] `tests/conformance/runtime/valid/async_await.ks` still passes.
-- [ ] `stdlib/kestrel/fs.test.ks` still passes.
+- [x] `KTask.java` exists in `runtime/jvm/src/kestrel/runtime/` with `completed(Object)` and `get()` methods.
+- [x] `KRuntime.completedTask(Object)` returns a `KTask` instance.
+- [x] `KRuntime.readFileAsync(Object)` returns `KTask.completed(content)` instead of raw `String`.
+- [x] JVM codegen emits an `INVOKEVIRTUAL`/`INVOKESTATIC` call for `await` expressions instead of being a no-op.
+- [x] `KTask.get()` for a completed task returns the value immediately (no blocking, no virtual threads).
+- [x] `KTask.get()` for an incomplete task throws a TODO error: `"TODO: virtual thread suspension (S01-02)"`.
+- [x] Existing tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
+- [x] `tests/conformance/runtime/valid/async_await.ks` still passes.
+- [x] `stdlib/kestrel/fs.test.ks` still passes.
 
 ## Spec References
 
@@ -70,18 +70,19 @@ Introduce a concrete `KTask` Java class in the JVM runtime that wraps `Completab
 
 ## Tasks
 
-- [ ] Parser: audit `compiler/src/parser/parse.ts` `await` parsing path (`parsePrimary`) and confirm no AST shape change is required for S01-01.
-- [ ] Typecheck: audit `compiler/src/typecheck/check.ts` `AwaitExpr` inference to ensure `await` still requires `Task<T>` and returns `T` with no runtime-class coupling.
-- [ ] Bytecode codegen (non-JVM): verify `compiler/src/codegen/codegen.ts` requires no changes for this JVM-only story; document explicit no-op in build notes when implementing.
-- [ ] JVM codegen: update `compiler/src/jvm-codegen/codegen.ts` `AwaitExpr` emission to call `kestrel/runtime/KTask.get()` and update all related method descriptors for `completedTask` / `readFileAsync` task-returning intrinsics.
-- [ ] JVM runtime: add `runtime/jvm/src/kestrel/runtime/KTask.java` implementing `completed(Object)` and `get()` over `CompletableFuture<Object>` with S01-02 TODO behavior for incomplete tasks.
-- [ ] JVM runtime: update `runtime/jvm/src/kestrel/runtime/KRuntime.java` (`completedTask`, `readFileAsync`) to construct and return `KTask` consistently.
-- [ ] Stdlib validation: confirm `stdlib/kestrel/fs.ks` and current async stdlib call sites remain source-compatible without edits in this story.
-- [ ] Tests: add/update compiler and Kestrel runtime tests listed below to cover await dispatch through `KTask` and preserve current observable behavior.
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `cd runtime/jvm && bash build.sh`
-- [ ] Run `./scripts/kestrel test`
-- [ ] Run `./scripts/run-e2e.sh`
+- [x] Parser: audit `compiler/src/parser/parse.ts` `await` parsing path (`parsePrimary`) and confirm no AST shape change is required for S01-01.
+- [x] Typecheck: audit `compiler/src/typecheck/check.ts` `AwaitExpr` inference to ensure `await` still requires `Task<T>` and returns `T` with no runtime-class coupling.
+- [x] Bytecode codegen (non-JVM): verify `compiler/src/codegen/codegen.ts` requires no changes for this JVM-only story; document explicit no-op in build notes when implementing.
+- [x] JVM codegen: update `compiler/src/jvm-codegen/codegen.ts` `AwaitExpr` emission to call `kestrel/runtime/KTask.get()` and update all related method descriptors for `completedTask` / `readFileAsync` task-returning intrinsics.
+- [x] JVM runtime: add `runtime/jvm/src/kestrel/runtime/KTask.java` implementing `completed(Object)` and `get()` over `CompletableFuture<Object>` with S01-02 TODO behavior for incomplete tasks.
+- [x] JVM runtime: update `runtime/jvm/src/kestrel/runtime/KRuntime.java` (`completedTask`, `readFileAsync`) to construct and return `KTask` consistently.
+- [x] JVM runtime build plumbing: include `runtime/jvm/src/kestrel/runtime/KTask.java` in `runtime/jvm/build.sh` so the runtime jar contains the new task type.
+- [x] Stdlib validation: confirm `stdlib/kestrel/fs.ks` and current async stdlib call sites remain source-compatible without edits in this story.
+- [x] Tests: add/update compiler and Kestrel runtime tests listed below to cover await dispatch through `KTask` and preserve current observable behavior.
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `cd runtime/jvm && bash build.sh`
+- [x] Run `./scripts/kestrel test`
+- [x] Run `./scripts/run-e2e.sh`
 
 ## Tests to add
 
@@ -94,9 +95,16 @@ Introduce a concrete `KTask` Java class in the JVM runtime that wraps `Completab
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — update async/await runtime wording in section 5 and/or expression semantics to describe that JVM await unwraps `Task<T>` through runtime task object access (`KTask.get` equivalent behavior).
-- [ ] `docs/specs/06-typesystem.md` — update Task/await implementation note in section 6 to align with concrete JVM `Task<T>` runtime representation (completed vs incomplete task behavior and S01-02 TODO boundary).
+- [x] `docs/specs/01-language.md` — update async/await runtime wording in section 5 and/or expression semantics to describe that JVM await unwraps `Task<T>` through runtime task object access (`KTask.get` equivalent behavior).
+- [x] `docs/specs/06-typesystem.md` — update Task/await implementation note in section 6 to align with concrete JVM `Task<T>` runtime representation (completed vs incomplete task behavior and S01-02 TODO boundary).
 
 ## Notes
 
 - Current source appears to have `readFileAsync` and `AwaitExpr` passthrough, and JVM codegen references `KRuntime.completedTask(...)` descriptor paths that should be validated as part of this story to avoid runtime linkage drift.
+
+## Build notes
+
+- 2026-04-03: Started implementation from `planned/`; codebase still matches the planned S01-01 scope (await passthrough + sync `readFileAsync`).
+- 2026-04-03: Codebase divergence found during implementation: `KRuntime.completedTask(...)` did not exist yet (rather than returning an ad-hoc wrapper). Added as part of S01-01 and aligned all JVM codegen descriptors to concrete `KTask` return types.
+- 2026-04-03: Additional scope emerged: `runtime/jvm/build.sh` compiles a fixed source list, so `KTask.java` had to be added explicitly to avoid javac symbol failures.
+- 2026-04-03: Validation complete. Required suites all pass: compiler build/tests, runtime build, Kestrel harness tests, and E2E scenarios (including new `async-await-ktask-wiring`).

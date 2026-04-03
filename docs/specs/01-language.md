@@ -501,7 +501,9 @@ val x = await f()
 
 Runtime behaviour:
 
-- Instruction `AWAIT`: if task complete → push result; else suspend frame.
+- On the JVM backend, `Task<T>` values are runtime `kestrel.runtime.KTask` objects.
+- Async function returns and async runtime primitives produce `KTask` (S01-01: completed-task only).
+- `await e` lowers to `KTask.get()`: for completed tasks it returns immediately; for incomplete tasks the current implementation raises a TODO runtime error (`"TODO: virtual thread suspension (S01-02)"`) until virtual-thread suspension lands in S01-02.
 
 ---
 

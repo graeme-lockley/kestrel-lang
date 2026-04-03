@@ -14,7 +14,7 @@ Async execution exploits **Project Loom virtual threads** (Java 21+) rather than
 
 ## Stories (ordered — implement sequentially)
 
-1. [S01-01-ktask-runtime-class-and-codegen-wiring.md](../../unplanned/S01-01-ktask-runtime-class-and-codegen-wiring.md) — KTask Java class, completedTask() update, await codegen wiring. No behavior change; all tasks still synchronous.
+1. [x] [S01-01-ktask-runtime-class-and-codegen-wiring.md](../../done/S01-01-ktask-runtime-class-and-codegen-wiring.md) — KTask Java class, completedTask() update, await codegen wiring. Completed.
 2. [S01-02-virtual-thread-executor-async-launch.md](../../unplanned/S01-02-virtual-thread-executor-async-launch.md) — Virtual thread executor; async function bodies launch on virtual threads; await blocks cheaply.
 3. [S01-03-nonblocking-file-io-virtual-threads.md](../../unplanned/S01-03-nonblocking-file-io-virtual-threads.md) — readFileAsync on virtual threads; provisional error handling (exceptions).
 4. [S01-07-async-listdir-cascade.md](../../unplanned/S01-07-async-listdir-cascade.md) — Async `listDir` signature, JVM runtime, codegen, and cascade all Kestrel callers (fs.test.ks, run_tests.ks).
