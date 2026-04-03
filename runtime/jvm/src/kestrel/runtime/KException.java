@@ -5,7 +5,7 @@ public class KException extends RuntimeException {
     private final Object payload;
 
     public KException(Object payload) {
-        super(payload != null ? payload.toString() : "Kestrel exception");
+        super("Uncaught exception: " + KRuntime.formatOne(payload));
         this.payload = payload;
     }
 

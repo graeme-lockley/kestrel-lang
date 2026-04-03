@@ -70,9 +70,9 @@ for f in "${files[@]}"; do
         continue
       fi
       ok_st=0
-      if grep -q "Uncaught exception" "$out_stderr" && grep -q " at " "$out_stderr"; then
+      if grep -q "Uncaught exception" "$out_stderr" && grep -Eq '^[[:space:]]+at | at ' "$out_stderr"; then
         ok_st=1
-      elif grep -q "Operand stack overflow" "$out_stderr" && grep -q " at " "$out_stderr"; then
+      elif grep -q "Operand stack overflow" "$out_stderr" && grep -Eq '^[[:space:]]+at | at ' "$out_stderr"; then
         ok_st=1
       elif grep -q "stack overflow (exceeded" "$out_stderr"; then
         ok_st=1
