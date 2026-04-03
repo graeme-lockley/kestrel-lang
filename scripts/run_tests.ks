@@ -1,5 +1,5 @@
-import { getProcess, runProcess } from "kestrel:process"
-import { listDir, writeText } from "kestrel:fs"
+import { getProcess, runProcess, ProcessSpawnError } from "kestrel:process"
+import { listDir, writeText, NotFound, PermissionDenied, IoError } from "kestrel:fs"
 import * as Lst from "kestrel:list"
 import * as Opt from "kestrel:option"
 import * as Str from "kestrel:string"
@@ -14,6 +14,49 @@ val rootDir = getRootDir(proc.args, cwd)
 
 fun hasSuffix(s: String, suffix: String): Bool = Str.endsWith(suffix, s)
 
+async fun listDirOrExit(path: String): Task<List<String>> =
+  match (await listDir(path)) {
+    Ok(entries) => entries,
+    Err(err) => {
+      val message =
+        match (err) {
+          NotFound => "not found"
+          PermissionDenied => "permission denied"
+          IoError(_) => "io error"
+        };
+      println("kestrel test: listDir failed for ${path}: ${message}");
+      exit(1);
+      []
+    }
+  }
+
+async fun writeTextOrExit(path: String, content: String): Task<Unit> = {
+  match (await writeText(path, content)) {
+    Ok(_) => (),
+    Err(err) => {
+      val message =
+        match (err) {
+          NotFound => "not found"
+          PermissionDenied => "permission denied"
+          IoError(_) => "io error"
+        };
+      println("kestrel test: writeText failed for ${path}: ${message}");
+      exit(1)
+    }
+  }
+}
+
+async fun runProcessOrExit(program: String, args: List<String>): Task<Int> = {
+  match (await runProcess(program, args)) {
+    Ok(code) => code,
+    Err(ProcessSpawnError(_)) => {
+      println("kestrel test: runProcess failed for ${program}: process error");
+      exit(1);
+      1
+    }
+  }
+}
+
 fun collectTests(entries: List<String>, acc: List<String>): List<String> =
   match (entries) {
     [] => acc,
@@ -23,9 +66,7 @@ fun collectTests(entries: List<String>, acc: List<String>): List<String> =
       val kind =
         if (tabIdx >= 0) Str.slice(hd, tabIdx + 1, Str.length(hd)) else "file";
       if (Str.equals(kind, "dir")) {
-        val subEntries = listDir(path);
-        val subAcc = collectTests(subEntries, acc);
-        collectTests(tl, subAcc)
+        collectTests(tl, acc)
       }
       else if (hasSuffix(path, ".test.ks")) collectTests(tl, path :: acc)
       else collectTests(tl, acc)
@@ -82,44 +123,48 @@ fun buildCalls(count: Int, idx: Int): String =
 val unitDir = "${rootDir}/tests/unit"
 val stdlibDir = "${rootDir}/stdlib/kestrel"
 
-checkTestOutputFlags(proc.args)
+async fun main(): Task<Unit> = {
+  checkTestOutputFlags(proc.args)
 
-val pathArgs = getPathArgs(proc.args)
-val outputModeStr =
-  if (hasFlag(proc.args, "--summary")) "outputSummary"
-  else if (hasFlag(proc.args, "--verbose")) "outputVerbose" 
-  else "outputCompact"
+  val pathArgs = getPathArgs(proc.args)
+  val outputModeStr =
+    if (hasFlag(proc.args, "--summary")) "outputSummary"
+    else if (hasFlag(proc.args, "--verbose")) "outputVerbose" 
+    else "outputCompact"
 
-val tests = 
-  if (Lst.length(pathArgs) == 0) {
-    val unitEntries = listDir(unitDir)
-    val stdlibEntries = listDir(stdlibDir)
-    val unitTests = collectTests(unitEntries, [])
-    val stdlibTests = collectTests(stdlibEntries, [])
-    Lst.append(unitTests, stdlibTests)
-  } else 
-    resolvePaths(rootDir, filterToTestFiles(pathArgs))
+  val tests =
+    if (Lst.length(pathArgs) == 0) {
+      val unitEntries = await listDirOrExit(unitDir)
+      val stdlibEntries = await listDirOrExit(stdlibDir)
+      val unitTests = collectTests(unitEntries, [])
+      val stdlibTests = collectTests(stdlibEntries, [])
+      Lst.append(unitTests, stdlibTests)
+    } else
+      resolvePaths(rootDir, filterToTestFiles(pathArgs))
 
-val testCount = Lst.length(tests)
+  val testCount = Lst.length(tests)
 
-val impLines = buildImports(tests, 0)
-val calls = buildCalls(testCount, 0)
+  val impLines = buildImports(tests, 0)
+  val calls = buildCalls(testCount, 0)
 
-val genHead =
-  "import { printSummary, outputCompact, outputVerbose, outputSummary } from \"kestrel:test\"\n";
-val genMid =
-  "\nval counts = { mut passed = 0, mut failed = 0, mut startTime = __now_ms(), mut compactStackBox = { frames = [] }, mut compactExpanded = False }\nval root = { depth = 1, output = ";
-val genRest = ", counts = counts }\n\n";
-val genTail = "printSummary(counts)\n";
-val generatedSource =
-  "${genHead}${impLines}${genMid}${outputModeStr}${genRest}${calls}${genTail}"
+  val genHead =
+    "import { printSummary, outputCompact, outputVerbose, outputSummary } from \"kestrel:test\"\n";
+  val genMid =
+    "\nval counts = { mut passed = 0, mut failed = 0, mut startTime = __now_ms(), mut compactStackBox = { frames = [] }, mut compactExpanded = False }\nval root = { depth = 1, output = ";
+  val genRest = ", counts = counts }\n\n";
+  val genTail = "printSummary(counts)\n";
+  val generatedSource =
+    "${genHead}${impLines}${genMid}${outputModeStr}${genRest}${calls}${genTail}"
 
-val generatedPath = "${rootDir}/.kestrel_test_runner.ks"
+  val generatedPath = "${rootDir}/.kestrel_test_runner.ks"
 
-// Write to a temp file, then only replace if content changed (preserves timestamp to avoid recompilation)
-val tmpPath = "${generatedPath}.new"
-writeText(tmpPath, generatedSource)
-val _cmp = runProcess("sh", ["-c", "cmp -s '${tmpPath}' '${generatedPath}' 2>/dev/null && rm '${tmpPath}' || mv '${tmpPath}' '${generatedPath}'"])
+  // Write to a temp file, then only replace if content changed (preserves timestamp to avoid recompilation)
+  val tmpPath = "${generatedPath}.new"
+  await writeTextOrExit(tmpPath, generatedSource)
+  val _cmp = await runProcessOrExit("sh", ["-c", "cmp -s '${tmpPath}' '${generatedPath}' 2>/dev/null && rm '${tmpPath}' || mv '${tmpPath}' '${generatedPath}'"])
 
-val exitCode = runProcess("./scripts/kestrel", ["run", generatedPath])
-exit(exitCode)
+  val exitCode = await runProcessOrExit("./scripts/kestrel", ["run", generatedPath])
+  exit(exitCode)
+}
+
+main()

@@ -120,13 +120,32 @@ Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on 
 
 ## kestrel:list
 
-Immutable list utilities (in addition to list syntax and `List<T>` in §Library types).
+File system. File operations are async and return `Task<Result<T, FsError>>` so callers use `await` and pattern matching instead of exception control flow.
+
+| Type | Definition |
+|------|------------|
+| `FsError` | `NotFound | PermissionDenied | IoError(String)` |
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `length` | `(List<X>) -> Int` | Number of elements |
-| `isEmpty` | `(List<X>) -> Bool` | True for `[]` |
-| `drop` | `(List<T>, Int) -> List<T>` | Drop first `n` elements (`n <= 0` leaves list unchanged); list first for piping |
+| `readText` | `(String) -> Task<Result<String, FsError>>` | Read file contents as UTF-8 text. Returns `Ok(contents)` on success. |
+| `writeText` | `(String, String) -> Task<Result<Unit, FsError>>` | Write UTF-8 text to a path (creates or truncates the file per host semantics). Returns `Ok(())` on success. |
+| `listDir` | `(String) -> Task<Result<List<String>, FsError>>` | Non-recursive directory listing. `Ok(entries)` on success where each entry is `"<fullPath>\tfile"` or `"<fullPath>\tdir"`. |
+
+---
+
+## kestrel:process
+
+Process information and subprocess execution.
+
+| Type | Definition |
+|------|------------|
+| `ProcessError` | `ProcessSpawnError(String)` |
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `getProcess` | `() -> { os: String, args: List<String>, env: List<(String, String)>, cwd: String }` | Returns process metadata for the current invocation. |
+| `runProcess` | `(String, List<String>) -> Task<Result<Int, ProcessError>>` | Spawn a subprocess, stream stdout/stderr to the current process output, and return `Ok(exitCode)` on completion. Returns `Err(ProcessSpawnError(message))` when process start/execution fails. |
 | `map` | `(List<A>, (A) -> B) -> List<B>` | Element-wise map |
 | `filter` | `(List<A>, (A) -> Bool) -> List<A>` | Keep elements satisfying predicate |
 | `foldl` | `(List<A>, B, (B, A) -> B) -> B` | Left fold |

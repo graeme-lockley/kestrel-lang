@@ -1671,14 +1671,13 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           }
           if (name === '__list_dir' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'listDir', '(Ljava/lang/Object;)Lkestrel/runtime/KList;'));
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'listDirAsync', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
             return false;
           }
           if (name === '__write_text' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'writeText', '(Ljava/lang/Object;Ljava/lang/Object;)V'));
-            mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'writeTextAsync', '(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
             return false;
           }
           if (name === '__now_ms' && expr.args.length === 0) {
@@ -1700,7 +1699,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           if (name === '__run_process' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'runProcess', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;'));
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'runProcessAsync', '(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
             return false;
           }
           const ns = options.namespaceClasses?.get(name);

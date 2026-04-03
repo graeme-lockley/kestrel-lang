@@ -40,15 +40,15 @@ After S01-03:
 
 ## Acceptance Criteria
 
-- [ ] `FsError` ADT is defined (at minimum: `NotFound`, `PermissionDenied`, `IoError`) and exported from `stdlib/kestrel/fs.ks`.
-- [ ] `Fs.readText(path)` has type `Task<Result<String, FsError>>`.
-- [ ] `await Fs.readText("valid-path")` returns `Ok(contents)`.
-- [ ] `await Fs.readText("missing-path")` returns `Err(FsError.NotFound)` (or similar).
-- [ ] Compiler type checker updated: `__read_file_async` returns `Task<Result<String, FsError>>`.
-- [ ] `stdlib/kestrel/fs.test.ks` updated with tests for Ok and Err paths using pattern matching.
-- [ ] Other implemented async I/O primitives have analogous Result-wrapped return types.
-- [ ] No async I/O primitive returns a raw payload or throws on expected errors — all use Result.
-- [ ] Existing tests updated and passing: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
+- [x] `FsError` ADT is defined (at minimum: `NotFound`, `PermissionDenied`, `IoError`) and exported from `stdlib/kestrel/fs.ks`.
+- [x] `Fs.readText(path)` has type `Task<Result<String, FsError>>`.
+- [x] `await Fs.readText("valid-path")` returns `Ok(contents)`.
+- [x] `await Fs.readText("missing-path")` returns `Err(FsError.NotFound)` (or similar).
+- [x] Compiler type checker updated: `__read_file_async` returns `Task<Result<String, FsError>>`.
+- [x] `stdlib/kestrel/fs.test.ks` updated with tests for Ok and Err paths using pattern matching.
+- [x] Other implemented async I/O primitives have analogous Result-wrapped return types.
+- [x] No async I/O primitive returns a raw payload or throws on expected errors — all use Result.
+- [x] Existing tests updated and passing: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
 
 ## Spec References
 
@@ -77,20 +77,20 @@ After S01-03:
 
 ## Tasks
 
-- [ ] Typecheck intrinsics in `compiler/src/typecheck/check.ts`: change `__read_file_async` to `Task<Result<String, FsError>>`, and migrate audited async I/O/process intrinsics (`listDir`, `writeText`, `runProcess`) to `Task<Result<...>>` signatures with concrete ADT error types.
-- [ ] JVM intrinsic lowering in `compiler/src/jvm-codegen/codegen.ts`: update intrinsic name/descriptor mappings to call Result-returning async runtime methods for read/list/write/process.
-- [ ] JVM runtime implementation in `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add async Result-returning methods, map Java IO/process failures to ADT constructors, and remove expected-error sentinel/exception behavior from async I/O surface.
-- [ ] Stdlib API in `stdlib/kestrel/fs.ks`: add/export `FsError` ADT, migrate `readText`, `listDir`, and `writeText` signatures to `Task<Result<...>>`, and expose helper constructors/types needed by callers.
-- [ ] Stdlib API in `stdlib/kestrel/process.ks`: add/export `ProcessError` (or equivalent) and migrate `runProcess` to `Task<Result<Int, ProcessError>>`.
-- [ ] Cascade call sites in `scripts/run_tests.ks`: make filesystem/process usage async and pattern match `Ok/Err` so test discovery and runner generation preserve current UX and exit behavior.
-- [ ] Cascade call sites in `tests/perf/float/run.ks` and other runtime callers using `Process.runProcess`/`Fs.*`: convert to async + Result handling without changing benchmark accounting semantics.
-- [ ] Update stdlib regression coverage in `stdlib/kestrel/fs.test.ks`: assert `Ok` for happy paths and constructor-specific `Err` values for missing file, denied access, and generic IO mapping cases.
-- [ ] Update compiler integration coverage in `compiler/test/integration/runtime-stdlib.test.ts` (and related async runtime tests): assert Result payload semantics instead of exception propagation.
-- [ ] Add conformance and e2e regression cases for `Task<Result<...>>` async fs/process behavior and pattern matching across module boundaries.
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `cd runtime/jvm && bash build.sh`
-- [ ] Run `./scripts/kestrel test`
-- [ ] Run `./scripts/run-e2e.sh`
+- [x] Typecheck intrinsics in `compiler/src/typecheck/check.ts`: change `__read_file_async` to `Task<Result<String, FsError>>`, and migrate audited async I/O/process intrinsics (`listDir`, `writeText`, `runProcess`) to `Task<Result<...>>` signatures with concrete ADT error types.
+- [x] JVM intrinsic lowering in `compiler/src/jvm-codegen/codegen.ts`: update intrinsic name/descriptor mappings to call Result-returning async runtime methods for read/list/write/process.
+- [x] JVM runtime implementation in `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add async Result-returning methods, map Java IO/process failures to ADT constructors, and remove expected-error sentinel/exception behavior from async I/O surface.
+- [x] Stdlib API in `stdlib/kestrel/fs.ks`: add/export `FsError` ADT, migrate `readText`, `listDir`, and `writeText` signatures to `Task<Result<...>>`, and expose helper constructors/types needed by callers.
+- [x] Stdlib API in `stdlib/kestrel/process.ks`: add/export `ProcessError` (or equivalent) and migrate `runProcess` to `Task<Result<Int, ProcessError>>`.
+- [x] Cascade call sites in `scripts/run_tests.ks`: make filesystem/process usage async and pattern match `Ok/Err` so test discovery and runner generation preserve current UX and exit behavior.
+- [x] Cascade call sites in `tests/perf/float/run.ks` and other runtime callers using `Process.runProcess`/`Fs.*`: convert to async + Result handling without changing benchmark accounting semantics.
+- [x] Update stdlib regression coverage in `stdlib/kestrel/fs.test.ks`: assert `Ok` for happy paths and constructor-specific `Err` values for missing file, denied access, and generic IO mapping cases.
+- [x] Update compiler integration coverage in `compiler/test/integration/runtime-stdlib.test.ts` (and related async runtime tests): assert Result payload semantics instead of exception propagation.
+- [x] Add conformance and e2e regression cases for `Task<Result<...>>` async fs/process behavior and pattern matching across module boundaries.
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `cd runtime/jvm && bash build.sh`
+- [x] Run `./scripts/kestrel test`
+- [x] Run `./scripts/run-e2e.sh`
 
 ## Tests to add
 
@@ -107,6 +107,14 @@ After S01-03:
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/02-stdlib.md` — update `kestrel:fs` and `kestrel:process` signatures and behavior text from provisional exception/sentinel handling to typed `Task<Result<T, E>>` ADT contracts.
-- [ ] `docs/specs/06-typesystem.md` — add/clarify async primitive examples so `await` over fs/process now unwraps to `Result<..., ...>` values and preserve ADT typing expectations.
-- [ ] `docs/specs/01-language.md` — revise async runtime note to remove provisional exceptional-readText wording and describe failure-as-data behavior for these stdlib async operations.
+- [x] `docs/specs/02-stdlib.md` — update `kestrel:fs` and `kestrel:process` signatures and behavior text from provisional exception/sentinel handling to typed `Task<Result<T, E>>` ADT contracts.
+- [x] `docs/specs/06-typesystem.md` — add/clarify async primitive examples so `await` over fs/process now unwraps to `Result<..., ...>` values and preserve ADT typing expectations.
+- [x] `docs/specs/01-language.md` — revise async runtime note to remove provisional exceptional-readText wording and describe failure-as-data behavior for these stdlib async operations.
+
+## Build notes
+
+- 2026-04-03: Started implementation from planned scope and moved story to doing.
+- 2026-04-03: Implemented Result-returning async runtime primitives for read/list/write/process and switched JVM codegen/typecheck intrinsics to Task<Result<...>>.
+- 2026-04-03: Exported `FsError` / `ProcessError` ADTs in stdlib modules and mapped runtime error strings to typed constructors in stdlib to keep external API pattern-matchable.
+- 2026-04-03: Updated scripts, perf harness, stdlib tests, conformance, and e2e scenarios for Result-based async behavior.
+- 2026-04-03: Verified with `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test`, and `./scripts/run-e2e.sh` (all passing).

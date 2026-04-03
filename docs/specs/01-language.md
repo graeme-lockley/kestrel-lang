@@ -504,7 +504,7 @@ Runtime behaviour:
 - On the JVM backend, `Task<T>` values are runtime `kestrel.runtime.KTask` objects.
 - Async function calls submit their bodies to the runtime virtual-thread executor and immediately return `KTask` backed by a `CompletableFuture<Object>`.
 - `await e` lowers to `KTask.get()`: completed tasks return immediately; pending tasks block the current virtual thread until completion; exceptional completion rethrows the original failure so surrounding `try/catch` can handle it normally.
-- Runtime I/O tasks may also complete exceptionally. For example, `await Fs.readText(path)` now rethrows host I/O failures from task completion instead of returning an empty-string sentinel; typed `Result<T, E>` task payloads remain deferred to S01-04.
+- Runtime stdlib I/O/process tasks use `Result` payloads for expected operational failures. For example, `await Fs.readText(path)` produces `Result<String, FsError>` and `await Process.runProcess(program, args)` produces `Result<Int, ProcessError>`; callers pattern-match on `Ok` / `Err`.
 
 ---
 

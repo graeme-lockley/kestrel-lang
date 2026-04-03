@@ -211,7 +211,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
   env.set('__read_file_async', generalize({
     kind: 'arrow',
     params: [tString],
-    return: { kind: 'app', name: 'Task', args: [tString] },
+    return: {
+      kind: 'app',
+      name: 'Task',
+      args: [{ kind: 'app', name: 'Result', args: [tString, tString] }],
+    },
   }, new Set()));
   env.set('__now_ms', generalize({
     kind: 'arrow',
@@ -398,19 +402,31 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
   env.set('__list_dir', generalize({
     kind: 'arrow',
     params: [tString],
-    return: { kind: 'app', name: 'List', args: [tString] },
+    return: {
+      kind: 'app',
+      name: 'Task',
+      args: [{ kind: 'app', name: 'Result', args: [{ kind: 'app', name: 'List', args: [tString] }, tString] }],
+    },
   }, new Set()));
 
   env.set('__write_text', generalize({
     kind: 'arrow',
     params: [tString, tString],
-    return: tUnit,
+    return: {
+      kind: 'app',
+      name: 'Task',
+      args: [{ kind: 'app', name: 'Result', args: [tUnit, tString] }],
+    },
   }, new Set()));
 
   env.set('__run_process', generalize({
     kind: 'arrow',
     params: [tString, { kind: 'app', name: 'List', args: [tString] }],
-    return: tInt,
+    return: {
+      kind: 'app',
+      name: 'Task',
+      args: [{ kind: 'app', name: 'Result', args: [tInt, tString] }],
+    },
   }, new Set()));
 
   function apply(t: InternalType): InternalType {

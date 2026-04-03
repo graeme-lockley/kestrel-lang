@@ -3,7 +3,9 @@ package kestrel.runtime;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -588,10 +590,9 @@ public final class KRuntime {
         try {
             executor.submit(() -> {
                 try {
-                    future.complete(new String(Files.readAllBytes(Paths.get(resolvedPath)), StandardCharsets.UTF_8));
+                    future.complete(new KOk(new String(Files.readAllBytes(Paths.get(resolvedPath)), StandardCharsets.UTF_8)));
                 } catch (Throwable t) {
-                    // TODO(S01-04): surface typed Result<String, FsError> values instead of raw task failures.
-                    future.completeExceptionally(t);
+                    future.complete(new KErr(fsErrorCode(t)));
                 } finally {
                     synchronized (asyncMonitor) {
                         asyncTasksInFlight--;
@@ -610,33 +611,101 @@ public final class KRuntime {
         return KTask.fromFuture(future);
     }
 
-    public static KList listDir(Object path) {
-        if (!(path instanceof String)) throw new IllegalArgumentException("listDir expects String");
-        try {
-            Path dir = Paths.get((String) path);
-            List<String> entries = new ArrayList<>();
-            Files.list(dir).forEach(p -> {
-                String kind = Files.isDirectory(p) ? "dir" : "file";
-                // Match VM contract: "<fullPath>\t<kind>"
-                entries.add(p.toString() + "\t" + kind);
-            });
-            KList result = KNil.INSTANCE;
-            for (int i = entries.size() - 1; i >= 0; i--) {
-                result = new KCons(entries.get(i), result);
-            }
-            return result;
-        } catch (Exception e) {
-            return KNil.INSTANCE;
+    public static KTask listDirAsync(Object path) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(path instanceof String)) {
+            future.completeExceptionally(new IllegalArgumentException("listDir expects String"));
+            return KTask.fromFuture(future);
         }
+
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+
+        String resolvedPath = (String) path;
+        synchronized (asyncMonitor) {
+            asyncTasksInFlight++;
+        }
+
+        try {
+            executor.submit(() -> {
+                try {
+                    Path dir = Paths.get(resolvedPath);
+                    List<String> entries = new ArrayList<>();
+                    Files.list(dir).forEach(p -> {
+                        String kind = Files.isDirectory(p) ? "dir" : "file";
+                        // Match VM contract: "<fullPath>\t<kind>"
+                        entries.add(p.toString() + "\t" + kind);
+                    });
+                    KList result = KNil.INSTANCE;
+                    for (int i = entries.size() - 1; i >= 0; i--) {
+                        result = new KCons(entries.get(i), result);
+                    }
+                    future.complete(new KOk(result));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    synchronized (asyncMonitor) {
+                        asyncTasksInFlight--;
+                        asyncMonitor.notifyAll();
+                    }
+                }
+            });
+        } catch (RuntimeException e) {
+            synchronized (asyncMonitor) {
+                asyncTasksInFlight--;
+                asyncMonitor.notifyAll();
+            }
+            throw e;
+        }
+
+        return KTask.fromFuture(future);
     }
 
-    public static void writeText(Object path, Object content) {
-        if (!(path instanceof String)) throw new IllegalArgumentException("writeText expects String");
-        try {
-            Files.writeString(Paths.get((String) path), formatOne(content), StandardCharsets.UTF_8);
-        } catch (Exception e) {
-            throw new RuntimeException("writeText: " + e.getMessage());
+    public static KTask writeTextAsync(Object path, Object content) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(path instanceof String)) {
+            future.completeExceptionally(new IllegalArgumentException("writeText expects String"));
+            return KTask.fromFuture(future);
         }
+
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+
+        String resolvedPath = (String) path;
+        String resolvedContent = formatOne(content);
+        synchronized (asyncMonitor) {
+            asyncTasksInFlight++;
+        }
+
+        try {
+            executor.submit(() -> {
+                try {
+                    Files.writeString(Paths.get(resolvedPath), resolvedContent, StandardCharsets.UTF_8);
+                    future.complete(new KOk(KUnit.INSTANCE));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    synchronized (asyncMonitor) {
+                        asyncTasksInFlight--;
+                        asyncMonitor.notifyAll();
+                    }
+                }
+            });
+        } catch (RuntimeException e) {
+            synchronized (asyncMonitor) {
+                asyncTasksInFlight--;
+                asyncMonitor.notifyAll();
+            }
+            throw e;
+        }
+
+        return KTask.fromFuture(future);
     }
 
     public static Long nowMs() {
@@ -663,8 +732,13 @@ public final class KRuntime {
         return System.getProperty("user.dir", "");
     }
 
-    public static Long runProcess(Object program, Object argsObj) {
-        if (!(program instanceof String)) throw new IllegalArgumentException("runProcess expects String program");
+    public static KTask runProcessAsync(Object program, Object argsObj) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(program instanceof String)) {
+            future.completeExceptionally(new IllegalArgumentException("runProcess expects String program"));
+            return KTask.fromFuture(future);
+        }
+
         List<String> cmd = new ArrayList<>();
         cmd.add((String) program);
         if (argsObj instanceof KList) {
@@ -674,19 +748,59 @@ public final class KRuntime {
                 xs = ((KCons) xs).tail;
             }
         }
-        try {
-            ProcessBuilder pb = new ProcessBuilder(cmd);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = r.readLine()) != null) {
-                    System.out.println(line);
-                }
-            }
-            return Long.valueOf(p.waitFor());
-        } catch (Exception e) {
-            throw new RuntimeException("runProcess: " + e.getMessage());
+
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
         }
+        synchronized (asyncMonitor) {
+            asyncTasksInFlight++;
+        }
+
+        try {
+            executor.submit(() -> {
+                try {
+                    ProcessBuilder pb = new ProcessBuilder(cmd);
+                    pb.redirectErrorStream(true);
+                    Process p = pb.start();
+                    try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = r.readLine()) != null) {
+                            System.out.println(line);
+                        }
+                    }
+                    future.complete(new KOk(Long.valueOf(p.waitFor())));
+                } catch (Throwable t) {
+                    future.complete(new KErr("process_error:" + messageOrDefault(t, "process failed")));
+                } finally {
+                    synchronized (asyncMonitor) {
+                        asyncTasksInFlight--;
+                        asyncMonitor.notifyAll();
+                    }
+                }
+            });
+        } catch (RuntimeException e) {
+            synchronized (asyncMonitor) {
+                asyncTasksInFlight--;
+                asyncMonitor.notifyAll();
+            }
+            throw e;
+        }
+
+        return KTask.fromFuture(future);
+    }
+
+    private static String fsErrorCode(Throwable t) {
+        Throwable u = KTask.unwrapFailure(t);
+        if (u instanceof NoSuchFileException) return "not_found";
+        if (u instanceof AccessDeniedException) return "permission_denied";
+        return "io_error:" + messageOrDefault(u, "io failure");
+    }
+
+    private static String messageOrDefault(Throwable t, String fallback) {
+        String msg = t.getMessage();
+        if (msg == null || msg.isBlank()) return fallback;
+        return msg;
     }
 }

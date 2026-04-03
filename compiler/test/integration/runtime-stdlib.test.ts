@@ -32,7 +32,11 @@ describe('JVM runtime stdlib async wiring', () => {
 import * as Str from "kestrel:string"
 
 async fun run(): Task<Unit> = {
-  val t = await Fs.readText(${JSON.stringify(fixturePath)});
+  val t =
+    match (await Fs.readText(${JSON.stringify(fixturePath)})) {
+      Ok(v) => v,
+      Err(_) => ""
+    };
   println(Str.length(t));
   ()
 }
@@ -62,7 +66,7 @@ run()
     }
   });
 
-  it('await Fs.readText(...) propagates missing-path failures through catch', () => {
+  it('await Fs.readText(...) returns Err(NotFound) for missing path', () => {
     const tmpRoot = mkdtempSync(join(tmpdir(), 'kestrel-runtime-stdlib-missing-'));
     const missingPath = join(tmpRoot, '__missing__.txt');
     const srcPath = join(tmpRoot, 'RuntimeStdlibMissing.ks');
@@ -70,13 +74,13 @@ run()
     writeFileSync(
       srcPath,
       `import * as Fs from "kestrel:fs"
+import { NotFound } from "kestrel:fs"
 
 async fun run(): Task<Unit> = {
-  val caught = try {
-    await Fs.readText(${JSON.stringify(missingPath)});
-    0
-  } catch {
-    e => 1
+  val caught =
+    match (await Fs.readText(${JSON.stringify(missingPath)})) {
+      Err(NotFound) => 1,
+      _ => 0
   };
   println(caught);
   ()
@@ -129,8 +133,16 @@ async fun run(): Task<Unit> = {
   val launchedMs = __now_ms() - launchStart;
 
   val waitStart = __now_ms();
-  val left = await leftTask;
-  val right = await rightTask;
+  val left =
+    match (await leftTask) {
+      Ok(v) => v,
+      Err(_) => ""
+    };
+  val right =
+    match (await rightTask) {
+      Ok(v) => v,
+      Err(_) => ""
+    };
   val waitedMs = __now_ms() - waitStart;
 
   println(Str.length(left) + Str.length(right));

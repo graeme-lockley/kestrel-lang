@@ -1,4 +1,6 @@
 import { Suite, group, eq } from "kestrel:test"
+import * as Fs from "kestrel:fs"
+import * as Process from "kestrel:process"
 
 export exception AsyncBoom
 
@@ -15,6 +17,21 @@ export async fun run(s: Suite): Task<Unit> = {
     group(s1, "await try catch", (sg: Suite) => {
       val caught = try { await fail() } catch { AsyncBoom => 7 };
       eq(sg, "catch async exception", caught, 7)
+    });
+
+    group(s1, "await fs/process result", (sg: Suite) => {
+      val fileOk =
+        match (await Fs.readText("tests/fixtures/fs/read_fixture.txt")) {
+          Ok(_) => 1,
+          Err(_) => 0
+        };
+      val processOk =
+        match (await Process.runProcess("sh", ["-c", "exit 0"])) {
+          Ok(0) => 1,
+          _ => 0
+        };
+      eq(sg, "fs ok", fileOk, 1);
+      eq(sg, "process ok", processOk, 1)
     });
   });
   ()
