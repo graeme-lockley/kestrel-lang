@@ -88,7 +88,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
   /** Generic type aliases (e.g. `type Dict<K,V> = { ... }`): expand `App` to body for unify / field access. */
   const genericTypeAliasDefs = new Map<string, { paramVarIds: number[]; body: InternalType }>();
   const adtConstructors = new Map<string, { name: string; arity: number }[]>();
-  /** Exported ADT constructor names -> type scheme (for namespace importers and .kti). */
+  /** Exported ADT constructor names -> type scheme (for namespace importers). */
   const exportedConstructors = new Map<string, InternalType>();
   const opaqueTypes = new Set<string>();
   const exportedTypeVisibility = new Map<string, 'local' | 'opaque' | 'export'>();
@@ -1477,7 +1477,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         const appliedFnType = apply(fnType);
         const envForGen = envFreeVars();
         // Explicit function type parameters must always be quantified; they can appear in envFreeVars()
-        // via other bindings' inferred types and would otherwise leak as raw var ids into .kti exports.
+        // via other bindings' inferred types and would otherwise leak as raw var ids into exported signatures.
         if (node.typeParams) {
           for (const tp of node.typeParams) {
             const tv = sigScope.get(tp);

@@ -259,7 +259,7 @@ Stories live in `docs/kanban/` with folders: **future**, **unplanned**, **planne
 - **Compiler entry**: `compiler/src/index.ts`
 - **Parser**: `compiler/src/parser/parse.ts`
 - **Type checker**: `compiler/src/typecheck/check.ts`
-- **Code generator**: `compiler/src/codegen/codegen.ts`
+- **Code generator**: `compiler/src/jvm-codegen/codegen.ts`
 - **Diagnostics**: `compiler/src/diagnostics/reporter.ts`
 - **CLI**: `scripts/kestrel`
 - **Specs**: `docs/specs/` (01-language, 09-tools, etc.)

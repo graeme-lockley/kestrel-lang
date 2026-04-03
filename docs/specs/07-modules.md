@@ -4,7 +4,7 @@ Version: 1.0
 
 ---
 
-This document specifies the Kestrel module system in enough detail that implementors can build a deterministic compiler and loader without ambiguity. It must be read together with the import/export grammar in [01-language.md](01-language.md) (§3.1), the bytecode format in [03-bytecode-format.md](03-bytecode-format.md) (§6.5 import table), and the standard library contract in [02-stdlib.md](02-stdlib.md).
+This document specifies the Kestrel module system in enough detail that implementors can build a deterministic compiler and loader without ambiguity. It must be read together with the import/export grammar in [01-language.md](01-language.md) (§3.1) and the standard library contract in [02-stdlib.md](02-stdlib.md).
 
 ---
 

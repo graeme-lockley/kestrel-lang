@@ -1,6 +1,6 @@
 /**
  * JVM codegen: typed AST → .class file(s).
- * Uses same Program + getInferredType as kbc codegen.
+ * Uses same Program + getInferredType pipeline as the main compiler.
  */
 import type { Program, Expr, TopLevelStmt, TopLevelDecl, TuplePattern } from '../ast/nodes.js';
 import type { FunDecl, ValDecl, VarDecl, BlockExpr, LambdaExpr, FunStmt, TypeDecl } from '../ast/nodes.js';
@@ -29,7 +29,7 @@ function charLiteralCodePoint(value: string): number {
   return value.codePointAt(0) ?? 0;
 }
 
-/** Direct self tail-call lowering (GOTO method head); mirrors kbc codegen self-tail. */
+/** Direct self tail-call lowering (GOTO method head). */
 interface JvmSelfTailTarget {
   name: string;
   arity: number;

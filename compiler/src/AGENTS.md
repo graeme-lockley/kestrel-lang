@@ -9,15 +9,11 @@ compiler/src/
 ├── index.ts          # Entry point, orchestrates passes
 ├── bundle.ts         # Bundles multiple source files
 ├── resolve.ts        # Module resolution
-├── types-file.ts     # Type inference for files
-├── compile-file.ts   # Single file compilation (.kbc for stdlib)
-├── compile-file-jvm.ts # Multi-module JVM compilation (primary)
+├── compile-file-jvm.ts # Multi-module JVM compilation
 ├── lexer/            # Tokenization
 ├── parser/           # AST generation
 ├── typecheck/        # Hindley-Milner type inference
-├── codegen/          # .kbc bytecode emission (stdlib packages)
-├── jvm-codegen/      # JVM .class generation (primary target)
-├── bytecode/         # .kbc format definitions
+├── jvm-codegen/      # JVM .class generation
 ├── types/            # Type system primitives
 ├── ast/              # AST node definitions
 └── diagnostics/      # Error reporting
@@ -28,7 +24,7 @@ compiler/src/
 1. **Lex** → Token stream
 2. **Parse** → AST
 3. **Typecheck** → Annotated AST + diagnostics
-4. **JVM Codegen** → `.class` bytes (primary); or **Codegen** → `.kbc` bytes (stdlib only)
+4. **JVM Codegen** → `.class` bytes
 
 ## Module Responsibilities
 
@@ -38,9 +34,7 @@ compiler/src/
 | `lexer/` | `tokenize(source): Token[]` |
 | `parser/` | `parse(tokens): Program` |
 | `typecheck/` | `typecheck(ast): { ok, type, diagnostics }` |
-| `jvm-codegen/` | `jvmCodegen(ast): JvmCodegenResult` (primary JVM target) |
-| `codegen/` | `codegen(ast): BytecodeFunction[]` (used for stdlib .kbc) |
-| `bytecode/` | Instruction set, .kbc serialization |
+| `jvm-codegen/` | `jvmCodegen(ast): JvmCodegenResult` |
 | `types/` | TypeExpr, TypeVar, unify, generalize |
 | `ast/` | Node types (Program, Expr, Decl, etc.) |
 | `diagnostics/` | Diagnostic, SourceLocation, reporter |

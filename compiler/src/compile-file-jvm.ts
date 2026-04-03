@@ -1,6 +1,6 @@
 /**
  * Multi-module JVM compilation: resolve imports, emit .class files per module.
- * Modeled on compile-file.ts but uses jvmCodegen and writes .class + inner classes.
+ * Uses jvmCodegen and writes .class + inner classes.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve as pathResolve, dirname } from 'path';

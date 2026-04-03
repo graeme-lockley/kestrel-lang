@@ -1,6 +1,6 @@
 # Kestrel
 
-Kestrel is a statically typed language with Hindley–Milner type inference. You write programs that feel like scripts; the compiler checks them carefully, emits bytecode (`.kbc`), and runs them on the JVM backend. The project is under active development; language details live in [docs/specs/](docs/specs/), and work is tracked in the Kanban under [docs/kanban/](docs/kanban/) (pre-roadmap ideas in [future/](docs/kanban/future/); roadmap in [unplanned/](docs/kanban/unplanned/); see [docs/kanban/README.md](docs/kanban/README.md) for **future** and **unplanned → planned → doing → done**).
+Kestrel is a statically typed language with Hindley–Milner type inference. You write programs that feel like scripts; the compiler checks them carefully, emits JVM `.class` files, and runs them on the JVM backend. The project is under active development; language details live in [docs/specs/](docs/specs/), and work is tracked in the Kanban under [docs/kanban/](docs/kanban/) (pre-roadmap ideas in [future/](docs/kanban/future/); roadmap in [unplanned/](docs/kanban/unplanned/); see [docs/kanban/README.md](docs/kanban/README.md) for **future** and **unplanned → planned → doing → done**).
 
 ## What you need
 
@@ -60,21 +60,21 @@ The `kestrel` script implements the CLI described in [docs/specs/09-tools.md](do
 
 - **`kestrel run`** — `<script.ks>` and runtime arguments. Compiles if needed, then runs on the JVM.
 - **`kestrel build`** — Builds the compiler; optional script path to compile.
-- **`kestrel dis`** — Compiles if needed, then prints bytecode disassembly for a script.
+- **`kestrel dis`** — Compiles if needed, then prints JVM bytecode disassembly via `javap`.
 - **`kestrel test`** — Runs Kestrel unit tests; optional test file paths.
 
-Bytecode is cached under `~/.kestrel/kbc/` (layout mirrors absolute source paths). Override with `KESTREL_CACHE`. JVM class output uses `~/.kestrel/jvm/` unless you set `KESTREL_JVM_CACHE`.
+JVM class output is cached under `~/.kestrel/jvm/` unless you set `KESTREL_JVM_CACHE`.
 
 ## Repository layout
 
 ```
 kestrel/
 ├── kestrel              # CLI wrapper → scripts/kestrel
-├── compiler/            # TypeScript: parse, typecheck, emit .kbc (and JVM)
+├── compiler/            # TypeScript: parse, typecheck, emit JVM .class files
 ├── runtime/jvm/         # Java runtime for the JVM target
 ├── stdlib/kestrel/      # Standard modules (strings, lists, tests, …)
 ├── tests/               # Unit, E2E, and conformance tests
-├── docs/specs/          # Normative specifications (language, bytecode, tools, …)
+├── docs/specs/          # Normative specifications (language, tools, diagnostics, …)
 └── scripts/             # CLI implementation, E2E runner, full test script
 ```
 

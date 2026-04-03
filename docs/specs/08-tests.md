@@ -13,8 +13,8 @@ This document describes how to validate that a Kestrel implementation conforms t
 A conforming implementation must:
 
 - Accept all programs that satisfy the grammar and typing rules in [01-language.md](01-language.md) and [06-typesystem.md](06-typesystem.md), and reject programs that violate them with defined error behaviour.
-- Produce bytecode that conforms to [03-bytecode-format.md](03-bytecode-format.md) and uses only instructions and semantics defined in [04-bytecode-isa.md](04-bytecode-isa.md).
-- Execute bytecode so that runtime behaviour matches [05-runtime-model.md](05-runtime-model.md) and the semantics implied by the type system and language spec.
+- Produce JVM classfiles that execute with language semantics defined by [01-language.md](01-language.md) and [06-typesystem.md](06-typesystem.md).
+- Execute compiled output so that runtime behaviour matches the JVM runtime implementation and the semantics implied by the type system and language spec.
 - Resolve modules according to [07-modules.md](07-modules.md).
 - Expose the standard library contract in [02-stdlib.md](02-stdlib.md) with the specified signatures and observable behaviour.
 
@@ -34,7 +34,7 @@ A conforming implementation must:
 - **Rejection:** Programs that violate the type rules (e.g. wrong arity, missing cases in match, unification failures, row conflicts) are rejected with a type error. Tests in `typecheck/invalid/` may assert that a specific type error (or error substring) is produced.
 - **Tuple `match`:** `tests/unit/match.test.ks` exercises tuple destructuring, nested tuples, wildcards, literal slots, and catch-all arms. `tests/conformance/typecheck/valid/tuple_pattern_match.ks` and `tests/conformance/typecheck/invalid/tuple_*.ks` cover typing and exhaustiveness for tuple patterns.
 - **Unions and narrowing (`is`):** Compiler: `compiler/test/unit/typecheck/is-narrowing.test.ts` (then/else/`while`, Option, unions, ADTs, records, impossible narrow); `compiler/test/integration/parse.test.ts` (grammar/precedence). Conformance: `tests/conformance/typecheck/valid/narrowing_option.ks`, `narrowing_union.ks`; invalid `tests/conformance/typecheck/invalid/narrowing_impossible.ks` with `// EXPECT:`. Runtime harness: `tests/unit/narrowing.test.ks`. Intersection **`A & B`** typing remains covered by the general typecheck suite where applicable.
-- **Union / intersection subtyping (call, return, assignment):** `compiler/test/unit/typecheck/unify.test.ts` (`unifySubtype`); conformance `tests/conformance/typecheck/valid/union_intersection_subtyping.ks`, invalid `union_not_subtype_of_int_param.ks`; runtime `tests/unit/union_intersection.test.ks`. The `.kbc` placeholder type table: `compiler/src/bytecode/write.ts`.
+- **Union / intersection subtyping (call, return, assignment):** `compiler/test/unit/typecheck/unify.test.ts` (`unifySubtype`); conformance `tests/conformance/typecheck/valid/union_intersection_subtyping.ks`, invalid `union_not_subtype_of_int_param.ks`; runtime `tests/unit/union_intersection.test.ks`.
 
 ### 2.3 Exceptions and Async
 
@@ -43,21 +43,21 @@ A conforming implementation must:
 
 ### 2.4 Bytecode and Runtime
 
-- **Format:** Emitted `.kbc` files have valid header, section offsets, and section layout per [03-bytecode-format.md](03-bytecode-format.md). Invalid or truncated files are rejected by the runtime.
-- **Instructions:** Each instruction in [04-bytecode-isa.md](04-bytecode-isa.md) is covered by at least one test that executes it and checks stack/result. **Record spread:** SPREAD (0x19) is exercised by the record spread literal test in `tests/unit/records.test.ks`, which compiles `{ ...r, x = v }` to SPREAD and is run by the unit test harness. **`KIND_IS` (0x25):** end-to-end coverage via `tests/unit/narrowing.test.ks` and compiler codegen tests.
+- **Format:** Emitted `.class` files load and execute on the JVM runtime.
+- **Instructions:** Runtime-sensitive features are covered end-to-end through compiler + runtime tests (record spread, narrowing, async/await, exceptions).
 - **Calling convention:** Calls with multiple arguments and returns follow left-to-right argument order and single return value.
 
 ### 2.5 Runtime Model
 
-- **Values:** Tagged values (INT, BOOL, UNIT, CHAR, PTR) and heap objects (FLOAT, STRING, RECORD, ADT, TASK, CLOSURE) behave as in [05-runtime-model.md](05-runtime-model.md). Closure values are fn_ref (non-capturing) or PTR to CLOSURE (capturing); see 04 §1.10, 05 §2. No undefined layout assumptions that contradict the spec.
-- **Integer overflow and division by zero:** `tests/unit/overflow_divzero.test.ks` asserts that 61-bit `Int` overflow on `+`, `-`, `*` and divide/mod by zero throw catchable exceptions (`ArithmeticOverflow`, `DivideByZero`) defined in the same module, including when tests run as an imported module (see 05 §1, §5).
+- **Values:** Primitive and heap values behave consistently with language semantics on the JVM runtime. Closure values preserve lexical capture semantics for both capturing and non-capturing functions.
+- **Integer overflow and division by zero:** `tests/unit/overflow_divzero.test.ks` asserts that 61-bit `Int` overflow on `+`, `-`, `*` and divide/mod by zero throw catchable exceptions (`ArithmeticOverflow`, `DivideByZero`) defined in the same module, including when tests run as an imported module.
 - **GC:** Programs that allocate many short-lived objects complete without leaks; no use-after-free when the GC is enabled.
 
 ### 2.6 Modules
 
 - **Resolution:** Local path imports and (where supported) URL imports resolve deterministically; lockfile and cache behaviour match [07-modules.md](07-modules.md).
 - **Re-export and conflicts:** Re-exports and name conflicts are tested; conflicts produce compile errors unless renamed.
-- **Namespace imports and ADT constructors:** `import * as M from "…"` exposes exported **non-opaque** ADT constructors as `M.Ctor` / `M.Ctor(…)` with correct typing and runtime interop (same ADT identity as construction in the exporter). Coverage includes nullary, unary, and multi-argument constructors; opaque constructor rejection; wrong name, arity, and argument types; and at least one **`.kti`-only** dependency path (importer uses a fresh types file without re-parsing dependency source). See `tests/unit/namespace_import.test.ks`, `tests/fixtures/opaque_pkg/`, and `compiler/test/integration/compile-file.test.ts`.
+- **Namespace imports and ADT constructors:** `import * as M from "…"` exposes exported **non-opaque** ADT constructors as `M.Ctor` / `M.Ctor(…)` with correct typing and runtime interop (same ADT identity as construction in the exporter). Coverage includes nullary, unary, and multi-argument constructors; opaque constructor rejection; wrong name, arity, and argument types. See `tests/unit/namespace_import.test.ks` and `tests/fixtures/opaque_pkg/`.
 
 ### 2.7 Standard Library
 
@@ -136,8 +136,6 @@ When behaviour is intentionally changed, goldens must be updated (e.g. `UPDATE_G
 
 - [01-language.md](01-language.md) – Grammar and language features under test
 - [02-stdlib.md](02-stdlib.md) – Stdlib contract tests
-- [03-bytecode-format.md](03-bytecode-format.md), [04-bytecode-isa.md](04-bytecode-isa.md) – Bytecode format and instruction set
-- [05-runtime-model.md](05-runtime-model.md) – Runtime and GC behaviour
 - [06-typesystem.md](06-typesystem.md) – Type-checker tests
 - [07-modules.md](07-modules.md) – Module resolution tests
 - [09-tools.md](09-tools.md) – `kestrel` CLI (user-facing run/build; E2E harness uses compiler/JVM runtime directly)

@@ -1,11 +1,9 @@
 /**
- * Kestrel compiler — parse, typecheck, emit bytecode.
+ * Kestrel compiler — parse, typecheck, emit JVM bytecode.
  */
 import { tokenize } from './lexer/index.js';
 import { parse, ParseError } from './parser/index.js';
 import { typecheck } from './typecheck/index.js';
-import { codegen } from './codegen/codegen.js';
-import { writeKbc, writeMinimalKbc } from './bytecode/write.js';
 import { jvmCodegen } from './jvm-codegen/index.js';
 import type { Diagnostic } from './diagnostics/types.js';
 import { CODES, locationFileOnly, locationFromSpan } from './diagnostics/types.js';
@@ -60,26 +58,6 @@ export function compile(source: string, compileOptions?: CompileOptions): { ok: 
       }],
     };
   }
-}
-
-/** Emit .kbc from typed AST (codegen + full sections). */
-export function emitKbc(ast: import('./parser/index.js').Program, compileOptions?: CompileOptions): Uint8Array {
-  const sourceFile = compileOptions?.sourceFile ?? '<source>';
-  const result = codegen(ast, { sourceFile });
-  const { stringTable, constantPool, code, functionTable, importSpecifierIndices, shapes, adts, nGlobals, debugFileStringIndices, debugEntries } = result;
-  return writeKbc(
-    stringTable,
-    constantPool,
-    code,
-    functionTable,
-    importSpecifierIndices,
-    [],
-    shapes,
-    adts,
-    nGlobals ?? 0,
-    debugFileStringIndices ?? [],
-    debugEntries ?? []
-  );
 }
 
 /** Emit JVM .class from typed AST. Returns main class bytes; inner classes in result.innerClasses. */

@@ -93,7 +93,7 @@ BINARY        ::= "0" [bB] [01] ([01]_*)* [01]?
 OCTAL         ::= "0" [oO] [0-7] ([0-7]_*)* [0-7]?
 ```
 
-Underscores may appear only **between** digits; leading/trailing underscores are not allowed. Value must fit in a **61-bit signed integer** at runtime (overflow throws). The 61-bit width is required by the runtime tagged-value layout: a 64-bit word uses 3 bits for the tag, leaving 61 bits for the integer payload so that Int can be stored inline without boxing; see [05-runtime-model.md](05-runtime-model.md).
+Underscores may appear only **between** digits; leading/trailing underscores are not allowed. Value must fit in a **61-bit signed integer** at runtime (overflow throws). The JVM runtime preserves this 61-bit Int bound for language-level compatibility.
 
 ### 2.7 Float Literals
 
@@ -111,7 +111,7 @@ DECIMAL_FLOAT ::= [0-9] { [0-9] } "." { [0-9] }
 EXPONENT_FLOAT::= (DECIMAL_FLOAT | [0-9] { [0-9] }) [eE] ["+" | "-"] [0-9] { [0-9] }
 ```
 
-Lexer must not treat `1.` or `.5` as integer plus dot; the longest valid float token wins. Runtime type is **Float** (64-bit). Unlike Int, Float cannot be stored inline in the 64-bit tagged word and is **boxed** (heap-allocated) at runtime; see [05-runtime-model.md](05-runtime-model.md).
+Lexer must not treat `1.` or `.5` as integer plus dot; the longest valid float token wins. Runtime type is **Float** (64-bit).
 
 ### 2.8 String Literals (Template Strings)
 
@@ -138,7 +138,7 @@ Delimited by `'` (U+0027).
 - **Escapes:** Same as in strings: `\\`, `\'`, `\n`, `\r`, `\t`, `\u{` HEX+ `}`.
 - **Content:** Exactly one code point (one character or one `\u{...}` rune). Multi-byte UTF-8 sequences in single quotes denote one character.
 
-**Char and Rune:** The type names `Char` and `Rune` denote the **same** type (a single Unicode code point). Both are valid in type annotations and have the same runtime representation; see [05-runtime-model.md](05-runtime-model.md) and [06-typesystem.md](06-typesystem.md).
+**Char and Rune:** The type names `Char` and `Rune` denote the **same** type (a single Unicode code point). Both are valid in type annotations and have the same runtime representation; see [06-typesystem.md](06-typesystem.md).
 
 ```
 CHAR_LITERAL  ::= '\'' (ESCAPE | [^\'\\]) '\''
@@ -272,7 +272,7 @@ These operators are defined for numeric types and, where the implementation spec
 - **Syntax:** `IsExpr` in the grammar above: `RelExpr` optionally followed by **`is`** and a **Type** (§3.6).
 - **Typing:** The expression has type **Bool** (06 §8). The type checker must ensure **`T`** can **narrow** the type of **`e`** (structural overlap with **`e`**’s type); otherwise it is a compile-time error (06 §4, 10 §4 `type:narrow_impossible`). **Opaque** ADT rules from importing modules apply as for pattern matching (06 §5.3, 07 §5.3; `type:narrow_opaque` when violated).
 - **Narrowing:** When `e` is a **simple identifier** `x`, the type of `x` is refined in **`if`**’s **then**-branch and **`while`**’s **body** to **`original_type & T`** (06 §4). The **`else`** branch (if any) keeps **`x`** at the **unrefined** type. Standalone **`x is T`** does not change the binding’s type outside the boolean result.
-- **Runtime truth (summary):** **`T`** is checked **structurally** against the value of **`e`**: primitives and heap **kind** (e.g. Int vs String) via the probe described in 04/05; **ADT** variants by constructor **tag** (and payload where needed); **records** by presence and type of required fields. Exact lowering is in [04-bytecode-isa.md](04-bytecode-isa.md) and [05-runtime-model.md](05-runtime-model.md). The JVM backend must correctly implement these checks for all well-typed programs.
+- **Runtime truth (summary):** **`T`** is checked **structurally** against the value of **`e`**: primitives and heap **kind** (e.g. Int vs String); **ADT** variants by constructor **tag** (and payload where needed); **records** by presence and type of required fields. The JVM backend must correctly implement these checks for all well-typed programs.
 
 ```
 Expr           ::= IfExpr
@@ -378,7 +378,7 @@ Unit           ::= "(" ")"
 
 **Tuples:** Syntactically, grouping and constant tuples share the same parenthesized comma-separated form `"(" Expr { "," Expr } ")"` (and the same for patterns). A single expression or pattern `(e)` or `(p)` is treated as **grouping** (same as `e` or `p`). Two or more `(e1, e2, …)` form a **constant tuple** with product type (e.g. `(Int, String)` has type `Int * String`). Tuple patterns match the same shape: `(p1, p2)` or `(p1, p2, p3, …)`. The parser disambiguates by the presence of a comma after the first element. `()` is always the **Unit** literal (expression or pattern), not a tuple.
 
-At runtime, tuple values use the same representation as **records** with **positional field names** `"0"`, `"1"`, … (see [05-runtime-model.md](05-runtime-model.md)). In `match`, tuple patterns destructure by those indices (06 exhaustiveness for tuple `match`).
+At runtime, tuple values use the same representation as **records** with **positional field names** `"0"`, `"1"`, … in the JVM runtime. In `match`, tuple patterns destructure by those indices (06 exhaustiveness for tuple `match`).
 
 For float literal patterns, matching uses pattern semantics (not plain `==`): a float NaN pattern matches a NaN scrutinee.
 
@@ -421,7 +421,7 @@ TypeField      ::= LOWER_IDENT ":" [ "mut" ] Type
 
 Precedence: `&` tighter than `|`; `->` groups to the right; `*` (product) tighter than `->`. Record and function types use parentheses when nested (e.g. `(Int -> Bool) -> String`). **Built-in generics:** `Array<T>` and `Task<T>` are runtime built-ins. **Library types:** `Option<T>`, `Result<T,E>`, and `List<T>` are provided by the standard library; see [02-stdlib.md](02-stdlib.md). List has special syntax: `[a, b, ...c]` and `::` (expression and pattern).
 
-**Union / intersection at use sites:** Where a type is **expected** (function parameter, declared return, assignment target, annotated binding when supported by the parser), a **value** whose type is a **member** of a union (e.g. `Int` where `Int | Bool` is expected) is allowed; the full rules are in [06-typesystem.md](06-typesystem.md) §3 (subtyping) and §4 (narrowing with `is`). Values at runtime do not gain a separate “union tag”; see [05-runtime-model.md](05-runtime-model.md).
+**Union / intersection at use sites:** Where a type is **expected** (function parameter, declared return, assignment target, annotated binding when supported by the parser), a **value** whose type is a **member** of a union (e.g. `Int` where `Int | Bool` is expected) is allowed; the full rules are in [06-typesystem.md](06-typesystem.md) §3 (subtyping) and §4 (narrowing with `is`). Values at runtime do not gain a separate “union tag”.
 
 ### 3.7 Parser and Lexer Disambiguation
 
@@ -439,7 +439,7 @@ Precedence: `&` tighter than `|`; `->` groups to the right; `*` (product) tighte
 
 Lambdas `(params) => body` and nested functions (block-local `fun`, desugared to `val name = (params) => body`) may **capture** variables from the enclosing block or function scope (lexical/static scope). The **capture set** of a lambda is the set of free variables: identifiers used in `body` that are not in the lambda's own `params` (and not introduced by an inner lambda's params). Enclosing scope includes: earlier `val`/`var`/`fun` bindings in the same block, and (when the block is inside a function) that function's parameters and outer blocks.
 
-The implementation uses **closure conversion**: each capturing lambda is compiled as a **lifted** function that takes an **environment** (a record of captured values) as its first parameter; the environment is built at the point where the lambda is created and stored in a **closure** value. Non-capturing lambdas are represented as a function reference only (no environment). Details are in [04-bytecode-isa.md](04-bytecode-isa.md) §5.1 and [05-runtime-model.md](05-runtime-model.md).
+The implementation uses **closure conversion**: each capturing lambda is compiled as a **lifted** function that takes an **environment** (a record of captured values) as its first parameter; the environment is built at the point where the lambda is created and stored in a **closure** value. Non-capturing lambdas are represented as a function reference only (no environment).
 
 **Capture semantics:** `val` bindings are captured **by value** (the value at creation time is stored in the environment). `var` bindings are captured **by reference** via a mutable cell (e.g. a one-field record) so that assignments to the variable inside the closure are visible outside and vice versa; both the closure and the enclosing scope operate on the same storage.
 
@@ -499,7 +499,7 @@ val x = await f()
 
 **Await expression:** The grammar allows `await` as an optional prefix on a primary expression: `await` *expr* (e.g. `await f()`). `await` is only valid in an **async context** (inside an `async fun`); use outside async is a semantic (type/context) error.
 
-Runtime behaviour (see [04-bytecode-isa.md](04-bytecode-isa.md)):
+Runtime behaviour:
 
 - Instruction `AWAIT`: if task complete → push result; else suspend frame.
 

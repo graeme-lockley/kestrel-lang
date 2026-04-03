@@ -177,7 +177,7 @@ Helpers for `Result<T, E>` (see §Library types). Functions are polymorphic in b
 
 ## kestrel:dict
 
-Finite maps exposed as the **opaque** type `Dict<K, V>`: clients use the functions below only and must not rely on a visible record shape. The implementation still stores a hash function, an equality function, and an association list of `(key, value)` pairs (see [05-runtime-model.md](05-runtime-model.md) for the runtime RECORD layout). **Pipe-friendly:** the dict is the first argument on `insert`, `get`, `map`, etc.
+Finite maps exposed as the **opaque** type `Dict<K, V>`: clients use the functions below only and must not rely on a visible record shape. The implementation still stores a hash function, an equality function, and an association list of `(key, value)` pairs using runtime records on the JVM. **Pipe-friendly:** the dict is the first argument on `insert`, `get`, `map`, etc.
 
 Keys are compared only via the embedded `eq`; `hash` is used for potential future bucketed implementations (v1 may still scan linearly).
 

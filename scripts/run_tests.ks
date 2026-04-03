@@ -51,7 +51,7 @@ fun checkTestOutputFlags(args: List<String>): Unit = {
   }
 }
 
-// argv layout must match VM: [vm binary, .kbc path, project root, ...paths]. JVM entry pads with "" "".
+// argv layout is [exe, script, project root, ...paths]. JVM entry pads with "" "".
 fun getPathArgs(allArgs: List<String>): List<String> = excludeTestFlags(Lst.drop(allArgs, 3))
 
 fun filterToTestFiles(paths: List<String>): List<String> =

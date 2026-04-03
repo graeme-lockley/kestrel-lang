@@ -1,7 +1,7 @@
 {
   "name": "kestrel-compiler",
   "version": "0.1.0",
-  "description": "Kestrel compiler (TypeScript) — parse, typecheck, emit .kbc",
+  "description": "Kestrel compiler (TypeScript) — parse, typecheck, emit JVM .class files",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

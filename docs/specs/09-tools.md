@@ -21,11 +21,11 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.1 run
 
-**Usage:** `kestrel run [--target jvm] <script[.ks]> [args...]`
+**Usage:** `kestrel run <script[.ks]> [args...]`
 
 - **Effect:** Compiles the named Kestrel script (and its constituent packages) if the target binary is stale or missing, then executes it via the JVM runtime.
-- **Target:** `jvm` is the execution target; compiled `.class` files are generated for the Java Virtual Machine.
-- **Freshness:** The script is compiled when (a) the `.class` files do not exist, or (b) the entry `.ks` is newer than the compiled `.class`, or (c) a `.class.deps` file exists beside the cached classes and any listed path (transitive `.ks` sources and each imported module's `.class`) has modification time greater than or equal to the compiled `.class`—so consumers recompile when a dependency's source or class files change.
+- **Target:** JVM is the only execution target; compiled `.class` files are generated for the Java Virtual Machine.
+- **Freshness:** The script is compiled when (a) the generated `.class` files do not exist, or (b) the entry `.ks` is newer than the main generated class, or (c) a `.class.deps` file exists beside that class and any listed dependency path is newer.
 - **Cache:**
   - Compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/jvm/Users/me/proj/foo.class`. This avoids cluttering the project directory. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run foo.ks`).
 - **Execution:** `kestrel` runs `java` with a classpath containing `kestrel-runtime.jar` and the JVM cache root, and uses a main class derived from the entry source file path (strip leading `/`, remove `.ks`, capitalize the last path segment; convert `/` to `.` for the Java binary name). Entry-point discovery is implementation-defined, but the derived class name is stable for a given absolute source path.
@@ -35,14 +35,12 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 **Usage:** `kestrel dis [--verbose|--code-only] <script[.ks]>`
 
-- **Effect:** Compiles the named script if needed (same freshness rules as `run`; output cached under `~/.kestrel/jvm/` as for `run`), then unpacks and disassembles the JVM `.class` file bytecode in mnemonic form.
+- **Effect:** Compiles the named script if needed (same freshness rules as `run`; output cached under `~/.kestrel/jvm/` as for `run`), then runs `javap` against the generated main class.
 - **Output modes:**
-  - **Default:** Shows code section with method/function boundaries, debug annotations when present, and constant comments.
-  - **`--verbose`:** Additionally shows class structure, method signatures, and constant pool.
-  - **`--code-only`:** Shows only raw instruction lines without comments, headers, or structural information.
-- **Function/method boundaries:** The disassembler marks each method's code region with a boundary comment including arity and bytecode offset. The module initializer (top-level code) is labeled `"<module>"` if no explicit method claims that code.
-- **Detailed output (--verbose only):** Shows class name, extended bytecode metadata, method signatures with parameter and return types.
-- **Format:** Each instruction is printed with its byte offset and mnemonic (e.g. `aload_0`, `invokestatic`, `ireturn`). Format follows the JVM instruction set encoding. When available, source line information allows instructions to be annotated with their source file and line.
+  - **Default:** `javap -c -l`.
+  - **`--verbose`:** `javap -verbose -c -l`.
+  - **`--code-only`:** `javap -c`.
+- **Format:** Output is the standard `javap` listing for JVM classfiles.
 - **Purpose:** Inspection and debugging of compiled JVM bytecode.
 
 ### 2.3 build
@@ -78,10 +76,10 @@ When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
 
 | Component | Language | Role |
 |-----------|----------|------|
-| **`kestrel` script** | **Bash** | Entry-point wrapper: parse subcommand and options, decide what to run, check freshness (binary older than source or missing ⇒ compile), invoke compiler or disassembler. |
-| **Compile** | **TypeScript** | `compiler` (node `dist/cli.js`): parses `.ks`, typechecks ([06-typesystem.md](06-typesystem.md)), emits bytecode in `.class` format for JVM execution. |
+| **`kestrel` script** | **Bash** | Entry-point wrapper: parse subcommand and options, decide what to run, check freshness (binary older than source or missing ⇒ compile), invoke compiler or `javap`. |
+| **Compile** | **TypeScript** | `compiler` (node `dist/cli.js`): parses `.ks`, typechecks ([06-typesystem.md](06-typesystem.md)), emits `.class` files for JVM execution. |
 | **Run (jvm)** | **Java** | JVM (`java`): loads generated `.class` files and executes the entry main class on top of `kestrel-runtime.jar`. |
-| **Disassembler** | **TypeScript** | `compiler/disasm.ts`: reads compiled bytecode, decodes instructions per [04-bytecode-isa.md](04-bytecode-isa.md), emits mnemonic listing. Built as `dist/disasm.js`. |
+| **Disassembler** | **JDK tool** | `javap`: disassembles generated `.class` files. |
 
 ---
 
@@ -89,9 +87,6 @@ When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
 
 - [01-language.md](01-language.md) – Source language parsed by compiler
 - [02-stdlib.md](02-stdlib.md) – Standard library available at runtime
-- [03-bytecode-format.md](03-bytecode-format.md) – Bytecode format produced by compiler and consumed by JVM runtime/disassembler
-- [04-bytecode-isa.md](04-bytecode-isa.md) – Instruction set executed by JVM runtime and disassembled by `dis`
-- [05-runtime-model.md](05-runtime-model.md) – JVM runtime execution semantics
 - [06-typesystem.md](06-typesystem.md) – Type checking during compile
 - [07-modules.md](07-modules.md) – Module resolution (future multi-file support)
 - [08-tests.md](08-tests.md) – Test harnesses: **`cd compiler && npm test`** runs parse, typecheck, and runtime conformance corpora under `tests/conformance/` (Vitest integration tests). **`scripts/run-e2e.sh`** drives the compiler (`dist/cli.js`) and JVM runtime on `tests/e2e/scenarios/negative/*.ks` (expect failure) and `tests/e2e/scenarios/positive/*.ks` (stdout vs `*.expected`); it does **not** replace the conformance runtime tree (see 08 §3.3).
