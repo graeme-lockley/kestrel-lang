@@ -50,3 +50,26 @@ Branch A is unreachable in any meaningful sense because branch B catches all `aw
 ## Risks / Notes
 
 - Trivial change. Verify the exact line range before editing to avoid touching adjacent logic.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Parser `compiler/src/parser/parse.ts` | Remove dead `if (awaitPrefix && expr.kind === 'CallExpr')` branch in `parsePrimary` |
+
+## Tasks
+
+- [x] In `compiler/src/parser/parse.ts` `parsePrimary`: remove the `awaitPrefix && expr.kind === 'CallExpr'` branch
+- [x] Run `cd compiler && npm run build && npm test`
+
+## Tests to add
+
+No new tests needed — this is a behaviour-identical cleanup; all existing parser/conformance tests serve as regression guards.
+
+## Documentation and specs to update
+
+No spec changes needed.
+
+## Build notes
+
+- 2026-03-07: Trivial 3-line removal. `npm test` 231/231 unchanged.

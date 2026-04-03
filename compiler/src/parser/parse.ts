@@ -839,9 +839,6 @@ class Parser {
         expr = { kind: 'FieldExpr', object: expr, field };
       }
     }
-    if (awaitPrefix && expr.kind === 'CallExpr') {
-      return { kind: 'AwaitExpr', value: expr };
-    }
     if (awaitPrefix) {
       return { kind: 'AwaitExpr', value: expr };
     }
