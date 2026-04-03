@@ -1771,6 +1771,22 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'runProcessAsync', '(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
             return false;
           }
+          if (name === '__task_map' && expr.args.length === 2) {
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(K_TASK, 'taskMap', '(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
+            return false;
+          }
+          if (name === '__task_all' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(K_TASK, 'taskAll', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
+            return false;
+          }
+          if (name === '__task_race' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(K_TASK, 'taskRace', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
+            return false;
+          }
           const ns = options.namespaceClasses?.get(name);
           const importedClass = options.importedNameToClass?.get(name);
           if (funNames.has(name) || ns || importedClass) {

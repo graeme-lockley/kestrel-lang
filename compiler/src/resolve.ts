@@ -11,7 +11,7 @@ const STDLIB_NAMES = [
   'kestrel:option', 'kestrel:result', 'kestrel:list', 'kestrel:test',
   'kestrel:process', 'kestrel:console',
   'kestrel:tuple', 'kestrel:basics', 'kestrel:dict', 'kestrel:set',
-  'kestrel:runtime',
+  'kestrel:runtime', 'kestrel:task',
 ] as const;
 
 /** Map stdlib specifier to path segment (e.g. kestrel:string -> kestrel/string.ks). */

@@ -1,6 +1,8 @@
 package kestrel.runtime;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -58,5 +60,73 @@ public final class KTask {
             }
             throw new KException(failure);
         }
+    }
+
+    /**
+     * Task.map: transform the result of a task without blocking.
+     * Returns a new Task&lt;B&gt; that applies f when the source task completes.
+     */
+    public static KTask taskMap(Object taskObj, Object fn) {
+        KTask task = (KTask) taskObj;
+        KFunction f = (KFunction) fn;
+        CompletableFuture<Object> result = task.future.thenApply(
+            value -> f.apply(new Object[]{value})
+        );
+        return new KTask(result);
+    }
+
+    /**
+     * Task.all: wait for all tasks in a List&lt;Task&lt;T&gt;&gt; to complete.
+     * Returns Task&lt;List&lt;T&gt;&gt;. Fails fast if any task fails.
+     */
+    @SuppressWarnings("unchecked")
+    public static KTask taskAll(Object listObj) {
+        List<KTask> tasks = new ArrayList<>();
+        Object current = listObj;
+        while (current instanceof KCons) {
+            KCons cons = (KCons) current;
+            tasks.add((KTask) cons.head);
+            current = cons.tail;
+        }
+        if (tasks.isEmpty()) {
+            return KTask.completed(KNil.INSTANCE);
+        }
+        CompletableFuture<Object>[] futures = tasks.stream()
+            .map(t -> t.future)
+            .toArray(CompletableFuture[]::new);
+        final List<KTask> tasksCopy = tasks;
+        CompletableFuture<Object> combined = CompletableFuture.allOf(futures)
+            .thenApply(ignored -> {
+                KList list = KNil.INSTANCE;
+                for (int i = tasksCopy.size() - 1; i >= 0; i--) {
+                    list = new KCons(tasksCopy.get(i).future.join(), list);
+                }
+                return (Object) list;
+            });
+        return new KTask(combined);
+    }
+
+    /**
+     * Task.race: return the result of the first task in a List&lt;Task&lt;T&gt;&gt; to complete.
+     * Remaining tasks continue running (cancellation deferred to S01-17).
+     */
+    @SuppressWarnings("unchecked")
+    public static KTask taskRace(Object listObj) {
+        List<KTask> tasks = new ArrayList<>();
+        Object current = listObj;
+        while (current instanceof KCons) {
+            KCons cons = (KCons) current;
+            tasks.add((KTask) cons.head);
+            current = cons.tail;
+        }
+        if (tasks.isEmpty()) {
+            CompletableFuture<Object> failed = new CompletableFuture<>();
+            failed.completeExceptionally(new RuntimeException("Task.race called with empty list"));
+            return new KTask(failed);
+        }
+        CompletableFuture<Object>[] futures = tasks.stream()
+            .map(t -> t.future)
+            .toArray(CompletableFuture[]::new);
+        return new KTask(CompletableFuture.anyOf(futures));
     }
 }

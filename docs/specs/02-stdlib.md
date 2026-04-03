@@ -180,6 +180,18 @@ Process information and subprocess execution.
 
 ---
 
+## kestrel:task
+
+Task combinator utilities for composing `Task<T>` values.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `map` | `(Task<A>, A -> B) -> Task<B>` | Transform the result of a task without blocking. |
+| `all` | `(List<Task<T>>) -> Task<List<T>>` | Wait for all tasks to complete and collect results; fails fast if any task fails. |
+| `race` | `(List<Task<T>>) -> Task<T>` | Return the result of the first task to complete. Remaining tasks continue running. Fails if the list is empty. |
+
+---
+
 ## kestrel:result
 
 Helpers for `Result<T, E>` (see §Library types). Functions are polymorphic in both type parameters. **Pipe-friendly:** the result is the first argument on transforming functions.

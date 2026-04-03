@@ -429,6 +429,32 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     },
   }, new Set()));
 
+  // Task combinators (kestrel:task)
+  const taskMapA = freshVar();
+  const taskMapB = freshVar();
+  env.set('__task_map', generalize({
+    kind: 'arrow',
+    params: [
+      { kind: 'app', name: 'Task', args: [taskMapA] },
+      { kind: 'arrow', params: [taskMapA], return: taskMapB },
+    ],
+    return: { kind: 'app', name: 'Task', args: [taskMapB] },
+  }, new Set()));
+
+  const taskAllT = freshVar();
+  env.set('__task_all', generalize({
+    kind: 'arrow',
+    params: [{ kind: 'app', name: 'List', args: [{ kind: 'app', name: 'Task', args: [taskAllT] }] }],
+    return: { kind: 'app', name: 'Task', args: [{ kind: 'app', name: 'List', args: [taskAllT] }] },
+  }, new Set()));
+
+  const taskRaceT = freshVar();
+  env.set('__task_race', generalize({
+    kind: 'arrow',
+    params: [{ kind: 'app', name: 'List', args: [{ kind: 'app', name: 'Task', args: [taskRaceT] }] }],
+    return: { kind: 'app', name: 'Task', args: [taskRaceT] },
+  }, new Set()));
+
   function apply(t: InternalType): InternalType {
     return applySubst(t, subst);
   }
