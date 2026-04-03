@@ -376,4 +376,91 @@ run()
       rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  it('await Process.runProcess(...) forwards combined output and returns Ok(exitCode)', () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'kestrel-runtime-stdlib-runprocess-'));
+    const srcPath = join(tmpRoot, 'RuntimeStdlibRunProcess.ks');
+
+    writeFileSync(
+      srcPath,
+      `import * as Process from "kestrel:process"
+
+async fun run(): Task<Unit> = {
+  val code =
+    match (await Process.runProcess("sh", ["-c", "echo out-line; echo err-line 1>&2; exit 7"])) {
+      Ok(v) => v,
+      Err(_) => -1
+    };
+  println("exit:\${code}");
+  ()
+}
+
+run()
+`
+    );
+
+    try {
+      const compileResult = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpRoot,
+      });
+      expect(compileResult.ok).toBe(true);
+      if (!compileResult.ok) return;
+
+      const mainClass = compileResult.mainClass.replace(/\//g, '.');
+      const stdout = execSync(`java -cp "${runtimeJar}:${tmpRoot}" "${mainClass}"`, {
+        cwd: kestrelRoot,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      expect(stdout).toBe('out-line\nerr-line\nexit:7\n');
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('await Process.runProcess(...) returns Err(ProcessSpawnError(_)) for missing binary', () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'kestrel-runtime-stdlib-runprocess-missing-'));
+    const srcPath = join(tmpRoot, 'RuntimeStdlibRunProcessMissing.ks');
+
+    writeFileSync(
+      srcPath,
+      `import * as Process from "kestrel:process"
+import { ProcessSpawnError } from "kestrel:process"
+
+async fun run(): Task<Unit> = {
+  val caught =
+    match (await Process.runProcess("__definitely_missing_binary_xyz__", [])) {
+      Err(ProcessSpawnError(_)) => "spawn-error",
+      _ => "unexpected"
+    };
+  println(caught);
+  ()
+}
+
+run()
+`
+    );
+
+    try {
+      const compileResult = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpRoot,
+      });
+      expect(compileResult.ok).toBe(true);
+      if (!compileResult.ok) return;
+
+      const mainClass = compileResult.mainClass.replace(/\//g, '.');
+      const stdout = execSync(`java -cp "${runtimeJar}:${tmpRoot}" "${mainClass}"`, {
+        cwd: kestrelRoot,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      expect(stdout).toBe('spawn-error\n');
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });

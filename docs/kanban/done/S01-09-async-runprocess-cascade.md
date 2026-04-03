@@ -43,16 +43,16 @@ Promote the stale `runProcess` migration story to a build-ready plan that matche
 
 ## Acceptance Criteria
 
-- [ ] `stdlib/kestrel/process.ks` continues to export `runProcess(program: String, args: List<String>): Task<Result<Int, ProcessError>>` and maps runtime error codes to `ProcessError` consistently.
-- [ ] `compiler/src/typecheck/check.ts` `__run_process` binding remains aligned with the runtime contract: `(String, List<String>) -> Task<Result<Int, String>>` at the intrinsic layer, with stdlib mapping to `ProcessError` at the public layer.
-- [ ] `compiler/src/jvm-codegen/codegen.ts` emits the async intrinsic call to `KRuntime.runProcessAsync(Object, Object): KTask` for `__run_process`.
-- [ ] `runtime/jvm/src/kestrel/runtime/KRuntime.java` `runProcessAsync()` dispatches to the virtual-thread executor, forwards subprocess output, and returns `KOk(exitCode)` / `KErr(code)` rather than blocking the caller thread or surfacing expected launch failures as user-visible uncaught exceptions.
-- [ ] `scripts/run_tests.ks` continues to await both `runProcess` call sites and preserves current non-zero exit behavior when child-process startup fails.
-- [ ] `tests/perf/float/run.ks` continues to await all `Process.runProcess(...)` calls and preserves sequential benchmark semantics.
-- [ ] `compiler/test/integration/runtime-stdlib.test.ts` includes runProcess-specific JVM integration coverage for combined output forwarding, exit-code delivery, and missing-binary failure.
-- [ ] A focused positive E2E scenario pins the public `kestrel:process` behavior end to end without depending on host-specific tools beyond the existing `sh` baseline already used in repo tests.
-- [ ] User-facing docs do not describe stale synchronous or pre-Result `runProcess` behavior.
-- [ ] Verification passes: `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test`, `./scripts/run-e2e.sh`.
+- [x] `stdlib/kestrel/process.ks` continues to export `runProcess(program: String, args: List<String>): Task<Result<Int, ProcessError>>` and maps runtime error codes to `ProcessError` consistently.
+- [x] `compiler/src/typecheck/check.ts` `__run_process` binding remains aligned with the runtime contract: `(String, List<String>) -> Task<Result<Int, String>>` at the intrinsic layer, with stdlib mapping to `ProcessError` at the public layer.
+- [x] `compiler/src/jvm-codegen/codegen.ts` emits the async intrinsic call to `KRuntime.runProcessAsync(Object, Object): KTask` for `__run_process`.
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java` `runProcessAsync()` dispatches to the virtual-thread executor, forwards subprocess output, and returns `KOk(exitCode)` / `KErr(code)` rather than blocking the caller thread or surfacing expected launch failures as user-visible uncaught exceptions.
+- [x] `scripts/run_tests.ks` continues to await both `runProcess` call sites and preserves current non-zero exit behavior when child-process startup fails.
+- [x] `tests/perf/float/run.ks` continues to await all `Process.runProcess(...)` calls and preserves sequential benchmark semantics.
+- [x] `compiler/test/integration/runtime-stdlib.test.ts` includes runProcess-specific JVM integration coverage for combined output forwarding, exit-code delivery, and missing-binary failure.
+- [x] A focused positive E2E scenario pins the public `kestrel:process` behavior end to end without depending on host-specific tools beyond the existing `sh` baseline already used in repo tests.
+- [x] User-facing docs do not describe stale synchronous or pre-Result `runProcess` behavior.
+- [x] Verification passes: `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test`, `./scripts/run-e2e.sh`.
 
 ## Spec References
 
@@ -87,20 +87,20 @@ Promote the stale `runProcess` migration story to a build-ready plan that matche
 
 ## Tasks
 
-- [ ] Audit `compiler/src/typecheck/check.ts` `__run_process` typing so the intrinsic contract remains `Task<Result<Int, String>>` and matches the runtime payload shape.
-- [ ] Audit `compiler/src/jvm-codegen/codegen.ts` `__run_process` lowering to `KRuntime.runProcessAsync(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KTask;` and fix any descriptor or intrinsic-name drift.
-- [ ] Audit `runtime/jvm/src/kestrel/runtime/KRuntime.java` `runProcessAsync()` for virtual-thread dispatch, combined output forwarding, and `KOk`/`KErr` payload shape; tighten failure handling if needed.
-- [ ] Audit `stdlib/kestrel/process.ks` `runProcess` wrapper and `mapProcessError` so the public surface remains `Task<Result<Int, ProcessError>>` and matches runtime error-code conventions.
-- [ ] Audit `scripts/run_tests.ks` `runProcessOrExit()` and generated-runner launch flow so both child-process calls remain awaited and failure messaging stays unchanged.
-- [ ] Audit `tests/perf/float/run.ks` `runProcessCode()` and the warmup/measured loops so subprocess execution remains sequential and result handling stays unchanged.
-- [ ] Audit `stdlib/kestrel/process.test.ks` and extend it only if existing exit-code or spawn-error assertions are incomplete for the current public surface.
-- [ ] Add or extend `compiler/test/integration/runtime-stdlib.test.ts` with runProcess success/output-forwarding and missing-binary JVM integration regressions.
-- [ ] Add or extend a focused positive scenario under `tests/e2e/scenarios/positive/` if CLI-level runProcess behavior is not already pinned elsewhere.
-- [ ] Update canonical specs and any still-user-facing docs that describe stale sync or pre-Result `runProcess` behavior.
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `cd runtime/jvm && bash build.sh`
-- [ ] Run `./scripts/kestrel test`
-- [ ] Run `./scripts/run-e2e.sh`
+- [x] Audit `compiler/src/typecheck/check.ts` `__run_process` typing so the intrinsic contract remains `Task<Result<Int, String>>` and matches the runtime payload shape.
+- [x] Audit `compiler/src/jvm-codegen/codegen.ts` `__run_process` lowering to `KRuntime.runProcessAsync(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KTask;` and fix any descriptor or intrinsic-name drift.
+- [x] Audit `runtime/jvm/src/kestrel/runtime/KRuntime.java` `runProcessAsync()` for virtual-thread dispatch, combined output forwarding, and `KOk`/`KErr` payload shape; tighten failure handling if needed.
+- [x] Audit `stdlib/kestrel/process.ks` `runProcess` wrapper and `mapProcessError` so the public surface remains `Task<Result<Int, ProcessError>>` and matches runtime error-code conventions.
+- [x] Audit `scripts/run_tests.ks` `runProcessOrExit()` and generated-runner launch flow so both child-process calls remain awaited and failure messaging stays unchanged.
+- [x] Audit `tests/perf/float/run.ks` `runProcessCode()` and the warmup/measured loops so subprocess execution remains sequential and result handling stays unchanged.
+- [x] Audit `stdlib/kestrel/process.test.ks` and extend it only if existing exit-code or spawn-error assertions are incomplete for the current public surface.
+- [x] Add or extend `compiler/test/integration/runtime-stdlib.test.ts` with runProcess success/output-forwarding and missing-binary JVM integration regressions.
+- [x] Add or extend a focused positive scenario under `tests/e2e/scenarios/positive/` if CLI-level runProcess behavior is not already pinned elsewhere.
+- [x] Update canonical specs and any still-user-facing docs that describe stale sync or pre-Result `runProcess` behavior.
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `cd runtime/jvm && bash build.sh`
+- [x] Run `./scripts/kestrel test`
+- [x] Run `./scripts/run-e2e.sh`
 
 ## Tests to add
 
@@ -111,12 +111,21 @@ Promote the stale `runProcess` migration story to a build-ready plan that matche
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/02-stdlib.md` — confirm the `kestrel:process` `runProcess` row describes the final `Task<Result<Int, ProcessError>>` contract and current output-forwarding/spawn-failure behavior.
-- [ ] `docs/specs/01-language.md` — keep the async/task model wording consistent with failure-as-data process tasks so this story does not reintroduce exception-first wording.
-- [ ] `docs/specs/06-typesystem.md` — confirm the `await` typing examples remain accurate for `Task<Result<...>>` process APIs.
-- [ ] `docs/specs/09-tools.md` — verify `kestrel test` still matches the async `scripts/run_tests.ks` implementation that launches child processes through awaited `runProcess` helpers.
+- [x] `docs/specs/02-stdlib.md` — confirm the `kestrel:process` `runProcess` row describes the final `Task<Result<Int, ProcessError>>` contract and current output-forwarding/spawn-failure behavior.
+- [x] `docs/specs/01-language.md` — keep the async/task model wording consistent with failure-as-data process tasks so this story does not reintroduce exception-first wording.
+- [x] `docs/specs/06-typesystem.md` — confirm the `await` typing examples remain accurate for `Task<Result<...>>` process APIs.
+- [x] `docs/specs/09-tools.md` — verify `kestrel test` still matches the async `scripts/run_tests.ks` implementation that launches child processes through awaited `runProcess` helpers.
 
 ## Notes
 
 - The repository already appears to satisfy most of the original story mechanically. `build-story` should treat this as an audit-and-closeout task: add only the missing runProcess-specific regression coverage and docs cleanup that remain after verification.
 - For process coverage, prefer `sh -c` commands that emit a few deterministic lines and exit with a known code, because the repo already assumes `sh` availability in tests and scripts.
+
+## Build notes
+
+- 2026-04-03: Started implementation.
+- 2026-04-03: Audit confirmed implementation already aligned in compiler typecheck/codegen, JVM runtime, stdlib wrapper, test runner, and perf harness. Scope remained audit + regression coverage only.
+- 2026-04-03: Added two integration regressions in `compiler/test/integration/runtime-stdlib.test.ts`: (1) combined stdout/stderr forwarding with `Ok(exitCode)` and (2) missing-binary `Err(ProcessSpawnError(_))`.
+- 2026-04-03: Added focused E2E scenario `tests/e2e/scenarios/positive/async-runprocess-result.ks` (+ `.expected`) to pin public runProcess output forwarding and spawn-error handling end to end.
+- 2026-04-03: Specs already matched the final API/semantics (`docs/specs/02-stdlib.md`, `docs/specs/01-language.md`, `docs/specs/06-typesystem.md`, `docs/specs/09-tools.md`), so no spec text changes were needed.
+- 2026-04-03: Full required verification passed: `cd compiler && npm run build && npm test` (18 files, 217 tests), `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test` (1002 passed), `./scripts/run-e2e.sh` (12 negative + 9 positive).
