@@ -39,14 +39,14 @@ Current repo state:
 
 ## Acceptance Criteria
 
-- [ ] `kestrel run script.ks` (no flags) waits for async work to complete before exiting.
-- [ ] `kestrel run --exit-wait script.ks` behaves identically to the default.
-- [ ] `kestrel run --exit-no-wait script.ks` exits after `main` returns, even if async tasks are pending.
-- [ ] `kestrel run --exit-wait --exit-no-wait script.ks` prints an error and exits non-zero.
-- [ ] The exit mode is passed to the JVM and respected by `KRuntime` executor shutdown logic.
-- [ ] `docs/specs/09-tools.md` documents both flags under `kestrel run`.
-- [ ] `kestrel run --help` includes `--exit-wait` and `--exit-no-wait` descriptions.
-- [ ] Existing tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
+- [x] `kestrel run script.ks` (no flags) waits for async work to complete before exiting.
+- [x] `kestrel run --exit-wait script.ks` behaves identically to the default.
+- [x] `kestrel run --exit-no-wait script.ks` exits after `main` returns, even if async tasks are pending.
+- [x] `kestrel run --exit-wait --exit-no-wait script.ks` prints an error and exits non-zero.
+- [x] The exit mode is passed to the JVM and respected by `KRuntime` executor shutdown logic.
+- [x] `docs/specs/09-tools.md` documents both flags under `kestrel run`.
+- [x] `kestrel run --help` includes `--exit-wait` and `--exit-no-wait` descriptions.
+- [x] Existing tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
 
 ## Spec References
 
@@ -72,17 +72,17 @@ Current repo state:
 
 ## Tasks
 
-- [ ] Update `runtime/jvm/src/kestrel/runtime/KRuntime.java` `runMain` / shutdown helpers to read the configured exit mode and branch between wait-for-quiescence + orderly shutdown and immediate `shutdownNow()` semantics.
-- [ ] Update `scripts/kestrel` `usage()` and `cmd_run()` help handling so `kestrel run --help` documents `--exit-wait` and `--exit-no-wait` without regressing existing run-argument parsing or mutual-exclusion errors.
-- [ ] Verify `compiler/src/jvm-codegen/codegen.ts` main entrypoint remains compatible with property-driven runtime selection; keep the existing `KRuntime.runMain` call unchanged unless runtime wiring requires a signature change.
-- [ ] Add JVM/runtime integration coverage in `compiler/test/integration/jvm-async-runtime.test.ts` for wait-vs-no-wait shutdown behavior, ideally via a small Java harness that sets `kestrel.exitWait` and observes whether pending async work prints before process exit.
-- [ ] Add CLI-facing end-to-end coverage under `tests/e2e/scenarios/positive/` and/or `tests/e2e/scenarios/negative/` plus any needed `scripts/run-e2e.sh` support so default run, explicit `--exit-wait`, explicit `--exit-no-wait`, and conflicting flags are exercised through `./scripts/kestrel`.
-- [ ] Update `docs/specs/09-tools.md` `kestrel run` usage/help text to document both flags, the default wait behavior, and the conflicting-flags error.
-- [ ] Update `docs/specs/01-language.md` §5 to document process lifetime at program exit for async tasks, including the `--exit-no-wait` abandonment/interruption behavior.
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `cd runtime/jvm && bash build.sh`
-- [ ] Run `./scripts/kestrel test`
-- [ ] Run `./scripts/run-e2e.sh`
+- [x] Update `runtime/jvm/src/kestrel/runtime/KRuntime.java` `runMain` / shutdown helpers to read the configured exit mode and branch between wait-for-quiescence + orderly shutdown and immediate `shutdownNow()` semantics.
+- [x] Update `scripts/kestrel` `usage()` and `cmd_run()` help handling so `kestrel run --help` documents `--exit-wait` and `--exit-no-wait` without regressing existing run-argument parsing or mutual-exclusion errors.
+- [x] Verify `compiler/src/jvm-codegen/codegen.ts` main entrypoint remains compatible with property-driven runtime selection; keep the existing `KRuntime.runMain` call unchanged unless runtime wiring requires a signature change.
+- [x] Add JVM/runtime integration coverage in `compiler/test/integration/jvm-async-runtime.test.ts` for wait-vs-no-wait shutdown behavior, ideally via a small Java harness that sets `kestrel.exitWait` and observes whether pending async work prints before process exit.
+- [x] Add CLI-facing end-to-end coverage under `tests/e2e/scenarios/positive/` and/or `tests/e2e/scenarios/negative/` plus any needed `scripts/run-e2e.sh` support so default run, explicit `--exit-wait`, explicit `--exit-no-wait`, and conflicting flags are exercised through `./scripts/kestrel`.
+- [x] Update `docs/specs/09-tools.md` `kestrel run` usage/help text to document both flags, the default wait behavior, and the conflicting-flags error.
+- [x] Update `docs/specs/01-language.md` §5 to document process lifetime at program exit for async tasks, including the `--exit-no-wait` abandonment/interruption behavior.
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `cd runtime/jvm && bash build.sh`
+- [x] Run `./scripts/kestrel test`
+- [x] Run `./scripts/run-e2e.sh`
 
 ## Tests to add
 
@@ -97,5 +97,13 @@ Current repo state:
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — update `kestrel run` usage, option descriptions, help behavior, and conflicting-flag error handling for `--exit-wait` / `--exit-no-wait`.
-- [ ] `docs/specs/01-language.md` — extend §5 async runtime behavior with process-lifetime semantics at `main` exit and the interruption/abandonment behavior of `--exit-no-wait`.
+- [x] `docs/specs/09-tools.md` — update `kestrel run` usage, option descriptions, help behavior, and conflicting-flag error handling for `--exit-wait` / `--exit-no-wait`.
+- [x] `docs/specs/01-language.md` — extend §5 async runtime behavior with process-lifetime semantics at `main` exit and the interruption/abandonment behavior of `--exit-no-wait`.
+
+## Build notes
+
+- 2026-04-03: Started implementation.
+- 2026-04-03: Added JVM runtime exit-mode branching via `kestrel.exitWait` and introduced `shutdownAsyncRuntimeNow()` for immediate interruption semantics.
+- 2026-04-03: Kept JVM codegen entrypoint signature unchanged (`KRuntime.runMain(String[], KFunction)`) and implemented CLI coverage through `scripts/run-e2e.sh` smoke checks rather than adding flag-specific `.ks` scenario files.
+- 2026-04-03: Verification passed for `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test`, and `./scripts/run-e2e.sh`.
+- 2026-04-03: Added a generated `--exit-no-wait` probe in `scripts/run-e2e.sh` using `Process.runProcess("sh", ["-c", "sleep 2"])` to assert main-output prints while async completion output is suppressed.

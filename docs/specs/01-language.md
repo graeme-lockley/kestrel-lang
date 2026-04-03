@@ -505,6 +505,7 @@ Runtime behaviour:
 - Async function calls submit their bodies to the runtime virtual-thread executor and immediately return `KTask` backed by a `CompletableFuture<Object>`.
 - `await e` lowers to `KTask.get()`: completed tasks return immediately; pending tasks block the current virtual thread until completion; exceptional completion rethrows the original failure so surrounding `try/catch` can handle it normally.
 - Runtime stdlib I/O/process tasks use `Result` payloads for expected operational failures. For example, `await Fs.readText(path)` produces `Result<String, FsError>` and `await Process.runProcess(program, args)` produces `Result<Int, ProcessError>`; callers pattern-match on `Ok` / `Err`.
+- Process lifetime at top-level return is controlled by the CLI run mode (09 §2.1): default `kestrel run` / `--exit-wait` waits for pending async tasks to quiesce before exit; `--exit-no-wait` exits when `main` returns and may interrupt in-flight virtual-thread work.
 
 ---
 

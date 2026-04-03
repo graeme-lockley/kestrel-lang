@@ -130,3 +130,90 @@ fi
 if [ "$pos_count" -gt 0 ]; then
   echo "E2E positive: $pos_count scenario(s) passed."
 fi
+
+# CLI flag smoke checks for S01-05 process exit modes.
+sample_run="$POSITIVE/async-await-virtual-threads.ks"
+sample_expected="$POSITIVE/async-await-virtual-threads.expected"
+if [ -f "$sample_run" ] && [ -f "$sample_expected" ]; then
+  out_dir="$ROOT/out/e2e"
+  mkdir -p "$out_dir"
+
+  default_stdout="$out_dir/cli_exit_wait_default.stdout"
+  wait_stdout="$out_dir/cli_exit_wait_explicit.stdout"
+  nowait_stdout="$out_dir/cli_exit_nowait.stdout"
+  nowait_stderr="$out_dir/cli_exit_nowait.stderr"
+  nowait_probe="$out_dir/cli_exit_nowait_probe.ks"
+  conflict_stderr="$out_dir/cli_exit_wait_conflict.stderr"
+  help_stdout="$out_dir/cli_exit_help.stdout"
+
+  if ! (cd "$ROOT" && ./scripts/kestrel run "$sample_run" >"$default_stdout" 2>/dev/null); then
+    echo "E2E CLI: default run failed for exit-wait smoke check" >&2
+    exit 1
+  fi
+  if ! diff -q "$sample_expected" "$default_stdout" >/dev/null 2>&1; then
+    echo "E2E CLI: default run output mismatch for exit-wait smoke check" >&2
+    diff "$sample_expected" "$default_stdout" >&2 || true
+    exit 1
+  fi
+
+  if ! (cd "$ROOT" && ./scripts/kestrel run --exit-wait "$sample_run" >"$wait_stdout" 2>/dev/null); then
+    echo "E2E CLI: --exit-wait run failed" >&2
+    exit 1
+  fi
+  if ! diff -q "$sample_expected" "$wait_stdout" >/dev/null 2>&1; then
+    echo "E2E CLI: --exit-wait output mismatch" >&2
+    diff "$sample_expected" "$wait_stdout" >&2 || true
+    exit 1
+  fi
+
+  if (cd "$ROOT" && ./scripts/kestrel run --exit-wait --exit-no-wait "$sample_run" >/dev/null 2>"$conflict_stderr"); then
+    echo "E2E CLI: expected conflicting exit flags to fail" >&2
+    exit 1
+  fi
+  if ! grep -q "mutually exclusive" "$conflict_stderr"; then
+    echo "E2E CLI: conflicting exit flags did not print expected error" >&2
+    cat "$conflict_stderr" >&2
+    exit 1
+  fi
+
+  cat >"$nowait_probe" <<'EOF'
+import * as Process from "kestrel:process"
+
+async fun linger(): Task<Unit> = {
+  val _ = await Process.runProcess("sh", ["-c", "sleep 2"]);
+  println("late");
+  ()
+}
+
+linger()
+println("main")
+EOF
+
+  if ! (cd "$ROOT" && ./scripts/kestrel run --exit-no-wait "$nowait_probe" >"$nowait_stdout" 2>"$nowait_stderr"); then
+    echo "E2E CLI: --exit-no-wait run failed" >&2
+    cat "$nowait_stderr" >&2
+    exit 1
+  fi
+  if ! grep -q "^main$" "$nowait_stdout"; then
+    echo "E2E CLI: --exit-no-wait did not print main marker" >&2
+    cat "$nowait_stdout" >&2
+    exit 1
+  fi
+  if grep -q "^late$" "$nowait_stdout"; then
+    echo "E2E CLI: --exit-no-wait unexpectedly waited for async completion" >&2
+    cat "$nowait_stdout" >&2
+    exit 1
+  fi
+
+  if ! (cd "$ROOT" && ./scripts/kestrel run --help >"$help_stdout"); then
+    echo "E2E CLI: kestrel run --help failed" >&2
+    exit 1
+  fi
+  if ! grep -q -- "--exit-wait" "$help_stdout" || ! grep -q -- "--exit-no-wait" "$help_stdout"; then
+    echo "E2E CLI: kestrel run --help missing exit mode flags" >&2
+    cat "$help_stdout" >&2
+    exit 1
+  fi
+
+  echo "E2E CLI: exit mode flag checks passed."
+fi

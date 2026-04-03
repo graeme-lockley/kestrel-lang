@@ -37,7 +37,7 @@ function compileAndRunKestrel(source: string): string {
   }
 }
 
-function compileAndRunJava(className: string, source: string): string {
+function compileAndRunJava(className: string, source: string, javaArgs: string[] = []): string {
   const tmpRoot = mkdtempSync(join(tmpdir(), 'kestrel-jvm-async-java-'));
   const javaPath = join(tmpRoot, `${className}.java`);
   writeFileSync(javaPath, source);
@@ -47,7 +47,11 @@ function compileAndRunJava(className: string, source: string): string {
       cwd: kestrelRoot,
       stdio: 'pipe',
     });
-    return execSync(`java -cp "${runtimeJar}:${tmpRoot}" "${className}"`, {
+    const javaArgString = javaArgs.map((arg) => JSON.stringify(arg)).join(' ');
+    const javaCommand = javaArgString.length > 0
+      ? `java ${javaArgString} -cp "${runtimeJar}:${tmpRoot}" "${className}"`
+      : `java -cp "${runtimeJar}:${tmpRoot}" "${className}"`;
+    return execSync(javaCommand, {
       cwd: kestrelRoot,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -131,4 +135,106 @@ public final class AsyncOverlapHarness {
 
     expect(stdout).toBe('3\noverlap\n');
   });
+
+    it('runMain waits for pending async work by default', () => {
+    const stdout = compileAndRunJava(
+      'ExitWaitDefaultHarness',
+      `import kestrel.runtime.KFunction;
+  import kestrel.runtime.KRuntime;
+  import kestrel.runtime.KUnit;
+
+  public final class ExitWaitDefaultHarness {
+    public static void main(String[] args) {
+      KRuntime.runMain(new String[0], new KFunction() {
+        @Override
+        public Object apply(Object[] ignored) {
+          KRuntime.submitAsync(new KFunction() {
+            @Override
+            public Object apply(Object[] ignored2) {
+              try {
+                Thread.sleep(250L);
+                KRuntime.println("async-done");
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              return KUnit.INSTANCE;
+            }
+          }, new Object[0]);
+          return KUnit.INSTANCE;
+        }
+      });
+    }
+  }
+  `
+    );
+
+    expect(stdout).toBe('async-done\n');
+    });
+
+    it('runMain exits without waiting when kestrel.exitWait=false', () => {
+    const stdout = compileAndRunJava(
+      'ExitNoWaitHarness',
+      `import kestrel.runtime.KFunction;
+  import kestrel.runtime.KRuntime;
+  import kestrel.runtime.KUnit;
+
+  public final class ExitNoWaitHarness {
+    public static void main(String[] args) {
+      KRuntime.runMain(new String[0], new KFunction() {
+        @Override
+        public Object apply(Object[] ignored) {
+          KRuntime.submitAsync(new KFunction() {
+            @Override
+            public Object apply(Object[] ignored2) {
+              try {
+                Thread.sleep(5000L);
+                KRuntime.println("async-done");
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              }
+              return KUnit.INSTANCE;
+            }
+          }, new Object[0]);
+          return KUnit.INSTANCE;
+        }
+      });
+    }
+  }
+  `,
+      ['-Dkestrel.exitWait=false']
+    );
+
+    expect(stdout).toBe('');
+    });
+
+    it('shutdownAsyncRuntimeNow interrupts pending virtual-thread tasks', () => {
+    const stdout = compileAndRunJava(
+      'ShutdownNowHarness',
+      `import kestrel.runtime.KFunction;
+  import kestrel.runtime.KRuntime;
+  import kestrel.runtime.KUnit;
+
+  public final class ShutdownNowHarness {
+    public static void main(String[] args) {
+      KRuntime.initAsyncRuntime();
+      KRuntime.submitAsync(new KFunction() {
+        @Override
+        public Object apply(Object[] ignored) {
+          try {
+            Thread.sleep(5000L);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+          return KUnit.INSTANCE;
+        }
+      }, new Object[0]);
+      KRuntime.shutdownAsyncRuntimeNow();
+      System.out.println("shutdown-now");
+    }
+  }
+  `
+    );
+
+    expect(stdout).toBe('shutdown-now\n');
+    });
 });

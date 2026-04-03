@@ -55,6 +55,17 @@ public final class KRuntime {
         }
     }
 
+    public static synchronized void shutdownAsyncRuntimeNow() {
+        ExecutorService executor = asyncExecutor;
+        asyncExecutor = null;
+        if (executor == null) return;
+        executor.shutdownNow();
+    }
+
+    private static boolean exitWaitEnabled() {
+        return Boolean.parseBoolean(System.getProperty("kestrel.exitWait", "true"));
+    }
+
     public static KTask submitAsync(KFunction fn, Object[] args) {
         if (fn == null) throw new IllegalArgumentException("submitAsync expects KFunction");
         initAsyncRuntime();
@@ -106,11 +117,18 @@ public final class KRuntime {
     public static void runMain(String[] args, KFunction init) {
         setMainArgs(args);
         initAsyncRuntime();
+        boolean waitForAsync = exitWaitEnabled();
         try {
             init.apply(new Object[0]);
-            awaitAsyncQuiescence();
+            if (waitForAsync) {
+                awaitAsyncQuiescence();
+            }
         } finally {
-            shutdownAsyncRuntime();
+            if (waitForAsync) {
+                shutdownAsyncRuntime();
+            } else {
+                shutdownAsyncRuntimeNow();
+            }
         }
     }
 

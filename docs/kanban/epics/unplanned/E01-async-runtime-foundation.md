@@ -23,7 +23,7 @@ Async execution exploits **Project Loom virtual threads** (Java 21+) rather than
 7. [x] [S01-04-result-error-adts-async-operations.md](../../done/S01-04-result-error-adts-async-operations.md) — Result<T, E> and FsError ADT for typed async error handling; all async I/O returns Task<Result<T, E>>. Completed.
 8. [S01-11-async-lambda-expressions.md](../../unplanned/S01-11-async-lambda-expressions.md) — Grammar, AST, type checker, and codegen for `async (params) => body` lambda expressions; `await` in a non-async lambda remains a compile error.
 9. [S01-10-async-test-harness-suite-runner.md](../../unplanned/S01-10-async-test-harness-suite-runner.md) — Standardize all test suite `run` functions to `async fun run(s: Suite): Task<Unit>` and update the generated test runner to `await` each call.
-10. [S01-05-cli-exit-wait-exit-no-wait.md](../../unplanned/S01-05-cli-exit-wait-exit-no-wait.md) — CLI --exit-wait (default) and --exit-no-wait flags for process lifetime.
+10. [x] [S01-05-cli-exit-wait-exit-no-wait.md](../../done/S01-05-cli-exit-wait-exit-no-wait.md) — CLI --exit-wait (default) and --exit-no-wait flags for process lifetime. Completed.
 11. [S01-06-specs-conformance-e2e-tests.md](../../unplanned/S01-06-specs-conformance-e2e-tests.md) — Spec updates, conformance tests, and E2E scenarios for the full async model.
 
 Stories 4–6 (listDir, writeText, runProcess) can be implemented in any order relative to each other; they all depend on S01-03. S01-11 and S01-10 should follow those three.

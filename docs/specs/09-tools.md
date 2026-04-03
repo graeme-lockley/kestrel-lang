@@ -21,7 +21,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.1 run
 
-**Usage:** `kestrel run <script[.ks]> [args...]`
+**Usage:** `kestrel run [--exit-wait|--exit-no-wait] <script[.ks]> [args...]`
 
 - **Effect:** Compiles the named Kestrel script (and its constituent packages) if the target binary is stale or missing, then executes it via the JVM runtime.
 - **Target:** JVM is the only execution target; compiled `.class` files are generated for the Java Virtual Machine.
@@ -29,6 +29,11 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Cache:**
   - Compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/jvm/Users/me/proj/foo.class`. This avoids cluttering the project directory. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run foo.ks`).
 - **Execution:** `kestrel` runs `java` with a classpath containing `kestrel-runtime.jar` and the JVM cache root, and uses a main class derived from the entry source file path (strip leading `/`, remove `.ks`, capitalize the last path segment; convert `/` to `.` for the Java binary name). Entry-point discovery is implementation-defined, but the derived class name is stable for a given absolute source path.
+- **Exit mode flags:**
+  - **`--exit-wait` (default):** wait for pending async runtime work to quiesce before process exit, then perform orderly executor shutdown.
+  - **`--exit-no-wait`:** exit after `main` returns; pending async tasks are abandoned and virtual threads may be interrupted via immediate shutdown.
+  - Supplying both flags in one invocation is a CLI error with non-zero exit.
+- **Run help:** `kestrel run --help` prints run-specific usage and describes both exit mode flags.
 - **Errors:** Compile errors are reported on stderr; the process exits non-zero. Diagnostic format and behaviour are specified in [10-compile-diagnostics.md](10-compile-diagnostics.md). JVM runtime errors (e.g. uncaught exception) produce non-zero exit as per the runtime model.
 
 ### 2.2 dis
