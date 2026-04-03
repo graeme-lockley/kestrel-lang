@@ -1,0 +1,106 @@
+---
+name: kanban-story-migrate
+description: >-
+  Moves a Kestrel kanban story between future, unplanned, planned, doing, and
+  done with the right content updates and entry/exit gates. Use when promoting
+  a story, starting implementation, or closing work.
+---
+
+# Kestrel Kanban — migrate a story between phases
+
+Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill is a checklist for agents; do not skip gates without explicit team agreement.
+
+## Conventions
+
+- **Move** the file (same `NN-slug.md` name) on the roadmap: `unplanned/` → `planned/` → `doing/` → `done/`.
+- **Never** change `NN` in the filename when moving between those folders (`NN` is **globally unique**; the story keeps the same id through **planned** / **doing** / **done**).
+- Update the markdown **in place** as required by the target phase.
+
+---
+
+## 0. `future/slug.md` → `unplanned/NN-slug.md`
+
+### Preconditions
+
+Team agrees the investigation is ready to become a **roadmap** item.
+
+### Actions
+
+1. Pick the next free **global `NN`** across **unplanned**, **planned**, **doing**, and **done** (see [docs/kanban/README.md](docs/kanban/README.md)).
+2. **Move** and **rename**: `docs/kanban/future/slug.md` → `docs/kanban/unplanned/NN-slug.md`.
+3. Add full **unplanned** sections: **`## Sequence: NN`**, **`## Tier:`**, **Summary**, **Current State**, **Relationship to other stories**, **Goals**, **Acceptance criteria**, **Spec references**, **Risks / notes** (merge or expand content from the future file).
+4. Ensure **unplanned exit** criteria are met before later promoting to **planned** (section A below).
+
+---
+
+## A. `unplanned/` → `planned/`
+
+### Preconditions (unplanned exit)
+
+Story has complete: Summary, Current State, Relationship to other stories, **Goals**, Acceptance criteria, Spec references, **Risks / notes**.
+
+### Actions
+
+1. Move `docs/kanban/unplanned/NN-slug.md` → `docs/kanban/planned/NN-slug.md`.
+2. Add sections (if missing):
+   - `## Impact analysis` — areas touched (compiler, VM, stdlib, scripts), risks, compatibility; **merge or reference** bullets from unplanned **Risks / notes** (do not drop them silently).
+   - `## Tasks` — concrete `- [ ]` items covering implementation and verification.
+   - `## Tests to add` — list planned tests by layer (Vitest paths, `tests/unit/*.test.ks`, conformance, Zig, E2E) and what each proves.
+   - `## Documentation and specs to update` — explicit `docs/specs/` and other doc paths.
+3. Optional: `## Notes` — planning spikes, extra links, or questions **beyond** what is already under **Risks / notes**.
+
+### Stop here until
+
+Planned exit criteria met: impact, tasks, test list, and doc/spec list are substantive enough that an implementer can start without guessing.
+
+---
+
+## B. `planned/` → `doing/`
+
+### Preconditions (planned exit)
+
+All planned sections filled; team agrees the story is ready to build.
+
+### Actions
+
+1. Move `docs/kanban/planned/NN-slug.md` → `docs/kanban/doing/NN-slug.md`.
+2. Add (if missing):
+
+```markdown
+## Build notes
+
+- YYYY-MM-DD: Started implementation.
+```
+
+3. During implementation: tick **Tasks**, append **Build notes**, add new `- [ ]` tasks if scope emerges (complete them before **done**).
+
+---
+
+## C. `doing/` → `done/`
+
+### Preconditions (doing exit)
+
+- All **Tasks** are `[x]`.
+- Acceptance criteria satisfied (or documented deferrals with follow-up stories).
+- Tests run and pass per [AGENTS.md](AGENTS.md) and the story's own **Tests to add** / verification list.
+
+### Actions
+
+1. Run verification (adjust to the story):
+   - `cd compiler && npm run build && npm test`
+   - `./scripts/kestrel test` from repo root
+   - `cd vm && zig build test` when bytecode/VM/runtime changes
+   - `./scripts/run-e2e.sh` when user-visible behaviour or integration warrants it
+2. Move `docs/kanban/doing/NN-slug.md` → `docs/kanban/done/NN-slug.md`.
+3. Final pass: ensure **Documentation and specs to update** items are done or explicitly deferred in the story text.
+
+---
+
+## Skipping `planned/`
+
+Only for **explicitly agreed** trivial work (doc-only, single-file regression). Record the exception in **Build notes** or **Notes**. Default path remains **unplanned → planned → doing → done**.
+
+## Related
+
+- Create new stories: skill **kanban-story-create**
+- Build the feature: skill **feature-delivery**
