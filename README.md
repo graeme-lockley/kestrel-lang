@@ -1,20 +1,18 @@
 # Kestrel
 
-Kestrel is a statically typed language with Hindley–Milner type inference. You write programs that feel like scripts; the compiler checks them carefully, emits bytecode (`.kbc`), and you can run them on the included stack VM or on a JVM backend. The project is under active development; language details live in [docs/specs/](docs/specs/), and work is tracked in the Kanban under [docs/kanban/](docs/kanban/) (pre-roadmap ideas in [future/](docs/kanban/future/); roadmap in [unplanned/](docs/kanban/unplanned/); see [docs/kanban/README.md](docs/kanban/README.md) for **future** and **unplanned → planned → doing → done**).
+Kestrel is a statically typed language with Hindley–Milner type inference. You write programs that feel like scripts; the compiler checks them carefully, emits bytecode (`.kbc`), and runs them on the JVM backend. The project is under active development; language details live in [docs/specs/](docs/specs/), and work is tracked in the Kanban under [docs/kanban/](docs/kanban/) (pre-roadmap ideas in [future/](docs/kanban/future/); roadmap in [unplanned/](docs/kanban/unplanned/); see [docs/kanban/README.md](docs/kanban/README.md) for **future** and **unplanned → planned → doing → done**).
 
 ## What you need
 
 - **Node.js** 18 or newer (for the compiler)
-- **Zig** (current stable) for the default VM target
-- **JDK 11+** only if you use `--target jvm`
+- **JDK 11+** for the JVM runtime
 
 ## Quick start
 
-Clone the repository, then build the compiler and VM:
+Clone the repository, then build the compiler:
 
 ```bash
 cd compiler && npm install && npm run build
-cd ../vm && zig build
 cd ..
 ```
 
@@ -60,12 +58,12 @@ More examples appear in [tests/unit/](tests/unit/) and [tests/e2e/scenarios/](te
 
 The `kestrel` script implements the CLI described in [docs/specs/09-tools.md](docs/specs/09-tools.md):
 
-- **`kestrel run`** — Optional `--target vm` (default) or `--target jvm`; then `<script.ks>` and runtime arguments. Compiles if needed, then runs.
-- **`kestrel build`** — Builds the compiler and VM; optional `--target` and optional script path to compile.
+- **`kestrel run`** — `<script.ks>` and runtime arguments. Compiles if needed, then runs on the JVM.
+- **`kestrel build`** — Builds the compiler; optional script path to compile.
 - **`kestrel dis`** — Compiles if needed, then prints bytecode disassembly for a script.
-- **`kestrel test`** — Runs Kestrel unit tests; optional `--target vm` or `--target jvm` and optional test file paths.
+- **`kestrel test`** — Runs Kestrel unit tests; optional test file paths.
 
-Bytecode for the VM is cached under `~/.kestrel/kbc/` (layout mirrors absolute source paths). Override with `KESTREL_CACHE`. JVM class output uses `~/.kestrel/jvm/` unless you set `KESTREL_JVM_CACHE`.
+Bytecode is cached under `~/.kestrel/kbc/` (layout mirrors absolute source paths). Override with `KESTREL_CACHE`. JVM class output uses `~/.kestrel/jvm/` unless you set `KESTREL_JVM_CACHE`.
 
 ## Repository layout
 
@@ -73,7 +71,6 @@ Bytecode for the VM is cached under `~/.kestrel/kbc/` (layout mirrors absolute s
 kestrel/
 ├── kestrel              # CLI wrapper → scripts/kestrel
 ├── compiler/            # TypeScript: parse, typecheck, emit .kbc (and JVM)
-├── vm/                  # Zig bytecode interpreter and runtime
 ├── runtime/jvm/         # Java runtime for the JVM target
 ├── stdlib/kestrel/      # Standard modules (strings, lists, tests, …)
 ├── tests/               # Unit, E2E, and conformance tests
@@ -89,7 +86,7 @@ From the repository root:
 ./scripts/test-all.sh
 ```
 
-runs compiler tests, VM tests, E2E scenarios, and Kestrel unit tests. See [CONTRIBUTING.md](CONTRIBUTING.md) for running individual layers and for JVM-only checks.
+runs compiler tests, E2E scenarios, and Kestrel unit tests. See [CONTRIBUTING.md](CONTRIBUTING.md) for running individual layers.
 
 ## Contributing
 

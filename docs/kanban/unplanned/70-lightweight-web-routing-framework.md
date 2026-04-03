@@ -6,13 +6,13 @@
 
 ## Summary
 
-Add a **small, opinionated** standard library module (working name **`kestrel:web`**—final name set in **planned** and reflected in **02**/**07**) that sits **on top of** `kestrel:http` and provides **route matching** (method + path patterns), optional **filters** (before/after hooks), and **ergonomic handlers** for building **HTML** and **JSON/REST** servers without boilerplate. The implementation should be **mostly Kestrel source** (`.ks`) using **`kestrel:http`**’s `createServer` / `listen` and **`kestrel:json`** where appropriate; only add VM/JVM primitives if the language cannot express the router.
+Add a **small, opinionated** standard library module (working name **`kestrel:web`**—final name set in **planned** and reflected in **02**/**07**) that sits **on top of** `kestrel:http` and provides **route matching** (method + path patterns), optional **filters** (before/after hooks), and **ergonomic handlers** for building **HTML** and **JSON/REST** servers without boilerplate. The implementation should be **mostly Kestrel source** (`.ks`) using **`kestrel:http`**’s `createServer` / `listen` and **`kestrel:json`** where appropriate; only add JVM primitives if the language cannot express the router.
 
 ## Current State
 
 - No spec-defined routing or DSL above **`kestrel:http`**.
 - **`kestrel:http`** (after **60**) provides low-level **request → Task response** handling; **69** improves **client** REST ergonomics—**70** focuses on **server** composition.
-- Sinatra-like frameworks in other languages combine **routing + short handlers**; Kestrel needs a **documented** module so examples and tests stay portable across VM and JVM.
+- Sinatra-like frameworks in other languages combine **routing + short handlers**; Kestrel needs a **documented** module so examples and tests stay portable across JVM deployments.
 
 ## Relationship to other stories
 
@@ -25,7 +25,7 @@ Add a **small, opinionated** standard library module (working name **`kestrel:we
 
 1. Users can write a **multi-route** HTTP server in **under a page** of Kestrel using the new module’s API.
 2. **Path patterns** and **HTTP methods** are matched deterministically; **unmatched** routes produce a **documented** default (e.g. 404) in the reference implementations.
-3. The module is **stdlib**-backed (bundled `.kbc` or equivalent) with **no** VM/JVM divergence in **routing logic**—only **http** primitives differ underneath.
+3. The module is **stdlib**-backed (bundled `.kbc` or equivalent) with **no** divergence in **routing logic** — only **http** primitives differ in the JVM runtime underneath.
 4. Examples in **specs** or **`docs/`** (as listed in **planned**) stay in sync with the API so tutorials do not drift.
 
 ## Acceptance Criteria
@@ -34,8 +34,8 @@ Add a **small, opinionated** standard library module (working name **`kestrel:we
 - [ ] **`docs/specs/07-modules.md`** §4.2 lists the new **`kestrel:…`** specifier alongside other stdlib names.
 - [ ] At least: **register GET/POST (or any two methods)** routes, **path with one path parameter or wildcard** (exact pattern syntax specified in **02**), and a **JSON** or **plain text** response E2E test.
 - [ ] **Unit tests** in `tests/unit/*.test.ks` for route matching edge cases (trailing slash, method mismatch) per **02** semantics.
-- [ ] **No** new VM primitives unless **planned** documents why Kestrel cannot implement the router (goal: **zero** new primitives preferred).
-- [ ] **JVM and VM** both run the same **`.ks`** implementation (or document any unavoidable divergence—default is **none**).
+- [ ] **No** new runtime primitives unless **planned** documents why Kestrel cannot implement the router (goal: **zero** new primitives preferred).
+- [ ] **JVM** runs the **`.ks`** implementation (pure Kestrel routing logic with no backend divergence required).
 
 ## Spec References
 

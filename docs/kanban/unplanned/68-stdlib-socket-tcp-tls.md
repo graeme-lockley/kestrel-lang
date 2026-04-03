@@ -6,13 +6,13 @@
 
 ## Summary
 
-Introduce a **user-facing** standard library module for **TCP** sockets (connect, listen, accept, read, write, close) and **TLS** over TCP for client and server roles where the host platform allows it. Implementations use **native** facilities in the Zig VM and the JVM backend (no bundled third-party protocol stacks required beyond what the host provides). This complements sequence **60** (`kestrel:http`), which may use sockets internally without exposing them; this story **documents and stabilises** the socket surface for protocols and tooling that need raw streams.
+Introduce a **user-facing** standard library module for **TCP** sockets (connect, listen, accept, read, write, close) and **TLS** over TCP for client and server roles where the host platform allows it. Implementations use **native** facilities in the **JVM backend** (no bundled third-party protocol stacks required beyond what the host provides). This complements sequence **60** (`kestrel:http`), which may use sockets internally without exposing them; this story **documents and stabilises** the socket surface for protocols and tooling that need raw streams.
 
 ## Current State
 
 - `docs/specs/02-stdlib.md` defines `kestrel:http` but **no** first-class socket module.
 - `docs/specs/07-modules.md` lists core stdlib specifiers; `kestrel:socket` is not a reserved name.
-- Sequence **60** acceptance criteria mention VM primitives for TCP/HTTP; any **public** socket API is out of scope for **60** unless explicitly merged—this story assumes **60** may deliver internal transport first, then **68** adds the **stdlib contract** and JVM/Zig parity for programs that need streams.
+- Sequence **60** acceptance criteria mention VM primitives for TCP/HTTP; any **public** socket API is out of scope for **60** unless explicitly merged—this story assumes **60** may deliver internal transport first, then **68** adds the **stdlib contract** and the JVM implementation for programs that need streams.
 
 ## Relationship to other stories
 
@@ -23,8 +23,8 @@ Introduce a **user-facing** standard library module for **TCP** sockets (connect
 
 ## Goals
 
-1. Kestrel programs can open **TCP** connections and accept **TCP** connections with predictable error and closure semantics on **both** the Zig VM and JVM.
-2. **TLS** (HTTPS-style handshakes on streams) is available where the reference implementations can rely on **Zig** and **Java** platform TLS without mandating a specific certificate verification policy beyond what is documented and tested.
+1. Kestrel programs can open **TCP** connections and accept **TCP** connections with predictable error and closure semantics on the **JVM**.
+2. **TLS** (HTTPS-style handshakes on streams) is available where the reference implementation can rely on **Java** platform TLS without mandating a specific certificate verification policy beyond what is documented and tested.
 3. The **specs** name the module, types, and functions so compiler resolution, typechecking, and conformance tests can treat `kestrel:socket` like other stdlib modules.
 4. Security-sensitive defaults (e.g. verification mode, allowed ciphers) are **specified or explicitly implementation-defined** so the two runtimes do not silently diverge in ways that confuse users.
 
@@ -33,9 +33,8 @@ Introduce a **user-facing** standard library module for **TCP** sockets (connect
 - [ ] `kestrel:socket` resolves from source like other stdlib modules (`docs/specs/07-modules.md` updated accordingly).
 - [ ] Documented API in `docs/specs/02-stdlib.md` covers at least: client connect (host, port), server listen/bind, accept, close, and byte-oriented send/receive returning **`Task`-shaped** results where **59** requires async I/O (or a documented blocking subset if **59** is not yet done—planning must pick one and stick to it).
 - [ ] TLS: documented API for upgrading or creating a **TLS client** stream and **TLS server** context (exact shape left to planned phase but must appear in **02** before **done**).
-- [ ] Zig VM: primitives or host calls implementing the module behaviour; `zig build test` extended as needed.
-- [ ] JVM: equivalent behaviour via `KRuntime` (or documented Java APIs) with the same Kestrel-visible signatures.
-- [ ] Unit/E2E tests under `tests/unit/*.test.ks` (and any JVM harness tests the project uses for parity) exercise connect + short request/response over **plain TCP**; at least one **TLS** smoke test if CI can run it deterministically (or documented skip with local-only command).
+- [ ] **JVM:** JVM runtime primitives or host calls implementing the module behaviour with the Kestrel-visible signatures.
+- [ ] Unit/E2E tests under `tests/unit/*.test.ks` (and any JVM harness tests) exercise connect + short request/response over **plain TCP**; at least one **TLS** smoke test if CI can run it deterministically (or documented skip with local-only command).
 
 ## Spec References
 
@@ -45,12 +44,12 @@ Normative updates required for a consistent end state (this story is not complet
 - **`docs/specs/07-modules.md`** — §4.2: add `kestrel:socket` to the stdlib specifier list and cross-reference **02**.
 - **`docs/specs/05-runtime-model.md`** — I/O, blocking vs event-driven completion, interaction with **TASK** and host resources (sockets as owned handles), if not already sufficient.
 - **`docs/specs/04-bytecode-isa.md`** — §7: any **new** `CALL` primitive ids for sockets/TLS must be documented with arity and JVM mapping notes (match existing primitive table style).
-- **`docs/specs/08-tests.md`** — If stdlib coverage rules mention only certain modules, extend so **socket** parity (VM vs JVM) is required where feasible.
+- **`docs/specs/08-tests.md`** — If stdlib coverage rules mention only certain modules, extend so **socket** test coverage is required where feasible.
 
 ## Risks / Notes
 
 - **Ordering:** Implementing **68** before **59** risks duplicating TLS/TCP work; prefer **shared internal layer** or implement **68** after the first **60** vertical slice that already owns sockets.
 - **TLS in tests:** Certificate fixtures, trust stores, and CI headless environments differ between macOS/Linux and JVM; plan deterministic local certs or mock server in **planned** phase.
-- **Semantics parity:** Zig and Java may differ on edge cases (half-close, timeout granularity, DNS); **02** should mark behaviour **implementation-defined** where parity is impractical, and tests should cover the **intersection** behaviour.
+- **Semantics:** JVM implementation edge cases (half-close, timeout granularity, DNS); **02** should mark behaviour **implementation-defined** where needed.
 - **Security:** Raw sockets increase attack surface for user code; document that servers must not run with elevated trust without host hardening.
 - Detailed **Tasks**, **Tests to add**, and **Documentation and specs to update** checklists belong in **`planned/`** when this story is promoted.

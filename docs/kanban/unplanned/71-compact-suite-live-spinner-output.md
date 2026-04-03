@@ -41,7 +41,7 @@ Improve test output readability across all three harness styles (compact, verbos
 - [ ] Failure output remains complete and understandable; failure expansion in compact mode still prints diagnostics reliably.
 - [ ] Spinner-and-duration behavior is implemented in all three styles (`--verbose`, default compact, and `--summary`) with style-appropriate detail levels documented in specs.
 - [ ] Non-interactive output path is explicitly handled (fallback rendering or opt-in gating) so redirected logs do not contain unreadable cursor-control artifacts.
-- [ ] VM and JVM test runs maintain equivalent logical harness behavior for the same test files, allowing timing differences.
+- [ ] JVM test runs maintain equivalent logical harness behavior for the same test files, allowing timing differences.
 
 ## Spec References
 

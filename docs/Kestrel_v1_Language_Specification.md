@@ -1,6 +1,6 @@
 # Kestrel v1 Language Specification
 
-Version: 1.0 (Compiler + Zig VM Target)
+Version: 1.0 (Compiler + JVM Target)
 
 This document is a concise overview of the Kestrel language and runtime. For full, implementor-level detail (grammar, bytecode layout, instruction encoding, type rules, modules), see the split specifications in **`docs/specs/`** (01–08).
 
@@ -18,14 +18,14 @@ Kestrel is a statically typed, scripting and server-oriented programming languag
 -   Async/await (`Task<T>`)
 -   Pipeline operator (`|>`)
 -   No member-call syntax (`x.f(y)` is invalid)
--   Bytecode compilation targeting a Zig-based VM
+-   Bytecode compilation targeting the JVM backend
 
 Kestrel prioritizes:
 
 1.  Predictable semantics
 2.  Mechanical simplicity
 3.  Strong static typing
-4.  Clean separation between compiler (TypeScript) and VM (Zig)
+4.  Clean separation between compiler (TypeScript) and runtime (JVM)
 5.  Deterministic module resolution
 
 ------------------------------------------------------------------------
@@ -310,7 +310,7 @@ Sections (index 0–6): (0) String table; (1) Constant pool; (2) Function table 
 
 # 9. Bytecode Instruction Set
 
-Stack-based VM. Full opcode and operand layout: **`docs/specs/04-bytecode-isa.md`**.
+JVM-targeted stack-based bytecode. Full opcode and operand layout: **`docs/specs/04-bytecode-isa.md`**.
 
 Core instructions: LOAD_CONST, LOAD_LOCAL, STORE_LOCAL; ADD, SUB, MUL, DIV, MOD, POW; EQ, NE, LT, LE, GT, GE; CALL (fn_id, arity), RET; JUMP (i32 offset), JUMP_IF_FALSE (i32 offset); CONSTRUCT (adt_id, ctor, arity); MATCH (u32 count + count×i32 jump table); ALLOC_RECORD, GET_FIELD, SET_FIELD, SPREAD; THROW; TRY (handler_offset), END_TRY; AWAIT. All branch offsets are i32 relative to the **first byte of the instruction** containing the offset.
 

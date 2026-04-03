@@ -169,7 +169,7 @@ val b = 2 ** 3 ** 2   // 512 (right-associative: 2^(3^2))
 val c = True & !False  // True
 ```
 
-**Integer bounds and errors:** `Int` is a fixed-width signed type (61-bit in the reference VM). If an `+`, `-`, or `*` result does not fit, the runtime throws **`ArithmeticOverflow`**. **`/`** and **`%`** throw **`DivideByZero`** when the divisor is zero. Both are standard-library exception ADTs from **`kestrel:runtime`** — import them so your `catch` patterns match what the VM throws (see [Exceptions](#exceptions) below).
+**Integer bounds and errors:** `Int` is a fixed-width signed type (61-bit). If an `+`, `-`, or `*` result does not fit, the runtime throws **`ArithmeticOverflow`**. **`/`** and **`%`** throw **`DivideByZero`** when the divisor is zero. Both are standard-library exception ADTs from **`kestrel:runtime`** — import them so your `catch` patterns match what the runtime throws (see [Exceptions](#exceptions) below).
 
 ---
 
@@ -425,7 +425,7 @@ match (result) {
 
 For truly exceptional situations, Kestrel has `throw` and `try`/`catch`.
 
-**Built-in integer traps:** Overflow and divide-by-zero from the built-in operators use the canonical types exported by **`kestrel:runtime`**. Import **`ArithmeticOverflow`** and **`DivideByZero`** so handlers can match the values the VM constructs:
+**Built-in integer traps:** Overflow and divide-by-zero from the built-in operators use the canonical types exported by **`kestrel:runtime`**. Import **`ArithmeticOverflow`** and **`DivideByZero`** so handlers can match the values the runtime constructs:
 
 ```kestrel
 import { ArithmeticOverflow, DivideByZero } from "kestrel:runtime"
@@ -637,14 +637,13 @@ The runner ends with `printSummary(counts)` (see `scripts/run_tests.ks`): if any
 
 ## Installation
 
-You need **Node.js 18+** and **Zig** (current stable). Optionally, **JDK 11+** for the JVM backend.
+You need **Node.js 18+** and **JDK 11+**.
 
 ```bash
 # Clone and build
 git clone https://github.com/graemelockley/kestrel.git
 cd kestrel
 cd compiler && npm install && npm run build && cd ..
-cd vm && zig build && cd ..
 
 # Run a program
 ./kestrel run hello.ks
@@ -667,6 +666,6 @@ This guide covered the core language. There is more to explore:
 - **Specifications** — the [docs/specs/](specs/) directory contains normative specs for the language, type system, bytecode format, and standard library.
 - **Standard library source** — read the implementations in [stdlib/kestrel/](../stdlib/kestrel/) to see idiomatic Kestrel.
 - **Test suite** — the [tests/unit/](../tests/unit/) directory has runnable examples of every language feature.
-- **Kanban** — [docs/kanban/future/](kanban/future/) holds pre-roadmap investigations (`slug.md`, no numeric prefix). [docs/kanban/unplanned/](kanban/unplanned/) lists the prioritized roadmap (global sequence **50–67**, lower = higher priority); completed stories live under [docs/kanban/done/](kanban/done/) (**01–49**). Stories progress through **planned**, **doing**, and **done** as described in [docs/kanban/README.md](kanban/README.md).
+- **Kanban** — [docs/kanban/future/](kanban/future/) holds pre-roadmap investigations (`slug.md`, no numeric prefix). [docs/kanban/unplanned/](kanban/unplanned/) lists the prioritized roadmap (lower sequence = higher priority); completed stories live under [docs/kanban/done/](kanban/done/). Stories progress through **planned**, **doing**, and **done** as described in [docs/kanban/README.md](kanban/README.md).
 
 Kestrel is under active development. Contributions are welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md).

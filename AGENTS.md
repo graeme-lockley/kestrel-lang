@@ -10,7 +10,7 @@ This file provides guidance for agentic coding agents working on the Kestrel pro
 
 Kestrel is a statically typed programming language with Hindley-Milner type inference. It consists of:
 - **Compiler**: TypeScript in `compiler/`
-- **VM**: Zig in `vm/`
+- **JVM runtime**: Java in `runtime/jvm/`
 - **CLI**: Bash scripts in `scripts/`
 
 ---
@@ -39,24 +39,9 @@ npm test -- --run <test-file>
 # Example: npm test -- --run test/unit/lexer.test.ts
 ```
 
-### VM (Zig)
-
-```bash
-cd vm
-
-# Build the VM
-zig build
-
-# Build with optimizations
-zig build -Doptimize=ReleaseSafe
-
-# Run VM tests (uses build.zig; registers tests via src/main.zig)
-zig build test
-```
-
 ### End-to-End Tests
 
-Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or VM with non-zero exit; see `tests/e2e/scenarios/negative/README.md`) and `tests/e2e/scenarios/positive/*.ks` (stdout compared to `*.expected`). `./scripts/test-all.sh` runs `./scripts/run-e2e.sh` after compiler and VM tests.
+Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime with non-zero exit; see `tests/e2e/scenarios/negative/README.md`) and `tests/e2e/scenarios/positive/*.ks` (stdout compared to `*.expected`). `./scripts/test-all.sh` runs `./scripts/run-e2e.sh` after compiler tests.
 
 ```bash
 # Run E2E tests (from project root)
@@ -72,14 +57,11 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or VM with non
 # Disassemble bytecode
 ./kestrel dis [--verbose|--code-only] <script.ks>
 
-# Build compiler and VM (optionally compile a script)
+# Build compiler (optionally compile a script)
 ./kestrel build [script.ks]
 
 # Run Kestrel test suite
 ./kestrel test [files...]
-
-# Run unit tests on VM and JVM with wall-clock and harness timing comparison
-./kestrel test-both [files...]
 ```
 
 ---
@@ -88,7 +70,7 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or VM with non
 
 ### General
 
-- **Language**: TypeScript for the compiler, Zig for the VM
+- **Language**: TypeScript for the compiler, Java for the JVM runtime
 - **Strict mode**: Always enabled in TypeScript (`tsconfig.json` has `"strict": true`)
 - **Module system**: ES modules (`.js` extensions in imports)
 
@@ -154,7 +136,7 @@ export class ParseError extends Error {
 #### Testing (Vitest)
 
 - Tests go in `compiler/test/unit/` and `compiler/test/integration/`
-- **Conformance corpora** (`.ks` files under `tests/conformance/`): **parse** (`parse/` — `parse-conformance.test.ts`), **typecheck** (`typecheck/` — `typecheck-conformance.test.ts`), **runtime VM** (`runtime/valid/` — `runtime-conformance.test.ts`). All are run by **`cd compiler && npm test`**. See [tests/conformance/typecheck/README.md](tests/conformance/typecheck/README.md) (links to parse/runtime READMEs) for layout, `// EXPECT:` on invalid cases, and in-file `println` + `//` stdout goldens for runtime.
+- **Conformance corpora** (`.ks` files under `tests/conformance/`): **parse** (`parse/` — `parse-conformance.test.ts`), **typecheck** (`typecheck/` — `typecheck-conformance.test.ts`), **runtime** (`runtime/valid/` — `runtime-conformance.test.ts`). All are run by **`cd compiler && npm test`**. See [tests/conformance/typecheck/README.md](tests/conformance/typecheck/README.md) (links to parse/runtime READMEs) for layout, `// EXPECT:` on invalid cases, and in-file `println` + `//` stdout goldens for runtime.
 - Use `describe` blocks for grouping related tests
 - Use `it` or `test` for individual test cases
 - Use `expect` with matchers
@@ -197,7 +179,6 @@ describe('tokenize', () => {
 Before marking a task complete:
 - [ ] Unit tests pass (`./scripts/kestrel test`)
 - [ ] Compiler tests pass (`cd compiler && npm test`)
-- [ ] VM tests pass (`cd vm && zig build test`)
 - [ ] Relevant specs updated (if applicable)
 
 ---
@@ -206,7 +187,7 @@ Before marking a task complete:
 
 Stories live in `docs/kanban/` with folders: **future**, **unplanned**, **planned**, **doing**, **done**.
 
-**`future/`** holds pre-roadmap **investigations and ideas** (`slug.md`, **no `NN-` prefix**). The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named **`NN-slug.md`**; **`NN` is globally unique** (current queue **50–67**, lower = higher priority). See `docs/kanban/README.md` for the tier table, **future** lifecycle, entry/exit criteria, and templates. Roadmap files are **moved** between **unplanned**, **planned**, **doing**, and **done** without renaming **`NN`**. **`docs/kanban/backlog/`** is **deprecated**; use **`planned/`** instead.
+**`future/`** holds pre-roadmap **investigations and ideas** (`slug.md`, **no `NN-` prefix**). The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named **`NN-slug.md`**; **`NN` is globally unique** (lower = higher priority). See `docs/kanban/README.md` for the tier table, **future** lifecycle, entry/exit criteria, and templates. Roadmap files are **moved** between **unplanned**, **planned**, **doing**, and **done** without renaming **`NN`**. **`docs/kanban/backlog/`** is **deprecated**; use **`planned/`** instead.
 
 ### Workflow
 
@@ -232,7 +213,7 @@ Stories live in `docs/kanban/` with folders: **future**, **unplanned**, **planne
 ### When completing a story
 
 1. Ensure all tasks are ticked and acceptance criteria are met.
-2. Confirm tests pass (`npm test`, `./scripts/kestrel test`, `zig build test`, and any story-specific suites).
+2. Confirm tests pass (`npm test`, `./scripts/kestrel test`, and any story-specific suites).
 3. Move the story from `docs/kanban/doing/` to `docs/kanban/done/`.
 
 ---

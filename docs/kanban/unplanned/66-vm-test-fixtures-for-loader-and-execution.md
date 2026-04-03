@@ -1,25 +1,25 @@
-# VM: Test fixtures for loader and execution
+# JVM: Test fixtures for loader and execution
 
 ## Sequence: 66
-## Tier: Subset of VM testing (often folded into sequence 13)
+## Tier: Subset of runtime testing (often folded into sequence 13)
 ## Former ID: 29
 
 ## Summary
 
-Provide minimal, checked-in `.kbc` fixtures (or equivalent) so Zig tests can load bytecode and assert loader behaviour and simple execution without going through the full TypeScript compiler pipeline. This unblocks incremental VM development and fixes broken tests that reference missing files.
+Provide minimal, checked-in `.kbc` fixtures (or equivalent) so JVM runtime tests can load bytecode and assert loader behaviour and simple execution without going through the full TypeScript compiler pipeline. This unblocks incremental JVM runtime development and fixes broken tests that reference missing files.
 
 ## Current State
 
-- `load.zig` (or similar) may reference a path such as `test/fixtures/empty.kbc`; the path and file must exist in-repo for CI.
-- Broader opcode and GC tests belong under sequence **13** (VM unit and integration tests); this story is the **smallest slice**: fixtures + loader smoke tests + one execution smoke test.
+- The JVM runtime loader may reference a path such as `test/fixtures/empty.kbc`; the path and file must exist in-repo for CI.
+- Broader opcode and execution tests belong under sequence **13** (runtime unit and integration tests); this story is the **smallest slice**: fixtures + loader smoke tests + one execution smoke test.
 
 ## Relationship to other stories
 
-- **Sequence 13** (VM unit and integration tests) should subsume most of this work. Treat **66** (this story) as optional if **13** lands first with fixtures included; otherwise implement **66** first as a stepping stone.
+- **Sequence 13** (runtime unit and integration tests) should subsume most of this work. Treat **66** (this story) as optional if **13** lands first with fixtures included; otherwise implement **66** first as a stepping stone.
 
 ## Acceptance Criteria
 
-- [ ] Create a stable directory for VM test fixtures (e.g. `vm/test/fixtures/`) documented in `vm/README` or build files.
+- [ ] Create a stable directory for JVM runtime test fixtures (e.g. `runtime/jvm/test/fixtures/`) documented in build files.
 - [ ] Add minimal `.kbc`: valid header, single function, body ends with RET (or documented minimal instruction sequence).
 - [ ] Add a second fixture: LOAD_CONST + RET (or compiler-generated equivalent) to verify constant load path.
 - [ ] Loader test: load each fixture, assert magic, version, and that code section is non-empty where expected.
@@ -29,4 +29,4 @@ Provide minimal, checked-in `.kbc` fixtures (or equivalent) so Zig tests can loa
 ## Spec References
 
 - 03-bytecode-format (file layout, sections)
-- 08-tests §2.4 (bytecode / VM testing expectations)
+- 08-tests §2.4 (bytecode / runtime testing expectations)

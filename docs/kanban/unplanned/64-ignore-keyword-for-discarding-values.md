@@ -31,7 +31,7 @@ Introduce `ignore expr` as an explicit statement that evaluates `expr` for side 
 - [ ] Lexer: add `ignore` as a keyword.
 - [ ] Parser: `ignore Expr` as a statement form; extend block/statement grammar in spec 01.
 - [ ] Type checker: require non-Unit type for `expr`; error on Unit.
-- [ ] Codegen (VM and JVM): emit evaluation of `expr` without storing the result (same as intentional discard).
+- [ ] Codegen (JVM): emit evaluation of `expr` without storing the result (same as intentional discard).
 - [ ] Kestrel unit test: `ignore` with a function returning `Int` succeeds.
 - [ ] Kestrel or conformance test: `ignore` with `()` expression fails typecheck.
 - [ ] Update `docs/specs/01-language.md` (statement grammar and semantics).

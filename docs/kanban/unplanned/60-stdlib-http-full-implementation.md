@@ -6,13 +6,12 @@
 
 ## Summary
 
-The `kestrel:http` module currently only exports `nowMs()`. [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) documents the full surface: `createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, and `nowMs`, plus the standard types `Server`, `Request`, and `Response` (concrete shapes are implementation-defined as long as signatures hold). Everything except `nowMs` depends on async I/O and an event loop; sequence **59** is the hard prerequisite. **Product intent:** the **server** path is **plain HTTP** only; the **client** (`get`) must support **`https://`** as well as `http://`. **Zig VM and JVM** backends must gain the needed primitives/runtime **together**-no VM-only milestone that leaves JVM behind.
+The `kestrel:http` module currently only exports `nowMs()`. [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) documents the full surface: `createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, and `nowMs`, plus the standard types `Server`, `Request`, and `Response` (concrete shapes are implementation-defined as long as signatures hold). Everything except `nowMs` depends on async I/O and an event loop; sequence **59** is the hard prerequisite. **Product intent:** the **server** path is **plain HTTP** only; the **client** (`get`) must support **`https://`** as well as `http://`. The **JVM** backend must gain the needed primitives/runtime.
 
 ## Current State
 
 - **Stdlib:** `stdlib/kestrel/http.ks` exports only `nowMs()` via `kestrel:basics` / `__now_ms()`.
-- **VM:** `vm/` implements the `nowMs` primitive; there are no TCP/HTTP primitives, no request parsing, and no server or client runtime support.
-- **JVM:** No HTTP/TLS primitives or parity path yet for `kestrel:http` beyond whatever the shared stdlib compiles to; planning must wire client TLS and server HTTP through the JVM runtime alongside the VM.
+- **JVM runtime:** The JVM runtime has `nowMs`; there are no TCP/HTTP primitives, no request parsing, and no server or client runtime support. No HTTP/TLS primitives yet for `kestrel:http` beyond whatever the shared stdlib compiles to; planning must wire client TLS and server HTTP through the JVM runtime.
 - **Compiler / types:** No special-case language support is required beyond existing `Task`, `async`/`await`, and stdlib module loading-once 55 lands, surface types can be ordinary records/ADTs in Kestrel or opaque handles backed by VM tags, as long as the spec signatures are met.
 - **Tests:** No HTTP-focused E2E or conformance coverage; [docs/kanban/done/45-stdlib-json-fs-http.md](../done/45-stdlib-json-fs-http.md) delivered JSON/fs and explicitly treated HTTP as a minimal / deferred slice (`nowMs` only in practice).
 
@@ -25,8 +24,8 @@ The `kestrel:http` module currently only exports `nowMs()`. [docs/specs/02-stdli
 ## Goals
 
 1. Bring the **reference** `kestrel:http` implementation up to the **02-stdlib** contract: all functions in the `kestrel:http` table and usable `Server` / `Request` / `Response` types for server and client use.
-2. Implement **Zig VM and JVM** support **in the same delivery**: primitives and/or runtime services on both backends so the stdlib can accept connections, parse/serve **HTTP/1.1** on the server, and perform outbound **GET** with **`http://` and `https://`** on the client (TLS required for HTTPS-use host platform or embedded stack per planning).
-3. Add **automated verification** (at least one E2E scenario) that exercises listen → handler → response and a client `get` (including **HTTPS**), with **both** backends covered or an explicitly equivalent split (e.g. same golden behaviour, dual harness)-decide in **planned**.
+2. Implement **JVM** support: primitives and/or runtime services so the stdlib can accept connections, parse/serve **HTTP/1.1** on the server, and perform outbound **GET** with **`http://` and `https://`** on the client (TLS required for HTTPS-use host platform or embedded stack per planning).
+3. Add **automated verification** (at least one E2E scenario) that exercises listen → handler → response and a client `get` (including **HTTPS**)-decide in **planned**.
 4. Keep **security and production** expectations explicit: default bind policy, server HTTP-only surface, TLS verification defaults for `get` (e.g. system trust store), and error behaviour documented; Tier 8 remains for sockets, pooling, and richer networking-not for "adding HTTPS to `get`."
 
 ## Acceptance Criteria
@@ -39,9 +38,8 @@ The `kestrel:http` module currently only exports `nowMs()`. [docs/specs/02-stdli
 - [ ] `requestId(request)`: `(Request) -> String` - stable identifier for the lifetime of the request value (e.g. UUID string or monotonic id); format implementation-defined.
 - [ ] `nowMs()`: unchanged, still matches 02 (already implemented).
 - [ ] Exported **types** `Server`, `Request`, `Response` with enough structure to build responses in handlers (status, headers, body) and to read status/body on client `Response` - exact fields follow planning/spec updates if 02 is tightened.
-- [ ] **VM:** Primitives or internal runtime support for TCP, HTTP parsing/serialization, and **client TLS** for `https` as needed; documented in spec or implementation notes if 09-tools or VM docs must list new opcodes/primitives.
-- [ ] **JVM:** Matching capabilities for the same stdlib surface (HTTP server, HTTPS-capable `get`), implemented **in lockstep** with the VM-not a later follow-up story unless an explicit exception is recorded in **planned**.
-- [ ] **E2E / verification:** Scenario(s) that start a server, perform at least one request, assert status/body (and tear down cleanly), and exercise **`get`** over **HTTPS** where CI allows (e.g. local TLS test server or documented skip). Both backends validated per AGENTS.md and story **Tests to add** in **planned**.
+- [ ] **JVM:** JVM runtime support for TCP/HTTP server and HTTPS-capable `get`, implemented in `KRuntime.java` or related classes.
+- [ ] **E2E / verification:** Scenario(s) that start a server, perform at least one request, assert status/body (and tear down cleanly), and exercise **`get`** over **HTTPS** where CI allows (e.g. local TLS test server or documented skip). JVM validated per AGENTS.md and story **Tests to add** in **planned**.
 
 ## Spec References
 
@@ -53,7 +51,7 @@ The `kestrel:http` module currently only exports `nowMs()`. [docs/specs/02-stdli
 
 - **Ordering:** Starting before **59** will duplicate or throw away integration work; keep 60 unblocked-by-dependency in planning only after 59's Task/event-loop design is agreed for I/O.
 - **Scope vs Tier 8:** HTTP/2, generic **socket** API, connection pooling, and WebSocket remain **out of scope** for **60**; **client TLS for `https://`** is **in scope**. Tier 8 adds breadth (sockets, pooling, REST helpers, routing), not the basic HTTPS client requirement.
-- **Dual backend cost:** VM (Zig) and JVM must both implement TLS-capable client I/O and HTTP server I/O; plan shared test strategy and avoid drift (e.g. same golden outputs, or paired smoke tests).
+- **Dual backend cost:** JVM must implement TLS-capable client I/O and HTTP server I/O; plan shared test strategy and avoid drift (e.g. same golden outputs, or paired smoke tests).
 - **TLS specifics:** Certificate verification (system trust vs custom), SNI, TLS version floor, and error surfaces differ by platform-document defaults in **02** or **09** during **planned**; consider CI flakiness for HTTPS E2E (local test certs, skip flags).
 - **Concurrency model:** Whether one handler runs at a time per process, per connection, or with limited parallelism affects both runtimes; decide in **planned** and document (including re-entrancy and `await` inside handlers).
 - **Security:** Binding `0.0.0.0`, defaults for `host`, and error messages must not encourage unsafe dev practices without documentation; consider defaulting to `127.0.0.1` in examples/tests.
@@ -63,54 +61,48 @@ The `kestrel:http` module currently only exports `nowMs()`. [docs/specs/02-stdli
 ### Resolved decisions (for planning)
 
 1. **Client vs server TLS:** **`get`** supports **`https://`**; **server** (`listen` / `createServer`) stays **HTTP only** for this story.
-2. **Backends:** **VM and JVM implemented together**-no VM-first drop that defers JVM.
+2. **Backends:** **JVM implemented**-single backend target.
 3. **`queryParam` duplicate keys:** **Last value wins**; update **02-stdlib** with a short normative line when implementing.
 
 ## Impact analysis
 
-Incorporates **Risks / notes** above (55 ordering, dual backend, TLS, concurrency, security, URL parsing, errors). Roll forward in **lockstep VM + JVM**; avoid shipping primitives on only one backend.
+Incorporates **Risks / notes** above (55 ordering, TLS, concurrency, security, URL parsing, errors). Roll forward on the **JVM** backend.
 
 | Area | Files / subsystems (indicative) | Change | Risk |
 |------|----------------------------------|--------|------|
 | **Prerequisite** | [59-async-await-suspension-event-loop.md](../unplanned/59-async-await-suspension-event-loop.md) | **60 starts only after 59** delivers real `Task` suspension, event loop, and non-blocking I/O hooks HTTP can register with | **Blocker** if ignored |
-| **VM (Zig)** | `vm/src/primitives.zig`, `vm/src/exec.zig`, new or extended I/O modules (sockets, TLS client), `vm/src/gc.zig` if new object kinds | TCP listen/accept, HTTP/1.1 request/response parse + serialize (server, plain HTTP); outbound GET with optional TLS (`https`); integrate completions with **59** loop; optional new opcode(s) or reuse TASK + host callbacks | **High**: parsing edge cases, TLS on Zig, GC roots for live connections |
 | **Bytecode / ISA** | `docs/specs/04-bytecode-isa.md` | Document any new calls or TASK-related behaviour for HTTP primitives | Low-medium |
-| **Compiler (TS)** | `compiler/src/typecheck/check.ts` (new `__*` bindings, `Task<Result<...>>` if used), `compiler/src/codegen/codegen.ts`, `compiler/src/jvm-codegen/codegen.ts` | Wire builtins used from `stdlib/kestrel/http.ks`; align VM and JVM primitive indices / KRuntime entry points | Medium |
-| **JVM runtime** | `runtime/jvm/src/kestrel/runtime/KRuntime.java` (and related classes) | **Mirror VM**: `HttpServer`/`HttpClient` (names TBD), non-blocking or loop-driven completion consistent with **59**, `HttpsURLConnection` or equivalent for `get` TLS | **High**: parity with VM, platform TLS |
+| **Compiler (TS)** | `compiler/src/typecheck/check.ts` (new `__*` bindings, `Task<Result<...>>` if used), `compiler/src/codegen/codegen.ts`, `compiler/src/jvm-codegen/codegen.ts` | Wire builtins used from `stdlib/kestrel/http.ks`; align JVM primitive indices / KRuntime entry points | Medium |
+| **JVM runtime** | `runtime/jvm/src/kestrel/runtime/KRuntime.java` (and related classes) | `HttpServer`/`HttpClient` (names TBD), non-blocking or loop-driven completion consistent with **59**, `HttpsURLConnection` or equivalent for `get` TLS | **High**: platform TLS |
 | **Stdlib** | `stdlib/kestrel/http.ks`, optional `stdlib/kestrel/http.test.ks` | Implement full **02** surface: types + exports; thin wrappers over `__` primitives | Medium |
 | **CLI / scripts** | `scripts/kestrel`, `scripts/build-cli.sh` if JVM classpath changes | Only if new native deps or flags; otherwise unchanged | Low |
-| **Tests** | `tests/e2e/scenarios/positive/`, `tests/unit/*.test.ks`, `tests/conformance/` as needed, `compiler/test/`, `vm` tests | HTTPS may need local cert fixture or conditional skip; **`./scripts/kestrel test-both`** on shared `.ks` | Medium |
-| **Docs** | `docs/specs/02-stdlib.md`, `05-runtime-model.md`, `09-tools.md`, `08-tests.md`, `AGENTS.md` if verification changes | `queryParam` duplicate-key rule; HTTP/TLS defaults; server HTTP-only; VM+JVM parity expectations | Low |
+| **Tests** | `tests/e2e/scenarios/positive/`, `tests/unit/*.test.ks`, `tests/conformance/` as needed, `compiler/test/` | HTTPS may need local cert fixture or conditional skip; **`./scripts/kestrel test`** on JVM `.ks` | Medium |
+| **Docs** | `docs/specs/02-stdlib.md`, `05-runtime-model.md`, `09-tools.md`, `08-tests.md`, `AGENTS.md` if verification changes | `queryParam` duplicate-key rule; HTTP/TLS defaults; server HTTP-only | Low |
 
 **Rollback:** Prefer feature branches; if TLS blocks release, document explicit deferral of `https` only with team agreement (contradicts current acceptance-avoid without amending story).
 
 ## Tasks
 
 - [ ] **Gate:** Confirm **59** is **done** (or explicitly list remaining 59 items that block HTTP integration); re-read `05` / `04` for TASK + idle semantics.
-- [ ] **Design note:** Record **concurrency model** for the server (e.g. single-threaded loop, one handler at a time vs per-connection serialization) in **02** or **05**; align VM and JVM.
+- [ ] **Design note:** Record **concurrency model** for the server (e.g. single-threaded loop, one handler at a time vs per-connection serialization) in **02** or **05**.
 - [ ] **Spec pass:** Update **02-stdlib** - `queryParam` **last duplicate wins**; clarify **server = HTTP only**, **`get`** supports **http + https**; document TLS verification (default: system trust), SNI, and error surfacing (`Task<Result<...>>` or exceptions per **59** contract).
-- [ ] **VM:** Add TCP server path (bind, listen, accept) integrated with event loop; HTTP/1.1 request parsing and response writing for handler API; no TLS on listen.
-- [ ] **VM:** Add outbound HTTP GET (`http://`) and **TLS** (`https://`) client; complete tasks on loop; failures map to agreed error model.
-- [ ] **VM:** Expose minimal **opaque or record** representation for `Server`, `Request`, `Response` consistent with stdlib (handles, tags, or records per existing patterns).
 - [ ] **Stdlib:** Implement `createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, `nowMs` in `stdlib/kestrel/http.ks` using new primitives; define exported **Request** / **Response** / **Server** shapes.
 - [ ] **Compiler:** Register primitive names, arities, and types in typecheck + **kbc** codegen + **JVM** codegen for every `__http_*` (or chosen split) builtin.
-- [ ] **JVM:** Implement matching server and client behaviour in `KRuntime` (or decomposed classes), driven by same **59** event-loop semantics as VM.
+- [ ] **JVM:** Implement matching server and client behaviour in `KRuntime` (or decomposed classes), driven by same **59** event-loop semantics.
 - [ ] **Tests (Kestrel):** Add `stdlib/kestrel/http.test.ks` or `tests/unit/` cases for `queryParam`, `requestId`, handler response shaping (no ordering dependence unless documented).
 - [ ] **E2E:** Add positive scenario: local HTTP server + client request + assertions; add **HTTPS** `get` path (e.g. `https://` to test endpoint with known cert, or documented `SKIP_HTTPS_E2E` with CI policy).
-- [ ] **Dual backend:** Run shared programs with **`./scripts/kestrel test-both`** (or extend `scripts/jvm-smoke.mjs` if appropriate); fix drift until both pass.
+- [ ] **JVM verification:** Run `./scripts/kestrel test` on JVM target; fix any issues until all HTTP tests pass.
 - [ ] **Conformance / Vitest:** Add or extend conformance for `kestrel:http` types and imports if valuable; fix compiler tests for new builtins.
-- [ ] **Zig:** VM unit/integration tests for parser edge cases or primitive wiring where feasible without full stdlib.
-- [ ] **Verification:** `cd compiler && npm run build && npm test`; `cd vm && zig build test`; `./scripts/kestrel test`; `./scripts/kestrel test-both` on HTTP tests; `./scripts/run-e2e.sh` when E2E added.
+- [ ] **Verification:** `cd compiler && npm run build && npm test`; `./scripts/kestrel test`; `./scripts/run-e2e.sh` when E2E added.
 
 ## Tests to add
 
 | Layer | Path / mechanism | Intent |
 |-------|------------------|--------|
-| **Zig** | `vm` tests (e.g. `vm/src/main.zig` registered tests) | HTTP parse/format helpers; primitive smoke if isolable |
 | **Vitest** | `compiler/test/unit/`, `compiler/test/integration/` | New primitive typing; `http.ks` module resolves; codegen symbol presence |
 | **Kestrel unit** | `stdlib/kestrel/http.test.ks`, `tests/unit/*.test.ks` | `queryParam` last-wins; body/headers; handler builds `Response` |
 | **Conformance** | `tests/conformance/runtime/` or `typecheck/` if shapes warrant | Optional: import `kestrel:http` and call `nowMs` + new APIs behind feature availability |
-| **Dual backend** | `./scripts/kestrel test-both` | **Same** `.ks` sources on **VM and JVM** for HTTP scenarios |
+| **JVM** | `./scripts/kestrel test` | **JVM** `.ks` sources for HTTP scenarios |
 | **E2E** | `tests/e2e/scenarios/positive/*.ks` + `.expected` | Server up → request → response; **`get`** over **HTTPS** per CI policy |
 | **Smoke** | `scripts/jvm-smoke.mjs` | Extend if quick JVM sanity for HTTP path is useful |
 

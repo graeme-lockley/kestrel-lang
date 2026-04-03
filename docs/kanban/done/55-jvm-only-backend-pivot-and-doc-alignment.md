@@ -29,14 +29,14 @@ Update all kanban roadmap stories and project-level documentation to reflect JVM
 
 ## Acceptance Criteria
 
-- [ ] Each file in `docs/kanban/unplanned/` (59–71) reviewed and updated to remove Zig VM implementation scope.
-- [ ] VM-specific stories (65, 66, 67) re-scoped to JVM-only verification or marked for closure with rationale.
-- [ ] `README.md` updated to JVM-only backend language.
-- [ ] `AGENTS.md` updated to remove Zig VM build/test commands and references (noting that script/code changes follow in 56–57).
-- [ ] `docs/guide.md` updated to JVM-only language.
-- [ ] `docs/IMPLEMENTATION_PLAN.md` updated to JVM-only language.
-- [ ] `docs/Kestrel_v1_Language_Specification.md` updated to JVM-only language where backend is mentioned.
-- [ ] No documentation text includes historical rationale for the pivot; it reflects the new state directly.
+- [x] Each file in `docs/kanban/unplanned/` (59–71) reviewed and updated to remove Zig VM implementation scope.
+- [x] VM-specific stories (65, 66, 67) re-scoped to JVM-only verification or marked for closure with rationale.
+- [x] `README.md` updated to JVM-only backend language.
+- [x] `AGENTS.md` updated to remove Zig VM build/test commands and references (noting that script/code changes follow in 56–57).
+- [x] `docs/guide.md` updated to JVM-only language.
+- [x] `docs/IMPLEMENTATION_PLAN.md` updated to JVM-only language.
+- [x] `docs/Kestrel_v1_Language_Specification.md` updated to JVM-only language where backend is mentioned.
+- [x] No documentation text includes historical rationale for the pivot; it reflects the new state directly.
 
 ## Spec References
 
@@ -61,14 +61,14 @@ Update all kanban roadmap stories and project-level documentation to reflect JVM
 
 ## Tasks
 
-- [ ] Audit all files in `docs/kanban/unplanned/` and list required JVM-only scope edits per story.
-- [ ] Update each unplanned story (59–71) to remove Zig VM implementation scope and align acceptance/tests/spec references to JVM-only delivery.
-- [ ] Re-scope or annotate VM-specific stories (65, 66, 67) for JVM-only verification or closure.
-- [ ] Update `README.md` to JVM-only backend language.
-- [ ] Update `AGENTS.md` to remove Zig VM build/test commands and references.
-- [ ] Update `docs/guide.md` to JVM-only language.
-- [ ] Update `docs/IMPLEMENTATION_PLAN.md` to JVM-only language.
-- [ ] Update `docs/Kestrel_v1_Language_Specification.md` to JVM-only language.
+- [x] Audit all files in `docs/kanban/unplanned/` and list required JVM-only scope edits per story.
+- [x] Update each unplanned story (59–71) to remove Zig VM implementation scope and align acceptance/tests/spec references to JVM-only delivery.
+- [x] Re-scope or annotate VM-specific stories (65, 66, 67) for JVM-only verification or closure.
+- [x] Update `README.md` to JVM-only backend language.
+- [x] Update `AGENTS.md` to remove Zig VM build/test commands and references.
+- [x] Update `docs/guide.md` to JVM-only language.
+- [x] Update `docs/IMPLEMENTATION_PLAN.md` to JVM-only language.
+- [x] Update `docs/Kestrel_v1_Language_Specification.md` to JVM-only language.
 
 ## Tests to add
 
@@ -88,3 +88,7 @@ Update all kanban roadmap stories and project-level documentation to reflect JVM
 - Specs (`docs/specs/`) are deliberately excluded — story **58** handles those as a focused pass.
 - Script and tooling changes are excluded — story **56** handles those.
 - Code removal is excluded — story **57** handles that.
+
+## Build notes
+
+- 2026-04-03: All 13 unplanned stories (59–71) updated. Stories 65, 66, 67 re-scoped from Zig VM to JVM-only verification. Stories 59, 60, 68, 69 had significant Zig VM implementation scope removed. Stories 61, 64, 70, 71 required minor wording fixes. Stories 62 and 63 had no VM references and required no changes. `docs/IMPLEMENTATION_PLAN.md` already retired; no additional changes needed beyond confirming no Zig references.
