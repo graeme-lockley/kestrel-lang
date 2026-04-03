@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { execSync } from 'child_process';
-import { mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'node:url';
@@ -462,5 +462,17 @@ run()
     } finally {
       rmSync(tmpRoot, { recursive: true, force: true });
     }
+  });
+
+  it('test runner generation awaits each suite run call inside async main', () => {
+    execSync('./scripts/kestrel test --summary tests/unit/async_virtual_threads.test.ks', {
+      cwd: kestrelRoot,
+      stdio: 'pipe',
+    });
+
+    const generatedRunner = readFileSync(join(kestrelRoot, '.kestrel_test_runner.ks'), 'utf-8');
+    expect(generatedRunner).toContain('async fun main(): Task<Unit> = {');
+    expect(generatedRunner).toContain('await run0(root)');
+    expect(generatedRunner).not.toMatch(/\nrun\d+\(root\)\n/);
   });
 });

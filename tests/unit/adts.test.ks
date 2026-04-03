@@ -94,7 +94,7 @@ fun payloadToString(v: Payload): String = match (v) {
   PBool(b) => "bool"
 }
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "user-defined ADTs", (s1: Suite) => {
     group(s1, "nullary constructors", (sg: Suite) => {
       eq(sg, "Red to int", colorToInt(Red), 0)

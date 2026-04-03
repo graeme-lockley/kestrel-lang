@@ -13,7 +13,7 @@ fun countBranch(n: Int, acc: Int): Int =
 fun sumNonTail(n: Int): Int =
   if (n <= 0) 0 else n + sumNonTail(n - 1)
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "tail_self_recursion", (s1: Suite) => {
     group(s1, "tail_optimized", (sg: Suite) => {
       eq(sg, "sumTail deep", sumTail(200000, 0), 20000100000)

@@ -5,7 +5,7 @@ import { ArithmeticOverflow } from "kestrel:runtime"
 fun throwDeep(): Unit = throw ArithmeticOverflow
 fun callDeep(): Unit = throwDeep()
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "stack", (s1: Suite) => {
     group(s1, "format primitives", (sg: Suite) => {
       gt(sg, "Int non-empty", __string_length(format(42)), 0);

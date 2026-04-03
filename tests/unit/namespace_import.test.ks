@@ -4,7 +4,7 @@ import * as Console from "kestrel:console"
 import * as Helper from "../fixtures/export_var_helper.ks"
 import * as Lib from "../fixtures/opaque_pkg/lib.ks"
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "namespace import", (s1: Suite) => {
     group(s1, "functions", (s2: Suite) => {
       eq(s2, "Str.length", Str.length("hello"), 5)

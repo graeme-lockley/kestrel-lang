@@ -5,7 +5,7 @@ fun classify(n: Int): Int =
   else if (n == 0) 1
   else 2
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "if_else", (s1: Suite) => {
     group(s1, "branches", (sg: Suite) => {
       eq(sg, "true branch", if (True) 42 else 0, 42)

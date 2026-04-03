@@ -20,7 +20,7 @@ import {
   nowMs
 } from "kestrel:basics"
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "basics", (s1: Suite) => {
     group(s1, "time", (sg: Suite) => {
       gte(sg, "nowMs non-negative", nowMs(), 0)

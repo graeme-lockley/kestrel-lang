@@ -7,7 +7,7 @@ fun useOpaqueToken(): Int = secretTokenToInt(makeSecretToken(100))
 // Using opaque type alias via its exported functions
 fun useOpaqueAlias(): Int = userIdToInt(makeUserId(999))
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "cross-module opaque types", (s1: Suite) => {
     eq(s1, "use opaque token", useOpaqueToken(), 100)
     eq(s1, "use opaque alias", useOpaqueAlias(), 999)

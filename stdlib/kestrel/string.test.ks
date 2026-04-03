@@ -51,7 +51,7 @@ import {
   allChars
 } from "kestrel:string"
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "string", (s1: Suite) => {
     group(s1, "length", (sg: Suite) => {
       eq(sg, "empty", length(""), 0)

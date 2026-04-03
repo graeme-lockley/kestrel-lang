@@ -51,7 +51,7 @@ fun isOdd(n: Int): Bool = if (n == 0) False else isEven(n - 1)
 // Top-level generic lambda
 val genId = <T>(x: T) => x
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "functions", (s1: Suite) => {
     group(s1, "basic calls", (sg: Suite) => {
       eq(sg, "double(3)", double(3), 6)

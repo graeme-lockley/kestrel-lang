@@ -1,6 +1,6 @@
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "logical", (s1: Suite) => {
     group(s1, "and", (sg: Suite) => {
       isTrue(sg, "True & True", True & True)

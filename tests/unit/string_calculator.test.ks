@@ -35,7 +35,7 @@ export fun add(input: String): Result<Int, List<Int>> =
       addCore(input, [",", "\n"])
   }
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "string calculator", (s1: Suite) => {
     eq(s1, "empty string", add(""), Ok(0))
     eq(s1, "single number", add("5"), Ok(5))

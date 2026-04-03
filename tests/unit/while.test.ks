@@ -65,7 +65,7 @@ fun nestedTargetsInnerWhile(): Int = {
   total
 }
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "while", (s1: Suite) => {
     group(s1, "sum", (sg: Suite) => {
       eq(sg, "sumTo(0)", sumTo(0), 0)

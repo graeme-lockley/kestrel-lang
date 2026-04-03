@@ -17,7 +17,7 @@ fun myResultIsOk<T>(r: MyResult<T>): Bool = match (r) {
   MyErr => False
 }
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "opaque types", (s1: Suite) => {
     group(s1, "opaque ADT", (sg: Suite) => {
       eq(sg, "tokenToInt Num", tokenToInt(Num(42)), 42)

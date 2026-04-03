@@ -6,6 +6,10 @@ export exception AsyncBoom
 
 async fun plusOne(n: Int): Task<Int> = n + 1
 async fun fail(): Task<Int> = throw AsyncBoom
+async fun delayedValue(): Task<Int> = {
+  val _ = await Process.runProcess("sh", ["-c", "sleep 0.05"]);
+  99
+}
 
 export async fun run(s: Suite): Task<Unit> = {
   group(s, "async virtual threads", (s1: Suite) => {
@@ -32,6 +36,11 @@ export async fun run(s: Suite): Task<Unit> = {
         };
       eq(sg, "fs ok", fileOk, 1);
       eq(sg, "process ok", processOk, 1)
+    });
+
+    group(s1, "await delayed task", (sg: Suite) => {
+      val value = await delayedValue();
+      eq(sg, "delayed task value", value, 99)
     });
   });
   ()

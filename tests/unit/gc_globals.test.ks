@@ -9,7 +9,7 @@ fun makeList(n: Int): List<Int> = if (n <= 0) [] else n :: makeList(n - 1)
 // Tail-recursive: allocate many lists to exceed GC threshold (~1MB) without stack overflow
 fun repeatAlloc(count: Int): Unit = if (count <= 0) () else { val _ = makeList(1000); repeatAlloc(count - 1) }
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "gc globals", (s1: Suite) => {
     repeatAlloc(35)
     eq(s1, "global unchanged after GC", globalStr, "survived")

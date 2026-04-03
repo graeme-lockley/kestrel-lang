@@ -499,6 +499,8 @@ val x = await f()
 
 **Await expression:** The grammar allows `await` as an optional prefix on a primary expression: `await` *expr* (e.g. `await f()`). `await` is only valid in an **async context** (inside an `async fun`); use outside async is a semantic (type/context) error.
 
+Test harness note: `./scripts/kestrel test` generates suite calls as `await runN(root)` inside `async fun main(): Task<Unit>`, so harness execution obeys the same async-context rule and does not require top-level `await` support.
+
 Runtime behaviour:
 
 - On the JVM backend, `Task<T>` values are runtime `kestrel.runtime.KTask` objects.

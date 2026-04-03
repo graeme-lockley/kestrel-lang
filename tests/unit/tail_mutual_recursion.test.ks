@@ -17,7 +17,7 @@ val oddViaClosure = (m: Int) => isOddClosure(m)
 fun isEvenClosure(n: Int): Bool = if (n == 0) True else oddViaClosure(n - 1)
 fun isOddClosure(n: Int): Bool = if (n == 0) False else isEvenClosure(n - 1)
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "tail_mutual_recursion", (s1: Suite) => {
     group(s1, "mutual_tail_optimized", (sg: Suite) => {
       isTrue(sg, "isEven deep", isEven(300000))

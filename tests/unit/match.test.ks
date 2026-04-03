@@ -18,7 +18,7 @@ fun sumListMatch(xs: List<Int>): Int = match (xs) { [] => 0, h :: t => h + sumLi
 
 fun makePair(): (Int * Int) = (7, 8)
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "match", (s1: Suite) => {
     group(s1, "boolean patterns", (sg: Suite) => {
       eq(sg, "boolToInt(True)", boolToInt(True), 1)

@@ -2,7 +2,7 @@ import { Suite, group, eq } from "kestrel:test"
 
 fun add(a: Int, b: Int): Int = a + b
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "strings", (s1: Suite) => {
     eq(s1, "greeting", "Hello, World!", "Hello, World!")
     eq(s1, "message", "Kestrel strings work!", "Kestrel strings work!")

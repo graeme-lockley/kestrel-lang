@@ -118,7 +118,7 @@ fun buildCalls(count: Int, idx: Int): String =
   if (idx >= count) 
     ""
   else 
-    "run${Str.fromInt(idx)}(root)\n${buildCalls(count, idx + 1)}"
+    "  await run${Str.fromInt(idx)}(root)\n${buildCalls(count, idx + 1)}"
 
 val unitDir = "${rootDir}/tests/unit"
 val stdlibDir = "${rootDir}/stdlib/kestrel"
@@ -151,8 +151,8 @@ async fun main(): Task<Unit> = {
     "import { printSummary, outputCompact, outputVerbose, outputSummary } from \"kestrel:test\"\n";
   val genMid =
     "\nval counts = { mut passed = 0, mut failed = 0, mut startTime = __now_ms(), mut compactStackBox = { frames = [] }, mut compactExpanded = False }\nval root = { depth = 1, output = ";
-  val genRest = ", counts = counts }\n\n";
-  val genTail = "printSummary(counts)\n";
+  val genRest = ", counts = counts }\n\nasync fun main(): Task<Unit> = {\n";
+  val genTail = "  printSummary(counts);\n  ()\n}\n\nmain()\n";
   val generatedSource =
     "${genHead}${impLines}${genMid}${outputModeStr}${genRest}${calls}${genTail}"
 

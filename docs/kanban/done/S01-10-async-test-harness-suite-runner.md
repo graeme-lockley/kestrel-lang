@@ -78,19 +78,19 @@ Standardize all Kestrel test suite `run` functions to `async fun run(s: Suite): 
 
 ## Tasks
 
-- [ ] Confirm parser/typecheck/codegen prerequisites need no implementation changes by compiling a generated runner shape that uses `await runN(root)` only inside `async fun main(): Task<Unit>`.
-- [ ] Update `scripts/run_tests.ks` `buildCalls` to generate `await run${idx}(root)` lines.
-- [ ] Update `scripts/run_tests.ks` generated source template so suite calls execute inside an async entrypoint and `printSummary(counts)` runs after all awaited suites complete.
-- [ ] Verify `stdlib/kestrel/test.ks` needs no API/signature changes for async suite execution; if needed, adjust helper signatures without changing `Suite` record shape.
-- [ ] Convert every sync stdlib suite entrypoint in `stdlib/kestrel/*.test.ks` from `export fun run(s: Suite): Unit` to `export async fun run(s: Suite): Task<Unit>` (leave existing async files intact).
-- [ ] Convert every sync unit suite entrypoint in `tests/unit/*.test.ks` from `export fun run(s: Suite): Unit` to `export async fun run(s: Suite): Task<Unit>` (leave existing async files intact).
-- [ ] Update/extend harness-focused coverage in `tests/unit/harness_output.test.ks` (or a dedicated new unit suite) so async `run` signature and grouped output paths are exercised.
-- [ ] Add an integration regression in `compiler/test/integration/runtime-stdlib.test.ts` or `compiler/test/integration/jvm-async-runtime.test.ts` that fails if generated test-runner suite calls are not awaited.
-- [ ] Update `docs/specs/08-tests.md` to define suite contract as `async fun run(s: Suite): Task<Unit>` and clarify that runner invocation is awaited.
-- [ ] Validate compiler suite: `cd compiler && npm run build && npm test`.
-- [ ] Validate JVM runtime jar: `cd runtime/jvm && bash build.sh`.
-- [ ] Validate Kestrel harness suite: `./scripts/kestrel test`.
-- [ ] Validate user-visible E2E behaviour: `./scripts/run-e2e.sh`.
+- [x] Confirm parser/typecheck/codegen prerequisites need no implementation changes by compiling a generated runner shape that uses `await runN(root)` only inside `async fun main(): Task<Unit>`.
+- [x] Update `scripts/run_tests.ks` `buildCalls` to generate `await run${idx}(root)` lines.
+- [x] Update `scripts/run_tests.ks` generated source template so suite calls execute inside an async entrypoint and `printSummary(counts)` runs after all awaited suites complete.
+- [x] Verify `stdlib/kestrel/test.ks` needs no API/signature changes for async suite execution; if needed, adjust helper signatures without changing `Suite` record shape.
+- [x] Convert every sync stdlib suite entrypoint in `stdlib/kestrel/*.test.ks` from `export fun run(s: Suite): Unit` to `export async fun run(s: Suite): Task<Unit>` (leave existing async files intact).
+- [x] Convert every sync unit suite entrypoint in `tests/unit/*.test.ks` from `export fun run(s: Suite): Unit` to `export async fun run(s: Suite): Task<Unit>` (leave existing async files intact).
+- [x] Update/extend harness-focused coverage in `tests/unit/harness_output.test.ks` (or a dedicated new unit suite) so async `run` signature and grouped output paths are exercised.
+- [x] Add an integration regression in `compiler/test/integration/runtime-stdlib.test.ts` or `compiler/test/integration/jvm-async-runtime.test.ts` that fails if generated test-runner suite calls are not awaited.
+- [x] Update `docs/specs/08-tests.md` to define suite contract as `async fun run(s: Suite): Task<Unit>` and clarify that runner invocation is awaited.
+- [x] Validate compiler suite: `cd compiler && npm run build && npm test`.
+- [x] Validate JVM runtime jar: `cd runtime/jvm && bash build.sh`.
+- [x] Validate Kestrel harness suite: `./scripts/kestrel test`.
+- [x] Validate user-visible E2E behaviour: `./scripts/run-e2e.sh`.
 
 ## Tests to add
 
@@ -104,10 +104,17 @@ Standardize all Kestrel test suite `run` functions to `async fun run(s: Suite): 
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/08-tests.md` — In the stdlib suite/harness sections, document canonical suite signature as `async fun run(s: Suite): Task<Unit>` and that generated runner calls are awaited.
-- [ ] `docs/specs/01-language.md` — In Section 5, add a brief note that harness-generated `await` calls run inside async entrypoints (no top-level await requirement) and remain subject to async-context rules.
+- [x] `docs/specs/08-tests.md` — In the stdlib suite/harness sections, document canonical suite signature as `async fun run(s: Suite): Task<Unit>` and that generated runner calls are awaited.
+- [x] `docs/specs/01-language.md` — In Section 5, add a brief note that harness-generated `await` calls run inside async entrypoints (no top-level await requirement) and remain subject to async-context rules.
 
 ## Notes
 
 - Current inventory confirms migration scale: `stdlib/kestrel/*.test.ks` has 13 suites total (11 sync, 2 async), and `tests/unit/*.test.ks` has 33 suites total (31 sync, 2 async).
 - `scripts/run_tests.ks` already has async helper functions (`listDirOrExit`, `writeTextOrExit`, `runProcessOrExit`) and an async `main`; the remaining correctness gap is generated suite-call awaiting.
+
+## Build notes
+
+- 2026-04-03: Started implementation by moving S01-10 from planned to doing and confirming impact-analysis assumptions still matched current runner/typecheck behavior.
+- 2026-04-03: Updated `scripts/run_tests.ks` to generate `await runN(root)` calls inside generated `async fun main(): Task<Unit>`; this removed top-level suite invocation ordering risk.
+- 2026-04-03: Initial generated-runner shape failed with `printSummary(counts)` parsed as callable before trailing `()`; fixed by emitting `printSummary(counts);` with an explicit statement terminator.
+- 2026-04-03: Added integration guard in `compiler/test/integration/runtime-stdlib.test.ts` to assert generated runner source contains async main plus awaited suite calls and no bare `runN(root)` lines.

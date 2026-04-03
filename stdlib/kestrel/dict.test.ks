@@ -2,7 +2,7 @@ import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 import * as Dict from "kestrel:dict"
 import * as Opt from "kestrel:option"
 
-export fun run(s: Suite): Unit = {
+export async fun run(s: Suite): Task<Unit> = {
   group(s, "dict", (s1: Suite) => {
     group(s1, "int core", (sg: Suite) => {
       val d0 = Dict.emptyIntDict()

@@ -4,7 +4,7 @@ import { pair, first, second, mapFirst, mapSecond, mapBoth } from "kestrel:tuple
 fun double(n: Int): Int = n + n
 fun incStr(s: String): String = "${s}!"
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "tuple", (s1: Suite) => {
     group(s1, "pair first second", (sg: Suite) => {
       val t = pair(1, "a")

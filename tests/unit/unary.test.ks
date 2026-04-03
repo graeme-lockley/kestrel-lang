@@ -3,7 +3,7 @@ import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 fun getValue(): Int = 42
 fun negate(x: Int): Int = -x
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "unary", (s1: Suite) => {
     group(s1, "plus", (sg: Suite) => {
       eq(sg, "+5", +5, 5)

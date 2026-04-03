@@ -10,7 +10,7 @@ fun sumAcc(acc: Int, x: Int): Int = acc + x
 
 fun emptyInts(): List<Int> = []
 
-export fun run(s: Suite): Unit = {
+export async fun run(s: Suite): Task<Unit> = {
   group(s, "list", (s1: Suite) => {
     group(s1, "length", (sg: Suite) => {
       eq(sg, "empty", List.length(emptyInts()), 0)

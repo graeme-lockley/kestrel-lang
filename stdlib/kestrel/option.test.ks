@@ -14,7 +14,7 @@ import {
 
 fun double(n: Int): Int = n + n
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "option", (s1: Suite) => {
     group(s1, "construction", (sg: Suite) => {
       eq(sg, "Some(42) pattern match", match (Some(42)) { None => 0, Some(v) => v }, 42)

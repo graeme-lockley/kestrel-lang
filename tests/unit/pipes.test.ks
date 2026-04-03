@@ -5,7 +5,7 @@ fun add1(x: Int): Int = x + 1
 fun triple(x: Int): Int = x * 3
 fun addPair(x: Int, y: Int): Int = x + y
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "pipes", (s1: Suite) => {
     group(s1, "forward pipe", (sg: Suite) => {
       eq(sg, "3 |> double", 3 |> double, 6)

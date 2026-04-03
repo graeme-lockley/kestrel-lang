@@ -4,7 +4,7 @@ fun apply(f: (Int) -> Int, x: Int): Int = f(x)
 
 fun applyTwice(f: (Int) -> Int, x: Int): Int = f(f(x))
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "lambdas", (s1: Suite) => {
     group(s1, "basic", (sg: Suite) => {
       eq(sg, "(x) => x + 1 applied to 5", ((x: Int) => x + 1)(5), 6)

@@ -1,6 +1,6 @@
 import { Suite, group, eq, isTrue } from "kestrel:test"
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "float", (s1: Suite) => {
     group(s1, "literals", (sg: Suite) => {
       eq(sg, "1.0", 1.0, 1.0)

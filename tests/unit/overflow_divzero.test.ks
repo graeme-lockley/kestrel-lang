@@ -6,7 +6,7 @@ import { ArithmeticOverflow, DivideByZero } from "kestrel:runtime"
 // 2^59; two of these sum to 2^60 which exceeds 61-bit signed max (2^60 - 1)
 val halfMax = 576460752303423488
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "overflow and divzero", (s1: Suite) => {
     group(s1, "integer overflow", (sg: Suite) => {
       eq(sg, "ADD overflow throws ArithmeticOverflow",

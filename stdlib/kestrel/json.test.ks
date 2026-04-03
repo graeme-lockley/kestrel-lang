@@ -33,7 +33,7 @@ fun unwrapOk(r): Value = Res.getOrElse(r, jsonNull())
 /** True if `describeParse(s)` contains `needle` (error-path smoke). */
 fun parseErrContains(s: String, needle: String): Bool = Str.indexOf(describeParse(s), needle) >= 0
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "json", (s1: Suite) => {
     group(s1, "parse literals and Result", (sg: Suite) => {
       isTrue(sg, "null Ok", isNull(unwrapOk(parse("null"))));

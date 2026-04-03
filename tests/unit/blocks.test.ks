@@ -3,7 +3,7 @@ import { Suite, group, eq } from "kestrel:test"
 // Minimal: block with var not inside a closure (direct function return)
 fun testVarBlockDirect(): Int = { var x = 0; x := 1; x }
 
-export fun run(s: Suite): Unit =
+export async fun run(s: Suite): Task<Unit> =
   group(s, "blocks", (s1: Suite) => {
     group(s1, "val", (sg: Suite) => {
       eq(sg, "single val", { val x = 1; x }, 1)
