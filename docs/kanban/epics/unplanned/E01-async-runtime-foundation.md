@@ -27,7 +27,7 @@ Async execution exploits **Project Loom virtual threads** (Java 21+) rather than
 11. [x] [S01-06-specs-conformance-e2e-tests.md](../../done/S01-06-specs-conformance-e2e-tests.md) — Spec updates, conformance tests, and E2E scenarios for the full async model. Completed.
 12. [x] [S01-12-block-local-async-fun.md](../../done/S01-12-block-local-async-fun.md) — Support `async fun` at block scope (FunStmt); grammar, AST, type-checker, codegen.
 13. [x] [S01-13-task-combinator-api.md](../../done/S01-13-task-combinator-api.md) — Add `Task.all`, `Task.race`, and `Task.map` combinators to stdlib and runtime.
-14. [ ] [S01-14-in-async-context-param-refactor.md](../../unplanned/S01-14-in-async-context-param-refactor.md) — Refactor `inAsyncContext` from mutable closure state into an explicit parameter on `inferExpr`.
+14. [x] [S01-14-in-async-context-param-refactor.md](../../done/S01-14-in-async-context-param-refactor.md) — Refactor `inAsyncContext` from mutable closure state into an explicit parameter on `inferExpr`.
 15. [ ] [S01-15-await-parser-dead-branch-cleanup.md](../../unplanned/S01-15-await-parser-dead-branch-cleanup.md) — Remove dead `CallExpr` branch in the `await` / `parsePrimary` parser path.
 16. [ ] [S01-16-await-type-error-message.md](../../unplanned/S01-16-await-type-error-message.md) — Improve `await`-on-non-Task diagnostic to include the actual resolved type.
 17. [ ] [S01-17-task-cancellation-api.md](../../unplanned/S01-17-task-cancellation-api.md) — Expose task cancellation via `Task.cancel` backed by `CompletableFuture.cancel()`.

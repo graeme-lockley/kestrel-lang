@@ -92,7 +92,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
   const exportedConstructors = new Map<string, InternalType>();
   const opaqueTypes = new Set<string>();
   const exportedTypeVisibility = new Map<string, 'local' | 'opaque' | 'export'>();
-  let inAsyncContext = false; // Track if we're in an async function
   let loopDepth = 0;
   const sourceFile = options?.sourceFile ?? '';
   const sourceContent = options?.sourceContent;
@@ -717,7 +716,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     return null;
   }
 
-  function inferExpr(expr: Expr): InternalType {
+  function inferExpr(expr: Expr, asyncCtx: boolean): InternalType {
     if (expr == null) {
       throw new TypeCheckError(
         'Internal error: expression is null or undefined',
@@ -756,7 +755,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         return result;
       }
       case 'IsExpr': {
-        const sRaw = inferExpr(expr.expr);
+        const sRaw = inferExpr(expr.expr, asyncCtx);
         const tRaw = resolveTypeForIsRhs(expr.testedType);
         checkOpaqueIsRule(apply(sRaw), expr.testedType, expr);
         const narrowed = refinementMeetScrutTarget(sRaw, tRaw);
@@ -775,7 +774,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         return tBool;
       }
       case 'IfExpr': {
-        const condT = inferExpr(expr.cond);
+        const condT = inferExpr(expr.cond, asyncCtx);
         unifyWithBlame(condT, tBool, expr);
         const nar = expr.cond.kind === 'IsExpr' ? narrowingByIsExpr.get(expr.cond) : undefined;
         let thenT: InternalType;
@@ -783,16 +782,16 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           const prev = env.get(nar.bindingName);
           env.set(nar.bindingName, nar.narrowed);
           try {
-            thenT = inferExpr(expr.then);
+            thenT = inferExpr(expr.then, asyncCtx);
           } finally {
             if (prev !== undefined) env.set(nar.bindingName, prev);
             else env.delete(nar.bindingName);
           }
         } else {
-          thenT = inferExpr(expr.then);
+          thenT = inferExpr(expr.then, asyncCtx);
         }
         if (expr.else !== undefined) {
-          const elseT = inferExpr(expr.else);
+          const elseT = inferExpr(expr.else, asyncCtx);
           unifyWithBlame(thenT, elseT, expr);
           result = apply(thenT);
         } else {
@@ -803,7 +802,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         return result;
       }
       case 'WhileExpr': {
-        const condT = inferExpr(expr.cond);
+        const condT = inferExpr(expr.cond, asyncCtx);
         unifyWithBlame(condT, tBool, expr);
         const nar = expr.cond.kind === 'IsExpr' ? narrowingByIsExpr.get(expr.cond) : undefined;
         loopDepth++;
@@ -811,21 +810,21 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           const prev = env.get(nar.bindingName);
           env.set(nar.bindingName, nar.narrowed);
           try {
-            inferExpr(expr.body);
+            inferExpr(expr.body, asyncCtx);
           } finally {
             if (prev !== undefined) env.set(nar.bindingName, prev);
             else env.delete(nar.bindingName);
           }
         } else {
-          inferExpr(expr.body);
+          inferExpr(expr.body, asyncCtx);
         }
         loopDepth--;
         setInferredType(expr, tUnit);
         return tUnit;
       }
       case 'BinaryExpr': {
-        const l = inferExpr(expr.left);
-        const r = inferExpr(expr.right);
+        const l = inferExpr(expr.left, asyncCtx);
+        const r = inferExpr(expr.right, asyncCtx);
         if (['+', '-', '*', '/', '%', '**'].includes(expr.op)) {
           unifyWithBlame(l, r, expr);
           const numType = apply(l);
@@ -850,7 +849,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         return result;
       }
       case 'UnaryExpr': {
-        const operandType = inferExpr(expr.operand);
+        const operandType = inferExpr(expr.operand, asyncCtx);
         if (expr.op === '-' || expr.op === '+') {
           unifyWithBlame(operandType, tInt, expr);
           result = tInt;
@@ -869,13 +868,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           if (expr.args.length < 1) {
             throw new TypeCheckError('print and println require at least one argument', expr);
           }
-          for (const arg of expr.args) inferExpr(arg);
+          for (const arg of expr.args) inferExpr(arg, asyncCtx);
           result = { kind: 'prim', name: 'Unit' };
           setInferredType(expr, result);
           return result;
         }
-        const calleeT = inferExpr(expr.callee);
-        const argTs = expr.args.map(inferExpr);
+        const calleeT = inferExpr(expr.callee, asyncCtx);
+        const argTs = expr.args.map((a) => inferExpr(a, asyncCtx));
         const ret = freshVar();
         const arrow = { kind: 'arrow' as const, params: argTs, return: ret };
         unifyWithBlame(calleeT, arrow, expr, undefined, { arrowMode: 'call' });
@@ -884,7 +883,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         return result;
       }
       case 'TupleExpr': {
-        const elements = expr.elements.map(inferExpr);
+        const elements = expr.elements.map((e) => inferExpr(e, asyncCtx));
         result = apply({ kind: 'tuple', elements });
         setInferredType(expr, result);
         return result;
@@ -909,7 +908,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         }
         for (const stmt of expr.stmts) {
           if (stmt.kind === 'ValStmt') {
-            const t = apply(inferExpr(stmt.value));
+            const t = apply(inferExpr(stmt.value, asyncCtx));
             if (stmt.type) {
               unifyWithBlame(t, astTypeToInternal(stmt.type, typeAliases, resolveQualified), stmt.value, undefined, {
                 relation: 'subtype',
@@ -935,9 +934,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
               for (let i = 0; i < stmt.params.length; i++) {
                 env.set(stmt.params[i]!.name, arrowT.params[i]!);
               }
-              const wasAsync = inAsyncContext;
-              inAsyncContext = stmt.async ?? false;
-              const bodyT = inferExpr(stmt.body);
+              const bodyT = inferExpr(stmt.body, stmt.async ?? false);
               // For async block-local funs: unify body against inner T, not Task<T>
               const returnApplied = apply(arrowT.return);
               if (stmt.async && returnApplied.kind === 'app' && returnApplied.name === 'Task' && returnApplied.args.length === 1) {
@@ -946,7 +943,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
                 const inferredArrow: InternalType = { kind: 'arrow', params: arrowT.params, return: apply(bodyT) };
                 unifyWithBlame(inferredArrow, arrowT, stmt.body, undefined, { arrowMode: 'fun_check' });
               }
-              inAsyncContext = wasAsync;
               const scheme = generalize(apply(arrowT), envFreeVars());
               env.set(stmt.name, scheme);
               for (let i = 0; i < stmt.params.length; i++) {
@@ -954,7 +950,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
               }
             }
           } else if (stmt.kind === 'VarStmt') {
-            const t = apply(inferExpr(stmt.value));
+            const t = apply(inferExpr(stmt.value, asyncCtx));
             if (stmt.type) {
               unifyWithBlame(t, astTypeToInternal(stmt.type, typeAliases, resolveQualified), stmt.value, undefined, {
                 relation: 'subtype',
@@ -962,7 +958,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             }
             env.set(stmt.name, apply(t));
           } else if (stmt.kind === 'ExprStmt') {
-            inferExpr(stmt.expr);
+            inferExpr(stmt.expr, asyncCtx);
           } else if (stmt.kind === 'BreakStmt') {
             if (loopDepth <= 0) {
               throw new TypeCheckError(
@@ -984,8 +980,8 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             }
             setInferredType(stmt, tUnit);
           } else if (stmt.kind === 'AssignStmt') {
-            const targetT = inferExpr(stmt.target);
-            const valueT = inferExpr(stmt.value);
+            const targetT = inferExpr(stmt.target, asyncCtx);
+            const valueT = inferExpr(stmt.value, asyncCtx);
             const target = stmt.target;
             if (target.kind === 'FieldExpr') {
               const objT = apply(getInferredType(target.object) ?? targetT);
@@ -1001,7 +997,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             }
           }
         }
-        result = inferExpr(expr.result);
+        result = inferExpr(expr.result, asyncCtx);
         setInferredType(expr, result);
         return result;
       }
@@ -1018,13 +1014,10 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         for (let i = 0; i < expr.params.length; i++) {
           env.set(expr.params[i]!.name, paramTs[i]!);
         }
-        const wasAsync = inAsyncContext;
-        inAsyncContext = expr.async;
         let bodyT: InternalType;
         try {
-          bodyT = inferExpr(expr.body);
+          bodyT = inferExpr(expr.body, expr.async);
         } finally {
-          inAsyncContext = wasAsync;
           for (let i = 0; i < expr.params.length; i++) {
             env.delete(expr.params[i]!.name);
           }
@@ -1037,7 +1030,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       case 'RecordExpr': {
         if (expr.spread != null) {
           // Record spread: { ...r, x = e } — infer r as record, extend with new fields
-          const spreadT = inferExpr(expr.spread);
+          const spreadT = inferExpr(expr.spread, asyncCtx);
           let spreadApplied = apply(spreadT);
           if (spreadApplied.kind !== 'record') {
             const rowVar = freshVar();
@@ -1053,7 +1046,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             if (!newNames.has(f.name)) newFields.push(f);
           }
           for (const f of expr.fields) {
-            const ft = inferExpr(f.value);
+            const ft = inferExpr(f.value, asyncCtx);
             newFields.push({ name: f.name, mut: f.mut ?? false, type: ft });
           }
           result = apply({ kind: 'record', fields: newFields, row: spreadApplied.row ?? undefined });
@@ -1062,7 +1055,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         }
         const fields: { name: string; mut: boolean; type: InternalType }[] = [];
         for (const f of expr.fields) {
-          const ft = inferExpr(f.value);
+          const ft = inferExpr(f.value, asyncCtx);
           fields.push({ name: f.name, mut: f.mut ?? false, type: ft });
         }
         // Create a closed record (no row variable) since we know all fields
@@ -1071,7 +1064,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         return result;
       }
       case 'FieldExpr': {
-        const objT = inferExpr(expr.object);
+        const objT = inferExpr(expr.object, asyncCtx);
         let applied = apply(objT);
 
         if (applied.kind === 'app' && opaqueTypes.has(applied.name)) {
@@ -1138,7 +1131,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         throw new TypeCheckError(`Unknown field: ${expr.field}`, expr);
       }
       case 'MatchExpr': {
-        const scrutT = inferExpr(expr.scrutinee);
+        const scrutT = inferExpr(expr.scrutinee, asyncCtx);
         // Check if we're matching on an opaque type from another module
         const appliedScrutT = apply(scrutT);
         if (appliedScrutT.kind === 'app' && opaqueTypes.has(appliedScrutT.name)) {
@@ -1248,7 +1241,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           // Infer type of first case body
           const firstCase = expr.cases[0]!;
           const boundVars = bindPattern(firstCase.pattern, scrutT);
-          const firstT = inferExpr(firstCase.body);
+          const firstT = inferExpr(firstCase.body, asyncCtx);
           if (firstT == null) {
             throw new TypeCheckError('Match first case body inferred as null/undefined', firstCase.body);
           }
@@ -1258,7 +1251,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           for (let i = 1; i < expr.cases.length; i++) {
             const c = expr.cases[i]!;
             const caseVars = bindPattern(c.pattern, scrutT);
-            const caseT = inferExpr(c.body);
+            const caseT = inferExpr(c.body, asyncCtx);
             if (caseT == null) {
               throw new TypeCheckError('Match case body inferred as null/undefined', c.body);
             }
@@ -1274,13 +1267,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         return result;
       }
       case 'AwaitExpr': {
-        if (!inAsyncContext) {
+        if (!asyncCtx) {
           throw new TypeCheckError(
             'await can only be used in async contexts (async functions or async lambdas)',
             expr
           );
         }
-        const taskT = inferExpr(expr.value);
+        const taskT = inferExpr(expr.value, asyncCtx);
         const applied = apply(taskT);
         // Expect Task<T>
         if (applied.kind === 'app' && applied.name === 'Task' && applied.args.length === 1) {
@@ -1293,20 +1286,20 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       }
       case 'ThrowExpr': {
         // For now, accept any type for throw (should be exception type)
-        inferExpr(expr.value);
+        inferExpr(expr.value, asyncCtx);
         // Throw has bottom type (never returns)
         result = freshVar();
         setInferredType(expr, result);
         return result;
       }
       case 'TryExpr': {
-        const blockT = inferExpr(expr.body);
+        const blockT = inferExpr(expr.body, asyncCtx);
         // Type check catch cases similar to match
         for (const c of expr.cases) {
           if (c.pattern.kind === 'VarPattern') {
             env.set(c.pattern.name, freshVar()); // Exception type
           }
-          const caseT = inferExpr(c.body);
+          const caseT = inferExpr(c.body, asyncCtx);
           if (c.pattern.kind === 'VarPattern') {
             env.delete(c.pattern.name);
           }
@@ -1329,12 +1322,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             // Spread element
             result = freshVar();
           } else {
-            const firstT = inferExpr(firstElem as Expr);
+            const firstT = inferExpr(firstElem as Expr, asyncCtx);
             // Unify all other elements with first
             for (let i = 1; i < expr.elements.length; i++) {
               const elem = expr.elements[i];
               if (!(typeof elem === 'object' && 'spread' in elem)) {
-                const elemT = inferExpr(elem as Expr);
+                const elemT = inferExpr(elem as Expr, asyncCtx);
                 unifyWithBlame(firstT, elemT, elem as Expr);
               }
             }
@@ -1346,8 +1339,8 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       }
       case 'ConsExpr': {
         // head :: tail where tail is List<T> and head is T
-        const headT = inferExpr(expr.head);
-        const tailT = inferExpr(expr.tail);
+        const headT = inferExpr(expr.head, asyncCtx);
+        const tailT = inferExpr(expr.tail, asyncCtx);
         const applied = apply(tailT);
         if (applied.kind === 'app' && applied.name === 'List' && applied.args.length === 1) {
           unifyWithBlame(headT, applied.args[0]!, expr);
@@ -1372,12 +1365,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
               args: [expr.left, ...expr.right.args],
               span: expr.span,
             };
-            result = apply(inferExpr(merged));
+            result = apply(inferExpr(merged, asyncCtx));
             setInferredType(expr, result);
             return result;
           }
-          const leftT = apply(inferExpr(expr.left));
-          const rightT = apply(inferExpr(expr.right));
+          const leftT = apply(inferExpr(expr.left, asyncCtx));
+          const rightT = apply(inferExpr(expr.right, asyncCtx));
           result = freshVar();
           unifyWithBlame(rightT, { kind: 'arrow', params: [leftT], return: result }, expr, undefined, {
             arrowMode: 'call',
@@ -1393,12 +1386,12 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             args: [...expr.left.args, expr.right],
             span: expr.span,
           };
-          result = apply(inferExpr(merged));
+          result = apply(inferExpr(merged, asyncCtx));
           setInferredType(expr, result);
           return result;
         }
-        const leftT = apply(inferExpr(expr.left));
-        const rightT = apply(inferExpr(expr.right));
+        const leftT = apply(inferExpr(expr.left, asyncCtx));
+        const rightT = apply(inferExpr(expr.right, asyncCtx));
         result = freshVar();
         unifyWithBlame(leftT, { kind: 'arrow', params: [rightT], return: result }, expr, undefined, {
           arrowMode: 'call',
@@ -1410,7 +1403,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       case 'TemplateExpr': {
         for (const part of expr.parts) {
           if (part.type !== 'literal') {
-            inferExpr(part.expr);
+            inferExpr(part.expr, asyncCtx);
           }
         }
         result = tString;
@@ -1489,11 +1482,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           env.set(node.params[i]!.name, paramTs[i]!);
         }
 
-        // Set async context if this is an async function
-        const wasAsync: boolean = inAsyncContext;
-        if (node.async) inAsyncContext = true;
-
-        const bodyT = inferExpr(node.body);
+        const bodyT = inferExpr(node.body, node.async);
         // If body type is a type variable that appears in the return type of a parameter
         // (e.g. S in f: T -> S), the declared return type must be that variable, not a different type.
         const paramReturnVarIds = new Set<number>();
@@ -1531,9 +1520,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         } else {
           unifyWithBlame(bodyT, returnT, node.body, undefined, { relation: 'subtype' });
         }
-
-        // Restore async context
-        inAsyncContext = wasAsync;
 
         const fnType = { kind: 'arrow' as const, params: paramTs, return: returnT };
         unifyWithBlame(fnVar, fnType, node.body);
@@ -1628,15 +1614,15 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         const scheme = generalize(apply(ctorType), envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'ValStmt') {
-        const t = apply(inferExpr(node.value));
+        const t = apply(inferExpr(node.value, false));
         const scheme = generalize(t, envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'VarStmt') {
-        const t = apply(inferExpr(node.value));
+        const t = apply(inferExpr(node.value, false));
         // Var bindings not generalized
         env.set(node.name, t);
       } else if (node.kind === 'ValDecl') {
-        const valueT = inferExpr(node.value);
+        const valueT = inferExpr(node.value, false);
         if (node.type) {
           unifyWithBlame(valueT, astTypeToInternal(node.type, typeAliases, resolveQualified), node.value, undefined, {
             relation: 'subtype',
@@ -1646,7 +1632,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         const scheme = generalize(t, envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'VarDecl') {
-        const valueT = inferExpr(node.value);
+        const valueT = inferExpr(node.value, false);
         if (node.type) {
           unifyWithBlame(valueT, astTypeToInternal(node.type, typeAliases, resolveQualified), node.value, undefined, {
             relation: 'subtype',
@@ -1655,10 +1641,10 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         const t = apply(valueT);
         env.set(node.name, t);
       } else if (node.kind === 'ExprStmt') {
-        inferExpr(node.expr);
+        inferExpr(node.expr, false);
       } else if (node.kind === 'AssignStmt') {
-        const targetT = inferExpr(node.target);
-        const valueT = inferExpr(node.value);
+        const targetT = inferExpr(node.target, false);
+        const valueT = inferExpr(node.value, false);
         const target = node.target;
         if (target.kind === 'FieldExpr') {
           const objT = apply(getInferredType(target.object) ?? targetT);
