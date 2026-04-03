@@ -161,6 +161,42 @@ describe('tokenize', () => {
 
 ---
 
+## Commit Messages
+
+All commits must follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/):
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Allowed types:** `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`, `perf`, `style`.
+
+**Allowed scopes:** `parser`, `typecheck`, `codegen`, `jvm`, `stdlib`, `cli`, `vm`, `e2e`.
+
+**Breaking changes** — append `!` after the type/scope and/or add a `BREAKING CHANGE:` footer:
+
+```
+feat(parser)!: remove support for legacy syntax
+
+BREAKING CHANGE: the `=>` arrow form is no longer accepted; use `->` instead.
+```
+
+**Examples:**
+
+```
+feat(typecheck): infer return type of recursive functions
+fix(codegen): emit correct opcode for nested let bindings
+docs: update spec for match expressions
+test(stdlib): add coverage for List.map edge cases
+chore: bump vitest to 2.x
+```
+
+---
+
 ## Quality Standards
 
 ### Tests are Mandatory
