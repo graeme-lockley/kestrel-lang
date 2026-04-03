@@ -1022,8 +1022,8 @@ class Parser {
       // empty { } — record
       return this.parseRecordExpr();
     }
-    if (next1 && (next1.value === 'val' || next1.value === 'var' || next1.value === 'fun')) {
-      // { val ... or { var ... or { fun ... — block
+    if (next1 && (next1.value === 'val' || next1.value === 'var' || next1.value === 'fun' || next1.value === 'async')) {
+      // { val ... or { var ... or { fun ... or { async fun ... — block
       return this.parseBlock(ctx);
     }
     if (next1 && next1.value === '...') {
@@ -1094,8 +1094,10 @@ class Parser {
         }
         this.expect('op', '=');
         stmts.push({ kind: 'VarStmt', name, type, value: this.parseExpr('expr') });
-      } else if (this.at('keyword', 'fun')) {
-        this.advance();
+      } else if (this.at('keyword', 'fun') || (this.at('keyword', 'async') && this.peek(1).kind === 'keyword' && this.peek(1).value === 'fun')) {
+        const isAsync = this.at('keyword', 'async');
+        if (isAsync) this.advance();
+        this.advance(); // consume 'fun'
         const name = this.expect('ident').value!;
         let typeParams: string[] | undefined;
         if (this.at('op', '<')) {
@@ -1113,7 +1115,7 @@ class Parser {
         const returnType = this.parseType();
         this.expect('op', '=');
         const body = this.parseExpr('expr');
-        stmts.push({ kind: 'FunStmt', name, typeParams, params, returnType, body });
+        stmts.push({ kind: 'FunStmt', async: isAsync || undefined, name, typeParams, params, returnType, body });
       } else if (this.at('keyword', 'break')) {
         this.advance();
         stmts.push({ kind: 'BreakStmt' });

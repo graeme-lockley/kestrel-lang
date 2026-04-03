@@ -219,6 +219,7 @@ export interface ExprStmt extends NodeBase {
 
 export interface FunStmt extends NodeBase {
   kind: 'FunStmt';
+  async?: boolean;
   name: string;
   typeParams?: string[];
   params: Param[];

@@ -894,12 +894,33 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           } else if (stmt.kind === 'FunStmt') {
             const arrowT = env.get(stmt.name) as InternalType;
             if (arrowT?.kind === 'arrow') {
+              // Validate async return type must be Task<T>
+              if (stmt.async) {
+                const rt = apply(arrowT.return);
+                if (!(rt.kind === 'app' && rt.name === 'Task')) {
+                  diagnostics.push({
+                    severity: 'error',
+                    code: CODES.type.check,
+                    message: `Async function ${stmt.name} must return Task<T>`,
+                    location: locFor(stmt),
+                  });
+                }
+              }
               for (let i = 0; i < stmt.params.length; i++) {
                 env.set(stmt.params[i]!.name, arrowT.params[i]!);
               }
+              const wasAsync = inAsyncContext;
+              inAsyncContext = stmt.async ?? false;
               const bodyT = inferExpr(stmt.body);
-              const inferredArrow: InternalType = { kind: 'arrow', params: arrowT.params, return: apply(bodyT) };
-              unifyWithBlame(inferredArrow, arrowT, stmt.body, undefined, { arrowMode: 'fun_check' });
+              // For async block-local funs: unify body against inner T, not Task<T>
+              const returnApplied = apply(arrowT.return);
+              if (stmt.async && returnApplied.kind === 'app' && returnApplied.name === 'Task' && returnApplied.args.length === 1) {
+                unifyWithBlame(bodyT, returnApplied.args[0]!, stmt.body, undefined, { relation: 'subtype' });
+              } else {
+                const inferredArrow: InternalType = { kind: 'arrow', params: arrowT.params, return: apply(bodyT) };
+                unifyWithBlame(inferredArrow, arrowT, stmt.body, undefined, { arrowMode: 'fun_check' });
+              }
+              inAsyncContext = wasAsync;
               const scheme = generalize(apply(arrowT), envFreeVars());
               env.set(stmt.name, scheme);
               for (let i = 0; i < stmt.params.length; i++) {

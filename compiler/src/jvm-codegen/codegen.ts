@@ -289,7 +289,7 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
           // Pass localFunNames for mutual recursion (>1 funs) OR self-recursion (fun references itself)
           const isSelfRecursive = fv.includes(stmt.name);
           const useLFN = (localFunNames.size > 1 || isSelfRecursive) ? localFunNames : undefined;
-          const id = addLambda(stmt.body, false, stmt.params.map((p) => ({ name: p.name })), fv, useLFN, fvVars.size > 0 ? fvVars : undefined);
+          const id = addLambda(stmt.body, stmt.async ?? false, stmt.params.map((p) => ({ name: p.name })), fv, useLFN, fvVars.size > 0 ? fvVars : undefined);
         idByNode.set(stmt, id);
         walk(stmt.body);
       } else if (stmt.kind === 'ExprStmt') walk(stmt.expr);
