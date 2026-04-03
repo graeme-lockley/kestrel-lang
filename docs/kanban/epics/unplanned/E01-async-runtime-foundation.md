@@ -29,7 +29,7 @@ Async execution exploits **Project Loom virtual threads** (Java 21+) rather than
 13. [x] [S01-13-task-combinator-api.md](../../done/S01-13-task-combinator-api.md) — Add `Task.all`, `Task.race`, and `Task.map` combinators to stdlib and runtime.
 14. [x] [S01-14-in-async-context-param-refactor.md](../../done/S01-14-in-async-context-param-refactor.md) — Refactor `inAsyncContext` from mutable closure state into an explicit parameter on `inferExpr`.
 15. [x] [S01-15-await-parser-dead-branch-cleanup.md](../../done/S01-15-await-parser-dead-branch-cleanup.md) — Remove dead `CallExpr` branch in the `await` / `parsePrimary` parser path.
-16. [ ] [S01-16-await-type-error-message.md](../../unplanned/S01-16-await-type-error-message.md) — Improve `await`-on-non-Task diagnostic to include the actual resolved type.
+16. [x] [S01-16-await-type-error-message.md](../../done/S01-16-await-type-error-message.md) — Improve `await`-on-non-Task diagnostic to include the actual resolved type.
 17. [ ] [S01-17-task-cancellation-api.md](../../unplanned/S01-17-task-cancellation-api.md) — Expose task cancellation via `Task.cancel` backed by `CompletableFuture.cancel()`.
 18. [ ] [S01-18-run-process-stdout-capture.md](../../unplanned/S01-18-run-process-stdout-capture.md) — Return captured stdout string from `runProcess`; update result ADT and stdlib.
 19. [ ] [S01-19-listdir-direntry-adt.md](../../unplanned/S01-19-listdir-direntry-adt.md) — Replace raw tab-embedded strings from `listDir` with a typed `DirEntry` ADT.
