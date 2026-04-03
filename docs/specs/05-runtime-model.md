@@ -4,7 +4,7 @@ Version: 1.0
 
 ---
 
-This document describes how the Kestrel VM represents values at runtime. It must align with the types and literals in [01-language.md](01-language.md), the standard types in [02-stdlib.md](02-stdlib.md), the bytecode layout in [03-bytecode-format.md](03-bytecode-format.md), and the instructions in [04-bytecode-isa.md](04-bytecode-isa.md). The reference implementation is in Zig; the model may be adapted for other hosts as long as the semantics in 04 and the type system in [06-typesystem.md](06-typesystem.md) are preserved.
+This document describes how the Kestrel runtime represents values at runtime. It must align with the types and literals in [01-language.md](01-language.md), the standard types in [02-stdlib.md](02-stdlib.md), the bytecode layout in [03-bytecode-format.md](03-bytecode-format.md), and the instructions in [04-bytecode-isa.md](04-bytecode-isa.md). The reference implementation is in Java on the JVM; the model may be adapted for other hosts as long as the semantics in 04 and the type system in [06-typesystem.md](06-typesystem.md) are preserved.
 
 **Union and intersection types** (`|`, `&`) exist only in the **static** type system (06). The VM continues to represent **concrete** values (integers, ADT tags, records, etc.) as described below; there is no extra runtime discriminant solely because a binding was inferred or annotated with a union. The `.kbc` type table does not currently encode `|` / `&` (03 §6.3); **`.kti`** may still carry them for importers (07 §5).
 

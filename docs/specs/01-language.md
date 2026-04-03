@@ -1,6 +1,6 @@
 # 01 – Core Language Specification
 
-Version: 1.0 (Compiler + Zig VM Target)
+Version: 1.0 (Compiler + JVM Target)
 
 ---
 
@@ -16,14 +16,14 @@ Kestrel is a statically typed, scripting, and server-oriented programming langua
 - Async/await (`Task<T>`)
 - Pipeline operator (`|>`)
 - No member-call syntax (`x.f(y)` is invalid)
-- Bytecode compilation targeting a Zig-based VM
+- Bytecode compilation targeting the JVM (Java Virtual Machine)
 
 Kestrel prioritizes:
 
 1. Predictable semantics
 2. Mechanical simplicity
 3. Strong static typing
-4. Clean separation between compiler (TypeScript) and VM (Zig)
+4. Clean separation between compiler (TypeScript) and runtime (Java)
 5. Deterministic module resolution
 
 ---
@@ -241,7 +241,7 @@ Both operators require operands of the **same** type (after inference); the type
 
 **`==` — semantic (deep) equality**
 
-`==` compares values by meaning, not by object identity (where a heap representation exists). The compiler and runtimes implement it with the same structural deep-equality as the VM’s `EQ` instruction / JVM `KRuntime.equals` (there is no separate user-callable `__equals`; use `==` / `!=`).
+`==` compares values by meaning, not by object identity (where a heap representation exists). The JVM runtime implements it with structural deep-equality via `KRuntime.equals` (there is no separate user-callable `__equals`; use `==` / `!=`).
 
 | Kind | `==` is true when |
 |------|-------------------|
@@ -334,7 +334,7 @@ RecordSpread   ::= "..." Expr
 RecordField    ::= LOWER_IDENT "=" Expr
 ```
 
-Record spread `{ ...expr, field = value }` is implemented by compiling to the SPREAD instruction (04 §1.8) with an extended shape; the VM pops the base record and additional field values and produces a new record.
+Record spread `{ ...expr, field = value }` is implemented by compiling to the SPREAD instruction (04 §1.8) with an extended shape; the JVM runtime pops the base record and additional field values and produces a new record.
 
 Application and field access are **postfix** on an atom: parse one Atom, then zero or more Suffix (call or field). So `f(x).y` is Atom `f`, Suffix `(x)`, Suffix `.y`. **Await:** A primary expression may be prefixed with `await` (e.g. `await f()`); valid only in async context (see §5).
 
@@ -499,7 +499,7 @@ val x = await f()
 
 **Await expression:** The grammar allows `await` as an optional prefix on a primary expression: `await` *expr* (e.g. `await f()`). `await` is only valid in an **async context** (inside an `async fun`); use outside async is a semantic (type/context) error.
 
-VM behaviour (see [04-bytecode-isa.md](04-bytecode-isa.md)):
+Runtime behaviour (see [04-bytecode-isa.md](04-bytecode-isa.md)):
 
 - Instruction `AWAIT`: if task complete → push result; else suspend frame.
 
