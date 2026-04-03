@@ -1279,7 +1279,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         if (applied.kind === 'app' && applied.name === 'Task' && applied.args.length === 1) {
           result = apply(applied.args[0]!);
         } else {
-          throw new TypeCheckError('await expects Task<T> type', expr);
+          throw new TypeCheckError(`await expects Task<T> but got ${typeStr(applied)}`, expr);
         }
         setInferredType(expr, result);
         return result;

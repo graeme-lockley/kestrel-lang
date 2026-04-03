@@ -48,3 +48,30 @@ The actual resolved type is available at that point (`applied` after `apply(task
 
 - Requires a `typeToString` (or equivalent) utility to render `InternalType` → human-readable. Verify one already exists before writing a new one.
 - Avoid over-engineering: the rendered string does not need to be identical to surface syntax, just recognisable.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Type checker `check.ts` | Change `'await expects Task<T> type'` → `` `await expects Task<T> but got ${typeStr(applied)}` `` |
+| Tests | New conformance typecheck invalid test |
+
+## Tasks
+
+- [x] In `check.ts` `AwaitExpr` handler: change error message to include `typeStr(applied)`
+- [x] Add `tests/conformance/typecheck/invalid/await_non_task_type.ks`
+- [x] Run `cd compiler && npm run build && npm test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Conformance typecheck | `tests/conformance/typecheck/invalid/await_non_task_type.ks` | Verify error message includes the actual type |
+
+## Documentation and specs to update
+
+No spec changes needed — `docs/specs/10-compile-diagnostics.md` is a framework spec, not a message catalogue.
+
+## Build notes
+
+- 2026-03-07: `typeStr` already available at module scope; no new utility needed. `npm test` 231/231.
