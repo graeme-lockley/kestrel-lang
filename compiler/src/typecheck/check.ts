@@ -971,11 +971,19 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         for (let i = 0; i < expr.params.length; i++) {
           env.set(expr.params[i]!.name, paramTs[i]!);
         }
-        const bodyT = inferExpr(expr.body);
-        for (let i = 0; i < expr.params.length; i++) {
-          env.delete(expr.params[i]!.name);
+        const wasAsync = inAsyncContext;
+        inAsyncContext = expr.async;
+        let bodyT: InternalType;
+        try {
+          bodyT = inferExpr(expr.body);
+        } finally {
+          inAsyncContext = wasAsync;
+          for (let i = 0; i < expr.params.length; i++) {
+            env.delete(expr.params[i]!.name);
+          }
         }
-        result = apply({ kind: 'arrow', params: paramTs, return: bodyT });
+        const returnT = expr.async ? ({ kind: 'app', name: 'Task', args: [bodyT] } as InternalType) : bodyT;
+        result = apply({ kind: 'arrow', params: paramTs, return: returnT });
         setInferredType(expr, result);
         return result;
       }
@@ -1221,7 +1229,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       case 'AwaitExpr': {
         if (!inAsyncContext) {
           throw new TypeCheckError(
-            'await can only be used in async functions (enclosing body must be Task<T>)',
+            'await can only be used in async contexts (async functions or async lambdas)',
             expr
           );
         }

@@ -314,7 +314,7 @@ ListPatInner   ::= "..." LOWER_IDENT                                            
                  | Pattern { "," Pattern } [ "," "..." LOWER_IDENT ]                 /* elements, optional rest last */
 
 TryExpr        ::= "try" Block "catch" "(" LOWER_IDENT ")" "{" Case { Case } "}"
-Lambda         ::= [ "<" IDENT { "," IDENT } ">" ] "(" ParamList ")" "=>" Expr
+Lambda         ::= [ "async" ] [ "<" IDENT { "," IDENT } ">" ] "(" ParamList ")" "=>" Expr
 
 Primary        ::= [ "await" ] Atom { Suffix }
 Atom           ::= Literal
@@ -429,7 +429,7 @@ Precedence: `&` tighter than `|`; `->` groups to the right; `*` (product) tighte
 - **Longest match:** The lexer always takes the longest possible token (e.g. `identifier` not `ident` + `ifier`; `0xFF` as one integer). **Arrow:** `=>` is a single token (lambda and case arrow); it must be matched as one token, not `=` followed by `>`.
 - **Keywords:** Keyword tokens are matched before generic IDENT (e.g. `if` is keyword, not identifier). Match fixed keyword strings as tokens first.
 - **Statement termination:** After a Stmt, the parser must see one of `;`, newline, or `}`. The lexer may emit a **newline token** (e.g. on `\n` or `\r\n`) so the parser can treat it as a terminator; or the parser may use a different rule (e.g. require `;` and ignore newlines, or use the next token’s line number). The choice is implementation-defined; the grammar assumes some notion of statement end.
-- **Ambiguous prefixes:** `( ParamList )` appears in Lambda and in parenthesized Expr. Use context: after `=>` expect Expr; after `(` at expression position expect Expr; after `fun` IDENT `(` expect ParamList. Type versus expression after `(`: if the first token is IDENT followed by `:` or `,` or `)`, parse as ParamList; otherwise parse as Expr.
+- **Ambiguous prefixes:** `( ParamList )` appears in Lambda and in parenthesized Expr. Use context: after `=>` expect Expr; after `(` at expression position expect Expr; after `fun` IDENT `(` expect ParamList. Type versus expression after `(`: if the first token is IDENT followed by `:` or `,` or `)`, parse as ParamList; otherwise parse as Expr. `async (` and `async <...>(` at expression position start async lambdas, not async function declarations.
 - **Record vs block:** `{` can start Block or RecordLit. After `{`, if the next token is `}` (empty record literal) or a label (IDENT `=` or `...`), parse as RecordLit; if the next token is `val`, `var`, `fun`, `break`, `continue`, or an expression start, parse as Block. (Expression start: Literal, IDENT, `(`, `[`, `throw`, `if`, `while`, `match`, `try`, `await`, etc.) Whether a Block may end after the last **Stmt** without a trailing **Expr** depends on **statement vs expression context** (§3.3), not on this disambiguation.
 - **Parenthesized type:** `"(" Type ")"` vs `"(" TypeList ")" "->" Type`: after parsing `"("` and one or more types, if the next token is `"->"`, treat as function type and parse the rest of the arrow type; otherwise treat as a single grouped type `"(" Type ")"`.
 - **Paren vs tuple:** After `"("` at expression or pattern position, parse one Expr or Pattern. If the next token is `","`, parse as tuple (two or more elements) and require the matching closing `")"`; otherwise parse as grouping (single `Expr` or `Pattern` and `")"`).
@@ -490,14 +490,18 @@ If no catch case matches the thrown value (e.g. no catch-all `_` or variable and
 
 ## 5. Async and Task Model
 
-`async` functions return `Task<T>`.
+`async` functions and `async` lambdas return `Task<T>`.
 
 ```
 async fun f(): Task<Int> = { ... }
 val x = await f()
+val inc = async (n: Int) => n + 1
+val y = await inc(41)
 ```
 
-**Await expression:** The grammar allows `await` as an optional prefix on a primary expression: `await` *expr* (e.g. `await f()`). `await` is only valid in an **async context** (inside an `async fun`); use outside async is a semantic (type/context) error.
+**Async lambda expression:** `async (params) => body` and `async <T>(params) => body` create closures whose bodies execute in an async context and whose function type returns `Task<R>` for body result type `R`.
+
+**Await expression:** The grammar allows `await` as an optional prefix on a primary expression: `await` *expr* (e.g. `await f()`). `await` is only valid in an **async context** (inside an `async fun` or `async` lambda); use outside async is a semantic (type/context) error. A non-async lambda nested inside an async function is still **not** an async context.
 
 Test harness note: `./scripts/kestrel test` generates suite calls as `await runN(root)` inside `async fun main(): Task<Unit>`, so harness execution obeys the same async-context rule and does not require top-level `await` support.
 

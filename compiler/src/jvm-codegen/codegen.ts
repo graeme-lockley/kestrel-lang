@@ -245,6 +245,7 @@ function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, num
 
 interface LambdaInfo {
   body: Expr;
+  async: boolean;
   params: { name: string }[];
   freeVars: string[];
   capturing: boolean;
@@ -262,10 +263,10 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
   const varScope = new Set<string>();
   for (const name of funNames) scope.set(name, scope.size);
   for (const name of globalNames) scope.set(name, scope.size);
-  function addLambda(body: Expr, params: { name: string }[], freeVars: string[], localFunNames?: Set<string>, freeVarVars?: Set<string>): number {
+  function addLambda(body: Expr, async: boolean, params: { name: string }[], freeVars: string[], localFunNames?: Set<string>, freeVarVars?: Set<string>): number {
     const id = lambdas.length;
     const capturing = freeVars.length > 0 || (localFunNames?.size ?? 0) > 0;
-    lambdas.push({ body, params, freeVars, capturing, localFunNames, freeVarVars });
+    lambdas.push({ body, async, params, freeVars, capturing, localFunNames, freeVarVars });
     return id;
   }
   function walkBlock(block: BlockExpr): void {
@@ -288,7 +289,7 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
           // Pass localFunNames for mutual recursion (>1 funs) OR self-recursion (fun references itself)
           const isSelfRecursive = fv.includes(stmt.name);
           const useLFN = (localFunNames.size > 1 || isSelfRecursive) ? localFunNames : undefined;
-          const id = addLambda(stmt.body, stmt.params.map((p) => ({ name: p.name })), fv, useLFN, fvVars.size > 0 ? fvVars : undefined);
+          const id = addLambda(stmt.body, false, stmt.params.map((p) => ({ name: p.name })), fv, useLFN, fvVars.size > 0 ? fvVars : undefined);
         idByNode.set(stmt, id);
         walk(stmt.body);
       } else if (stmt.kind === 'ExprStmt') walk(stmt.expr);
@@ -309,7 +310,7 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
         const paramNames = new Set(e.params.map((p) => p.name));
         const fv = getFreeVars(e.body, paramNames, scope);
         const fvVars = new Set(fv.filter(name => varScope.has(name)));
-        const id = addLambda(e.body, e.params.map((p) => ({ name: p.name })), fv, undefined, fvVars.size > 0 ? fvVars : undefined);
+        const id = addLambda(e.body, e.async, e.params.map((p) => ({ name: p.name })), fv, undefined, fvVars.size > 0 ? fvVars : undefined);
         idByNode.set(e, id);
         const savedScope = new Map(scope);
         for (const p of e.params) scope.set(p.name, scope.size);
@@ -490,6 +491,10 @@ function taskDescriptor(arity: number): string {
 
 function asyncPayloadMethodName(name: string): string {
   return `$async$${jvmMangleName(name)}`;
+}
+
+function asyncLambdaPayloadMethodName(lambdaId: number): string {
+  return `$async$lambda${lambdaId}`;
 }
 
 /** Primitive type name from InternalType. */
@@ -787,8 +792,51 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   /** Nearest enclosing `while` for `break`/`continue` (JVM emitExpr closure). */
   const loopBreakStack: { breakJumps: number[]; loopHead: number }[] = [];
 
-  /** Build inner class for lambda (implements KFunction, apply calls outer.$lambdaN). */
-  function buildLambdaClass(outerClassName: string, lambdaId: number, arity: number, capturing: boolean): Uint8Array {
+  function buildAsyncLambdaPayloadClass(outerClassName: string, lambdaId: number, arity: number, capturing: boolean): Uint8Array {
+    const innerName = outerClassName + '$Lambda' + lambdaId + '$Payload';
+    const innerCf = new ClassFileBuilder(innerName, 'java/lang/Object', ACC_PUBLIC | ACC_FINAL);
+    innerCf.addInterface(K_FUNCTION);
+    if (capturing) {
+      innerCf.addField('env', '[Ljava/lang/Object;', ACC_PRIVATE | ACC_FINAL);
+      const ctor = innerCf.addMethod('<init>', '([Ljava/lang/Object;)V', ACC_PUBLIC);
+      ctor.emit1b(JvmOp.ALOAD, 0);
+      ctor.emit1s(JvmOp.INVOKESPECIAL, innerCf.methodref('java/lang/Object', '<init>', '()V'));
+      ctor.emit1b(JvmOp.ALOAD, 0);
+      ctor.emit1b(JvmOp.ALOAD, 1);
+      ctor.emit1s(JvmOp.PUTFIELD, innerCf.fieldref(innerName, 'env', '[Ljava/lang/Object;'));
+      ctor.emit1(JvmOp.RETURN);
+      ctor.setMaxs(2, 2);
+      innerCf.flushLastMethod();
+    } else {
+      const ctor = innerCf.addMethod('<init>', '()V', ACC_PUBLIC);
+      ctor.emit1b(JvmOp.ALOAD, 0);
+      ctor.emit1s(JvmOp.INVOKESPECIAL, innerCf.methodref('java/lang/Object', '<init>', '()V'));
+      ctor.emit1(JvmOp.RETURN);
+      ctor.setMaxs(1, 1);
+      innerCf.flushLastMethod();
+    }
+    const applyMb = innerCf.addMethod('apply', '([Ljava/lang/Object;)Ljava/lang/Object;', ACC_PUBLIC);
+    if (capturing) {
+      applyMb.emit1b(JvmOp.ALOAD, 0);
+      applyMb.emit1s(JvmOp.GETFIELD, innerCf.fieldref(innerName, 'env', '[Ljava/lang/Object;'));
+    }
+    for (let j = 0; j < arity; j++) {
+      applyMb.emit1b(JvmOp.ALOAD, 1);
+      applyMb.emit1s(JvmOp.LDC_W, innerCf.constantInt(j));
+      applyMb.emit1(JvmOp.AALOAD);
+    }
+    const payloadDesc = capturing
+      ? `([Ljava/lang/Object;${'Ljava/lang/Object;'.repeat(arity)})Ljava/lang/Object;`
+      : descriptor(arity);
+    applyMb.emit1s(JvmOp.INVOKESTATIC, innerCf.methodref(outerClassName, asyncLambdaPayloadMethodName(lambdaId), payloadDesc));
+    applyMb.emit1(JvmOp.ARETURN);
+    applyMb.setMaxs(8, 3);
+    innerCf.flushLastMethod();
+    return innerCf.toBytes();
+  }
+
+  /** Build inner class for lambda (implements KFunction, apply either evaluates synchronously or submits async payload). */
+  function buildLambdaClass(outerClassName: string, lambdaId: number, arity: number, capturing: boolean, async: boolean): Uint8Array {
     const innerName = outerClassName + '$Lambda' + lambdaId;
     const innerCf = new ClassFileBuilder(innerName, 'java/lang/Object', ACC_PUBLIC | ACC_FINAL);
     innerCf.addInterface(K_FUNCTION);
@@ -812,6 +860,27 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       innerCf.flushLastMethod();
     }
     const applyMb = innerCf.addMethod('apply', '([Ljava/lang/Object;)Ljava/lang/Object;', ACC_PUBLIC);
+    if (async) {
+      const payloadClassName = innerName + '$Payload';
+      applyMb.emit1s(JvmOp.NEW, innerCf.classRef(payloadClassName));
+      applyMb.emit1(JvmOp.DUP);
+      if (capturing) {
+        applyMb.emit1b(JvmOp.ALOAD, 0);
+        applyMb.emit1s(JvmOp.GETFIELD, innerCf.fieldref(innerName, 'env', '[Ljava/lang/Object;'));
+        applyMb.emit1s(JvmOp.INVOKESPECIAL, innerCf.methodref(payloadClassName, '<init>', '([Ljava/lang/Object;)V'));
+      } else {
+        applyMb.emit1s(JvmOp.INVOKESPECIAL, innerCf.methodref(payloadClassName, '<init>', '()V'));
+      }
+      applyMb.emit1b(JvmOp.ALOAD, 1);
+      applyMb.emit1s(
+        JvmOp.INVOKESTATIC,
+        innerCf.methodref(RUNTIME, 'submitAsync', '(Lkestrel/runtime/KFunction;[Ljava/lang/Object;)Lkestrel/runtime/KTask;')
+      );
+      applyMb.emit1(JvmOp.ARETURN);
+      applyMb.setMaxs(8, 3);
+      innerCf.flushLastMethod();
+      return innerCf.toBytes();
+    }
     if (capturing) {
       applyMb.emit1b(JvmOp.ALOAD, 0);
       applyMb.emit1s(JvmOp.GETFIELD, innerCf.fieldref(innerName, 'env', '[Ljava/lang/Object;'));
@@ -2926,7 +2995,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     const desc = l.capturing
       ? `([Ljava/lang/Object;${'Ljava/lang/Object;'.repeat(arity)})Ljava/lang/Object;`
       : descriptor(arity);
-    const mb = cf.addMethod('$lambda' + i, desc, ACC_PUBLIC | ACC_STATIC);
+    const methodName = l.async ? asyncLambdaPayloadMethodName(i) : '$lambda' + i;
+    const methodFlags = ACC_PUBLIC | ACC_STATIC;
+    const mb = cf.addMethod(methodName, desc, methodFlags);
     const lambdaXfer = emitExpr(l.body, mb, undefined);
     if (!lambdaXfer) mb.emit1(JvmOp.ARETURN);
     // Match top-level fun decls: emitExpr uses fixed high slots (e.g. ConsExpr 60–61); nextLocal alone is too small.
@@ -2939,7 +3010,10 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     localFunNamesInEnv = prevLocalFuns;
     varNames.clear();
     for (const v of prevVarNames) varNames.add(v);
-    innerClasses.set(className + '$Lambda' + i, buildLambdaClass(className, i, arity, l.capturing));
+    innerClasses.set(className + '$Lambda' + i, buildLambdaClass(className, i, arity, l.capturing, l.async));
+    if (l.async) {
+      innerClasses.set(className + '$Lambda' + i + '$Payload', buildAsyncLambdaPayloadClass(className, i, arity, l.capturing));
+    }
   }
 
   const emittedMutualHelpers = new Set<string>();

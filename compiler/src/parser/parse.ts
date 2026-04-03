@@ -592,6 +592,7 @@ class Parser {
       this.at('keyword', 'while') ||
       this.at('keyword', 'match') ||
       this.at('keyword', 'try') ||
+      this.at('keyword', 'async') ||
       this.at('lparen') ||
       this.at('ident') ||
       this.at('int') ||
@@ -719,6 +720,49 @@ class Parser {
     return left;
   }
 
+  private isGenericLambdaHead(): boolean {
+    if (!this.at('op', '<')) return false;
+    const pos = this.pos();
+    this.advance();
+    let isValid = this.at('ident');
+    while (isValid && (this.at('ident') || this.at('comma'))) {
+      if (this.at('comma')) {
+        this.advance();
+        if (!this.at('ident')) {
+          isValid = false;
+          break;
+        }
+      } else {
+        this.advance();
+      }
+    }
+    const result = isValid && this.at('op', '>') && this.peek(1).kind === 'lparen';
+    this.i = pos;
+    return result;
+  }
+
+  private tryParseParenLambda(async: boolean): Expr | null {
+    if (!this.at('lparen')) return null;
+    const pos = this.pos();
+    this.advance();
+    if (this.at('rparen')) {
+      this.i = pos;
+      return null;
+    }
+    const savedErrors = this.errors.length;
+    const params = this.parseParamListOptional();
+    if (params && this.at('rparen')) {
+      this.advance();
+      if (this.at('op', '=>')) {
+        this.advance();
+        return { kind: 'LambdaExpr', async, params, body: this.parseExpr('expr') };
+      }
+    }
+    this.errors.length = savedErrors;
+    this.i = pos;
+    return null;
+  }
+
   private parseUnary(ctx: ExprContext): Expr {
     if (this.at('op', '-') || this.at('op', '+') || this.at('op', '!')) {
       const op = this.current().value!;
@@ -726,33 +770,21 @@ class Parser {
       const operand = this.parseUnary(ctx);
       return { kind: 'UnaryExpr', op, operand };
     }
-    if (this.at('op', '<')) {
+    if (this.at('keyword', 'async')) {
       const pos = this.pos();
       this.advance();
-      if (this.at('ident')) {
-        let isValid = true;
-        while (this.at('ident') || this.at('comma')) {
-          if (this.at('comma')) {
-            this.advance();
-            if (!this.at('ident')) {
-              isValid = false;
-              break;
-            }
-          } else {
-            this.advance();
-          }
-        }
-        if (isValid && this.at('op', '>') && this.peek(1).kind === 'lparen') {
-          this.i = pos;
-          return this.parseGenericLambda();
-        }
-      }
+      const parenLambda = this.tryParseParenLambda(true);
+      if (parenLambda) return parenLambda;
+      if (this.isGenericLambdaHead()) return this.parseGenericLambda(true);
       this.i = pos;
+    }
+    if (this.isGenericLambdaHead()) {
+      return this.parseGenericLambda(false);
     }
     return this.parsePrimary(ctx);
   }
 
-  private parseGenericLambda(): Expr {
+  private parseGenericLambda(async: boolean): Expr {
     this.expect('op', '<');
     const typeParams = [this.expect('ident').value!];
     while (this.at('comma')) {
@@ -763,7 +795,7 @@ class Parser {
     this.expect('lparen');
     const params = this.parseParamList();
     this.expect('op', '=>');
-    return { kind: 'LambdaExpr', typeParams, params, body: this.parseExpr() };
+    return { kind: 'LambdaExpr', async, typeParams, params, body: this.parseExpr() };
   }
 
   private parsePrimary(ctx: ExprContext): Expr {
@@ -868,23 +900,14 @@ class Parser {
       return { kind: 'TryExpr', body, catchVar, cases };
     }
     if (this.at('lparen')) {
+      const lambda = this.tryParseParenLambda(false);
+      if (lambda) return lambda;
       this.advance();
       if (this.at('rparen')) {
         this.advance();
         return { kind: 'LiteralExpr', literal: 'unit', value: '()' };
       }
       const pos = this.pos();
-      const savedErrors = this.errors.length;
-      const params = this.parseParamListOptional();
-      if (params && this.at('rparen')) {
-        this.advance();
-        if (this.at('op', '=>')) {
-          this.advance();
-          return { kind: 'LambdaExpr', params, body: this.parseExpr('expr') };
-        }
-      }
-      this.errors.length = savedErrors;
-      this.i = pos;
       if (this.at('op', '<')) {
         this.advance();
         const typeParams = [this.expect('ident').value!];
@@ -897,7 +920,7 @@ class Parser {
         const params2 = this.parseParamList();
         this.expect('rparen');
         this.expect('op', '=>');
-        return { kind: 'LambdaExpr', typeParams, params: params2, body: this.parseExpr('expr') };
+        return { kind: 'LambdaExpr', async: false, typeParams, params: params2, body: this.parseExpr('expr') };
       }
       this.i = pos;
       const first = this.parseExpr('expr');

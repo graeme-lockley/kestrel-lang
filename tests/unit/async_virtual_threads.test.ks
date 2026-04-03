@@ -12,35 +12,36 @@ async fun delayedValue(): Task<Int> = {
 }
 
 export async fun run(s: Suite): Task<Unit> = {
+  val plusOneValue = await plusOne(41)
+  val caughtValue = try { await fail() } catch { AsyncBoom => 7 }
+  val fileOk =
+    match (await Fs.readText("tests/fixtures/fs/read_fixture.txt")) {
+      Ok(_) => 1,
+      Err(_) => 0
+    }
+  val processOk =
+    match (await Process.runProcess("sh", ["-c", "exit 0"])) {
+      Ok(0) => 1,
+      _ => 0
+    }
+  val delayed = await delayedValue()
+
   group(s, "async virtual threads", (s1: Suite) => {
     group(s1, "await success", (sg: Suite) => {
-      val value = await plusOne(41);
-      eq(sg, "await plusOne", value, 42)
+      eq(sg, "await plusOne", plusOneValue, 42)
     });
 
     group(s1, "await try catch", (sg: Suite) => {
-      val caught = try { await fail() } catch { AsyncBoom => 7 };
-      eq(sg, "catch async exception", caught, 7)
+      eq(sg, "catch async exception", caughtValue, 7)
     });
 
     group(s1, "await fs/process result", (sg: Suite) => {
-      val fileOk =
-        match (await Fs.readText("tests/fixtures/fs/read_fixture.txt")) {
-          Ok(_) => 1,
-          Err(_) => 0
-        };
-      val processOk =
-        match (await Process.runProcess("sh", ["-c", "exit 0"])) {
-          Ok(0) => 1,
-          _ => 0
-        };
       eq(sg, "fs ok", fileOk, 1);
       eq(sg, "process ok", processOk, 1)
     });
 
     group(s1, "await delayed task", (sg: Suite) => {
-      val value = await delayedValue();
-      eq(sg, "delayed task value", value, 99)
+      eq(sg, "delayed task value", delayed, 99)
     });
   });
   ()

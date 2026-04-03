@@ -3,11 +3,13 @@ import { ProcessSpawnError } from "kestrel:process"
 import * as Process from "kestrel:process"
 
 export async fun run(s: Suite): Task<Unit> = {
+  val successResult = await Process.runProcess("sh", ["-c", "exit 7"]);
+  val spawnErrorResult = await Process.runProcess("__definitely_missing_binary_xyz__", []);
+
   group(s, "process", (s1: Suite) => {
     group(s1, "runProcess success", (sg: Suite) => {
-      val result = await Process.runProcess("sh", ["-c", "exit 7"]);
       val code =
-        match (result) {
+        match (successResult) {
           Ok(v) => v,
           Err(_) => -1
         };
@@ -15,9 +17,8 @@ export async fun run(s: Suite): Task<Unit> = {
     });
 
     group(s1, "runProcess spawn error", (sg: Suite) => {
-      val result = await Process.runProcess("__definitely_missing_binary_xyz__", []);
       val isErr =
-        match (result) {
+        match (spawnErrorResult) {
           Err(ProcessSpawnError(_)) => True,
           _ => False
         };

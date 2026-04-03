@@ -14,13 +14,22 @@ async fun readViaAwait(path: String): Task<Result<String, Fs.FsError>> = {
 }
 
 export async fun run(s: Suite): Task<Unit> = {
-  group(s, "fs", (s1: Suite) => {
-    val cwd = Process.getProcess().cwd;
+  val cwd = Process.getProcess().cwd;
+  val okPath = "${cwd}/tests/fixtures/fs/read_fixture.txt";
+  val readFixture = await Fs.readText(okPath);
+  val readMissing = await Fs.readText("${cwd}/tests/fixtures/fs/__missing__.no_such");
+  val readDirectory = await Fs.readText("${cwd}/tests/fixtures/fs/list_sample");
+  val roundtripPath = "${cwd}/tests/fixtures/fs/tmp_write_roundtrip.txt";
+  val roundtripWrite = await Fs.writeText(roundtripPath, "roundtrip\n");
+  val roundtripRead = await Fs.readText(roundtripPath);
+  val writeMissingParent = await Fs.writeText("${cwd}/tests/fixtures/fs/__no_such_parent__/out.txt", "x");
+  val listDirResult = await Fs.listDir("${cwd}/tests/fixtures/fs/list_sample");
+  val listDirMissing = await Fs.listDir("${cwd}/tests/fixtures/fs/__nope_dir_missing__");
+  val readViaAwaitResult = await readViaAwait(okPath);
 
+  group(s, "fs", (s1: Suite) => {
     group(s1, "readText", (sg: Suite) => {
-      val okPath = "${cwd}/tests/fixtures/fs/read_fixture.txt";
-      val t = await Fs.readText(okPath);
-      val text = match (t) {
+      val text = match (readFixture) {
         Ok(contents) => contents,
         Err(_) => ""
       };
@@ -28,9 +37,8 @@ export async fun run(s: Suite): Task<Unit> = {
     });
 
     group(s1, "readText missing", (sg: Suite) => {
-      val bad = "${cwd}/tests/fixtures/fs/__missing__.no_such";
       val isNotFound =
-        match (await Fs.readText(bad)) {
+        match (readMissing) {
           Err(NotFound) => True,
           _ => False
         };
@@ -38,9 +46,8 @@ export async fun run(s: Suite): Task<Unit> = {
     });
 
     group(s1, "readText directory", (sg: Suite) => {
-      val dirPath = "${cwd}/tests/fixtures/fs/list_sample";
       val isIoError =
-        match (await Fs.readText(dirPath)) {
+        match (readDirectory) {
           Err(IoError(_)) => True,
           _ => False
         };
@@ -58,15 +65,14 @@ export async fun run(s: Suite): Task<Unit> = {
     });
 
     group(s1, "writeText readText roundtrip", (sg: Suite) => {
-      val path = "${cwd}/tests/fixtures/fs/tmp_write_roundtrip.txt";
       val writeOk =
-        match (await Fs.writeText(path, "roundtrip\n")) {
+        match (roundtripWrite) {
           Ok(_) => True,
           _ => False
         };
       isTrue(sg, "write ok", writeOk);
       val text =
-        match (await Fs.readText(path)) {
+        match (roundtripRead) {
           Ok(contents) => contents,
           Err(_) => ""
         };
@@ -74,9 +80,8 @@ export async fun run(s: Suite): Task<Unit> = {
     });
 
     group(s1, "writeText missing parent returns Err(NotFound)", (sg: Suite) => {
-      val badPath = "${cwd}/tests/fixtures/fs/__no_such_parent__/out.txt";
       val isNotFound =
-        match (await Fs.writeText(badPath, "x")) {
+        match (writeMissingParent) {
           Err(NotFound) => True,
           _ => False
         };
@@ -84,9 +89,8 @@ export async fun run(s: Suite): Task<Unit> = {
     });
 
     group(s1, "listDir", (sg: Suite) => {
-      val dir = "${cwd}/tests/fixtures/fs/list_sample";
       val entries =
-        match (await Fs.listDir(dir)) {
+        match (listDirResult) {
           Ok(v) => v,
           Err(_) => []
         };
@@ -97,9 +101,8 @@ export async fun run(s: Suite): Task<Unit> = {
     });
 
     group(s1, "listDir missing", (sg: Suite) => {
-      val missing = await Fs.listDir("${cwd}/tests/fixtures/fs/__nope_dir_missing__");
       val isNotFound =
-        match (missing) {
+        match (listDirMissing) {
           Err(NotFound) => True,
           _ => False
         };
@@ -107,10 +110,8 @@ export async fun run(s: Suite): Task<Unit> = {
     });
 
     group(s1, "readViaAwait helper", (sg: Suite) => {
-      val okPath = "${cwd}/tests/fixtures/fs/read_fixture.txt";
-      val t = await readViaAwait(okPath);
       val text =
-        match (t) {
+        match (readViaAwaitResult) {
           Ok(contents) => contents,
           Err(_) => ""
         };

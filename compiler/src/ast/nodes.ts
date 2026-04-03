@@ -306,6 +306,7 @@ export interface TryExpr extends NodeBase {
 
 export interface LambdaExpr extends NodeBase {
   kind: 'LambdaExpr';
+  async: boolean;
   typeParams?: string[];
   params: Param[];
   body: Expr;

@@ -86,6 +86,22 @@ run()
     expect(stdout).toBe('7\n');
   });
 
+  it('executes async lambda closures on the async runtime', () => {
+    const stdout = compileAndRunKestrel(`async fun run(): Task<Unit> = {
+  val offset = 1
+  val inc = async (x: Int) => x + offset
+  val id = async <T>(x: T) => x
+  println(await inc(42));
+  println(await id(7));
+  ()
+}
+
+run()
+`);
+
+    expect(stdout).toBe('43\n7\n');
+  });
+
   it('virtual-thread executor overlaps independent tasks', () => {
     const stdout = compileAndRunJava(
       'AsyncOverlapHarness',

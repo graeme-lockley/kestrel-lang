@@ -80,23 +80,23 @@ Extend the Kestrel grammar to allow `async` on lambda expressions (`async (param
 
 ## Tasks
 
-- [ ] Update `compiler/src/parser/parse.ts` so lambda parsing accepts an optional `async` prefix for both `(params) => body` and `<T>(params) => body` forms, and ensure lambda disambiguation still works when `async` appears before the lambda head.
-- [ ] Update `compiler/src/ast/nodes.ts` to carry async metadata on `LambdaExpr` and adjust any downstream type imports/usages that assume lambdas are always synchronous.
-- [ ] Update the `LambdaExpr` path in `compiler/src/typecheck/check.ts` to save and restore `inAsyncContext`, type-check async lambdas in async context, force non-async lambdas to type-check out of async context, and infer async lambda return types as `Task<R>`.
-- [ ] Confirm `compiler/src/codegen/` requires no work for this JVM-only story; if any shared codegen layer participates in lambda lowering, document and update it explicitly before touching JVM-specific emission.
-- [ ] Update `compiler/src/jvm-codegen/codegen.ts` so lambda collection/emission knows whether a lambda is async, emits async payload helpers or equivalent wrapper methods for async lambdas, and routes async lambda invocation through `KRuntime.submitAsync(...)` the same way top-level async functions do.
-- [ ] Verify `runtime/jvm/src/kestrel/runtime/` needs no API changes for async lambdas; if JVM codegen cannot reuse `KFunction`, `KTask`, and `KRuntime.submitAsync` as-is, add the minimal runtime helper required and keep the change scoped to lambda dispatch.
-- [ ] Add parser coverage in `compiler/test/integration/parse.test.ts` for `async (x) => ...` and `async <A>(x: A) => ...` so the new syntax and AST flag are locked down.
-- [ ] Add typechecker regression coverage in `compiler/test/unit/typecheck/` for async lambda type inference, `await` rejection in non-async lambdas, and the nested-in-async-fun case where a sync lambda must not inherit the outer async context.
-- [ ] Add JVM backend regression coverage in `compiler/test/unit/jvm-codegen.test.ts` and/or `compiler/test/integration/jvm-async-runtime.test.ts` to prove async lambda lowering returns `KTask` and awaits correctly at runtime.
-- [ ] Add conformance coverage: `tests/conformance/typecheck/invalid/await_in_non_async_lambda.ks`, a valid typecheck case for async lambda inference/generics, and `tests/conformance/runtime/valid/async_lambda.ks` for runtime behaviour.
-- [ ] Add an end-to-end positive scenario under `tests/e2e/scenarios/positive/` that exercises async lambda syntax through the CLI and confirms the printed result when an awaited async lambda returns.
-- [ ] Update `docs/specs/01-language.md` to extend the lambda grammar and async-context wording from "async fun only" to "async fun or async lambda," including parser/disambiguation notes where needed.
-- [ ] Update `docs/specs/06-typesystem.md` to define async lambda typing as `(T1, ..., Tn) -> Task<R>` and to state that async context applies to async lambda bodies as well as async functions.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `cd runtime/jvm && bash build.sh`.
+- [x] Update `compiler/src/parser/parse.ts` so lambda parsing accepts an optional `async` prefix for both `(params) => body` and `<T>(params) => body` forms, and ensure lambda disambiguation still works when `async` appears before the lambda head.
+- [x] Update `compiler/src/ast/nodes.ts` to carry async metadata on `LambdaExpr` and adjust any downstream type imports/usages that assume lambdas are always synchronous.
+- [x] Update the `LambdaExpr` path in `compiler/src/typecheck/check.ts` to save and restore `inAsyncContext`, type-check async lambdas in async context, force non-async lambdas to type-check out of async context, and infer async lambda return types as `Task<R>`.
+- [x] Confirm `compiler/src/codegen/` requires no work for this JVM-only story; if any shared codegen layer participates in lambda lowering, document and update it explicitly before touching JVM-specific emission.
+- [x] Update `compiler/src/jvm-codegen/codegen.ts` so lambda collection/emission knows whether a lambda is async, emits async payload helpers or equivalent wrapper methods for async lambdas, and routes async lambda invocation through `KRuntime.submitAsync(...)` the same way top-level async functions do.
+- [x] Verify `runtime/jvm/src/kestrel/runtime/` needs no API changes for async lambdas; if JVM codegen cannot reuse `KFunction`, `KTask`, and `KRuntime.submitAsync` as-is, add the minimal runtime helper required and keep the change scoped to lambda dispatch.
+- [x] Add parser coverage in `compiler/test/integration/parse.test.ts` for `async (x) => ...` and `async <A>(x: A) => ...` so the new syntax and AST flag are locked down.
+- [x] Add typechecker regression coverage in `compiler/test/unit/typecheck/` for async lambda type inference, `await` rejection in non-async lambdas, and the nested-in-async-fun case where a sync lambda must not inherit the outer async context.
+- [x] Add JVM backend regression coverage in `compiler/test/unit/jvm-codegen.test.ts` and/or `compiler/test/integration/jvm-async-runtime.test.ts` to prove async lambda lowering returns `KTask` and awaits correctly at runtime.
+- [x] Add conformance coverage: `tests/conformance/typecheck/invalid/await_in_non_async_lambda.ks`, a valid typecheck case for async lambda inference/generics, and `tests/conformance/runtime/valid/async_lambda.ks` for runtime behaviour.
+- [x] Add an end-to-end positive scenario under `tests/e2e/scenarios/positive/` that exercises async lambda syntax through the CLI and confirms the printed result when an awaited async lambda returns.
+- [x] Update `docs/specs/01-language.md` to extend the lambda grammar and async-context wording from "async fun only" to "async fun or async lambda," including parser/disambiguation notes where needed.
+- [x] Update `docs/specs/06-typesystem.md` to define async lambda typing as `(T1, ..., Tn) -> Task<R>` and to state that async context applies to async lambda bodies as well as async functions.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `cd runtime/jvm && bash build.sh`.
 - [ ] Run `./scripts/kestrel test`.
-- [ ] Run `./scripts/run-e2e.sh`.
+- [x] Run `./scripts/run-e2e.sh`.
 
 ## Tests to add
 
@@ -112,11 +112,21 @@ Extend the Kestrel grammar to allow `async` on lambda expressions (`async (param
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — Update the expression grammar’s `Lambda` production, parser/lexer disambiguation notes, and Section 5 async-context wording to include `async` lambdas alongside `async fun`.
-- [ ] `docs/specs/06-typesystem.md` — Update Section 6 and the lambda row in the expression-typing summary so async lambda bodies type-check in async context and infer function types returning `Task<R>`.
+- [x] `docs/specs/01-language.md` — Update the expression grammar’s `Lambda` production, parser/lexer disambiguation notes, and Section 5 async-context wording to include `async` lambdas alongside `async fun`.
+- [x] `docs/specs/06-typesystem.md` — Update Section 6 and the lambda row in the expression-typing summary so async lambda bodies type-check in async context and infer function types returning `Task<R>`.
 
 ## Notes
 
 - Existing JVM async-function lowering already provides the model to copy: top-level async functions emit a private payload method plus a public wrapper that calls `KRuntime.submitAsync(...)`. Reusing that pattern for lambdas is lower risk than inventing a separate closure-only async path.
 - Current test coverage has a gap at every level relevant to this story: parser tests cover async functions but not async lambdas, typechecker tests cover top-level `await` misuse but not nested lambda context scoping, and runtime/conformance tests cover async functions but not async closures.
 - No stdlib or CLI migration is expected. If higher-order examples reveal a separate library ergonomics issue, capture it as a follow-up story instead of widening S01-11.
+
+## Build notes
+
+- 2026-04-03: Started implementation.
+- 2026-04-03: Added `async` metadata to `LambdaExpr`, taught the parser to recognize `async (...) => ...` and `async <T>(...) => ...`, and made non-async lambdas explicitly reset `inAsyncContext` so they no longer inherit an enclosing async function by accident.
+- 2026-04-03: Implemented async lambda lowering by generating wrapper closure classes whose `apply()` submits generated payload closures to `KRuntime.submitAsync(...)`, plus payload methods that execute the lambda body and preserve captures.
+- 2026-04-03: Async lambda payload methods must be emitted as directly callable static methods, not private helpers, because generated payload classes invoke them via bytecode rather than reflection.
+- 2026-04-03: Existing `fs`, `process`, and `async_virtual_threads` Kestrel tests were relying on the old bug where sync `group` callbacks inherited outer async context. Moved awaits out of those sync callbacks and kept assertions/grouping synchronous.
+- 2026-04-03: `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, and `./scripts/run-e2e.sh` all pass.
+- 2026-04-03: `./scripts/kestrel test` is still blocked on this machine by Node running out of heap while compiling `.kestrel_test_runner.ks` under Node 25.8.2, even with `NODE_OPTIONS=--max-old-space-size=16384`; feature-specific compiler, runtime, and E2E checks are green.

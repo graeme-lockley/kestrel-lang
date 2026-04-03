@@ -92,6 +92,25 @@ describe('parse (integration)', () => {
     expect(ast.body[0]).toMatchObject({ kind: 'FunDecl', async: true, name: 'f' });
   });
 
+  it('parses async lambda expressions', () => {
+    const ast = parse(tokenize('val inc = async (x: Int) => x + 1'));
+    expect(ast.kind).toBe('Program');
+    const stmt = ast.body[0];
+    expect(stmt).toMatchObject({ kind: 'ValStmt', name: 'inc' });
+    if (stmt.kind !== 'ValStmt') return;
+    expect(stmt.value).toMatchObject({ kind: 'LambdaExpr', async: true });
+  });
+
+  it('parses generic async lambda expressions', () => {
+    const ast = parse(tokenize('val id = async <T>(x: T) => x'));
+    expect(ast.kind).toBe('Program');
+    const stmt = ast.body[0];
+    expect(stmt).toMatchObject({ kind: 'ValStmt', name: 'id' });
+    if (stmt.kind !== 'ValStmt' || stmt.value.kind !== 'LambdaExpr') return;
+    expect(stmt.value.async).toBe(true);
+    expect(stmt.value.typeParams).toEqual(['T']);
+  });
+
   it('parses fun decl with typed param', () => {
     const ast = parse(tokenize('fun id(x: Int): Int = 1'));
     expect(ast.kind).toBe('Program');
