@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-vm:
-    name: Tests (VM)
+  test:
+    name: Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,9 +22,10 @@ jobs:
           cache: npm
           cache-dependency-path: compiler/package-lock.json
 
-      - uses: mlugg/setup-zig@v2
+      - uses: actions/setup-java@v4
         with:
-          version: 0.15.2
+          distribution: temurin
+          java-version: "11"
 
       - name: Install and build compiler
         working-directory: compiler
@@ -36,60 +37,20 @@ jobs:
         working-directory: compiler
         run: npm test
 
-      - name: VM build and tests
-        working-directory: vm
-        run: |
-          zig build -Doptimize=ReleaseSafe
-          zig build test
-
-      - name: E2E scenarios
-        run: ./scripts/run-e2e.sh
-
-      - name: Kestrel unit tests (VM)
-        run: ./scripts/kestrel test
-
-  test-jvm:
-    name: Tests (JVM)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: compiler/package-lock.json
-
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "11"
-
-      - name: Install and build compiler
-        working-directory: compiler
-        run: |
-          npm ci
-          npm run build
-
-      - name: Build VM (shared build path for CLI)
-        working-directory: vm
-        run: zig build -Doptimize=ReleaseSafe
-
       - name: Build JVM runtime JAR
         working-directory: runtime/jvm
         run: ./build.sh
 
-      - name: Kestrel unit tests (JVM)
-        run: ./scripts/kestrel test --target jvm
+      - name: E2E scenarios
+        run: ./scripts/run-e2e.sh
+
+      - name: Kestrel unit tests
+        run: ./scripts/kestrel test
 
   perf-medium:
     name: Perf (medium confidence)
     runs-on: ubuntu-latest
-    needs: [test-vm, test-jvm]
+    needs: [test]
     steps:
       - uses: actions/checkout@v4
 
@@ -98,10 +59,6 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: compiler/package-lock.json
-
-      - uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
 
       - uses: actions/setup-java@v4
         with:
@@ -113,10 +70,6 @@ jobs:
         run: |
           npm ci
           npm run build
-
-      - name: Build VM (ReleaseSafe)
-        working-directory: vm
-        run: zig build -Doptimize=ReleaseSafe
 
       - name: Build JVM runtime JAR
         working-directory: runtime/jvm
