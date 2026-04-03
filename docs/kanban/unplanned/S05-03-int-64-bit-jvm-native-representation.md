@@ -1,8 +1,13 @@
 # Int 64-bit JVM Native Representation
 
-## Sequence: 72
+## Sequence: S05-03
 ## Tier: 8
 ## Former ID: (none)
+
+## Epic
+
+- Epic: [E05 Runtime Modernization and DX](../epics/unplanned/E05-runtime-modernization-and-dx.md)
+- Companion stories: 67, 71
 
 ## Summary
 

@@ -1,8 +1,13 @@
 # JVM: Test fixtures for loader and execution
 
-## Sequence: 66
+## Sequence: S05-05
 ## Tier: Subset of runtime testing (often folded into sequence 13)
 ## Former ID: 29
+
+## Epic
+
+- Epic: [E05 Runtime Modernization and DX](../epics/unplanned/E05-runtime-modernization-and-dx.md)
+- Companion stories: S05-01, S05-04
 
 ## Summary
 

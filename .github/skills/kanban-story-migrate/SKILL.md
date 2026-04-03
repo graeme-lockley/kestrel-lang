@@ -12,13 +12,15 @@ Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill 
 
 ## Conventions
 
-- **Move** the file (same `NN-slug.md` name) on the roadmap: `unplanned/` → `planned/` → `doing/` → `done/`.
-- **Never** change `NN` in the filename when moving between those folders (`NN` is **globally unique**; the story keeps the same id through **planned** / **doing** / **done**).
+- **Move** the file (same `S##-##-slug.md` name) on the roadmap: `unplanned/` → `planned/` → `doing/` → `done/`.
+- **Never** change `S##-##` in the filename when moving between those folders; the story keeps the same id through **planned** / **doing** / **done**.
 - Update the markdown **in place** as required by the target phase.
+- Keep the story's `## Epic` link accurate; each story belongs to exactly one epic file.
+- Epics move separately: `docs/kanban/epics/unplanned/` → `docs/kanban/epics/done/` only when all member stories are done.
 
 ---
 
-## 0. `future/slug.md` → `unplanned/NN-slug.md`
+## 0. `future/slug.md` → `unplanned/S##-##-slug.md`
 
 ### Preconditions
 
@@ -26,9 +28,9 @@ Team agrees the investigation is ready to become a **roadmap** item.
 
 ### Actions
 
-1. Pick the next free **global `NN`** across **unplanned**, **planned**, **doing**, and **done** (see [docs/kanban/README.md](docs/kanban/README.md)).
-2. **Move** and **rename**: `docs/kanban/future/slug.md` → `docs/kanban/unplanned/NN-slug.md`.
-3. Add full **unplanned** sections: **`## Sequence: NN`**, **`## Tier:`**, **Summary**, **Current State**, **Relationship to other stories**, **Goals**, **Acceptance criteria**, **Spec references**, **Risks / notes** (merge or expand content from the future file).
+1. Choose the owning epic id and next story index within that epic (see [docs/kanban/README.md](docs/kanban/README.md)).
+2. **Move** and **rename**: `docs/kanban/future/slug.md` → `docs/kanban/unplanned/S##-##-slug.md`.
+3. Add full **unplanned** sections: **`## Sequence: S##-##`**, **`## Tier:`**, **Summary**, **Current State**, **Relationship to other stories**, **Goals**, **Acceptance criteria**, **Spec references**, **Risks / notes** (merge or expand content from the future file).
 4. Ensure **unplanned exit** criteria are met before later promoting to **planned** (section A below).
 
 ---
@@ -41,7 +43,7 @@ Story has complete: Summary, Current State, Relationship to other stories, **Goa
 
 ### Actions
 
-1. Move `docs/kanban/unplanned/NN-slug.md` → `docs/kanban/planned/NN-slug.md`.
+1. Move `docs/kanban/unplanned/S##-##-slug.md` → `docs/kanban/planned/S##-##-slug.md`.
 2. Add sections (if missing):
    - `## Impact analysis` — areas touched (compiler, VM, stdlib, scripts), risks, compatibility; **merge or reference** bullets from unplanned **Risks / notes** (do not drop them silently).
    - `## Tasks` — concrete `- [ ]` items covering implementation and verification.
@@ -63,7 +65,7 @@ All planned sections filled; team agrees the story is ready to build.
 
 ### Actions
 
-1. Move `docs/kanban/planned/NN-slug.md` → `docs/kanban/doing/NN-slug.md`.
+1. Move `docs/kanban/planned/S##-##-slug.md` → `docs/kanban/doing/S##-##-slug.md`.
 2. Add (if missing):
 
 ```markdown
@@ -91,8 +93,11 @@ All planned sections filled; team agrees the story is ready to build.
    - `./scripts/kestrel test` from repo root
    - `cd vm && zig build test` when bytecode/VM/runtime changes
    - `./scripts/run-e2e.sh` when user-visible behaviour or integration warrants it
-2. Move `docs/kanban/doing/NN-slug.md` → `docs/kanban/done/NN-slug.md`.
+2. Move `docs/kanban/doing/S##-##-slug.md` → `docs/kanban/done/S##-##-slug.md`.
 3. Final pass: ensure **Documentation and specs to update** items are done or explicitly deferred in the story text.
+4. Update the owning epic file in `docs/kanban/epics/unplanned/`:
+   - Mark this story as complete in the story list or progress notes.
+   - If all member stories are now in `docs/kanban/done/`, move the epic file to `docs/kanban/epics/done/`.
 
 ---
 

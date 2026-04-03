@@ -2,22 +2,50 @@
 
 Stories live in `docs/kanban/` with folders: **future**, **unplanned**, **planned**, **doing**, **done**.
 
+Epics live in `docs/kanban/epics/` with folders: **unplanned** and **done**. Stories are grouped under one epic, and epics are moved to `epics/done/` once all member stories are complete.
+
 Work flows **in order** on the roadmap: `unplanned` → `planned` → `doing` → `done`. Do not skip **planned** unless the team explicitly agrees (for example a trivial regression or doc-only fix).
 
 The **`future/`** folder is **outside** that pipeline: it holds investigations and ideas **before** they become roadmap items (see [Future (investigations and ideas)](#future-investigations-and-ideas)).
 
-## Global sequence (`NN-slug.md`)
+## Story IDs (`S##-##-slug.md`)
 
-Every **roadmap** story file (in **unplanned**, **planned**, **doing**, or **done**) is named **`NN-slug.md`** where **`NN` is a globally unique sequence**. The number never changes when a file moves between those folders.
+Epic-grouped roadmap stories use **`S##-##-slug.md`** where:
 
-**`future/`** does **not** use this prefix: files there are named **`slug.md`** only (kebab-case, no numeric priority). When an item graduates to the roadmap, it is **renamed** to **`NN-slug.md`** and moved to **`unplanned/`**.
+- The first `##` is the epic id.
+- The second `##` is the story index within that epic.
+
+The `S##-##` id never changes when a story moves between `unplanned`, `planned`, `doing`, and `done`.
+
+Legacy roadmap stories may still use older `NN-slug.md` names. Do not rename legacy completed stories unless explicitly requested.
+
+**`future/`** does **not** use this prefix: files there are named **`slug.md`** only (kebab-case, no numeric priority). When an item graduates to the roadmap, it is renamed to **`S##-##-slug.md`** and moved to **`unplanned/`**.
 
 - **`docs/kanban/done/`** — **01–54** (completed stories; lower numbers are not "newer," they are the global index assigned at renumbering).
 - **`docs/kanban/planned/`** — **55–58** (JVM-only backend pivot — in planning).
 - **`docs/kanban/unplanned/`** — **59–71** (current roadmap queue). **Lower numbers are higher priority** within this band (59 first, then 60, …).
 - **New roadmap items** use the next free integer (**72** onward) so IDs stay unique project-wide.
 
-Each story file should include **`## Sequence:`** (same value as **`NN`**), **`## Tier:`**, and **`## Former ID:`** where useful (for example the previous filename prefix before a renumber, or `(none)` if there was no numeric prefix).
+Each story file should include **`## Sequence:`** (same value as **`S##-##`**), **`## Tier:`**, and **`## Former ID:`** where useful (for example the previous filename prefix before a renumber, or `(none)` if there was no numeric prefix).
+
+Each roadmap story should also include **`## Epic`** with a markdown link to exactly one epic file under `docs/kanban/epics/unplanned/` or `docs/kanban/epics/done/`.
+
+## Epics
+
+Epics are cross-story containers that let related work move together at the planning level while stories still flow through `unplanned -> planned -> doing -> done` individually.
+
+- Active epic files live in `docs/kanban/epics/unplanned/`.
+- Completed epic files live in `docs/kanban/epics/done/`.
+- Epic filename format: `EXX-slug.md` (for example `E02-http-and-networking-platform.md`).
+- Each epic file should include: title, status, summary, story list with links, dependency notes, and epic completion criteria.
+
+### Epic completion rule
+
+Move an epic from `docs/kanban/epics/unplanned/` to `docs/kanban/epics/done/` only when:
+
+- Every member story is in `docs/kanban/done/`.
+- Epic-level acceptance/completion notes are satisfied.
+- Any deferred scope is explicitly linked as a follow-up epic or story.
 
 ### Roadmap tiers
 
@@ -42,7 +70,7 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 ### Naming
 
-- Filename: **`slug.md`** (short kebab-case slug). **No `NN-` prefix** and **no global sequence** until the item is promoted.
+- Filename: **`slug.md`** (short kebab-case slug). **No `S##-##-` prefix** and **no story id** until the item is promoted.
 - Body: free-form, but should make clear this is **not** a committed story (for example a **`## Kind`** line: investigation / idea / spike).
 
 ### Relationship to the roadmap
@@ -54,9 +82,9 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 When the team decides an item is real roadmap work:
 
-1. Choose the next free **global `NN`** (same rules as [new roadmap items](#global-sequence-nn-slugmd)).
-2. **Move** and **rename**: `future/slug.md` → `unplanned/NN-slug.md`.
-3. Fill standard **unplanned** sections (including **`## Sequence: NN`**, **`## Tier:`**, **Summary**, **Current State**, **Goals**, **Acceptance criteria**, **Spec references**, **Risks / notes**).
+1. Choose the owning epic id and next free story index within that epic.
+2. **Move** and **rename**: `future/slug.md` → `unplanned/S##-##-slug.md`.
+3. Fill standard **unplanned** sections (including **`## Sequence: S##-##`**, **`## Tier:`**, **Summary**, **Current State**, **Goals**, **Acceptance criteria**, **Spec references**, **Risks / notes**).
 
 ### Future template (minimal)
 
@@ -73,7 +101,7 @@ Investigation / idea / spike - not on the numbered roadmap.
 
 ## Promotion
 
-When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
+When actionable: move to `unplanned/S##-##-<slug>.md` with full unplanned sections.
 ```
 
 ## Phases (gates)
@@ -89,8 +117,9 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 
 **Entry criteria**
 
-- The idea is captured as a single markdown story with a title and assigned **`NN-slug.md`** (`NN` is globally unique; on the roadmap, lower `NN` means higher priority within the unplanned queue).
+- The idea is captured as a single markdown story with a title and assigned **`S##-##-slug.md`** (epic id + story index within epic).
 - Initial **Tier** is chosen (or "Optional / verification").
+- **Epic** link exists and points to a real file in `docs/kanban/epics/unplanned/` (or `epics/done/` for archival edits).
 
 **Exit criteria (before moving to `planned/`)**
 
@@ -149,7 +178,7 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 
 ## Workflow summary
 
-1. **Optional:** Capture raw investigations or ideas in **`future/`** (`slug.md`, no `NN-` prefix). Promote to **`unplanned/`** when the work is ready for the roadmap.
+1. **Optional:** Capture raw investigations or ideas in **`future/`** (`slug.md`, no `S##-##-` prefix). Promote to **`unplanned/`** when the work is ready for the roadmap.
 2. **Draft** in `unplanned/` until unplanned exit criteria are met.
 3. **Plan** in `planned/` until planned exit criteria are met.
 4. **Implement** in `doing/`; tick tasks; append build notes.
@@ -162,9 +191,13 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 ```markdown
 # <Title>
 
-## Sequence: NN
+## Sequence: S##-##
 ## Tier: <tier or Optional>
 ## Former ID: (if any)
+
+## Epic
+
+- Epic: [EXX Name](../epics/unplanned/EXX-name.md)
 
 ## Summary
 

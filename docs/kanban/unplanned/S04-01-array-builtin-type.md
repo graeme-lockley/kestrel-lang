@@ -1,8 +1,13 @@
 # Array<T> Built-in Type
 
-## Sequence: 61
+## Sequence: S04-01
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 24
+
+## Epic
+
+- Epic: [E04 Core Language Ergonomics](../epics/unplanned/E04-core-language-ergonomics.md)
+- Companion stories: 64
 
 ## Summary
 

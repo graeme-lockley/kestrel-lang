@@ -1,8 +1,13 @@
 # URL Import Resolution
 
-## Sequence: 62
+## Sequence: S03-01
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 25
+
+## Epic
+
+- Epic: [E03 Module Resolution and Reproducibility](../epics/unplanned/E03-module-resolution-and-reproducibility.md)
+- Companion stories: 63
 
 ## Summary
 

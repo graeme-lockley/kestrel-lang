@@ -1,8 +1,13 @@
 # Async/Await: Real Suspension and Event Loop
 
-## Sequence: 59
+## Sequence: S01-01
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 22
+
+## Epic
+
+- Epic: [E01 Async Runtime Foundation](../epics/unplanned/E01-async-runtime-foundation.md)
+- Companion stories: none
 
 ## Summary
 

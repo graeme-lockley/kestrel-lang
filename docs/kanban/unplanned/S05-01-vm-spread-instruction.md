@@ -1,8 +1,13 @@
 # JVM: SPREAD instruction (record spread)
 
-## Sequence: 67
+## Sequence: S05-01
 ## Tier: Archival / verification (feature implemented)
 ## Former ID: 30
+
+## Epic
+
+- Epic: [E05 Runtime Modernization and DX](../epics/unplanned/E05-runtime-modernization-and-dx.md)
+- Companion stories: 71, 72
 
 ## Summary
 

@@ -1,8 +1,13 @@
 # Lockfile: kestrel.lock
 
-## Sequence: 63
+## Sequence: S03-02
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 26
+
+## Epic
+
+- Epic: [E03 Module Resolution and Reproducibility](../epics/unplanned/E03-module-resolution-and-reproducibility.md)
+- Companion stories: 62
 
 ## Summary
 

@@ -222,23 +222,26 @@ Before marking a task complete:
 ## Kanban Workflow (from Cursor rules)
 
 Stories live in `docs/kanban/` with folders: **future**, **unplanned**, **planned**, **doing**, **done**.
+Epics live in `docs/kanban/epics/` with folders: **unplanned** and **done**.
 
-**`future/`** holds pre-roadmap **investigations and ideas** (`slug.md`, **no `NN-` prefix**). The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named **`NN-slug.md`**; **`NN` is globally unique** (lower = higher priority). See `docs/kanban/README.md` for the tier table, **future** lifecycle, entry/exit criteria, and templates. Roadmap files are **moved** between **unplanned**, **planned**, **doing**, and **done** without renaming **`NN`**. **`docs/kanban/backlog/`** is **deprecated**; use **`planned/`** instead.
+**`future/`** holds pre-roadmap **investigations and ideas** (`slug.md`, **no `S##-##-` prefix**). The **prioritized roadmap** is in **`docs/kanban/unplanned/`**, named **`S##-##-slug.md`** where the first number is the epic id and the second number is story order within that epic. See `docs/kanban/README.md` for the tier table, **future** lifecycle, entry/exit criteria, epic rules, and templates. Roadmap files are **moved** between **unplanned**, **planned**, **doing**, and **done** without renaming the `S##-##` id. **`docs/kanban/backlog/`** is **deprecated**; use **`planned/`** instead.
 
 ### Workflow
 
-1. **future** (optional) — Capture investigations and ideas before they are roadmap items; promote to **unplanned** with a new **`NN-slug.md`** when scoped.
+1. **future** (optional) — Capture investigations and ideas before they are roadmap items; promote to **unplanned** with a new **`S##-##-slug.md`** when scoped.
 2. **unplanned** — High-level feature stories on the ordered roadmap (summary, state, relationships, **goals**, acceptance, spec refs, **risks / notes**).
 3. **planned** — Scoped but not yet built: adds impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**.
 4. **doing** — Active implementation; tick tasks; add **Build notes** as needed.
 5. **done** — All tasks ticked, acceptance satisfied, and **required tests passing**.
+6. **epics** — Each roadmap story links to one epic in `docs/kanban/epics/unplanned/`; move epic to `docs/kanban/epics/done/` when all member stories are done.
 
 ### When promoting a story
 
-- **future → unplanned** — Assign next free global **`NN`**, rename to **`NN-slug.md`**, move to `docs/kanban/unplanned/`, add full unplanned sections per `docs/kanban/README.md`.
+- **future → unplanned** — Choose epic id + next story index, rename to **`S##-##-slug.md`**, move to `docs/kanban/unplanned/`, add full unplanned sections per `docs/kanban/README.md`.
 - **unplanned → planned** — Meet unplanned exit criteria in `docs/kanban/README.md`; move the file to `docs/kanban/planned/`.
 - **planned → doing** — Meet planned exit criteria (tasks and test/doc lists complete); move to `docs/kanban/doing/`.
 - **doing → done** — Meet doing exit criteria; run verification commands; move to `docs/kanban/done/`.
+- **epic unplanned → done** — When all member stories are in `docs/kanban/done/`, move epic file from `docs/kanban/epics/unplanned/` to `docs/kanban/epics/done/`.
 
 ### When implementing (in `doing/`)
 

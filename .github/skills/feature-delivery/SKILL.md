@@ -16,7 +16,8 @@ Use this workflow for **kanban-driven** or **spec-driven** features in this repo
 
 Before writing code:
 
-1. **Locate the story** — Implementation happens only when the file is in **`docs/kanban/doing/`**. Items in **`docs/kanban/future/`** are not implementation-ready; promote them to **`unplanned/`** (with **`NN-slug.md`**) first. Read **`planned/`** first if the story is still being scoped; if it is only in **`unplanned/`**, use **kestrel-kanban-story-migrate** to promote through **planned** before coding. Read **summary**, **current state**, **relationships**, **goals**, **risks / notes**, **acceptance criteria**, **spec references**, plus **Impact analysis**, **Tasks**, **Tests to add**, and **Documentation and specs to update** from **planned/doing**.
+1. **Locate the story** — Implementation happens only when the file is in **`docs/kanban/doing/`**. Items in **`docs/kanban/future/`** are not implementation-ready; promote them to **`unplanned/`** (with **`S##-##-slug.md`**) first. Read **`planned/`** first if the story is still being scoped; if it is only in **`unplanned/`**, use **kestrel-kanban-story-migrate** to promote through **planned** before coding. Read **summary**, **current state**, **relationships**, **goals**, **risks / notes**, **acceptance criteria**, **spec references**, plus **Impact analysis**, **Tasks**, **Tests to add**, and **Documentation and specs to update** from **planned/doing**.
+  - Confirm the story's **`## Epic`** link and open that epic file in `docs/kanban/epics/unplanned/` for cross-story dependencies.
 2. **Extract concrete requirements** — Turn **goals** and acceptance criteria (and the planned test list) into a mental or written checklist (implementation, tests, spec files to update). Treat **risks / notes** as non-functional constraints and verification targets (e.g. performance, JVM parity, GC).
 3. **Read impacted specs** — Open the linked `docs/specs/*.md` sections so implementation and docs stay aligned (language, typesystem, bytecode, runtime, tests).
 4. **Skim the codebase** — Find existing handlers (e.g. parser → `check.ts` → `codegen/codegen.ts` → `jvm-codegen/codegen.ts`). Note gaps vs the story.
@@ -80,6 +81,7 @@ Fix failures before merging or handing off.
 
 - Acceptance criteria and kanban **Tasks** are ticked (including any tasks added during **doing**).
 - Story file is in `docs/kanban/done/` with completed tasks and up-to-date **Build notes** if decisions were recorded during implementation.
+- Owning epic file is updated; if this was the final open member story, move epic file from `docs/kanban/epics/unplanned/` to `docs/kanban/epics/done/`.
 
 ## Quick copy-paste checklist
 

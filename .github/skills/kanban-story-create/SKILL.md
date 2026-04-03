@@ -14,7 +14,7 @@ description: >-
 Use **`docs/kanban/future/`** when the work is **not** ready for the prioritized queue: spikes, performance observations, "maybe later" features without acceptance criteria yet.
 
 1. Read [docs/kanban/README.md](docs/kanban/README.md) section **Future (investigations and ideas)**.
-2. Filename: **`slug.md`** only (**no `NN-` prefix**, no global sequence).
+2. Filename: **`slug.md`** only (**no `S##-##-` prefix**, no story id).
 3. Content: free-form; include a **`## Kind`** (e.g. investigation / idea) and enough context for later promotion.
 4. **Do not** add **Sequence**, **Tier**, or full unplanned sections until promoting to **unplanned** (use **kanban-story-migrate**).
 
@@ -27,22 +27,24 @@ Use this for **new** work that enters the roadmap at **`docs/kanban/unplanned/`*
 ## Before you write (unplanned)
 
 1. Read [docs/kanban/README.md](docs/kanban/README.md) for **unplanned entry/exit** criteria and the **tier table**.
-2. Pick the next free **global `NN`** across **unplanned**, **planned**, **doing**, and **done** (see [docs/kanban/README.md](docs/kanban/README.md) for the tier table). Filename: **`NN-slug.md`** (two digits or more as needed, hyphen, short kebab-case slug).
+2. Pick the owning epic and the next free story index within that epic. Filename: **`S##-##-slug.md`** where the first `##` is epic id and second `##` is story order within epic.
 3. Check for **duplicates** or **superseded** stories in `unplanned/` and `done/`.
+4. Assign the story to exactly one epic file in `docs/kanban/epics/unplanned/` (create a new epic only when no existing epic fits).
 
 ## File location and name (unplanned)
 
-- Path: `docs/kanban/unplanned/NN-slug.md`
-- Keep **Sequence** in the body aligned with **`NN`** in the filename.
+- Path: `docs/kanban/unplanned/S##-##-slug.md`
+- Keep **Sequence** in the body aligned with **`S##-##`** in the filename.
 
 ## Required sections (unplanned)
 
 Use the template from `docs/kanban/README.md`. Every unplanned story must have:
 
 - Title (`# …`)
-- `## Sequence: NN`
+- `## Sequence: S##-##`
 - `## Tier: …` (or Optional / verification)
 - `## Former ID:` if migrating from an old id scheme
+- `## Epic` with a markdown link to the owning epic file
 - `## Summary`
 - `## Current State`
 - `## Relationship to other stories` (or explicit **None** / **N/A** if isolated)
@@ -58,6 +60,7 @@ Use the template from `docs/kanban/README.md`. Every unplanned story must have:
 ## After the file exists
 
 - Ensure the story meets **unplanned exit** criteria before moving it to `planned/` (use skill **`kanban-story-migrate`**).
+- Ensure the owning epic file lists the new story and still has accurate dependency notes.
 
 ## Related
 

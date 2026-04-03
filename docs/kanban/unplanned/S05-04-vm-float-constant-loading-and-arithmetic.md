@@ -1,8 +1,13 @@
 # JVM: Float constant loading and arithmetic
 
-## Sequence: 65
+## Sequence: S05-04
 ## Tier: Verification / residual runtime (may already be done)
 ## Former ID: 28
+
+## Epic
+
+- Epic: [E05 Runtime Modernization and DX](../epics/unplanned/E05-runtime-modernization-and-dx.md)
+- Companion stories: S05-03, S05-05
 
 ## Summary
 
