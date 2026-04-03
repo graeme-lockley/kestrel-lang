@@ -1,6 +1,6 @@
 # URL Import Resolution
 
-## Sequence: 59
+## Sequence: 62
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 25
 
@@ -15,7 +15,7 @@ Spec 07 §4.2 defines URL specifiers (e.g., `https://example.com/lib.ks`). The c
 
 ## Dependencies
 
-- Sequence **59** (Lockfile) should be done first for deterministic URL resolution.
+- Sequence **63** (Lockfile) should be done first for deterministic URL resolution.
 
 ## Acceptance Criteria
 

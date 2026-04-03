@@ -1,6 +1,6 @@
 # Lockfile: kestrel.lock
 
-## Sequence: 60
+## Sequence: 63
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 26
 
@@ -17,7 +17,7 @@ Spec 07 §7 defines `kestrel.lock` as a project-root file that records resolved 
 
 ## Dependencies
 
-- Sequence **58** (URL imports) is the primary consumer. Lockfile for path-only projects is lower urgency.
+- Sequence **62** (URL imports) is the primary consumer. Lockfile for path-only projects is lower urgency.
 
 ## Acceptance Criteria
 

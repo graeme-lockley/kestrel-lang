@@ -12,31 +12,33 @@ Every **roadmap** story file (in **unplanned**, **planned**, **doing**, or **don
 
 **`future/`** does **not** use this prefix: files there are named **`slug.md`** only (kebab-case, no numeric priority). When an item graduates to the roadmap, it is **renamed** to **`NN-slug.md`** and moved to **`unplanned/`**.
 
-- **`docs/kanban/done/`** — **01–49** (completed stories; lower numbers are not “newer,” they are the global index assigned at renumbering).
-- **`docs/kanban/unplanned/`** — **50–67** (current roadmap queue). **Lower numbers are higher priority** within this band (50 first, then 51, …).
-- **New roadmap items** use the next free integer (**68** onward) so IDs stay unique project-wide.
+- **`docs/kanban/done/`** — **01–54** (completed stories; lower numbers are not "newer," they are the global index assigned at renumbering).
+- **`docs/kanban/planned/`** — **55–58** (JVM-only backend pivot — in planning).
+- **`docs/kanban/unplanned/`** — **59–71** (current roadmap queue). **Lower numbers are higher priority** within this band (59 first, then 60, …).
+- **New roadmap items** use the next free integer (**72** onward) so IDs stay unique project-wide.
 
 Each story file should include **`## Sequence:`** (same value as **`NN`**), **`## Tier:`**, and **`## Former ID:`** where useful (for example the previous filename prefix before a renumber, or `(none)` if there was no numeric prefix).
 
-### Roadmap tiers (`unplanned/`, sequences 50–67)
+### Roadmap tiers
 
-| Tier | Sequences | Focus |
-|------|-----------|--------|
-| **4** | 50 | Stdlib stack `trace()` / stack traces |
-| **5** | 51–52 | Broader test coverage (E2E negative, conformance) |
-| **6** | 53–54 | Polish (block-expression codegen, disassembler) |
-| **7** | 55–59 | Deferred large work (async, HTTP, arrays, URL, lockfile) |
-| **Optional** | 60–63 | Language sugar, VM float work, fixtures, spread follow-up |
-| **(follow-up)** | 64 | JSON / `Result` errors, remove `value` builtins |
-| **8** | 65–67 | Networking expansion: TCP/TLS sockets (`kestrel:socket`), REST-capable HTTP client (`kestrel:http` extensions), lightweight routing (`kestrel:web` or as specified) |
+| Tier | Sequences | Location | Focus |
+|------|-----------|----------|--------|
+| **4** | 50 | done | Stdlib stack `trace()` / stack traces |
+| **5** | 51–52 | done | Broader test coverage (E2E negative, conformance) |
+| **6** | 53–54 | done | Polish (block-expression codegen, disassembler) |
+| **8 (pivot)** | 55–58 | planned | JVM-only backend pivot (docs, scripts, VM removal, specs) |
+| **7** | 59–63 | unplanned | Deferred large work (async, HTTP, arrays, URL, lockfile) |
+| **Optional** | 64–67 | unplanned | Language sugar, VM float work, fixtures, spread follow-up |
+| **8** | 68–70 | unplanned | Networking expansion: TCP/TLS sockets (`kestrel:socket`), REST-capable HTTP client (`kestrel:http` extensions), lightweight routing (`kestrel:web` or as specified) |
+| **Optional** | 71 | unplanned | Test harness UX (compact suite spinner) |
 
-Completed stories in **`done/`** retain their **`## Tier:`** lines from delivery; there is no separate tier table for **01–49** here—open the file for context.
+Completed stories in **`done/`** retain their **`## Tier:`** lines from delivery; there is no separate tier table for **01-49** here-open the file for context.
 
 The **`planned/`** folder holds the same filenames (moved from `unplanned/` when promoted); **`doing/`** and **`done/`** likewise.
 
 ## Future (investigations and ideas)
 
-**`docs/kanban/future/`** captures **ideas under investigation** that are **not** ready to live on the prioritized **unplanned** queue. Use it for performance notes, spikes, “maybe someday” features, and cross-cutting observations where **goals and acceptance are still unclear**.
+**`docs/kanban/future/`** captures **ideas under investigation** that are **not** ready to live on the prioritized **unplanned** queue. Use it for performance notes, spikes, "maybe someday" features, and cross-cutting observations where **goals and acceptance are still unclear**.
 
 ### Naming
 
@@ -45,7 +47,7 @@ The **`planned/`** folder holds the same filenames (moved from `unplanned/` when
 
 ### Relationship to the roadmap
 
-- **`future/`** is **not** ordered by priority. Nothing in this folder is implied to be “next” after a given `NN` in **unplanned/**.
+- **`future/`** is **not** ordered by priority. Nothing in this folder is implied to be "next" after a given `NN` in **unplanned/**.
 - Items here **do not** need unplanned entry/exit criteria, tiers, or acceptance tests until promoted.
 
 ### Promotion to `unplanned/`
@@ -63,7 +65,7 @@ When the team decides an item is real roadmap work:
 
 ## Kind
 
-Investigation / idea / spike — not on the numbered roadmap.
+Investigation / idea / spike - not on the numbered roadmap.
 
 ## Context
 
@@ -79,7 +81,7 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 | Phase | Meaning |
 |-------|---------|
 | **unplanned** | High-level feature intent: **summary**, **current state**, **relationships**, **goals**, **acceptance criteria**, **spec references**, and **risks / notes**. **Not** build-ready. |
-| **planned** | Same content as unplanned, plus **impact analysis**, concrete **Tasks**, **Tests to add**, **Documentation and specs to update**, and optional **Notes** (may absorb or extend unplanned risks). Still **not** executing implementation—this is the planning gate before code. |
+| **planned** | Same content as unplanned, plus **impact analysis**, concrete **Tasks**, **Tests to add**, **Documentation and specs to update**, and optional **Notes** (may absorb or extend unplanned risks). Still **not** executing implementation-this is the planning gate before code. |
 | **doing** | Implementation in progress. Tasks are ticked (and may be added) as the build proceeds; append **Build notes** as you learn. |
 | **done** | Complete: every task checked, acceptance satisfied, **all required tests passing** (see exit criteria). |
 
@@ -88,19 +90,19 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 **Entry criteria**
 
 - The idea is captured as a single markdown story with a title and assigned **`NN-slug.md`** (`NN` is globally unique; on the roadmap, lower `NN` means higher priority within the unplanned queue).
-- Initial **Tier** is chosen (or “Optional / verification”).
+- Initial **Tier** is chosen (or "Optional / verification").
 
 **Exit criteria (before moving to `planned/`)**
 
 - **Summary** states the outcome in one place.
 - **Current state** explains what exists today (compiler, VM, stdlib, tests) and gaps.
 - **Relationship to other stories** calls out dependencies, ordering, or merges (by sequence or path), or states **None** if truly isolated.
-- **Goals** list the concrete outcomes you want (numbered or bulleted)—the “why and what” before the pass/fail **Acceptance criteria**.
+- **Goals** list the concrete outcomes you want (numbered or bulleted)-the "why and what" before the pass/fail **Acceptance criteria**.
 - **Acceptance criteria** are testable and agreed (even if high level).
 - **Spec references** list the `docs/specs/` areas that must stay authoritative.
-- **Risks / notes** capture known hazards, constraints, performance or compatibility concerns, open technical questions, and links—anything that informs planning and implementation.
+- **Risks / notes** capture known hazards, constraints, performance or compatibility concerns, open technical questions, and links-anything that informs planning and implementation.
 
-**Must not** include: a **Tasks** checkbox grid, exhaustive per-layer test matrices, or full **Impact analysis** tables—those belong in **planned**. A one-line reminder that tasks will be added in **planned** is fine inside **Risks / notes** if helpful.
+**Must not** include: a **Tasks** checkbox grid, exhaustive per-layer test matrices, or full **Impact analysis** tables-those belong in **planned**. A one-line reminder that tasks will be added in **planned** is fine inside **Risks / notes** if helpful.
 
 ### `planned/`
 
@@ -115,9 +117,9 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 - **Tasks** section exists with concrete checkboxes (implementation + verification steps).
 - **Tests to add** lists harness layers (e.g. Vitest paths, `tests/unit/*.test.ks`, conformance files, `zig build test`) with intent per item.
 - **Documentation and specs to update** lists every `docs/specs/` (and other docs) file to change.
-- **Notes** (optional) holds research spikes, planning-only open questions, or links—anything useful for the implementer beyond what is already under **Risks / notes**.
+- **Notes** (optional) holds research spikes, planning-only open questions, or links-anything useful for the implementer beyond what is already under **Risks / notes**.
 
-**Optional section: `## Notes`** — free-form; does not replace acceptance criteria or tasks. Unplanned **Risks / notes** stay in the file when you promote; add **Notes** if you need a separate planning scratchpad.
+**Optional section: `## Notes`** - free-form; does not replace acceptance criteria or tasks. Unplanned **Risks / notes** stay in the file when you promote; add **Notes** if you need a separate planning scratchpad.
 
 ### `doing/`
 
@@ -186,7 +188,7 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 
 ## Tasks
 
-- [ ] …
+- [ ] ...
 
 ## Tests to add
 
@@ -205,7 +207,7 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 ```markdown
 ## Build notes
 
-- YYYY-MM-DD: …
+- YYYY-MM-DD: ...
 ```
 
 ## Automation and agents

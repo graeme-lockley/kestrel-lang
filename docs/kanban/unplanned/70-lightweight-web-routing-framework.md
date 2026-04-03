@@ -1,6 +1,6 @@
 # Lightweight web routing framework (Sinatra-style)
 
-## Sequence: 67
+## Sequence: 70
 ## Tier: 8 — Networking expansion (post–HTTP baseline)
 ## Former ID: (none)
 
@@ -11,15 +11,15 @@ Add a **small, opinionated** standard library module (working name **`kestrel:we
 ## Current State
 
 - No spec-defined routing or DSL above **`kestrel:http`**.
-- **`kestrel:http`** (after **56**) provides low-level **request → Task response** handling; **66** improves **client** REST ergonomics—**67** focuses on **server** composition.
+- **`kestrel:http`** (after **60**) provides low-level **request → Task response** handling; **69** improves **client** REST ergonomics—**70** focuses on **server** composition.
 - Sinatra-like frameworks in other languages combine **routing + short handlers**; Kestrel needs a **documented** module so examples and tests stay portable across VM and JVM.
 
 ## Relationship to other stories
 
-- **Depends on** sequence **56** (`kestrel:http` server path: `createServer`, `listen`, `Request`/`Response`).
-- **Soft dependency** on sequence **66** if handlers need rich **response** helpers (status, JSON body) that align with client types—**planned** should order **67** after **56** minimum, and after **66** if shared **Response** builders are required.
-- **Depends on** sequence **56** indirectly through **57** (async server).
-- **Independent of** sequence **65** (`kestrel:socket`) unless the framework later supports **WebSockets** (out of scope unless added as a follow-up).
+- **Depends on** sequence **60** (`kestrel:http` server path: `createServer`, `listen`, `Request`/`Response`).
+- **Soft dependency** on sequence **69** if handlers need rich **response** helpers (status, JSON body) that align with client types—**planned** should order **70** after **60** minimum, and after **69** if shared **Response** builders are required.
+- **Depends on** sequence **59** indirectly through **60** (async server).
+- **Independent of** sequence **68** (`kestrel:socket`) unless the framework later supports **WebSockets** (out of scope unless added as a follow-up).
 
 ## Goals
 
@@ -48,7 +48,7 @@ Normative and supporting docs for a consistent solution:
 
 ## Risks / Notes
 
-- **Scope creep:** Sinatra has many features (templates, sessions, middleware stacks). **67** should stay **lightweight**; defer templates/sessions to future stories and say so in **02**.
+- **Scope creep:** Sinatra has many features (templates, sessions, middleware stacks). **70** should stay **lightweight**; defer templates/sessions to future stories and say so in **02**.
 - **Type system:** Path params may require **string** extraction only in v1; typed path segments are a possible follow-up.
 - **Performance:** Pure-Kestrel routing is fine for small services; document **O(n)** vs trie trade-offs if relevant.
 - **Name collision:** If **`kestrel:web`** is reserved before implementation, document in **07** as **future stdlib** or implement immediately—avoid half-reserved names.

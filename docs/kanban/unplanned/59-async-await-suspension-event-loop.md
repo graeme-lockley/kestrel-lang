@@ -1,6 +1,6 @@
 # Async/Await: Real Suspension and Event Loop
 
-## Sequence: 56
+## Sequence: 59
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 22
 
@@ -10,7 +10,7 @@ The current AWAIT implementation only handles **completed** tasks (synchronous r
 
 **Delivery scope:** **Reference VM and JVM backend** implement the same observable behavior in one story—no deferred “JVM later.” **Stdlib:** every API that is **async-shaped or documented as non-blocking** must be implemented **non-blocking** on the main thread, not only a single read primitive; include an **audit** of impacted code and update all call sites and runtimes accordingly. **Errors:** async operations surface failures via **`Task` carrying `Result<Success, ErrorAdt>`** (or equivalent), with **errors as a named ADT** per domain—not ad-hoc sentinels such as empty-string errors where this story defines the new contract. **CLI:** **`kestrel run`** uses **`--exit-wait` by default** (keep the process alive until the event loop is idle). **`--exit-no-wait`** opts out: exit without waiting for pending async work (exact tie to `main` return documented in **Notes** / `09-tools`). Users may pass **`--exit-wait` explicitly** for clarity; it is the default when neither flag is given. This story closes the gap between today’s placeholder behavior and `05-runtime-model` §6 and `04-bytecode-isa` for AWAIT.
 
-**Audit boundary:** The stdlib/runtime **audit** covers only **what is already implemented** today. **HTTP** and other networking surfaces belong to sequence **56** and are **out of scope** for this audit (though **56** builds on the loop delivered here).
+**Audit boundary:** The stdlib/runtime **audit** covers only **what is already implemented** today. **HTTP** and other networking surfaces belong to sequence **60** and are **out of scope** for this audit (though **60** builds on the loop delivered here).
 
 ## Decisions (pre-planning)
 
@@ -34,7 +34,7 @@ The current AWAIT implementation only handles **completed** tasks (synchronous r
 ## Relationship to other stories
 
 - **Deferred until** language/VM test and core correctness work are in good shape; sequence **13** (VM/language test story) is the anchor for “tests green before large VM churn.”
-- **Enables** sequence **56** (HTTP server): handlers return `Task<Response>`; without a real loop and suspension, server-style concurrency is not credible. **HTTP is not audited or implemented in 55**—only the loop and **existing** async APIs.
+- **Enables** sequence **60** (HTTP server): handlers return `Task<Response>`; without a real loop and suspension, server-style concurrency is not credible. **HTTP is not audited or implemented in 59**—only the loop and **existing** async APIs.
 - **Dependencies (risk reduction):** sequences **12**–**15** (VM stack guard, VM integration tests, overflow/divzero tests) before landing large VM changes.
 - **Spec / stdlib churn:** This story supersedes the old “reference VM may complete `readText` synchronously” escape hatch where it conflicts with **non-blocking** and **Result/ErrorAdt** requirements.
 
@@ -49,14 +49,14 @@ The current AWAIT implementation only handles **completed** tasks (synchronous r
 7. **CLI process model:** Default **`--exit-wait`** (run-until-idle); **`--exit-no-wait`** for eager exit; documented in `09-tools` and CLI help.
 8. **Exceptions + AWAIT:** AWAIT inside `try`/`catch` behaves **deterministically**, with documented unwind semantics; covered by VM and JVM tests.
 9. **Portable tests:** Async concurrency tests **do not** assert completion **order**; they **do** run unchanged (or via one shared source) on **VM and JVM**.
-10. **Foundation for later work:** Timers, HTTP (**56**), and further I/O plug into the same loop model.
+10. **Foundation for later work:** Timers, HTTP (**60**), and further I/O plug into the same loop model.
 
 ## Acceptance Criteria
 
 - [ ] **Frame suspension:** On AWAIT, if the TASK is not completed, persist the current frame state and return to the scheduler; do not push a bogus value in place of the awaited result.
 - [ ] **Resumption:** When a TASK becomes completed, any frame suspended awaiting it is resumed and receives the **typed** result on the stack (**`Result`** success or failure as specified).
 - [ ] **Single-threaded loop:** Reference VM uses one thread for bytecode and the loop’s turn logic; no parallel execution of two Kestrel frames at once. JVM matches for language-visible behavior.
-- [ ] **Non-blocking stdlib (implemented surface only):** Audit complete for **shipped** async/non-blocking APIs; each uses the event loop / background completion path on **VM and JVM**. **HTTP / unimplemented spec-only APIs** excluded (**56**).
+- [ ] **Non-blocking stdlib (implemented surface only):** Audit complete for **shipped** async/non-blocking APIs; each uses the event loop / background completion path on **VM and JVM**. **HTTP / unimplemented spec-only APIs** excluded (**60**).
 - [ ] **Result + error ADTs:** Async stdlib operations exposed as `Task<…>` use **`Result<_, ErrorAdt>`** (or documented equivalent) with **enumerated** error types; legacy ad-hoc error channels removed or deprecated per spec.
 - [ ] **Multiple concurrent tasks:** At least two independent async operations can be in flight; tests prove correctness **without** asserting **which** completes first.
 - [ ] **E2E / integration:** Scenario(s) with concurrent async work (e.g. two reads) whose assertions depend only on **final aggregated outcomes** (or explicit synchronization **in Kestrel**, not on runtime ordering), runnable on **both** VM and JVM.
@@ -70,7 +70,7 @@ The current AWAIT implementation only handles **completed** tasks (synchronous r
 - `docs/specs/01-language.md` §5 (Async and Task model)
 - `docs/specs/04-bytecode-isa.md` §1.9 (AWAIT: suspend when task not complete)
 - `docs/specs/05-runtime-model.md` §6 (TASK suspended vs completed; event-loop-driven I/O; single-threaded frame execution)
-- `docs/specs/02-stdlib.md` (async APIs and filesystem **implemented in 55**; HTTP work stays with **56**)
+- `docs/specs/02-stdlib.md` (async APIs and filesystem **implemented in 59**; HTTP work stays with **60**)
 - `docs/specs/06-typesystem.md` (`Task`, `Result`, ADTs)
 - `docs/specs/08-tests.md` (async/Task testing expectations; VM+JVM parity)
 - `docs/specs/09-tools.md` (CLI: `kestrel run`, loop lifetime, flags)
@@ -97,7 +97,7 @@ The current AWAIT implementation only handles **completed** tasks (synchronous r
 
 ### Audit scope
 
-- The audit covers **stdlib**, **runtime primitives**, **compiler lowering** if needed, **scripts/CLI** entry, and **tests** that assumed synchronous completion or old error shapes—**limited to code paths that exist today**. **Do not** expand scope to HTTP client/server or other **57** work; the spec may still mention HTTP, but **56** updates only what is already implemented unless a doc fix is needed for consistency.
+- The audit covers **stdlib**, **runtime primitives**, **compiler lowering** if needed, **scripts/CLI** entry, and **tests** that assumed synchronous completion or old error shapes—**limited to code paths that exist today**. **Do not** expand scope to HTTP client/server or other **60** work; the spec may still mention HTTP, but **59** updates only what is already implemented unless a doc fix is needed for consistency.
 
 ## Impact analysis
 
@@ -115,7 +115,7 @@ The current AWAIT implementation only handles **completed** tasks (synchronous r
 
 ## Tasks
 
-- [ ] **Audit (inventory):** List every **implemented** `Task<…>` / async primitive and stdlib re-export (`stdlib/kestrel/fs.ks`, `__read_file_async`, JVM `KRuntime.readFileAsync`, VM `readFileAsync`); record sync/blocking call sites. Exclude HTTP / spec-only stubs (**56**).
+- [ ] **Audit (inventory):** List every **implemented** `Task<…>` / async primitive and stdlib re-export (`stdlib/kestrel/fs.ks`, `__read_file_async`, JVM `KRuntime.readFileAsync`, VM `readFileAsync`); record sync/blocking call sites. Exclude HTTP / spec-only stubs (**60**).
 - [ ] **Spec-first pass:** Update `05-runtime-model` §6 and `04` AWAIT text for suspension, idle process, and (if needed) TASK object layout; draft `02` **readText** / fs errors as **`Task<Result<String, FsReadError>>`** (or chosen ADT names); align `06` and `01` §5 for Task + Result composition.
 - [ ] **VM: TASK state machine:** Extend TASK representation for **pending** vs **completed** with optional **waiter list** / back-pointer to suspended frame(s); ensure **GC** traces suspended continuations and pending I/O handles safely.
 - [ ] **VM: Scheduler / loop:** Implement a **run-until** driver: execute bytecode until AWAIT suspend or halt; **poll/wait** for I/O (or integrate Zig/async or platform non-blocking read) without blocking the **frame-execution** thread on read completion; **idle** = no runnable frames and no pending external work (define precisely in spec).
@@ -159,5 +159,5 @@ The current AWAIT implementation only handles **completed** tasks (synchronous r
 
 - **`--exit-no-wait` semantics (planning default):** Exit when the **program entry** returns control to the host **without** draining the event loop (pending TASKs may remain incomplete or be dropped—pick one and document; prefer **explicit process exit code** and stderr warning if work was abandoned). **`--exit-wait`:** after entry returns, keep driving the loop until **idle** (no runnable frames, no registered pending I/O for in-flight tasks—exact definition in `05`).
 - **Both flags:** **Reject** with a diagnostic and non-zero exit (simplest, matches user recommendation in story draft).
-- **Timers:** Out of scope unless needed to unblock I/O testing; if deferred, note follow-up for **56** / later story.
+- **Timers:** Out of scope unless needed to unblock I/O testing; if deferred, note follow-up for **60** / later story.
 - **Migration:** List every breaking change to `Fs.readText` consumers in stdlib tests and conformance; consider a short **changelog** entry in repo root or `docs/` if the project maintains one.

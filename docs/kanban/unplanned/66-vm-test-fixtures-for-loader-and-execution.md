@@ -1,6 +1,6 @@
 # VM: Test fixtures for loader and execution
 
-## Sequence: 63
+## Sequence: 66
 ## Tier: Subset of VM testing (often folded into sequence 13)
 ## Former ID: 29
 
@@ -15,7 +15,7 @@ Provide minimal, checked-in `.kbc` fixtures (or equivalent) so Zig tests can loa
 
 ## Relationship to other stories
 
-- **Sequence 13** (VM unit and integration tests) should subsume most of this work. Treat **62** (this story) as optional if **13** lands first with fixtures included; otherwise implement **62** first as a stepping stone.
+- **Sequence 13** (VM unit and integration tests) should subsume most of this work. Treat **66** (this story) as optional if **13** lands first with fixtures included; otherwise implement **66** first as a stepping stone.
 
 ## Acceptance Criteria
 

@@ -1,6 +1,6 @@
 # Test output: suite-first live spinner and duration updates across all modes
 
-## Sequence: 68
+## Sequence: 71
 ## Tier: Optional / verification — Test harness UX
 ## Former ID: (none)
 
@@ -19,7 +19,7 @@ Improve test output readability across all three harness styles (compact, verbos
 ## Relationship to other stories
 
 - Follow-up UX refinement on top of `docs/kanban/done/21-stdlib-kestrel-test-framework-completeness.md`.
-- Independent of current networking roadmap stories (`65`–`67`) and async implementation story `55`.
+- Independent of current networking roadmap stories (`68`–`70`) and async implementation story `59`.
 - May require aligned wording updates with command-output docs in `docs/specs/09-tools.md` and test-library contract text in `docs/specs/02-stdlib.md`.
 
 ## Goals

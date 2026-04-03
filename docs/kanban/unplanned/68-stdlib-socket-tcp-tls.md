@@ -1,25 +1,25 @@
 # Stdlib: TCP/TLS sockets (`kestrel:socket`)
 
-## Sequence: 65
+## Sequence: 68
 ## Tier: 8 — Networking expansion (post–HTTP baseline)
 ## Former ID: (none)
 
 ## Summary
 
-Introduce a **user-facing** standard library module for **TCP** sockets (connect, listen, accept, read, write, close) and **TLS** over TCP for client and server roles where the host platform allows it. Implementations use **native** facilities in the Zig VM and the JVM backend (no bundled third-party protocol stacks required beyond what the host provides). This complements sequence **56** (`kestrel:http`), which may use sockets internally without exposing them; this story **documents and stabilises** the socket surface for protocols and tooling that need raw streams.
+Introduce a **user-facing** standard library module for **TCP** sockets (connect, listen, accept, read, write, close) and **TLS** over TCP for client and server roles where the host platform allows it. Implementations use **native** facilities in the Zig VM and the JVM backend (no bundled third-party protocol stacks required beyond what the host provides). This complements sequence **60** (`kestrel:http`), which may use sockets internally without exposing them; this story **documents and stabilises** the socket surface for protocols and tooling that need raw streams.
 
 ## Current State
 
 - `docs/specs/02-stdlib.md` defines `kestrel:http` but **no** first-class socket module.
 - `docs/specs/07-modules.md` lists core stdlib specifiers; `kestrel:socket` is not a reserved name.
-- Sequence **56** acceptance criteria mention VM primitives for TCP/HTTP; any **public** socket API is out of scope for **56** unless explicitly merged—this story assumes **56** may deliver internal transport first, then **65** adds the **stdlib contract** and JVM/Zig parity for programs that need streams.
+- Sequence **60** acceptance criteria mention VM primitives for TCP/HTTP; any **public** socket API is out of scope for **60** unless explicitly merged—this story assumes **60** may deliver internal transport first, then **68** adds the **stdlib contract** and JVM/Zig parity for programs that need streams.
 
 ## Relationship to other stories
 
-- **Depends on** sequence **56** (async/event loop) for non-blocking read/write and accept patterns consistent with `Task` and `await`, unless the first slice is **strictly blocking** with documented limitations (prefer aligning with **56** before closing **65**).
-- **Builds on / coordinates with** sequence **56** (`kestrel:http` full implementation): shared low-level code or primitives should be **factored** so HTTP and sockets do not fork incompatible TLS or TCP behaviour.
-- **Related (not duplicate):** sequence **58** (URL import resolution) is **compile-time** fetch; **65** is **runtime** I/O.
-- **Optional later:** WebSockets or other framed protocols may be separate stories on top of **65**.
+- **Depends on** sequence **59** (async/event loop) for non-blocking read/write and accept patterns consistent with `Task` and `await`, unless the first slice is **strictly blocking** with documented limitations (prefer aligning with **59** before closing **68**).
+- **Builds on / coordinates with** sequence **60** (`kestrel:http` full implementation): shared low-level code or primitives should be **factored** so HTTP and sockets do not fork incompatible TLS or TCP behaviour.
+- **Related (not duplicate):** sequence **62** (URL import resolution) is **compile-time** fetch; **68** is **runtime** I/O.
+- **Optional later:** WebSockets or other framed protocols may be separate stories on top of **68**.
 
 ## Goals
 
@@ -31,7 +31,7 @@ Introduce a **user-facing** standard library module for **TCP** sockets (connect
 ## Acceptance Criteria
 
 - [ ] `kestrel:socket` resolves from source like other stdlib modules (`docs/specs/07-modules.md` updated accordingly).
-- [ ] Documented API in `docs/specs/02-stdlib.md` covers at least: client connect (host, port), server listen/bind, accept, close, and byte-oriented send/receive returning **`Task`-shaped** results where **56** requires async I/O (or a documented blocking subset if **56** is not yet done—planning must pick one and stick to it).
+- [ ] Documented API in `docs/specs/02-stdlib.md` covers at least: client connect (host, port), server listen/bind, accept, close, and byte-oriented send/receive returning **`Task`-shaped** results where **59** requires async I/O (or a documented blocking subset if **59** is not yet done—planning must pick one and stick to it).
 - [ ] TLS: documented API for upgrading or creating a **TLS client** stream and **TLS server** context (exact shape left to planned phase but must appear in **02** before **done**).
 - [ ] Zig VM: primitives or host calls implementing the module behaviour; `zig build test` extended as needed.
 - [ ] JVM: equivalent behaviour via `KRuntime` (or documented Java APIs) with the same Kestrel-visible signatures.
@@ -49,7 +49,7 @@ Normative updates required for a consistent end state (this story is not complet
 
 ## Risks / Notes
 
-- **Ordering:** Implementing **65** before **56** risks duplicating TLS/TCP work; prefer **shared internal layer** or implement **65** after the first **56** vertical slice that already owns sockets.
+- **Ordering:** Implementing **68** before **59** risks duplicating TLS/TCP work; prefer **shared internal layer** or implement **68** after the first **60** vertical slice that already owns sockets.
 - **TLS in tests:** Certificate fixtures, trust stores, and CI headless environments differ between macOS/Linux and JVM; plan deterministic local certs or mock server in **planned** phase.
 - **Semantics parity:** Zig and Java may differ on edge cases (half-close, timeout granularity, DNS); **02** should mark behaviour **implementation-defined** where parity is impractical, and tests should cover the **intersection** behaviour.
 - **Security:** Raw sockets increase attack surface for user code; document that servers must not run with elevated trust without host hardening.

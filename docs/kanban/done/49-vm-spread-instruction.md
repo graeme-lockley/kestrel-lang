@@ -22,4 +22,4 @@ Per spec 04 §1.8, the **SPREAD** opcode (0x19) pops a record and additional val
 
 ## Notes
 
-- Unplanned story `docs/kanban/unplanned/63-vm-spread-instruction.md` covers follow-up verification; this done entry records the VM work. Compiler record spread codegen is a separate story (`38-compiler-record-spread-codegen.md`).
+- Unplanned story `docs/kanban/unplanned/67-vm-spread-instruction.md` covers follow-up verification; this done entry records the VM work. Compiler record spread codegen is a separate story (`38-compiler-record-spread-codegen.md`).

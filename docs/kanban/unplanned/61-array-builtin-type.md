@@ -1,6 +1,6 @@
 # Array<T> Built-in Type
 
-## Sequence: 58
+## Sequence: 61
 ## Tier: 7 — Deferred (large / dependency-heavy)
 ## Former ID: 24
 
