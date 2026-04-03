@@ -37,14 +37,14 @@ After S01-02:
 
 ## Acceptance Criteria
 
-- [ ] `KRuntime.readFileAsync(path)` submits the file read to the virtual thread executor and returns a `KTask`.
-- [ ] `await Fs.readText("valid-path")` returns the file contents.
-- [ ] `await Fs.readText("missing-path")` surfaces an error (exception from `get()`) — not an empty string.
-- [ ] Two concurrent `readText` calls overlap on the JVM (verify with test reading two files).
-- [ ] `listDir`, `writeText`, and `runProcess` remain synchronous in this story (converted in S01-07, S01-08, S01-09).
-- [ ] Stub: error returns are raw exceptions; a TODO comment references S01-04 for `Result<T, FsError>` migration.
-- [ ] Existing tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
-- [ ] `stdlib/kestrel/fs.test.ks` updated if needed for error behavior changes (empty string → exception).
+- [x] `KRuntime.readFileAsync(path)` submits the file read to the virtual thread executor and returns a `KTask`.
+- [x] `await Fs.readText("valid-path")` returns the file contents.
+- [x] `await Fs.readText("missing-path")` surfaces an error (exception from `get()`) — not an empty string.
+- [x] Two concurrent `readText` calls overlap on the JVM (verify with test reading two files).
+- [x] `listDir`, `writeText`, and `runProcess` remain synchronous in this story (converted in S01-07, S01-08, S01-09).
+- [x] Stub: error returns are raw exceptions; a TODO comment references S01-04 for `Result<T, FsError>` migration.
+- [x] Existing tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
+- [x] `stdlib/kestrel/fs.test.ks` updated if needed for error behavior changes (empty string → exception).
 
 ## Spec References
 
@@ -71,20 +71,20 @@ After S01-02:
 
 ## Tasks
 
-- [ ] Parser audit: confirm no parser grammar changes are required for this story (`await` / async syntax unchanged).
-- [ ] Typecheck audit in `compiler/src/typecheck/check.ts`: confirm `__read_file_async` remains `String -> Task<String>` and no additional type rules are needed.
-- [ ] Bytecode codegen audit (`compiler/src/codegen/codegen.ts`): confirm no VM-bytecode path changes are needed for this JVM-focused story.
-- [ ] JVM codegen verification in `compiler/src/jvm-codegen/codegen.ts`: keep intrinsic mapping for `__read_file_async` and ensure await path (`KTask.get()`) still matches runtime method descriptors after runtime edits.
-- [ ] JVM runtime implementation in `runtime/jvm/src/kestrel/runtime/KRuntime.java`: update `readFileAsync(Object path)` to dispatch file read work onto the virtual-thread executor and return a `KTask` backed by that asynchronous completion rather than `KTask.completed(...)`.
-- [ ] JVM runtime error path in `runtime/jvm/src/kestrel/runtime/KRuntime.java`: remove empty-string fallback for read errors and propagate failures through task completion exceptions, with a TODO referencing S01-04 typed `Result<T, FsError>` migration.
-- [ ] JVM task wiring in `runtime/jvm/src/kestrel/runtime/KTask.java`: add minimal helper support only if needed so runtime can return task instances backed by asynchronous `CompletableFuture` completion.
-- [ ] Stdlib behavior validation in `stdlib/kestrel/fs.ks`: keep `readText` surface signature unchanged and ensure no accidental scope creep to `listDir`/`writeText`.
-- [ ] Update `stdlib/kestrel/fs.test.ks` for missing-path behavior change (`""` sentinel -> exception from await) and keep existing sync `listDir` / `writeText` expectations.
-- [ ] Add/extend integration and scenario coverage for concurrent overlapping reads and missing-path exception propagation.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `cd runtime/jvm && bash build.sh`.
-- [ ] Run `./scripts/kestrel test`.
-- [ ] Run `./scripts/run-e2e.sh`.
+- [x] Parser audit: confirm no parser grammar changes are required for this story (`await` / async syntax unchanged).
+- [x] Typecheck audit in `compiler/src/typecheck/check.ts`: confirm `__read_file_async` remains `String -> Task<String>` and no additional type rules are needed.
+- [x] Bytecode codegen audit (`compiler/src/codegen/codegen.ts`): confirm no VM-bytecode path changes are needed for this JVM-focused story.
+- [x] JVM codegen verification in `compiler/src/jvm-codegen/codegen.ts`: keep intrinsic mapping for `__read_file_async` and ensure await path (`KTask.get()`) still matches runtime method descriptors after runtime edits.
+- [x] JVM runtime implementation in `runtime/jvm/src/kestrel/runtime/KRuntime.java`: update `readFileAsync(Object path)` to dispatch file read work onto the virtual-thread executor and return a `KTask` backed by that asynchronous completion rather than `KTask.completed(...)`.
+- [x] JVM runtime error path in `runtime/jvm/src/kestrel/runtime/KRuntime.java`: remove empty-string fallback for read errors and propagate failures through task completion exceptions, with a TODO referencing S01-04 typed `Result<T, FsError>` migration.
+- [x] JVM task wiring in `runtime/jvm/src/kestrel/runtime/KTask.java`: add minimal helper support only if needed so runtime can return task instances backed by asynchronous `CompletableFuture` completion.
+- [x] Stdlib behavior validation in `stdlib/kestrel/fs.ks`: keep `readText` surface signature unchanged and ensure no accidental scope creep to `listDir`/`writeText`.
+- [x] Update `stdlib/kestrel/fs.test.ks` for missing-path behavior change (`""` sentinel -> exception from await) and keep existing sync `listDir` / `writeText` expectations.
+- [x] Add/extend integration and scenario coverage for concurrent overlapping reads and missing-path exception propagation.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `cd runtime/jvm && bash build.sh`.
+- [x] Run `./scripts/kestrel test`.
+- [x] Run `./scripts/run-e2e.sh`.
 
 ## Tests to add
 
@@ -97,5 +97,12 @@ After S01-02:
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/02-stdlib.md` — update `kestrel:fs` `readText` contract from empty-string-on-error semantics to provisional exception propagation in Task completion, with note that S01-04 will migrate to `Result<T, E>`.
-- [ ] `docs/specs/01-language.md` — update §5 async/task runtime notes to reflect that `await` on `readText` may now surface task completion exceptions from runtime I/O failures.
+- [x] `docs/specs/02-stdlib.md` — update `kestrel:fs` `readText` contract from empty-string-on-error semantics to provisional exception propagation in Task completion, with note that S01-04 will migrate to `Result<T, E>`.
+- [x] `docs/specs/01-language.md` — update §5 async/task runtime notes to reflect that `await` on `readText` may now surface task completion exceptions from runtime I/O failures.
+
+## Build notes
+
+- 2026-04-03: Started implementation.
+- 2026-04-03: Verified the planned story diverged from the current tree: `KRuntime.readFileAsync` still returns `KTask.completed(...)` and `stdlib/kestrel/fs.test.ks` still asserts the old empty-string-on-missing-file behavior.
+- 2026-04-03: Wrapped checked task failures in `KException` payloads in `KTask.get()` so host I/O failures from `await Fs.readText(...)` are catchable in Kestrel without inventing typed filesystem errors ahead of S01-04.
+- 2026-04-03: Verified the non-blocking read path with a launch-vs-await timing integration test on two real files to avoid brittle absolute wall-clock thresholds.

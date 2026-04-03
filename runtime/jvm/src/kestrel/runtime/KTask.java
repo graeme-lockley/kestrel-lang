@@ -56,7 +56,7 @@ public final class KTask {
             if (failure instanceof Error) {
                 throw (Error) failure;
             }
-            throw new RuntimeException(failure);
+            throw new KException(failure);
         }
     }
 }

@@ -568,12 +568,46 @@ public final class KRuntime {
     }
 
     public static KTask readFileAsync(Object path) {
-        if (!(path instanceof String)) return KTask.completed("");
-        try {
-            return KTask.completed(new String(Files.readAllBytes(Paths.get((String) path)), StandardCharsets.UTF_8));
-        } catch (Exception e) {
-            return KTask.completed("");
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(path instanceof String)) {
+            future.completeExceptionally(new IllegalArgumentException("readText expects String"));
+            return KTask.fromFuture(future);
         }
+
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+
+        String resolvedPath = (String) path;
+        synchronized (asyncMonitor) {
+            asyncTasksInFlight++;
+        }
+
+        try {
+            executor.submit(() -> {
+                try {
+                    future.complete(new String(Files.readAllBytes(Paths.get(resolvedPath)), StandardCharsets.UTF_8));
+                } catch (Throwable t) {
+                    // TODO(S01-04): surface typed Result<String, FsError> values instead of raw task failures.
+                    future.completeExceptionally(t);
+                } finally {
+                    synchronized (asyncMonitor) {
+                        asyncTasksInFlight--;
+                        asyncMonitor.notifyAll();
+                    }
+                }
+            });
+        } catch (RuntimeException e) {
+            synchronized (asyncMonitor) {
+                asyncTasksInFlight--;
+                asyncMonitor.notifyAll();
+            }
+            throw e;
+        }
+
+        return KTask.fromFuture(future);
     }
 
     public static KList listDir(Object path) {

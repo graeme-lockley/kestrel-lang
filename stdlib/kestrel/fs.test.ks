@@ -24,8 +24,13 @@ export async fun run(s: Suite): Task<Unit> = {
 
     group(s1, "readText missing", (sg: Suite) => {
       val bad = "${cwd}/tests/fixtures/fs/__missing__.no_such";
-      val t = await Fs.readText(bad);
-      eq(sg, "empty string", t, "");
+      val caught = try {
+        await Fs.readText(bad);
+        0
+      } catch {
+        e => 1
+      };
+      eq(sg, "exception surfaces", caught, 1);
     });
 
     group(s1, "readViaAwait helper", (sg: Suite) => {

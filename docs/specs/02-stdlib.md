@@ -271,11 +271,11 @@ JSON parsing and serialisation implemented **in Kestrel** (no host JSON primitiv
 
 ## kestrel:fs
 
-File system. `readText` is **async-shaped** (`Task<String>`) so callers use `await` inside `async` functions; the reference VM may complete the task synchronously.
+File system. `readText` is **async-shaped** (`Task<String>`) so callers use `await` inside `async` functions. On the JVM backend the task is dispatched onto the virtual-thread runtime; callers observe the same API surface but the file read no longer completes synchronously on the calling thread.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `readText` | `(String) -> Task<String>` | Read file contents as UTF-8 text. On missing path, unreadable path, or read failure, the completed task carries an **empty string** (no distinct error type in the surface API). |
+| `readText` | `(String) -> Task<String>` | Read file contents as UTF-8 text. On the JVM backend, missing path, unreadable path, or read failure currently complete the task **exceptionally** and `await` rethrows that failure; this provisional surface is replaced by typed `Result<T, E>` payloads in S01-04. |
 | `writeText` | `(String, String) -> Unit` | Write UTF-8 text to a path (creates or truncates the file per host semantics). |
 | `listDir` | `(String) -> List<String>` | Non-recursive directory listing. Each element is `"<fullPath>\\tfile"` or `"<fullPath>\\tdir"` for a regular file or directory entry. If the path cannot be opened, returns an **empty** list. |
 
