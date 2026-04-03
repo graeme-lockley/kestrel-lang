@@ -411,6 +411,8 @@ export interface JvmCodegenOptions {
   namespaceClasses?: Map<string, string>;
   /** Namespace -> (function name -> arity) for namespace function value access. */
   namespaceFunArities?: Map<string, Map<string, number>>;
+  /** Namespace -> set of async function names for direct call descriptors. */
+  namespaceAsyncFunNames?: Map<string, Set<string>>;
   /** Namespace -> (constructor name -> full inner class name) for namespace ADT constructor access. */
   namespaceAdtConstructors?: Map<string, Map<string, string>>;
   /** Namespace -> set of var field names (for KRecord-based read/write). */
@@ -425,6 +427,8 @@ export interface JvmCodegenOptions {
   importedVarNames?: Set<string>;
   /** Local name -> arity for imported function declarations (IdentExpr: build KFunctionRef). */
   importedFunArities?: Map<string, number>;
+  /** Local imported names that refer to async functions. */
+  importedAsyncFunNames?: Set<string>;
   /** Local alias -> original exported name (for aliased imports like `import { x as y }`). */
   importedNameToOriginal?: Map<string, string>;
 }
@@ -469,11 +473,23 @@ function jvmMangleName(name: string): string {
   return out || '$';
 }
 
-/** Build descriptor for (Object,Object,...) -> Object. */
-function descriptor(arity: number): string {
+function descriptorWithReturn(arity: number, returnDescriptor: string): string {
   let params = '';
   for (let i = 0; i < arity; i++) params += 'Ljava/lang/Object;';
-  return `(${params})Ljava/lang/Object;`;
+  return `(${params})${returnDescriptor}`;
+}
+
+/** Build descriptor for (Object,Object,...) -> Object. */
+function descriptor(arity: number): string {
+  return descriptorWithReturn(arity, 'Ljava/lang/Object;');
+}
+
+function taskDescriptor(arity: number): string {
+  return descriptorWithReturn(arity, 'Lkestrel/runtime/KTask;');
+}
+
+function asyncPayloadMethodName(name: string): string {
+  return `$async$${jvmMangleName(name)}`;
 }
 
 /** Primitive type name from InternalType. */
@@ -610,6 +626,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     }
   const funNames = new Set<string>();
   const funArities = new Map<string, number>();
+  const asyncFunNames = new Set<string>();
   const topLevelFunDecls: FunDecl[] = [];
   const globalSlots = new Map<string, number>();
   const globalNames = new Set<string>();
@@ -621,6 +638,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       const fun = node as FunDecl;
       funNames.add(fun.name);
       funArities.set(fun.name, fun.params.length);
+      if (fun.async) asyncFunNames.add(fun.name);
       topLevelFunDecls.push(fun);
     }
     if (node.kind === 'ValDecl' || node.kind === 'VarDecl' || node.kind === 'ValStmt' || node.kind === 'VarStmt') {
@@ -702,6 +720,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     const arity = funByName.get(scc[0]!)?.params.length;
     if (arity == null) continue;
     if (!scc.every((name) => funByName.get(name)?.params.length === arity)) continue;
+    if (scc.some((name) => funByName.get(name)?.async)) continue;
     const orderedMembers = topLevelFunDecls.map((f) => f.name).filter((n) => scc.includes(n));
     const memberStateByName = new Map<string, number>();
     for (let i = 0; i < orderedMembers.length; i++) memberStateByName.set(orderedMembers[i]!, i);
@@ -730,6 +749,40 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   let localFunNamesInEnv: Set<string> | undefined; // set when emitting block-local lambda (mutual recursion)
 
   const { lambdas, idByNode } = collectLambdas(program, globalNames, funNames);
+
+  function emitFunctionRef(mb: MethodBuilder, ownerClass: string, methodName: string, arity: number): void {
+    mb.emit1s(JvmOp.LDC_W, cf.classRef(ownerClass));
+    mb.emit1s(JvmOp.LDC_W, cf.string(methodName));
+    mb.emit1s(JvmOp.LDC_W, cf.constantInt(arity));
+    mb.emit1s(
+      JvmOp.INVOKESTATIC,
+      cf.methodref(K_FUNCTION_REF, 'of', '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';')
+    );
+  }
+
+  function emitArgsObjectArray(mb: MethodBuilder, argSlots: number[]): void {
+    mb.emit1s(JvmOp.LDC_W, cf.constantInt(argSlots.length));
+    mb.emit1s(JvmOp.ANEWARRAY, cf.classRef('java/lang/Object'));
+    for (let i = 0; i < argSlots.length; i++) {
+      mb.emit1(JvmOp.DUP);
+      mb.emit1s(JvmOp.LDC_W, cf.constantInt(i));
+      mb.emit1b(JvmOp.ALOAD, argSlots[i]!);
+      mb.emit1(JvmOp.AASTORE);
+    }
+  }
+
+  function isImportedAsyncFunction(name: string): boolean {
+    return options.importedAsyncFunNames?.has(name) ?? false;
+  }
+
+  function isNamespaceAsyncFunction(namespaceName: string, functionName: string): boolean {
+    return options.namespaceAsyncFunNames?.get(namespaceName)?.has(functionName) ?? false;
+  }
+
+  function methodDescriptorForDirectCall(name: string, arity: number, namespaceName?: string): string {
+    if (namespaceName != null) return isNamespaceAsyncFunction(namespaceName, name) ? taskDescriptor(arity) : descriptor(arity);
+    return asyncFunNames.has(name) || isImportedAsyncFunction(name) ? taskDescriptor(arity) : descriptor(arity);
+  }
 
   /** Nearest enclosing `while` for `break`/`continue` (JVM emitExpr closure). */
   const loopBreakStack: { breakJumps: number[]; loopHead: number }[] = [];
@@ -894,17 +947,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         if (funNames.has(expr.name)) {
           const arity = funArities.get(expr.name);
           if (arity === undefined) throw new Error(`JVM codegen: missing arity for function ${expr.name}`);
-          mb.emit1s(JvmOp.LDC_W, cf.classRef(className));
-          mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(expr.name)));
-          mb.emit1s(JvmOp.LDC_W, cf.constantInt(arity));
-          mb.emit1s(
-            JvmOp.INVOKESTATIC,
-            cf.methodref(
-              K_FUNCTION_REF,
-              'of',
-              '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';'
-            )
-          );
+          emitFunctionRef(mb, className, jvmMangleName(expr.name), arity);
           return false;
         }
         const importedValVarClass = options.importedValVarToClass?.get(expr.name);
@@ -924,17 +967,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         if (importedFunClass != null && importedFunArity !== undefined) {
           const originalName = options.importedNameToOriginal?.get(expr.name) ?? expr.name;
           mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedFunClass, '$init', '()V'));
-          mb.emit1s(JvmOp.LDC_W, cf.classRef(importedFunClass));
-          mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(originalName)));
-          mb.emit1s(JvmOp.LDC_W, cf.constantInt(importedFunArity));
-          mb.emit1s(
-            JvmOp.INVOKESTATIC,
-            cf.methodref(
-              K_FUNCTION_REF,
-              'of',
-              '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';'
-            )
-          );
+          emitFunctionRef(mb, importedFunClass, jvmMangleName(originalName), importedFunArity);
           return false;
         }
         if (expr.name === 'None') {
@@ -1675,8 +1708,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           if (funNames.has(name) || ns || importedClass) {
             let targetClass = className;
             let methodName = options.importedNameToOriginal?.get(name) ?? name;
+            let isAsyncTarget = asyncFunNames.has(name);
             if (ns) targetClass = ns;
-            else if (importedClass) targetClass = importedClass;
+            else if (importedClass) {
+              targetClass = importedClass;
+              isAsyncTarget = isImportedAsyncFunction(name);
+            }
             if (targetClass !== className) {
               mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(targetClass, '$init', '()V'));
             }
@@ -1684,6 +1721,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const st = tailCtx?.inTail === true ? tailCtx.self : undefined;
             // Self tail only: Java bytecode cannot GOTO another method, so mutual tail stays INVOKESTATIC.
             if (
+              !isAsyncTarget &&
               st != null &&
               name === st.name &&
               targetClass === className &&
@@ -1701,6 +1739,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const mt = tailCtx?.inTail === true ? tailCtx.mutual : undefined;
             const mtState = mt?.memberStateByName.get(name);
             if (
+              !isAsyncTarget &&
               mt != null &&
               mtState !== undefined &&
               targetClass === className &&
@@ -1716,7 +1755,10 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               return true;
             }
             for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(targetClass, jvmMangleName(methodName), descriptor(arity)));
+            mb.emit1s(
+              JvmOp.INVOKESTATIC,
+              cf.methodref(targetClass, jvmMangleName(methodName), methodDescriptorForDirectCall(name, arity))
+            );
             return false;
           }
         }
@@ -1745,7 +1787,10 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               }
               const arity = expr.args.length;
               for (let ai = 0; ai < arity; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
-              mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, jvmMangleName(fe.field), descriptor(arity)));
+              mb.emit1s(
+                JvmOp.INVOKESTATIC,
+                cf.methodref(nsClass, jvmMangleName(fe.field), methodDescriptorForDirectCall(fe.field, arity, fe.object.name))
+              );
               return false;
             }
           }
@@ -2356,13 +2401,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             } else if (funNames.has(name)) {
               const arity = funArities.get(name);
               if (arity === undefined) throw new Error(`JVM codegen: missing arity for function ${name}`);
-              mb.emit1s(JvmOp.LDC_W, cf.classRef(className));
-              mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(name)));
-              mb.emit1s(JvmOp.LDC_W, cf.constantInt(arity));
-              mb.emit1s(
-                JvmOp.INVOKESTATIC,
-                cf.methodref(K_FUNCTION_REF, 'of', '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';')
-              );
+              emitFunctionRef(mb, className, jvmMangleName(name), arity);
             } else if (
               options.importedNameToClass?.get(name) != null &&
               options.importedFunArities?.get(name) !== undefined
@@ -2371,13 +2410,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const importedFunArity = options.importedFunArities.get(name)!;
               const originalName = options.importedNameToOriginal?.get(name) ?? name;
               mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedFunClass, '$init', '()V'));
-              mb.emit1s(JvmOp.LDC_W, cf.classRef(importedFunClass));
-              mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(originalName)));
-              mb.emit1s(JvmOp.LDC_W, cf.constantInt(importedFunArity));
-              mb.emit1s(
-                JvmOp.INVOKESTATIC,
-                cf.methodref(K_FUNCTION_REF, 'of', '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';')
-              );
+              emitFunctionRef(mb, importedFunClass, jvmMangleName(originalName), importedFunArity);
             } else {
               throw new Error('JVM codegen: free var not in env/global: ' + name);
             }
@@ -2969,9 +3002,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       };
       const bodyXfer = emitExpr(member.body, helperMb, helperTailCtx);
       if (!bodyXfer) {
-        if (member.async) {
-          helperMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'completedTask', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
-        }
         helperMb.emit1(JvmOp.ARETURN);
       }
     }
@@ -2982,9 +3012,44 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   }
 
   for (const fun of topLevelFunDecls) {
+    if (!fun.async) continue;
+    const arity = fun.params.length;
+    const payloadMb = cf.addMethod(asyncPayloadMethodName(fun.name), descriptor(arity), ACC_PRIVATE | ACC_STATIC);
+    const paramEnv = new Map<string, number>();
+    const fixedParamKeys: string[] = [];
+    fun.params.forEach((p, i) => paramEnv.set(p.name, i));
+    for (const [k, v] of paramEnv) env.set(k, v);
+    for (let i = 0; i < arity; i++) {
+      const fixedKey = `__param$${i}`;
+      fixedParamKeys.push(fixedKey);
+      env.set(fixedKey, i);
+    }
+    nextLocal = arity;
+    const payloadXfer = emitExpr(fun.body, payloadMb, undefined);
+    payloadMb.setMaxs(32, Math.max(Math.max(arity, nextLocal) + 8, 70));
+    if (!payloadXfer) payloadMb.emit1(JvmOp.ARETURN);
+    cf.flushLastMethod();
+    for (const k of paramEnv.keys()) env.delete(k);
+    for (const k of fixedParamKeys) env.delete(k);
+    nextLocal = 0;
+  }
+
+  for (const fun of topLevelFunDecls) {
     const arity = fun.params.length;
     const group = mutualGroupByFun.get(fun.name);
-    const mb = cf.addMethod(jvmMangleName(fun.name), descriptor(arity), ACC_PUBLIC | ACC_STATIC);
+    const mb = cf.addMethod(jvmMangleName(fun.name), fun.async ? taskDescriptor(arity) : descriptor(arity), ACC_PUBLIC | ACC_STATIC);
+    if (fun.async) {
+      emitFunctionRef(mb, className, asyncPayloadMethodName(fun.name), arity);
+      emitArgsObjectArray(mb, Array.from({ length: arity }, (_, i) => i));
+      mb.emit1s(
+        JvmOp.INVOKESTATIC,
+        cf.methodref(RUNTIME, 'submitAsync', '(Lkestrel/runtime/KFunction;[Ljava/lang/Object;)Lkestrel/runtime/KTask;')
+      );
+      mb.emit1(JvmOp.ARETURN);
+      mb.setMaxs(32, Math.max(arity + 4, 8));
+      cf.flushLastMethod();
+      continue;
+    }
     if (group != null) {
       const state = group.memberStateByName.get(fun.name);
       if (state == null) throw new Error(`JVM codegen: missing mutual state for ${fun.name}`);
@@ -3017,9 +3082,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     const funXfer = emitExpr(fun.body, mb, funSelfTail);
     mb.setMaxs(32, Math.max(Math.max(arity, nextLocal) + 8, 70));
     if (!funXfer) {
-      if (fun.async) {
-        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'completedTask', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
-      }
       mb.emit1(JvmOp.ARETURN);
     }
     cf.flushLastMethod();
@@ -3066,10 +3128,10 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
 
   const mainMb = cf.addMethod('main', '([Ljava/lang/String;)V', ACC_PUBLIC | ACC_STATIC);
   mainMb.emit1s(JvmOp.ALOAD, 0);
-  mainMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'setMainArgs', '([Ljava/lang/String;)V'));
-  mainMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(className, '$init', '()V'));
+  emitFunctionRef(mainMb, className, '$init', 0);
+  mainMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'runMain', '([Ljava/lang/String;Lkestrel/runtime/KFunction;)V'));
   mainMb.emit1(JvmOp.RETURN);
-  mainMb.setMaxs(2, 1);
+  mainMb.setMaxs(6, 1);
   cf.flushLastMethod();
 
   return {

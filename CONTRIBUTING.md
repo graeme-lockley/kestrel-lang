@@ -10,9 +10,9 @@ Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
 |------|---------|----------|
 | [Node.js](https://nodejs.org/) | 18 or newer | Compiler (TypeScript), tests |
 | [Zig](https://ziglang.org/) | Current stable | Bytecode VM, build and tests |
-| [Java](https://adoptium.net/) JDK | 11 or newer | Optional: JVM backend (`--target jvm`) |
+| [Java](https://adoptium.net/) JDK | 21 or newer | JVM backend (`--target jvm`), async runtime, and tests |
 
-The compiler declares `engines.node` in [compiler/package.json](compiler/package.json). The JVM runtime is built with `-source 11 -target 11` in [runtime/jvm/build.sh](runtime/jvm/build.sh).
+The compiler declares `engines.node` in [compiler/package.json](compiler/package.json). The JVM runtime is built with `--release 21` in [runtime/jvm/build.sh](runtime/jvm/build.sh) because async execution uses Project Loom virtual threads.
 
 ## Getting started
 

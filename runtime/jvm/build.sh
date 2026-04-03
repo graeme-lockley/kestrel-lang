@@ -6,7 +6,7 @@ SRC_DIR="$SCRIPT_DIR/src"
 OUT_DIR="$SCRIPT_DIR/out"
 JAR="$SCRIPT_DIR/kestrel-runtime.jar"
 mkdir -p "$OUT_DIR"
-javac -d "$OUT_DIR" -source 11 -target 11 \
+javac -d "$OUT_DIR" --release 21 \
   "$SRC_DIR/kestrel/runtime/KUnit.java" \
   "$SRC_DIR/kestrel/runtime/KFunction.java" \
   "$SRC_DIR/kestrel/runtime/KFunctionRef.java" \

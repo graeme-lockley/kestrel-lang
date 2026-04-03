@@ -502,8 +502,8 @@ val x = await f()
 Runtime behaviour:
 
 - On the JVM backend, `Task<T>` values are runtime `kestrel.runtime.KTask` objects.
-- Async function returns and async runtime primitives produce `KTask` (S01-01: completed-task only).
-- `await e` lowers to `KTask.get()`: for completed tasks it returns immediately; for incomplete tasks the current implementation raises a TODO runtime error (`"TODO: virtual thread suspension (S01-02)"`) until virtual-thread suspension lands in S01-02.
+- Async function calls submit their bodies to the runtime virtual-thread executor and immediately return `KTask` backed by a `CompletableFuture<Object>`.
+- `await e` lowers to `KTask.get()`: completed tasks return immediately; pending tasks block the current virtual thread until completion; exceptional completion rethrows the original failure so surrounding `try/catch` can handle it normally.
 
 ---
 

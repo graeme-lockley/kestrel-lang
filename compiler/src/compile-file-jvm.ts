@@ -11,7 +11,7 @@ import { distinctSpecifiersInSourceOrder, spanForSpecifier } from './module-spec
 import { jvmCodegen, type JvmCodegenResult } from './jvm-codegen/index.js';
 import { resolveSpecifier } from './resolve.js';
 import type { Program, ImportDecl, Expr, TopLevelStmt, TopLevelDecl, BlockExpr } from './ast/nodes.js';
-import type { TypeDecl } from './ast/nodes.js';
+import type { FunDecl, TypeDecl } from './ast/nodes.js';
 import { getInferredType } from './typecheck/check.js';
 import type { InternalType } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
@@ -400,9 +400,11 @@ export function compileFileJvm(
     const importClasses = new Map<string, string>();
     const namespaceClasses = new Map<string, string>();
     const namespaceFunArities = new Map<string, Map<string, number>>();
+    const namespaceAsyncFunNames = new Map<string, Set<string>>();
     const importedNameToClass = new Map<string, string>();
     const importedNameToOriginal = new Map<string, string>();
     const importedFunArities = new Map<string, number>();
+    const importedAsyncFunNames = new Set<string>();
     const importedValVarToClass = new Map<string, string>();
     const importedVarNames = new Set<string>();
     const namespaceAdtConstructors = new Map<string, Map<string, string>>();
@@ -435,6 +437,16 @@ export function compileFileJvm(
       return undefined;
     }
 
+    function isAsyncFun(prog: Program, name: string): boolean {
+      for (const node of prog.body) {
+        if (!node) continue;
+        if (node.kind === 'FunDecl' && node.name === name) {
+          return (node as FunDecl).async;
+        }
+      }
+      return false;
+    }
+
     for (const dep of depResults) {
       const depProg = cache.get(dep.path)?.program;
       importClasses.set(dep.spec, dep.className);
@@ -447,6 +459,7 @@ export function compileFileJvm(
               if (depProg) {
                 const arity = getFunArity(depProg, s.external);
                 if (arity !== undefined) importedFunArities.set(s.local, arity);
+                if (isAsyncFun(depProg, s.external)) importedAsyncFunNames.add(s.local);
               }
               if (depProg && isValOrVar(depProg, s.external)) importedValVarToClass.set(s.local, dep.className);
               if (depProg && isVar(depProg, s.external)) importedVarNames.add(s.local);
@@ -475,13 +488,15 @@ export function compileFileJvm(
             // Build ADT constructor → inner class map and var fields set for this namespace import
             if (depProg) {
               const funArities = new Map<string, number>();
+              const asyncFunNames = new Set<string>();
               const adtCtors = new Map<string, string>();
               const varFields = new Set<string>();
               for (const node of depProg.body) {
                 if (!node) continue;
                 if (node.kind === 'FunDecl') {
-                  const fun = node as { name: string; params: Array<unknown> };
+                  const fun = node as FunDecl;
                   funArities.set(fun.name, fun.params.length);
+                  if (fun.async) asyncFunNames.add(fun.name);
                 } else if (node.kind === 'TypeDecl') {
                   const t = node as TypeDecl;
                   if (t.body?.kind !== 'ADTBody') continue;
@@ -494,6 +509,7 @@ export function compileFileJvm(
                 }
               }
               if (funArities.size > 0) namespaceFunArities.set(imp.name, funArities);
+              if (asyncFunNames.size > 0) namespaceAsyncFunNames.set(imp.name, asyncFunNames);
               if (adtCtors.size > 0) namespaceAdtConstructors.set(imp.name, adtCtors);
               if (varFields.size > 0) namespaceVarFields.set(imp.name, varFields);
             }
@@ -507,11 +523,13 @@ export function compileFileJvm(
       importClasses: importClasses.size > 0 ? importClasses : undefined,
       namespaceClasses: namespaceClasses.size > 0 ? namespaceClasses : undefined,
       namespaceFunArities: namespaceFunArities.size > 0 ? namespaceFunArities : undefined,
+      namespaceAsyncFunNames: namespaceAsyncFunNames.size > 0 ? namespaceAsyncFunNames : undefined,
       namespaceAdtConstructors: namespaceAdtConstructors.size > 0 ? namespaceAdtConstructors : undefined,
       namespaceVarFields: namespaceVarFields.size > 0 ? namespaceVarFields : undefined,
       importedNameToClass: importedNameToClass.size > 0 ? importedNameToClass : undefined,
       importedNameToOriginal: importedNameToOriginal.size > 0 ? importedNameToOriginal : undefined,
       importedFunArities: importedFunArities.size > 0 ? importedFunArities : undefined,
+      importedAsyncFunNames: importedAsyncFunNames.size > 0 ? importedAsyncFunNames : undefined,
       importedValVarToClass: importedValVarToClass.size > 0 ? importedValVarToClass : undefined,
       importedVarNames: importedVarNames.size > 0 ? importedVarNames : undefined,
       importedAdtClasses: importedAdtClasses.size > 0 ? importedAdtClasses : undefined,

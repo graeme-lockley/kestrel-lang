@@ -10,18 +10,106 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 /**
  * Kestrel runtime primitives — equivalent to VM built-in CALL 0xFFFFFFxx.
  * Generated code sets mainArgs via setMainArgs() before running.
  */
 public final class KRuntime {
     private static String[] mainArgs = new String[0];
+    private static ExecutorService asyncExecutor;
+    private static final Object asyncMonitor = new Object();
+    private static int asyncTasksInFlight = 0;
 
     private KRuntime() {}
 
     /** Set command-line args (called by generated main). */
     public static void setMainArgs(String[] args) {
         mainArgs = args != null ? args : new String[0];
+    }
+
+    public static synchronized void initAsyncRuntime() {
+        if (asyncExecutor == null || asyncExecutor.isShutdown()) {
+            asyncExecutor = Executors.newVirtualThreadPerTaskExecutor();
+        }
+    }
+
+    public static synchronized void shutdownAsyncRuntime() {
+        ExecutorService executor = asyncExecutor;
+        asyncExecutor = null;
+        if (executor == null) return;
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while shutting down async runtime", e);
+        }
+    }
+
+    public static KTask submitAsync(KFunction fn, Object[] args) {
+        if (fn == null) throw new IllegalArgumentException("submitAsync expects KFunction");
+        initAsyncRuntime();
+        Object[] taskArgs = args != null ? args : new Object[0];
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+        synchronized (asyncMonitor) {
+            asyncTasksInFlight++;
+        }
+        try {
+            executor.submit(() -> {
+                try {
+                    future.complete(fn.apply(taskArgs));
+                } catch (Throwable t) {
+                    future.completeExceptionally(KTask.unwrapFailure(t));
+                } finally {
+                    synchronized (asyncMonitor) {
+                        asyncTasksInFlight--;
+                        asyncMonitor.notifyAll();
+                    }
+                }
+            });
+        } catch (RuntimeException e) {
+            synchronized (asyncMonitor) {
+                asyncTasksInFlight--;
+                asyncMonitor.notifyAll();
+            }
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
+
+    private static void awaitAsyncQuiescence() {
+        synchronized (asyncMonitor) {
+            while (asyncTasksInFlight > 0) {
+                try {
+                    asyncMonitor.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("Interrupted while waiting for async tasks", e);
+                }
+            }
+        }
+    }
+
+    public static void runMain(String[] args, KFunction init) {
+        setMainArgs(args);
+        initAsyncRuntime();
+        try {
+            init.apply(new Object[0]);
+            awaitAsyncQuiescence();
+        } finally {
+            shutdownAsyncRuntime();
+        }
     }
 
     public static void println(Object... args) {

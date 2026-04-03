@@ -21,7 +21,7 @@ After S01-01:
 - `await` codegen invokes `KTask.get()`.
 - All tasks are still created via `completed()` — no virtual threads, no real concurrency.
 
-In the current workspace, S01-01 is still in `doing/`, so this story should be implemented only after rebasing onto the final `KTask` / `completedTask()` API that lands there.
+The current workspace has diverged from the original plan: S01-01 is already done, the epic still links S01-02 through `unplanned/`, and the JVM runtime/build still target synchronous task completion with Java 11-era tooling. This story closes that gap directly.
 
 ## Relationship to other stories
 
@@ -41,17 +41,17 @@ In the current workspace, S01-01 is still in `doing/`, so this story should be i
 
 ## Acceptance Criteria
 
-- [ ] `runtime/jvm/build.sh` updated from `-source 11 -target 11` to `--release 21` (Project Loom requires Java 21+).
-- [ ] `README.md` and `CONTRIBUTING.md` updated to require Java 21+ (currently state "Java 11+").
-- [ ] A virtual thread executor is created at runtime startup and accessible from `KRuntime`.
-- [ ] Calling an `async fun` dispatches its body to a virtual thread and returns a `KTask`.
-- [ ] JVM codegen emits the dispatch call for async function invocation (wrapping the body in a `Runnable`/`Callable` submitted to the executor).
-- [ ] `await` on a pending KTask blocks the calling virtual thread until the task completes, then returns the value.
-- [ ] Two concurrent `await` calls on independent tasks overlap execution (test with a delay or I/O).
-- [ ] Exception thrown in async body is caught via `await` in a try/catch block.
-- [ ] The `KTask.get()` TODO error from S01-01 is removed — real suspension now works.
-- [ ] Stub: async I/O primitives (e.g. `readFileAsync`) still complete synchronously (TODO → S01-03).
-- [ ] Existing tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
+- [x] `runtime/jvm/build.sh` updated from `-source 11 -target 11` to `--release 21` (Project Loom requires Java 21+).
+- [x] `README.md` and `CONTRIBUTING.md` updated to require Java 21+ (currently state "Java 11+").
+- [x] A virtual thread executor is created at runtime startup and accessible from `KRuntime`.
+- [x] Calling an `async fun` dispatches its body to a virtual thread and returns a `KTask`.
+- [x] JVM codegen emits the dispatch call for async function invocation (wrapping the body in a `Runnable`/`Callable` submitted to the executor).
+- [x] `await` on a pending KTask blocks the calling virtual thread until the task completes, then returns the value.
+- [x] Two concurrent `await` calls on independent tasks overlap execution (test with a delay or I/O).
+- [x] Exception thrown in async body is caught via `await` in a try/catch block.
+- [x] The `KTask.get()` TODO error from S01-01 is removed — real suspension now works.
+- [x] Stub: async I/O primitives (e.g. `readFileAsync`) still complete synchronously (TODO → S01-03).
+- [x] Existing tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
 
 ## Spec References
 
@@ -80,21 +80,22 @@ In the current workspace, S01-01 is still in `doing/`, so this story should be i
 
 ## Tasks
 
-- [ ] Parser: audit `compiler/src/parser/parse.ts` async / await parsing paths (`parseFunDecl`, `parsePrimary`) and confirm no grammar change is required for virtual-thread execution.
-- [ ] Typecheck: audit `compiler/src/typecheck/check.ts` async-context tracking and `AwaitExpr` inference so `await` continues to require `Task<T>` and unwrap to `T` with no Loom-specific type changes.
-- [ ] Bytecode codegen (non-JVM): verify `compiler/src/codegen/codegen.ts` needs no changes for this JVM-only story and record that no-op in build notes when implementing.
-- [ ] JVM codegen: update `compiler/src/jvm-codegen/codegen.ts` `AwaitExpr` emission and async-call lowering so awaited values come from `KTask.get()` on pending tasks rather than passthrough / immediately completed wrappers.
-- [ ] JVM codegen: update `compiler/src/jvm-codegen/codegen.ts` async function/helper emission and generated `main` startup path so async bodies are submitted through runtime executor hooks and the runtime lifecycle is initialized and shut down cleanly.
-- [ ] JVM runtime: extend `runtime/jvm/src/kestrel/runtime/KTask.java` with pending-task construction, blocking `get()`, and exceptional completion unwrapping for `await`.
-- [ ] JVM runtime: update `runtime/jvm/src/kestrel/runtime/KRuntime.java` (or add a focused neighboring runtime helper) to create the virtual-thread executor at startup, expose a submission helper for async functions, preserve `completedTask()` for still-synchronous primitives, and shut the executor down on process exit.
-- [ ] JVM runtime build: update `runtime/jvm/build.sh` to compile the runtime with Java 21 (`--release 21`) and include any new runtime source files.
-- [ ] Stdlib validation: confirm `stdlib/kestrel/fs.ks`, `stdlib/kestrel/process.ks`, and current async call sites remain source-compatible while `readFileAsync` and other I/O primitives stay synchronous stubs until follow-up stories.
-- [ ] Docs: update `README.md` and `CONTRIBUTING.md` to require Java 21+ and explain the Project Loom dependency for JVM async execution.
-- [ ] Tests: add or update the suites listed below to cover executor-backed async launch, overlapping execution, pending-task await, and exception propagation through `await`.
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `cd runtime/jvm && bash build.sh`
-- [ ] Run `./scripts/kestrel test`
-- [ ] Run `./scripts/run-e2e.sh`
+- [x] Parser: audit `compiler/src/parser/parse.ts` async / await parsing paths (`parseFunDecl`, `parsePrimary`) and confirm no grammar change is required for virtual-thread execution.
+- [x] Typecheck: audit `compiler/src/typecheck/check.ts` async-context tracking and `AwaitExpr` inference so `await` continues to require `Task<T>` and unwrap to `T` with no Loom-specific type changes.
+- [x] Bytecode codegen (non-JVM): verify `compiler/src/codegen/codegen.ts` needs no changes for this JVM-only story and record that no-op in build notes when implementing.
+- [x] JVM codegen: update `compiler/src/jvm-codegen/codegen.ts` `AwaitExpr` emission and async-call lowering so awaited values come from `KTask.get()` on pending tasks rather than passthrough / immediately completed wrappers.
+- [x] JVM codegen: update `compiler/src/jvm-codegen/codegen.ts` async function/helper emission and generated `main` startup path so async bodies are submitted through runtime executor hooks and the runtime lifecycle is initialized and shut down cleanly.
+- [x] JVM import metadata: thread async-function flags through `compiler/src/compile-file-jvm.ts` so imported and namespace async calls use `KTask`-returning descriptors instead of legacy object-returning signatures.
+- [x] JVM runtime: extend `runtime/jvm/src/kestrel/runtime/KTask.java` with pending-task construction, blocking `get()`, and exceptional completion unwrapping for `await`.
+- [x] JVM runtime: update `runtime/jvm/src/kestrel/runtime/KRuntime.java` (or add a focused neighboring runtime helper) to create the virtual-thread executor at startup, expose a submission helper for async functions, preserve `completedTask()` for still-synchronous primitives, and shut the executor down on process exit.
+- [x] JVM runtime build: update `runtime/jvm/build.sh` to compile the runtime with Java 21 (`--release 21`) and include any new runtime source files.
+- [x] Stdlib validation: confirm `stdlib/kestrel/fs.ks`, `stdlib/kestrel/process.ks`, and current async call sites remain source-compatible while `readFileAsync` and other I/O primitives stay synchronous stubs until follow-up stories.
+- [x] Docs: update `README.md` and `CONTRIBUTING.md` to require Java 21+ and explain the Project Loom dependency for JVM async execution.
+- [x] Tests: add or update the suites listed below to cover executor-backed async launch, overlapping execution, pending-task await, and exception propagation through `await`.
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `cd runtime/jvm && bash build.sh`
+- [x] Run `./scripts/kestrel test`
+- [x] Run `./scripts/run-e2e.sh`
 
 ## Tests to add
 
@@ -109,13 +110,22 @@ In the current workspace, S01-01 is still in `doing/`, so this story should be i
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — update §5 runtime semantics so `await` is described in terms of `Task<T>` / `KTask` completion on the JVM rather than the old "suspend frame" wording alone, and document exception propagation through `await`.
-- [ ] `docs/specs/06-typesystem.md` — update §6 async / await wording so the `Task<T>` discussion matches the concrete JVM runtime model without changing the surface type rules.
-- [ ] `README.md` — update the prerequisite and quick-start text from JDK 11+ to Java 21+ and mention Project Loom as the reason.
-- [ ] `CONTRIBUTING.md` — update the prerequisites table and runtime build note to `--release 21`, and clarify that JVM backend work now requires Java 21+.
+- [x] `docs/specs/01-language.md` — update §5 runtime semantics so `await` is described in terms of `Task<T>` / `KTask` completion on the JVM rather than the old "suspend frame" wording alone, and document exception propagation through `await`.
+- [x] `docs/specs/06-typesystem.md` — update §6 async / await wording so the `Task<T>` discussion matches the concrete JVM runtime model without changing the surface type rules.
+- [x] `README.md` — update the prerequisite and quick-start text from JDK 11+ to Java 21+ and mention Project Loom as the reason.
+- [x] `CONTRIBUTING.md` — update the prerequisites table and runtime build note to `--release 21`, and clarify that JVM backend work now requires Java 21+.
 
 ## Notes
 
-- S01-01 is still active in `docs/kanban/doing/`, so implementation should re-read its final landed `KTask` / `completedTask()` signatures before editing S01-02 files; if those names or descriptors drift, update this story's tasks before moving to `doing/`.
 - The most likely deterministic overlap test is a JVM-only integration or E2E program that uses a narrow delay source (for example a portable subprocess sleep) rather than busy-loop timing, which would be too flaky for CI.
 - `compiler/src/jvm-codegen/classfile.ts` still emits older classfile versions for generated user classes. Running those classes on Java 21 is fine, but if executor-related lowering requires newer bytecode constructs, raise that as an explicit follow-up rather than silently expanding this story.
+
+## Build notes
+
+- 2026-04-03: Started implementation.
+- 2026-04-03: Codebase divergence from the original plan: S01-01 is already done, but S01-02 still points at stale `unplanned/` links in the epic and still assumes pre-S01-01 workspace state. Implementation will update the story and epic as part of closure.
+- 2026-04-03: Reused the existing `KFunctionRef` path rather than inventing a second callable representation. Async public methods now submit private payload helpers through `KRuntime.submitAsync(...)`, which keeps function values and direct calls consistent.
+- 2026-04-03: Direct-call descriptors needed extra async metadata from `compile-file-jvm.ts` for named and namespace imports; otherwise imported async functions would still link as `(Object...) -> Object` and fail at runtime.
+- 2026-04-03: Shutting the executor down immediately after `$init` returned was too eager because still-running async tasks can submit nested async calls. `KRuntime.runMain(...)` now waits for async quiescence before shutdown so nested `await` chains complete reliably.
+- 2026-04-03: Deterministic overlap coverage lives in `compiler/test/integration/jvm-async-runtime.test.ts` via a tiny Java harness that submits sleeping `KFunction`s directly to the runtime executor; Kestrel-language tests focus on `await` success and `try/catch` propagation.
+- 2026-04-03: Verification complete. Required suites all pass: `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test`, and `./scripts/run-e2e.sh`.

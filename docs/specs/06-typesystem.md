@@ -198,7 +198,7 @@ The types file (07 §5) represents opaque types with a placeholder (the name and
 - **Async context:** The body of an `async fun` is an async context. Only in an async context may **await** be used.
 - **Await:** The expression `await e` is well-typed only if (1) **e** has type **Task<A>** for some type **A**, and (2) the expression appears in an **async context**. The type of `await e` is **A**. Use of `await` outside an async context (e.g. in a non-async function or at top level) is a **type or context error** (01 §5).
 - **Task<T>** is a built-in type (01 §3.6, 02); its values are created by calling async functions or by runtime primitives. On the JVM backend these values are represented by `kestrel.runtime.KTask` (wrapping `CompletableFuture<Object>`). The type system does not distinguish “suspended” vs “completed” tasks; both have type Task<T>.
-- **Current runtime boundary (S01-01):** `await` in JVM codegen invokes `KTask.get()`, which returns immediately for completed tasks. Incomplete-task suspension remains intentionally unimplemented until S01-02 (`"TODO: virtual thread suspension (S01-02)"`).
+- **JVM async runtime model:** Async JVM function calls create pending `KTask` values by submitting function bodies to the runtime virtual-thread executor. `await` invokes `KTask.get()`, which blocks until the task completes and then returns the payload or rethrows the original failure. These runtime details do not affect the static typing rules: both pending and completed tasks have the same type `Task<T>`.
 
 ---
 

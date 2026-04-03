@@ -5,7 +5,7 @@ Kestrel is a statically typed language with Hindley–Milner type inference. You
 ## What you need
 
 - **Node.js** 18 or newer (for the compiler)
-- **JDK 11+** for the JVM runtime
+- **Java 21+** for the JVM runtime and async execution (Project Loom virtual threads)
 
 ## Quick start
 
