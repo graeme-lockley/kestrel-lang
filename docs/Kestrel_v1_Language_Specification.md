@@ -294,7 +294,9 @@ Contract: implementations must provide these modules with the listed signatures.
 
 ### kestrel:fs
 
--   readText(String): Task\<String\>
+-   readText(String): Task\<Result\<String, FsError\>\>
+-   writeText(String, String): Task\<Result\<Unit, FsError\>\>
+-   listDir(String): Task\<Result\<List\<String\>, FsError\>\>
 
 ------------------------------------------------------------------------
 

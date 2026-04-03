@@ -174,4 +174,109 @@ run()
       rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  it('await Fs.listDir(...) returns entries for a known fixture directory', () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'kestrel-runtime-stdlib-listdir-'));
+    const fixtureDir = join(kestrelRoot, 'tests', 'fixtures', 'fs', 'list_sample');
+    const srcPath = join(tmpRoot, 'RuntimeStdlibListDir.ks');
+
+    writeFileSync(
+      srcPath,
+      `import * as Fs from "kestrel:fs"
+import * as Lst from "kestrel:list"
+import * as Str from "kestrel:string"
+
+fun entryContains(entries: List<String>, needle: String): Bool =
+  Lst.any(entries, (entry: String) => Str.contains(needle, entry))
+
+async fun run(): Task<Unit> = {
+  val result = await Fs.listDir(${JSON.stringify(fixtureDir)});
+  val count =
+    match (result) {
+      Ok(entries) => Lst.length(entries),
+      Err(_) => 0
+    };
+  val matched =
+    match (result) {
+      Ok(entries) => {
+        val a = if (entryContains(entries, "a.txt\tfile")) 1 else 0;
+        val b = if (entryContains(entries, "b.txt\tfile")) 1 else 0;
+        a + b
+      }
+      Err(_) => 0
+    };
+  println(count);
+  println(matched);
+  ()
+}
+
+run()
+`
+    );
+
+    try {
+      const compileResult = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpRoot,
+      });
+      expect(compileResult.ok).toBe(true);
+      if (!compileResult.ok) return;
+
+      const mainClass = compileResult.mainClass.replace(/\//g, '.');
+      const stdout = execSync(`java -cp "${runtimeJar}:${tmpRoot}" "${mainClass}"`, {
+        cwd: kestrelRoot,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      expect(stdout).toBe('2\n2\n');
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('await Fs.listDir(...) returns Err(NotFound) for a missing directory', () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'kestrel-runtime-stdlib-listdir-missing-'));
+    const missingDir = join(tmpRoot, '__missing__');
+    const srcPath = join(tmpRoot, 'RuntimeStdlibListDirMissing.ks');
+
+    writeFileSync(
+      srcPath,
+      `import * as Fs from "kestrel:fs"
+import { NotFound } from "kestrel:fs"
+
+async fun run(): Task<Unit> = {
+  val caught =
+    match (await Fs.listDir(${JSON.stringify(missingDir)})) {
+      Err(NotFound) => 1,
+      _ => 0
+    };
+  println(caught);
+  ()
+}
+
+run()
+`
+    );
+
+    try {
+      const compileResult = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpRoot,
+      });
+      expect(compileResult.ok).toBe(true);
+      if (!compileResult.ok) return;
+
+      const mainClass = compileResult.mainClass.replace(/\//g, '.');
+      const stdout = execSync(`java -cp "${runtimeJar}:${tmpRoot}" "${mainClass}"`, {
+        cwd: kestrelRoot,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      expect(stdout).toBe('1\n');
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });

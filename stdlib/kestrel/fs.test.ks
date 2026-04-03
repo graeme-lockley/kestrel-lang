@@ -80,6 +80,7 @@ export async fun run(s: Suite): Task<Unit> = {
           Ok(v) => v,
           Err(_) => []
         };
+      eq(sg, "entry count", Lst.length(entries), 2);
       isTrue(sg, "has a.txt", entryContains(entries, "a.txt"));
       isTrue(sg, "has b.txt", entryContains(entries, "b.txt"));
       isTrue(sg, "tab file suffix", entryContains(entries, "\tfile"));

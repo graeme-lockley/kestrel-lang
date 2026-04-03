@@ -16,6 +16,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 /**
  * Kestrel runtime primitives — equivalent to VM built-in CALL 0xFFFFFFxx.
  * Generated code sets mainArgs via setMainArgs() before running.
@@ -652,11 +653,13 @@ public final class KRuntime {
                 try {
                     Path dir = Paths.get(resolvedPath);
                     List<String> entries = new ArrayList<>();
-                    Files.list(dir).forEach(p -> {
-                        String kind = Files.isDirectory(p) ? "dir" : "file";
-                        // Match VM contract: "<fullPath>\t<kind>"
-                        entries.add(p.toString() + "\t" + kind);
-                    });
+                    try (Stream<Path> stream = Files.list(dir)) {
+                        stream.forEach(p -> {
+                            String kind = Files.isDirectory(p) ? "dir" : "file";
+                            // Match VM contract: "<fullPath>\t<kind>"
+                            entries.add(p.toString() + "\t" + kind);
+                        });
+                    }
                     KList result = KNil.INSTANCE;
                     for (int i = entries.size() - 1; i >= 0; i--) {
                         result = new KCons(entries.get(i), result);

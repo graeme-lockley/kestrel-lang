@@ -42,15 +42,15 @@ Promote the stale `listDir` migration story to a build-ready plan that matches t
 
 ## Acceptance Criteria
 
-- [ ] `stdlib/kestrel/fs.ks` continues to export `listDir(path: String): Task<Result<List<String>, FsError>>` and maps runtime error codes to `FsError` consistently with the other fs APIs.
-- [ ] `compiler/src/typecheck/check.ts` `__list_dir` binding remains aligned with the runtime contract: `(String) -> Task<Result<List<String>, String>>` at the intrinsic layer, with stdlib mapping to `FsError` at the public layer.
-- [ ] `compiler/src/jvm-codegen/codegen.ts` emits the async intrinsic call to `KRuntime.listDirAsync(Object): KTask` for `__list_dir`.
-- [ ] `runtime/jvm/src/kestrel/runtime/KRuntime.java` `listDirAsync()` dispatches to the virtual-thread executor and returns `KOk(entries)` / `KErr(code)` rather than silently falling back to an empty list.
-- [ ] `stdlib/kestrel/fs.test.ks` covers a successful listing and a missing-directory error with order-independent assertions.
-- [ ] `scripts/run_tests.ks` continues to await both directory scans used for default test discovery and preserves current non-zero exit behavior when discovery fails.
-- [ ] `compiler/test/integration/runtime-stdlib.test.ts` includes listDir-specific JVM integration coverage for success and missing-directory failure.
-- [ ] Canonical specs and related docs do not describe stale synchronous or pre-Result `listDir` behavior.
-- [ ] Verification passes: `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test`, `./scripts/run-e2e.sh`.
+- [x] `stdlib/kestrel/fs.ks` continues to export `listDir(path: String): Task<Result<List<String>, FsError>>` and maps runtime error codes to `FsError` consistently with the other fs APIs.
+- [x] `compiler/src/typecheck/check.ts` `__list_dir` binding remains aligned with the runtime contract: `(String) -> Task<Result<List<String>, String>>` at the intrinsic layer, with stdlib mapping to `FsError` at the public layer.
+- [x] `compiler/src/jvm-codegen/codegen.ts` emits the async intrinsic call to `KRuntime.listDirAsync(Object): KTask` for `__list_dir`.
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java` `listDirAsync()` dispatches to the virtual-thread executor and returns `KOk(entries)` / `KErr(code)` rather than silently falling back to an empty list.
+- [x] `stdlib/kestrel/fs.test.ks` covers a successful listing and a missing-directory error with order-independent assertions.
+- [x] `scripts/run_tests.ks` continues to await both directory scans used for default test discovery and preserves current non-zero exit behavior when discovery fails.
+- [x] `compiler/test/integration/runtime-stdlib.test.ts` includes listDir-specific JVM integration coverage for success and missing-directory failure.
+- [x] Canonical specs and related docs do not describe stale synchronous or pre-Result `listDir` behavior.
+- [x] Verification passes: `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test`, `./scripts/run-e2e.sh`.
 
 ## Spec References
 
@@ -82,18 +82,18 @@ Promote the stale `listDir` migration story to a build-ready plan that matches t
 
 ## Tasks
 
-- [ ] Audit `compiler/src/typecheck/check.ts` `__list_dir` typing so the intrinsic contract remains `Task<Result<List<String>, String>>` and matches the runtime payload shape.
-- [ ] Audit `compiler/src/jvm-codegen/codegen.ts` `__list_dir` lowering to `KRuntime.listDirAsync(Ljava/lang/Object;)Lkestrel/runtime/KTask;` and fix any descriptor or intrinsic-name drift.
-- [ ] Audit `runtime/jvm/src/kestrel/runtime/KRuntime.java` `listDirAsync()` for virtual-thread dispatch, `KOk`/`KErr` payload shape, and no silent empty-list fallback; tighten resource or error handling if needed.
-- [ ] Audit `stdlib/kestrel/fs.ks` `listDir` wrapper and `mapFsError` so the public surface remains `Task<Result<List<String>, FsError>>` and matches runtime error-code conventions.
-- [ ] Audit `stdlib/kestrel/fs.test.ks` listDir coverage and extend it only if success-entry shape or missing-directory error assertions are incomplete.
-- [ ] Audit `scripts/run_tests.ks` `listDirOrExit()` and default discovery flow so both directory scans remain awaited and failure messaging stays unchanged.
-- [ ] Add or extend `compiler/test/integration/runtime-stdlib.test.ts` with listDir success and missing-directory JVM integration regressions.
-- [ ] Update canonical specs and any still-user-facing docs that describe stale sync or pre-Result `listDir` behavior.
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `cd runtime/jvm && bash build.sh`
-- [ ] Run `./scripts/kestrel test`
-- [ ] Run `./scripts/run-e2e.sh`
+- [x] Audit `compiler/src/typecheck/check.ts` `__list_dir` typing so the intrinsic contract remains `Task<Result<List<String>, String>>` and matches the runtime payload shape.
+- [x] Audit `compiler/src/jvm-codegen/codegen.ts` `__list_dir` lowering to `KRuntime.listDirAsync(Ljava/lang/Object;)Lkestrel/runtime/KTask;` and fix any descriptor or intrinsic-name drift.
+- [x] Audit `runtime/jvm/src/kestrel/runtime/KRuntime.java` `listDirAsync()` for virtual-thread dispatch, `KOk`/`KErr` payload shape, and no silent empty-list fallback; tighten resource or error handling if needed.
+- [x] Audit `stdlib/kestrel/fs.ks` `listDir` wrapper and `mapFsError` so the public surface remains `Task<Result<List<String>, FsError>>` and matches runtime error-code conventions.
+- [x] Audit `stdlib/kestrel/fs.test.ks` listDir coverage and extend it only if success-entry shape or missing-directory error assertions are incomplete.
+- [x] Audit `scripts/run_tests.ks` `listDirOrExit()` and default discovery flow so both directory scans remain awaited and failure messaging stays unchanged.
+- [x] Add or extend `compiler/test/integration/runtime-stdlib.test.ts` with listDir success and missing-directory JVM integration regressions.
+- [x] Update canonical specs and any still-user-facing docs that describe stale sync or pre-Result `listDir` behavior.
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `cd runtime/jvm && bash build.sh`
+- [x] Run `./scripts/kestrel test`
+- [x] Run `./scripts/run-e2e.sh`
 
 ## Tests to add
 
@@ -105,12 +105,19 @@ Promote the stale `listDir` migration story to a build-ready plan that matches t
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/02-stdlib.md` — confirm the `kestrel:fs` `listDir` row describes the final `Task<Result<List<String>, FsError>>` contract and current entry format.
-- [ ] `docs/specs/01-language.md` — keep the async/task model wording consistent with failure-as-data stdlib operations so this story does not reintroduce exception-based wording.
-- [ ] `docs/specs/06-typesystem.md` — confirm the `await` typing examples remain accurate for `Task<Result<...>>` fs APIs.
-- [ ] `docs/specs/09-tools.md` — verify `kestrel test` discovery still matches the async `scripts/run_tests.ks` implementation.
-- [ ] `docs/Kestrel_v1_Language_Specification.md` — audit or update any stale fs signatures if this aggregate document is still intended to be user-facing.
+- [x] `docs/specs/02-stdlib.md` — confirm the `kestrel:fs` `listDir` row describes the final `Task<Result<List<String>, FsError>>` contract and current entry format.
+- [x] `docs/specs/01-language.md` — keep the async/task model wording consistent with failure-as-data stdlib operations so this story does not reintroduce exception-based wording.
+- [x] `docs/specs/06-typesystem.md` — confirm the `await` typing examples remain accurate for `Task<Result<...>>` fs APIs.
+- [x] `docs/specs/09-tools.md` — verify `kestrel test` discovery still matches the async `scripts/run_tests.ks` implementation.
+- [x] `docs/Kestrel_v1_Language_Specification.md` — audit or update any stale fs signatures if this aggregate document is still intended to be user-facing.
 
 ## Notes
 
 - The repository already appears to satisfy most of the original story mechanically. `build-story` should treat this as an audit-and-closeout task: add only the missing listDir-specific regression coverage and docs cleanup that remain after verification.
+
+## Build notes
+
+- 2026-04-03: Started implementation.
+- 2026-04-03: `listDirAsync()` already matched the planned Result-based contract, so the only runtime code change was closing the `Files.list(...)` stream explicitly to avoid leaking the directory handle on the JVM path.
+- 2026-04-03: Added listDir-specific JVM integration coverage and a direct positive E2E scenario because existing async stdlib coverage was readText-heavy and did not pin the `listDir` entry-shape and missing-directory behavior independently.
+- 2026-04-03: Canonical specs were already broadly correct; the docs pass focused on clarifying `listDir` failure behavior and updating the legacy aggregate spec file, which still documented the old pre-Result fs surface.
