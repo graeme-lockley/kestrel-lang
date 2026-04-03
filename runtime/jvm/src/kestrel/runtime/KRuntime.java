@@ -194,6 +194,29 @@ public final class KRuntime {
     }
 
     /**
+     * Normalize a caught JVM throwable into a Kestrel payload object.
+     * - KException => payload
+     * - ArithmeticException => DivideByZero/ArithmeticOverflow singleton when class names are provided
+     * - otherwise rethrow
+     */
+    public static Object normalizeCaught(Throwable t, String arithmeticOverflowClass, String divideByZeroClass) throws Throwable {
+        if (t instanceof KException) {
+            return ((KException) t).getPayload();
+        }
+        if (t instanceof ArithmeticException && arithmeticOverflowClass != null && divideByZeroClass != null) {
+            String msg = t.getMessage();
+            String className = "division by zero".equals(msg) ? divideByZeroClass : arithmeticOverflowClass;
+            try {
+                Class<?> cls = Class.forName(className.replace('/', '.'));
+                return cls.getField("INSTANCE").get(null);
+            } catch (ReflectiveOperationException ex) {
+                throw t;
+            }
+        }
+        throw t;
+    }
+
+    /**
      * Runtime probe for {@code e is T} when T is a primitive or record heap kind (matches VM KIND_IS / compiler).
      * Discriminant: 0 Int (Long), 1 Bool, 2 Unit, 3 Char (Integer), 4 String, 5 Float (Double), 6 KRecord.
      */
@@ -269,6 +292,18 @@ public final class KRuntime {
             if (a instanceof KOk && b instanceof KOk) return deepEquals(((KOk) a).value, ((KOk) b).value);
             return false;
         }
+            if (a instanceof KAdt && b instanceof KAdt) {
+                KAdt ka = (KAdt) a;
+                KAdt kb = (KAdt) b;
+                if (!ka.getClass().equals(kb.getClass())) return false;
+                Object[] pa = ka.payload();
+                Object[] pb = kb.payload();
+                if (pa.length != pb.length) return false;
+                for (int i = 0; i < pa.length; i++) {
+                    if (!deepEquals(pa[i], pb[i])) return false;
+                }
+                return true;
+            }
         return a.equals(b);
     }
 
@@ -465,7 +500,7 @@ public final class KRuntime {
             }
             return result;
         } catch (Exception e) {
-            throw new RuntimeException("listDir: " + e.getMessage());
+            return KNil.INSTANCE;
         }
     }
 

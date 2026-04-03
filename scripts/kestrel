@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Kestrel CLI: kestrel <command> [options]
-# Commands: run, dis, build
+# Commands: run, dis, build, test
 set -euo pipefail
 
 SOURCE="${BASH_SOURCE[0]}"
@@ -11,33 +11,19 @@ while [ -L "$SOURCE" ]; do
 done
 ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 COMPILER="$ROOT/compiler"
-VM="$ROOT/vm"
-VM_BIN="$VM/zig-out/bin/kestrel"
 COMPILER_CLI="$COMPILER/dist/cli.js"
 DISASM="$COMPILER/dist/disasm.js"
 # Cache roots: .class files under ~/.kestrel/jvm, .kbc under ~/.kestrel/kbc (clean: rm -rf ~/.kestrel)
-KBC_CACHE="${KESTREL_CACHE:-$HOME/.kestrel/kbc}"
 JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
+KBC_CACHE="${KESTREL_CACHE:-$HOME/.kestrel/kbc}"
 RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
-
-# ANSI colours for test output ($'…' so echo prints escapes) — align with stdlib/kestrel/console.ks
-GREEN=$'\033[32m'
-RED=$'\033[31m'
-DIM=$'\033[2m'
-BOLD=$'\033[1m'
-RESET=$'\033[0m'
-CHECK=$'\u2713'
-CROSS=$'\u2717'
-
-TARGET="${KESTREL_TARGET:-vm}"
 
 usage() {
   echo "Usage: kestrel <command> [options]" >&2
-  echo "  run   [--target vm|jvm] <script[.ks]> [args...]  Compile if needed, then execute" >&2
+  echo "  run   <script[.ks]> [args...]  Compile if needed, then execute on JVM" >&2
   echo "  dis   [--verbose|--code-only] <script[.ks]>  Compile if needed, then disassemble bytecode" >&2
-  echo "  build [--target vm|jvm] [script.ks]  Build compiler and VM; optionally compile script" >&2
-  echo "  test  [--target vm|jvm] [--verbose|--summary] [files...]   Run unit tests (default: compact output)" >&2
-  echo "  test-both [files...]           Run unit tests on VM and JVM; compare results and wall time" >&2
+  echo "  build [script.ks]  Build compiler and JVM runtime; optionally compile script" >&2
+  echo "  test  [--verbose|--summary] [files...]   Run unit tests on JVM (default: compact output)" >&2
   exit 1
 }
 
@@ -46,30 +32,24 @@ ensure_tools() {
     echo "kestrel: node not found" >&2
     exit 1
   fi
-  if [ "$TARGET" = "vm" ]; then
-    if ! command -v zig &>/dev/null; then
-      echo "kestrel: zig not found" >&2
-      exit 1
-    fi
-  else
-    if ! command -v java &>/dev/null; then
-      echo "kestrel: java not found (required for --target jvm)" >&2
-      exit 1
-    fi
-    if ! command -v javac &>/dev/null; then
-      echo "kestrel: javac not found (required for --target jvm)" >&2
-      exit 1
-    fi
+  if ! command -v java &>/dev/null; then
+    echo "kestrel: java not found" >&2
+    exit 1
+  fi
+  if ! command -v javac &>/dev/null; then
+    echo "kestrel: javac not found" >&2
+    exit 1
   fi
 }
 
-build_compiler_vm() {
+build_compiler_jvm() {
   cd "$COMPILER" && npm run build >/dev/null 2>&1 && cd "$ROOT" || {
     echo "kestrel: compiler build failed" >&2
     exit 1
   }
-  cd "$VM" && zig build -Doptimize=ReleaseSafe >/dev/null 2>&1 && cd "$ROOT" || {
-    echo "kestrel: VM build failed" >&2
+  (cd "$ROOT/runtime/jvm" && ./build.sh >/dev/null 2>&1) || {
+    cd "$ROOT"
+    echo "kestrel: JVM runtime build failed" >&2
     exit 1
   }
 }
@@ -270,174 +250,47 @@ do_compile() {
   fi
 }
 
-# High-resolution wall time in seconds (float). Uses Perl Time::HiRes (available on macOS/Linux).
-_highres_now() {
-  perl -MTime::HiRes=time -e 'printf "%.6f\n", time'
-}
-
-# Integer milliseconds between two _highres_now values.
-_elapsed_ms() {
-  perl -e 'printf "%.0f\n", ($ARGV[1] - $ARGV[0]) * 1000' "$1" "$2"
-}
-
-strip_ansi() {
-  perl -pe 's/\e\[[0-9;]*m//g'
-}
-
-# Parse the test harness final summary from captured output (see stdlib/kestrel/test.ks printSummary).
-# Sets: _parsed_passed, _parsed_failed, _parsed_runner_ms (use "?" if missing).
-_parse_test_summary() {
-  local f="$1"
-  local line
-  line=$(strip_ansi <"$f" | grep -E '[0-9]+ passed' | tail -n 1 || true)
-  _parsed_passed="?"
-  _parsed_failed="?"
-  _parsed_runner_ms="?"
-  if [ -z "$line" ]; then
-    return
-  fi
-  if echo "$line" | grep -q 'failed'; then
-    _parsed_failed=$(echo "$line" | perl -ne 'if (/(\d+) failed/) { print $1; exit }')
-    _parsed_passed=$(echo "$line" | perl -ne 'if (/(\d+) passed/) { print $1; exit }')
-  else
-    _parsed_failed=0
-    _parsed_passed=$(echo "$line" | perl -ne 'if (/(\d+) passed/) { print $1; exit }')
-  fi
-  _parsed_runner_ms=$(echo "$line" | perl -ne 'if (/\((\d+)ms\)/) { print $1; exit }')
-}
-
-# Write one failure description per line (assertion message after ✗) to the given file.
-_extract_failed_descriptions() {
-  local src="$1"
-  local dst="$2"
-  strip_ansi <"$src" | perl -CSD -ne 'if (/✗\s*(.+)/) { my $d = $1; $d =~ s/\s+$//; print "$d\n" if length $d; }' >"$dst" || true
-}
-
-# Coloured row: wall clock for one backend (label = vm or jvm).
-_tb_wall_row() {
-  local lbl="$1" ms="$2" ec="$3"
-  local ec_color=$GREEN
-  [ "$ec" -ne 0 ] && ec_color=$RED
-  printf '  %b%s:%b  %b%sms%b  %b(' "$DIM" "$lbl" "$RESET" "$DIM" "$ms" "$RESET" "$DIM"
-  printf '%b' "$ec_color"
-  printf 'exit %d' "$ec"
-  printf '%b)%b\n' "$DIM" "$RESET"
-}
-
-# Coloured row: harness summary (same style as kestrel:test printSummary).
-_tb_harness_row() {
-  local lbl="$1" pp="$2" pf="$3" rm="$4"
-  printf '  %b%s:%b  ' "$DIM" "$lbl" "$RESET"
-  if [[ "$pf" =~ ^[0-9]+$ ]] && [[ "$pp" =~ ^[0-9]+$ ]]; then
-    if [ "$pf" -gt 0 ]; then
-      printf '%b%d failed%b, %b%d passed%b  %b(%sms in-harness)%b\n' \
-        "$RED" "$pf" "$RESET" "$GREEN" "$pp" "$RESET" "$DIM" "$rm" "$RESET"
-    else
-      printf '%b%d passed%b  %b(%sms in-harness)%b\n' "$GREEN" "$pp" "$RESET" "$DIM" "$rm" "$RESET"
-    fi
-  else
-    printf '%s passed, %s failed  %b(%sms in-harness)%b\n' "$pp" "$pf" "$DIM" "$rm" "$RESET"
-  fi
-}
-
-ensure_tools_dual() {
-  if ! command -v node &>/dev/null; then
-    echo "kestrel: node not found" >&2
-    exit 1
-  fi
-  if ! command -v zig &>/dev/null; then
-    echo "kestrel: zig not found" >&2
-    exit 1
-  fi
-  if ! command -v java &>/dev/null; then
-    echo "kestrel: java not found (required for test-both)" >&2
-    exit 1
-  fi
-  if ! command -v javac &>/dev/null; then
-    echo "kestrel: javac not found (required for test-both)" >&2
-    exit 1
-  fi
-  if ! command -v perl &>/dev/null; then
-    echo "kestrel: perl not found (required for test-both timing/summary parsing)" >&2
-    exit 1
-  fi
-}
-
-# Run unit tests for one backend. First argument is vm or jvm; remaining args are passed to the test runner.
+# Run unit tests on JVM. Remaining args are passed to the test runner.
 _run_unit_tests() {
-  local ut_target="$1"
-  shift
   local runner="$ROOT/scripts/run_tests.ks"
   if [ ! -f "$runner" ]; then
     echo "kestrel: test runner not found: $runner" >&2
     exit 1
   fi
-  if [ "$ut_target" = "jvm" ]; then
-    local class_dir main_class
-    class_dir=$(jvm_class_dir_for "$runner")
-    if needs_compile_jvm "$runner" "$class_dir"; then
-      mkdir -p "$class_dir"
-      node "$COMPILER_CLI" "$runner" --target jvm -o "$class_dir" || return 1
-    fi
-    main_class=$(main_class_for "$runner")
-    java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" "$@"
-  else
-    local kbc
-    kbc=$(kbc_path_for "$runner")
-    if needs_compile_with_deps "$runner" "$kbc"; then
-      mkdir -p "$(dirname "$kbc")"
-      do_compile "$runner" "$kbc" || return 1
-    fi
-    "$VM_BIN" "$kbc" "$ROOT" "$@"
+  local class_dir main_class
+  class_dir=$(jvm_class_dir_for "$runner")
+  if needs_compile_jvm "$runner" "$class_dir"; then
+    mkdir -p "$class_dir"
+    node "$COMPILER_CLI" "$runner" --target jvm -o "$class_dir" || return 1
   fi
+  main_class=$(main_class_for "$runner")
+  java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" "$@"
 }
 
 cmd_build() {
-  TARGET="${KESTREL_TARGET:-vm}"
-  while [ "${1:-}" = '--target' ]; do
-    [ -z "${2:-}" ] && usage
-    TARGET="$2"
-    shift 2
-  done
   ensure_tools
-  build_compiler_vm
-  if [ "$TARGET" = "jvm" ] && [ ! -f "$RUNTIME_JAR" ]; then
-    (cd "$ROOT/runtime/jvm" && ./build.sh 2>/dev/null) || { echo "kestrel: build runtime: cd $ROOT/runtime/jvm && ./build.sh" >&2; exit 1; }
-  fi
+  build_compiler_jvm
   if [ -n "${1:-}" ]; then
-    local resolved kbc class_dir
+    local resolved class_dir
     resolved=$(resolve_script "$1")
     if [ -z "$resolved" ]; then
       echo "kestrel: script not found: $1" >&2
       exit 1
     fi
-    if [ "$TARGET" = "jvm" ]; then
-      class_dir=$(jvm_class_dir_for "$resolved")
-      mkdir -p "$class_dir"
-      if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"; then
-        echo "kestrel: JVM compile failed" >&2
-        exit 1
-      fi
-      echo "Built $class_dir (JVM)"
-    else
-      kbc=$(kbc_path_for "$resolved")
-      mkdir -p "$(dirname "$kbc")"
-      do_compile "$resolved" "$kbc"
-      echo "Built $kbc"
+    class_dir=$(jvm_class_dir_for "$resolved")
+    mkdir -p "$class_dir"
+    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"; then
+      echo "kestrel: JVM compile failed" >&2
+      exit 1
     fi
+    echo "Built $class_dir (JVM)"
   fi
 }
 
 cmd_run() {
-  TARGET="${KESTREL_TARGET:-vm}"
   local exit_mode=""
   while [ $# -gt 0 ]; do
     case "${1:-}" in
-      --target)
-        [ -z "${2:-}" ] && usage
-        TARGET="$2"
-        shift 2
-        ;;
       --exit-wait)
         if [ "$exit_mode" = "no-wait" ]; then
           echo "kestrel: --exit-wait and --exit-no-wait are mutually exclusive" >&2
@@ -463,61 +316,29 @@ cmd_run() {
     usage
   fi
   ensure_tools
-  if [ "$TARGET" = "jvm" ]; then
-    if [ ! -f "$COMPILER_CLI" ]; then
-      build_compiler_vm
-    fi
-    if [ ! -f "$RUNTIME_JAR" ]; then
-      (cd "$ROOT/runtime/jvm" && ./build.sh 2>/dev/null) || { echo "kestrel: build runtime jar: cd $ROOT/runtime/jvm && ./build.sh" >&2; exit 1; }
-    fi
-    local resolved class_dir main_class
-    resolved=$(resolve_script "$1")
-    if [ -z "$resolved" ]; then
-      echo "kestrel: script not found: $1" >&2
-      exit 1
-    fi
-    shift
-    class_dir=$(jvm_class_dir_for "$resolved")
-    if needs_compile_jvm "$resolved" "$class_dir"; then
-      mkdir -p "$class_dir"
-      if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"; then
-        echo "kestrel: JVM compile failed for $resolved" >&2
-        exit 1
-      fi
-    fi
-    main_class=$(main_class_for "$resolved")
-    if [ "$exit_mode" = "no-wait" ]; then
-      exec java -Dkestrel.exitWait=false -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
-    else
-      exec java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
-    fi
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
+    build_compiler_jvm
   fi
-  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
-    build_compiler_vm
-  fi
-  local resolved
+  local resolved class_dir main_class
   resolved=$(resolve_script "$1")
   if [ -z "$resolved" ]; then
     echo "kestrel: script not found: $1" >&2
     exit 1
   fi
   shift
-  local kbc
-  kbc=$(kbc_path_for "$resolved")
-  if needs_compile_with_deps "$resolved" "$kbc"; then
-    mkdir -p "$(dirname "$kbc")"
-    do_compile "$resolved" "$kbc"
+  class_dir=$(jvm_class_dir_for "$resolved")
+  if needs_compile_jvm "$resolved" "$class_dir"; then
+    mkdir -p "$class_dir"
+    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"; then
+      echo "kestrel: JVM compile failed for $resolved" >&2
+      exit 1
+    fi
   fi
-  local vm_exit_flag=""
+  main_class=$(main_class_for "$resolved")
   if [ "$exit_mode" = "no-wait" ]; then
-    vm_exit_flag="--exit-no-wait"
-  elif [ "$exit_mode" = "wait" ]; then
-    vm_exit_flag="--exit-wait"
-  fi
-  if [ -n "$vm_exit_flag" ]; then
-    exec "$VM_BIN" "$kbc" "$vm_exit_flag" "$@"
+    exec java -Dkestrel.exitWait=false -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
   else
-    exec "$VM_BIN" "$kbc" "$@"
+    exec java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
   fi
 }
 
@@ -539,9 +360,15 @@ cmd_dis() {
   if [ -z "$script" ]; then
     usage
   fi
-  ensure_tools
+  if ! command -v node &>/dev/null; then
+    echo "kestrel: node not found" >&2
+    exit 1
+  fi
   if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$DISASM" ]; then
-    build_compiler_vm
+    cd "$COMPILER" && npm run build >/dev/null 2>&1 && cd "$ROOT" || {
+      echo "kestrel: compiler build failed" >&2
+      exit 1
+    }
   fi
   local resolved
   resolved=$(resolve_script "$script")
@@ -564,163 +391,11 @@ cmd_dis() {
 }
 
 cmd_test() {
-  TARGET="${KESTREL_TARGET:-vm}"
-  while [ "${1:-}" = '--target' ]; do
-    [ -z "${2:-}" ] && usage
-    TARGET="$2"
-    shift 2
-  done
   ensure_tools
-  if [ "$TARGET" = "jvm" ]; then
-    if [ ! -f "$COMPILER_CLI" ]; then build_compiler_vm; fi
-    if [ ! -f "$RUNTIME_JAR" ]; then
-      (cd "$ROOT/runtime/jvm" && ./build.sh 2>/dev/null) || { echo "kestrel: build runtime jar first" >&2; exit 1; }
-    fi
-  else
-    if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
-      build_compiler_vm
-    fi
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
+    build_compiler_jvm
   fi
-  _run_unit_tests "$TARGET" "$@"
-}
-
-cmd_test_both() {
-  ensure_tools_dual
-  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$VM_BIN" ]; then
-    build_compiler_vm
-  fi
-  if [ ! -f "$RUNTIME_JAR" ]; then
-    (cd "$ROOT/runtime/jvm" && ./build.sh 2>/dev/null) || { echo "kestrel: build runtime jar: cd $ROOT/runtime/jvm && ./build.sh" >&2; exit 1; }
-  fi
-
-  # EXIT trap runs after this function returns; locals would be unset (set -u). Use global paths.
-  _kestrel_tb_vm=$(mktemp)
-  _kestrel_tb_jvm=$(mktemp)
-  _kestrel_tb_vm_fail=$(mktemp)
-  _kestrel_tb_jvm_fail=$(mktemp)
-  trap 'rm -f "$_kestrel_tb_vm" "$_kestrel_tb_jvm" "$_kestrel_tb_vm_fail" "$_kestrel_tb_jvm_fail"; unset _kestrel_tb_vm _kestrel_tb_jvm _kestrel_tb_vm_fail _kestrel_tb_jvm_fail' EXIT
-  local vm_out jvm_out vm_fail jvm_fail
-  vm_out="$_kestrel_tb_vm"
-  jvm_out="$_kestrel_tb_jvm"
-  vm_fail="$_kestrel_tb_vm_fail"
-  jvm_fail="$_kestrel_tb_jvm_fail"
-
-  local t0 t1 vm_wall_ms jvm_wall_ms vm_ec jvm_ec
-  t0=$(_highres_now)
-  set +e
-  _run_unit_tests vm "$@" >"$vm_out" 2>&1
-  vm_ec=$?
-  set -e
-  t1=$(_highres_now)
-  vm_wall_ms=$(_elapsed_ms "$t0" "$t1")
-
-  t0=$(_highres_now)
-  set +e
-  _run_unit_tests jvm "$@" >"$jvm_out" 2>&1
-  jvm_ec=$?
-  set -e
-  t1=$(_highres_now)
-  jvm_wall_ms=$(_elapsed_ms "$t0" "$t1")
-
-  local vm_pp vm_pf vm_rm jvm_pp jvm_pf jvm_rm
-  _parse_test_summary "$vm_out"
-  vm_pp="$_parsed_passed"
-  vm_pf="$_parsed_failed"
-  vm_rm="$_parsed_runner_ms"
-  _parse_test_summary "$jvm_out"
-  jvm_pp="$_parsed_passed"
-  jvm_pf="$_parsed_failed"
-  jvm_rm="$_parsed_runner_ms"
-
-  _extract_failed_descriptions "$vm_out" "$vm_fail"
-  _extract_failed_descriptions "$jvm_out" "$jvm_fail"
-
-  echo "${DIM}Wall clock ${RESET}${DIM}(full run, incl. compile if needed)${RESET}"
-  _tb_wall_row "vm " "$vm_wall_ms" "$vm_ec"
-  _tb_wall_row "jvm" "$jvm_wall_ms" "$jvm_ec"
-  if [ "$vm_wall_ms" -gt 0 ] && [ "$jvm_wall_ms" -gt 0 ]; then
-    if [ "$vm_wall_ms" -lt "$jvm_wall_ms" ]; then
-      local delta=$((jvm_wall_ms - vm_wall_ms))
-      local ratio
-      ratio=$(perl -e 'printf "%.2f", $ARGV[1]/$ARGV[0]' "$vm_wall_ms" "$jvm_wall_ms" 2>/dev/null || echo "?")
-      printf '  %bvm faster%b by %b%dms%b %b(jvm wall ~%s× vm)%b\n' \
-        "$GREEN" "$RESET" "$BOLD" "$delta" "$RESET" "$DIM" "$ratio" "$RESET"
-    elif [ "$jvm_wall_ms" -lt "$vm_wall_ms" ]; then
-      local delta=$((vm_wall_ms - jvm_wall_ms))
-      local ratio
-      ratio=$(perl -e 'printf "%.2f", $ARGV[0]/$ARGV[1]' "$vm_wall_ms" "$jvm_wall_ms" 2>/dev/null || echo "?")
-      printf '  %bjvm faster%b by %b%dms%b %b(vm wall ~%s× jvm)%b\n' \
-        "$GREEN" "$RESET" "$BOLD" "$delta" "$RESET" "$DIM" "$ratio" "$RESET"
-    else
-      printf '  %b%s%b %bsame wall time%b %b(within 1ms bucket)%b\n' "$GREEN" "$CHECK" "$RESET" "$DIM" "$RESET" "$DIM" "$RESET"
-    fi
-  fi
-  echo ""
-  echo "${DIM}Harness summary ${RESET}${DIM}(from kestrel:test printSummary)${RESET}"
-  _tb_harness_row "vm " "$vm_pp" "$vm_pf" "$vm_rm"
-  _tb_harness_row "jvm" "$jvm_pp" "$jvm_pf" "$jvm_rm"
-  if [ "$vm_rm" != "?" ] && [ "$jvm_rm" != "?" ] && [ "$vm_rm" -ge 0 ] 2>/dev/null && [ "$jvm_rm" -ge 0 ] 2>/dev/null; then
-    if [ "$vm_rm" -lt "$jvm_rm" ]; then
-      printf '  %bin-harness:%b %bvm faster%b by %b%dms%b\n' \
-        "$DIM" "$RESET" "$GREEN" "$RESET" "$BOLD" "$((jvm_rm - vm_rm))" "$RESET"
-    elif [ "$jvm_rm" -lt "$vm_rm" ]; then
-      printf '  %bin-harness:%b %bjvm faster%b by %b%dms%b\n' \
-        "$DIM" "$RESET" "$GREEN" "$RESET" "$BOLD" "$((vm_rm - jvm_rm))" "$RESET"
-    fi
-  fi
-
-  if [ -s "$vm_fail" ] || [ -s "$jvm_fail" ]; then
-    echo ""
-    printf '%b\n' "${RED}${CROSS} Failed assertions${RESET} ${DIM}(by backend)${RESET}"
-    if [ -s "$vm_fail" ]; then
-      echo "  ${DIM}vm:${RESET}"
-      while IFS= read -r line || [ -n "$line" ]; do
-        [ -z "$line" ] && continue
-        printf '    %b%s %s%b\n' "$RED" "$CROSS" "$line" "$RESET"
-      done <"$vm_fail"
-    else
-      printf '  %bvm:%b %b(none)%b\n' "$DIM" "$RESET" "$GREEN" "$RESET"
-    fi
-    if [ -s "$jvm_fail" ]; then
-      echo "  ${DIM}jvm:${RESET}"
-      while IFS= read -r line || [ -n "$line" ]; do
-        [ -z "$line" ] && continue
-        printf '    %b%s %s%b\n' "$RED" "$CROSS" "$line" "$RESET"
-      done <"$jvm_fail"
-    else
-      printf '  %bjvm:%b %b(none)%b\n' "$DIM" "$RESET" "$GREEN" "$RESET"
-    fi
-    if command -v comm &>/dev/null && [ -s "$vm_fail" ] && [ -s "$jvm_fail" ]; then
-      echo ""
-      echo "${DIM}Only on one backend (sorted diff):${RESET}"
-      local jvm_only vm_only
-      jvm_only=$(comm -13 <(sort -u "$vm_fail") <(sort -u "$jvm_fail"))
-      echo "  ${DIM}jvm only:${RESET}"
-      if [ -n "$jvm_only" ]; then
-        echo "$jvm_only" | while IFS= read -r line || [ -n "$line" ]; do
-          [ -z "$line" ] && continue
-          printf '    %b%s %s%b\n' "$RED" "$CROSS" "$line" "$RESET"
-        done
-      else
-        echo "    ${DIM}(none)${RESET}"
-      fi
-      vm_only=$(comm -23 <(sort -u "$vm_fail") <(sort -u "$jvm_fail"))
-      echo "  ${DIM}vm only:${RESET}"
-      if [ -n "$vm_only" ]; then
-        echo "$vm_only" | while IFS= read -r line || [ -n "$line" ]; do
-          [ -z "$line" ] && continue
-          printf '    %b%s %s%b\n' "$RED" "$CROSS" "$line" "$RESET"
-        done
-      else
-        echo "    ${DIM}(none)${RESET}"
-      fi
-    fi
-    echo ""
-  fi
-
-  if [ "$vm_ec" -ne 0 ] || [ "$jvm_ec" -ne 0 ]; then
-    exit 1
-  fi
+  _run_unit_tests "$@"
 }
 
 # Main
@@ -729,6 +404,5 @@ case "${1:-}" in
   dis)   shift; cmd_dis "$@" ;;
   build) shift; cmd_build "$@" ;;
   test)       shift; cmd_test "$@" ;;
-  test-both)  shift; cmd_test_both "$@" ;;
   *)     usage ;;
 esac

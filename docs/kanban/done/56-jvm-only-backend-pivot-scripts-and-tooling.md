@@ -32,15 +32,15 @@ Update CLI scripts, build helpers, and test automation to remove Zig VM build/te
 
 ## Acceptance Criteria
 
-- [ ] `scripts/kestrel` no longer invokes or references Zig VM build/test/run commands.
-- [ ] `scripts/test-all.sh` no longer invokes `cd vm && zig build test`; runs JVM-only test paths.
-- [ ] `scripts/build-cli.sh` no longer references Zig build paths.
-- [ ] `scripts/run-e2e.sh` uses JVM execution only (if it previously supported VM).
-- [ ] `--target vm` / `--target jvm` flags removed or `--target jvm` becomes the implicit default with no alternative.
-- [ ] `./scripts/kestrel test` passes without Zig installed.
-- [ ] `./scripts/test-all.sh` passes end-to-end without Zig installed.
-- [ ] `kestrel test-both` command removed or repurposed (no second backend to compare).
-- [ ] `kestrel dis` works with JVM-only workflow (or is documented as JVM-oriented).
+- [x] `scripts/kestrel` no longer invokes or references Zig VM build/test/run commands.
+- [x] `scripts/test-all.sh` no longer invokes `cd vm && zig build test`; runs JVM-only test paths.
+- [x] `scripts/build-cli.sh` no longer references Zig build paths.
+- [x] `scripts/run-e2e.sh` uses JVM execution only (if it previously supported VM).
+- [x] `--target vm` / `--target jvm` flags removed or `--target jvm` becomes the implicit default with no alternative.
+- [x] `./scripts/kestrel test` passes without Zig installed.
+- [x] `./scripts/test-all.sh` passes end-to-end without Zig installed.
+- [x] `kestrel test-both` command removed or repurposed (no second backend to compare).
+- [x] `kestrel dis` works with JVM-only workflow (or is documented as JVM-oriented).
 
 ## Spec References
 
@@ -64,15 +64,15 @@ Update CLI scripts, build helpers, and test automation to remove Zig VM build/te
 
 ## Tasks
 
-- [ ] Audit `scripts/kestrel` for all Zig/VM references; list specific functions and flag logic to remove.
-- [ ] Update `scripts/kestrel` to remove VM build/test/run/dis paths and `--target` dispatch.
-- [ ] Update `scripts/test-all.sh` to remove `cd vm && zig build test` step and `kestrel test` VM invocation.
-- [ ] Update `scripts/build-cli.sh` to remove Zig build references.
-- [ ] Update `scripts/run-e2e.sh` to ensure JVM-only execution.
-- [ ] Remove or repurpose `kestrel test-both` command.
-- [ ] Run `./scripts/kestrel test` and confirm pass.
-- [ ] Run `./scripts/test-all.sh` and confirm pass.
-- [ ] Run `./scripts/run-e2e.sh` and confirm pass.
+- [x] Audit `scripts/kestrel` for all Zig/VM references; list specific functions and flag logic to remove.
+- [x] Update `scripts/kestrel` to remove VM build/test/run/dis paths and `--target` dispatch.
+- [x] Update `scripts/test-all.sh` to remove `cd vm && zig build test` step and `kestrel test` VM invocation.
+- [x] Update `scripts/build-cli.sh` to remove Zig build references.
+- [x] Update `scripts/run-e2e.sh` to ensure JVM-only execution.
+- [x] Remove or repurpose `kestrel test-both` command.
+- [x] Run `./scripts/kestrel test` and confirm pass.
+- [x] Run `./scripts/test-all.sh` and confirm pass.
+- [x] Run `./scripts/run-e2e.sh` and confirm pass.
 
 ## Tests to add
 
@@ -82,3 +82,10 @@ Update CLI scripts, build helpers, and test automation to remove Zig VM build/te
 ## Documentation and specs to update
 
 - None directly — doc updates are in **55**, spec updates in **58**. Script comments should reflect JVM-only intent.
+
+## Build notes
+
+- 2026-04-03: Moved story to `doing/` and converted `scripts/kestrel`, `scripts/test-all.sh`, `scripts/build-cli.sh`, and `scripts/run-e2e.sh` to JVM-only workflows (removed Zig/VM paths and `test-both`).
+- 2026-04-03: Verified `./scripts/run-e2e.sh` passes with JVM-only execution.
+- 2026-04-03: Resolved the remaining JVM codegen/runtime failures uncovered by the JVM-only scripts so `./scripts/kestrel test` and `./scripts/test-all.sh` now pass end-to-end.
+- 2026-04-03: Moved story to `done/` after rebuilding the JVM runtime/compiler and verifying the full suite from a clean JVM cache.

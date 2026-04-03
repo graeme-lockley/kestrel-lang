@@ -160,6 +160,11 @@ public final class KMath {
         return Double.valueOf(a.doubleValue() / y);
     }
 
+    public static Double powFloat(Double a, Double b) {
+        if (a == null || b == null) throw new NullPointerException();
+        return Double.valueOf(Math.pow(a.doubleValue(), b.doubleValue()));
+    }
+
     public static java.lang.Boolean $lessFloat(Double a, Double b) {
         if (a == null || b == null) throw new NullPointerException();
         return Boolean.valueOf(a.doubleValue() < b.doubleValue());

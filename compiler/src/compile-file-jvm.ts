@@ -11,6 +11,7 @@ import { distinctSpecifiersInSourceOrder, spanForSpecifier } from './module-spec
 import { jvmCodegen, type JvmCodegenResult } from './jvm-codegen/index.js';
 import { resolveSpecifier } from './resolve.js';
 import type { Program, ImportDecl, Expr, TopLevelStmt, TopLevelDecl, BlockExpr } from './ast/nodes.js';
+import type { TypeDecl } from './ast/nodes.js';
 import { getInferredType } from './typecheck/check.js';
 import type { InternalType } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
@@ -394,33 +395,32 @@ export function compileFileJvm(
     const tc = typecheck(program, tcOpts);
     if (!tc.ok) return { ok: false, diagnostics: tc.diagnostics };
 
-    const nsCtorByNs = new Map<string, Set<string>>();
-    for (const imp of program.imports) {
-      if (imp.kind !== 'NamespaceImport') continue;
-      const depPath = resolved.get(imp.spec);
-      if (depPath == null) continue;
-      const depEntry = cache.get(depPath);
-      nsCtorByNs.set(imp.name, new Set(depEntry?.exportedConstructors.keys() ?? []));
-    }
-    const jvmCtorDiags = collectJvmNamespaceConstructorDiags(program, nsCtorByNs, filePath, source);
-    if (jvmCtorDiags.length > 0) {
-      visited.delete(filePath);
-      return { ok: false, diagnostics: jvmCtorDiags };
-    }
-
     const className = classNameForPath(filePath);
 
     const importClasses = new Map<string, string>();
     const namespaceClasses = new Map<string, string>();
+    const namespaceFunArities = new Map<string, Map<string, number>>();
     const importedNameToClass = new Map<string, string>();
     const importedNameToOriginal = new Map<string, string>();
     const importedFunArities = new Map<string, number>();
     const importedValVarToClass = new Map<string, string>();
+    const importedVarNames = new Set<string>();
+    const namespaceAdtConstructors = new Map<string, Map<string, string>>();
+    const namespaceVarFields = new Map<string, Set<string>>();
+    const importedAdtClasses = new Map<string, string>();
 
     function isValOrVar(prog: Program, name: string): boolean {
       for (const node of prog.body) {
         if (!node) continue;
         if ((node.kind === 'ValDecl' || node.kind === 'VarDecl') && node.name === name) return true;
+      }
+      return false;
+    }
+
+    function isVar(prog: Program, name: string): boolean {
+      for (const node of prog.body) {
+        if (!node) continue;
+        if (node.kind === 'VarDecl' && node.name === name) return true;
       }
       return false;
     }
@@ -449,11 +449,54 @@ export function compileFileJvm(
                 if (arity !== undefined) importedFunArities.set(s.local, arity);
               }
               if (depProg && isValOrVar(depProg, s.external)) importedValVarToClass.set(s.local, dep.className);
+              if (depProg && isVar(depProg, s.external)) importedVarNames.add(s.local);
+                // Check if it's an imported exception or nullary ADT constructor
+                if (depProg) {
+                  for (const node of depProg.body) {
+                    if (!node) continue;
+                    if (node.kind === 'ExceptionDecl' && node.name === s.external && !(node.fields?.length)) {
+                      importedAdtClasses.set(s.local, dep.className + '$' + s.external);
+                    } else if (node.kind === 'TypeDecl') {
+                      const t = node as TypeDecl;
+                      if (t.body?.kind !== 'ADTBody') continue;
+                      for (const c of (t.body as { constructors: Array<{ name: string; params: unknown[] }> }).constructors) {
+                        if (c.name === s.external && c.params.length === 0) {
+                          importedAdtClasses.set(s.local, dep.className + '$' + t.name + '$' + c.name);
+                        }
+                      }
+                    }
+                  }
+                }
             }
           }
         }
         if (imp.kind === 'NamespaceImport' && imp.spec === dep.spec) {
           namespaceClasses.set(imp.name, dep.className);
+            // Build ADT constructor → inner class map and var fields set for this namespace import
+            if (depProg) {
+              const funArities = new Map<string, number>();
+              const adtCtors = new Map<string, string>();
+              const varFields = new Set<string>();
+              for (const node of depProg.body) {
+                if (!node) continue;
+                if (node.kind === 'FunDecl') {
+                  const fun = node as { name: string; params: Array<unknown> };
+                  funArities.set(fun.name, fun.params.length);
+                } else if (node.kind === 'TypeDecl') {
+                  const t = node as TypeDecl;
+                  if (t.body?.kind !== 'ADTBody') continue;
+                  const base = dep.className + '$' + t.name;
+                  for (const c of t.body.constructors) {
+                    adtCtors.set(c.name, base + '$' + c.name);
+                  }
+                } else if (node.kind === 'VarDecl') {
+                  varFields.add((node as { name: string }).name);
+                }
+              }
+              if (funArities.size > 0) namespaceFunArities.set(imp.name, funArities);
+              if (adtCtors.size > 0) namespaceAdtConstructors.set(imp.name, adtCtors);
+              if (varFields.size > 0) namespaceVarFields.set(imp.name, varFields);
+            }
         }
       }
     }
@@ -463,10 +506,15 @@ export function compileFileJvm(
       className,
       importClasses: importClasses.size > 0 ? importClasses : undefined,
       namespaceClasses: namespaceClasses.size > 0 ? namespaceClasses : undefined,
+      namespaceFunArities: namespaceFunArities.size > 0 ? namespaceFunArities : undefined,
+      namespaceAdtConstructors: namespaceAdtConstructors.size > 0 ? namespaceAdtConstructors : undefined,
+      namespaceVarFields: namespaceVarFields.size > 0 ? namespaceVarFields : undefined,
       importedNameToClass: importedNameToClass.size > 0 ? importedNameToClass : undefined,
       importedNameToOriginal: importedNameToOriginal.size > 0 ? importedNameToOriginal : undefined,
       importedFunArities: importedFunArities.size > 0 ? importedFunArities : undefined,
       importedValVarToClass: importedValVarToClass.size > 0 ? importedValVarToClass : undefined,
+      importedVarNames: importedVarNames.size > 0 ? importedVarNames : undefined,
+      importedAdtClasses: importedAdtClasses.size > 0 ? importedAdtClasses : undefined,
     });
 
     const runtimeKsPathForDeps = pathResolve(stdlibDir, 'kestrel/runtime.ks');

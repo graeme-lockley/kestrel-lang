@@ -34,14 +34,23 @@ interface JvmSelfTailTarget {
   name: string;
   arity: number;
   loopHead: number;
+  argBase?: number;
 }
-type JvmEmitTailContext = { self: JvmSelfTailTarget; inTail: boolean };
+interface JvmMutualTailTarget {
+  memberStateByName: Map<string, number>;
+  arity: number;
+  loopHead: number;
+  stateLocal: number;
+  argBase: number;
+}
+type JvmEmitTailContext = { self: JvmSelfTailTarget; mutual?: JvmMutualTailTarget; inTail: boolean };
 
 function subJvmTail(parent: JvmEmitTailContext | undefined, childIsTail: boolean): JvmEmitTailContext | undefined {
   if (parent?.self == null) return undefined;
-  return { self: parent.self, inTail: childIsTail && parent.inTail };
+  return { self: parent.self, mutual: parent.mutual, inTail: childIsTail && parent.inTail };
 }
 const K_OK = 'kestrel/runtime/KOk';
+const K_ADT = 'kestrel/runtime/KAdt';
 const K_FUNCTION = 'kestrel/runtime/KFunction';
 const K_FUNCTION_REF = 'kestrel/runtime/KFunctionRef';
 const K_EXCEPTION = 'kestrel/runtime/KException';
@@ -273,7 +282,10 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
         const paramNames = new Set(stmt.params.map((p) => p.name));
         const fv = getFreeVars(stmt.body, paramNames, scope);
         const fvVars = new Set(fv.filter(name => varScope.has(name)));
-        const id = addLambda(stmt.body, stmt.params.map((p) => ({ name: p.name })), fv, localFunNames.size > 1 ? localFunNames : undefined, fvVars.size > 0 ? fvVars : undefined);
+          // Pass localFunNames for mutual recursion (>1 funs) OR self-recursion (fun references itself)
+          const isSelfRecursive = fv.includes(stmt.name);
+          const useLFN = (localFunNames.size > 1 || isSelfRecursive) ? localFunNames : undefined;
+          const id = addLambda(stmt.body, stmt.params.map((p) => ({ name: p.name })), fv, useLFN, fvVars.size > 0 ? fvVars : undefined);
         idByNode.set(stmt, id);
         walk(stmt.body);
       } else if (stmt.kind === 'ExprStmt') walk(stmt.expr);
@@ -394,10 +406,20 @@ export interface JvmCodegenOptions {
   importClasses?: Map<string, string>;
   /** Namespace -> class name for namespace imports. */
   namespaceClasses?: Map<string, string>;
+  /** Namespace -> (function name -> arity) for namespace function value access. */
+  namespaceFunArities?: Map<string, Map<string, number>>;
+  /** Namespace -> (constructor name -> full inner class name) for namespace ADT constructor access. */
+  namespaceAdtConstructors?: Map<string, Map<string, string>>;
+  /** Namespace -> set of var field names (for KRecord-based read/write). */
+  namespaceVarFields?: Map<string, Set<string>>;
+  /** Local import name -> inner class name for imported nullary ADT constructors and exceptions. */
+  importedAdtClasses?: Map<string, string>;
   /** Local name -> target class for named imports (direct calls: invokestatic targetClass.name). */
   importedNameToClass?: Map<string, string>;
   /** Local name -> target class for imported val/var (IdentExpr: getstatic targetClass.name). */
   importedValVarToClass?: Map<string, string>;
+  /** Local import names that refer specifically to exported vars. */
+  importedVarNames?: Set<string>;
   /** Local name -> arity for imported function declarations (IdentExpr: build KFunctionRef). */
   importedFunArities?: Map<string, number>;
   /** Local alias -> original exported name (for aliased imports like `import { x as y }`). */
@@ -457,39 +479,236 @@ function primName(t: InternalType | undefined): string | null {
   return t.name;
 }
 
+/**
+ * Build inner class bytes for a user-defined ADT constructor.
+ * Nullary: generates a singleton INSTANCE field and private constructor.
+ * Parameterized (arity>0): generates public fields "0","1",... and a constructor + payload().
+ * All classes extend KAdt and implement tag().
+ */
+function buildAdtClass(adtClassName: string, arity: number, tag: number): Uint8Array {
+  const innerCf = new ClassFileBuilder(adtClassName, K_ADT, ACC_PUBLIC | ACC_FINAL);
+
+  if (arity === 0) {
+    // public static final CtorClass INSTANCE;
+    innerCf.addField('INSTANCE', 'L' + adtClassName + ';', ACC_PUBLIC | ACC_STATIC | ACC_FINAL);
+
+    // <clinit>: INSTANCE = new CtorClass();
+    const clinit = innerCf.addMethod('<clinit>', '()V', ACC_STATIC);
+    clinit.emit1s(JvmOp.NEW, innerCf.classRef(adtClassName));
+    clinit.emit1(JvmOp.DUP);
+    clinit.emit1s(JvmOp.INVOKESPECIAL, innerCf.methodref(adtClassName, '<init>', '()V'));
+    clinit.emit1s(JvmOp.PUTSTATIC, innerCf.fieldref(adtClassName, 'INSTANCE', 'L' + adtClassName + ';'));
+    clinit.emit1(JvmOp.RETURN);
+    clinit.setMaxs(2, 0);
+    innerCf.flushLastMethod();
+
+    // private <init>()
+    const ctor = innerCf.addMethod('<init>', '()V', ACC_PUBLIC);
+    ctor.emit1b(JvmOp.ALOAD, 0);
+    ctor.emit1s(JvmOp.INVOKESPECIAL, innerCf.methodref(K_ADT, '<init>', '()V'));
+    ctor.emit1(JvmOp.RETURN);
+    ctor.setMaxs(1, 1);
+    innerCf.flushLastMethod();
+  } else {
+    // public Object __field_0; ... public Object __field_{arity-1};
+    for (let i = 0; i < arity; i++) {
+      innerCf.addField(`__field_${i}`, 'Ljava/lang/Object;', ACC_PUBLIC);
+    }
+
+    // public <init>(Object f0, ..., Object f{arity-1})
+    const ctorDesc = '(' + 'Ljava/lang/Object;'.repeat(arity) + ')V';
+    const ctor = innerCf.addMethod('<init>', ctorDesc, ACC_PUBLIC);
+    ctor.emit1b(JvmOp.ALOAD, 0);
+    ctor.emit1s(JvmOp.INVOKESPECIAL, innerCf.methodref(K_ADT, '<init>', '()V'));
+    for (let i = 0; i < arity; i++) {
+      ctor.emit1b(JvmOp.ALOAD, 0);
+      ctor.emit1b(JvmOp.ALOAD, i + 1);
+      ctor.emit1s(JvmOp.PUTFIELD, innerCf.fieldref(adtClassName, `__field_${i}`, 'Ljava/lang/Object;'));
+    }
+    ctor.emit1(JvmOp.RETURN);
+    ctor.setMaxs(2, arity + 1);
+    innerCf.flushLastMethod();
+
+    // public Object[] payload()
+    const payloadMb = innerCf.addMethod('payload', '()[Ljava/lang/Object;', ACC_PUBLIC);
+    payloadMb.emit1b(JvmOp.BIPUSH, arity);
+    payloadMb.emit1s(JvmOp.ANEWARRAY, innerCf.classRef('java/lang/Object'));
+    for (let i = 0; i < arity; i++) {
+      payloadMb.emit1(JvmOp.DUP);
+      payloadMb.emit1b(JvmOp.BIPUSH, i);
+      payloadMb.emit1b(JvmOp.ALOAD, 0);
+      payloadMb.emit1s(JvmOp.GETFIELD, innerCf.fieldref(adtClassName, `__field_${i}`, 'Ljava/lang/Object;'));
+      payloadMb.emit1(JvmOp.AASTORE);
+    }
+    payloadMb.emit1(JvmOp.ARETURN);
+    payloadMb.setMaxs(4, 1);
+    innerCf.flushLastMethod();
+  }
+
+  // public int tag()
+  const tagMb = innerCf.addMethod('tag', '()I', ACC_PUBLIC);
+  const iconst = [JvmOp.ICONST_0, JvmOp.ICONST_1, JvmOp.ICONST_2, JvmOp.ICONST_3, JvmOp.ICONST_4, JvmOp.ICONST_5];
+  if (tag >= 0 && tag <= 5) {
+    tagMb.emit1(iconst[tag]!);
+  } else {
+    tagMb.emit1b(JvmOp.BIPUSH, tag);
+  }
+  tagMb.emit1(JvmOp.IRETURN);
+  tagMb.setMaxs(1, 1);
+  innerCf.flushLastMethod();
+
+  return innerCf.toBytes();
+}
+
 export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): JvmCodegenResult {
   const sourceFile = options.sourceFile ?? '<source>';
   const className = options.className ?? classNameFromPath(sourceFile);
   const cf = new ClassFileBuilder(className, 'java/lang/Object');
   const innerClasses = new Map<string, Uint8Array>();
+  interface JvmMutualGroupInfo {
+    helperMethod: string;
+    arity: number;
+    memberNames: string[];
+    memberStateByName: Map<string, number>;
+  }
 
   const adtClassByConstructor = new Map<string, string>();
+  const adtConstructorArity = new Map<string, number>();
   for (const node of program.body) {
     if (!node || node.kind !== 'TypeDecl') continue;
     const t = node as TypeDecl;
     if (t.body?.kind !== 'ADTBody') continue;
     const base = className + '$' + t.name;
-    for (const c of t.body.constructors) {
-      adtClassByConstructor.set(c.name, base + '$' + c.name);
+    for (let ci = 0; ci < t.body.constructors.length; ci++) {
+      const c = t.body.constructors[ci]!;
+      const adtClass = base + '$' + c.name;
+      adtClassByConstructor.set(c.name, adtClass);
+      const arity = c.params?.length ?? 0;
+      adtConstructorArity.set(c.name, arity);
+      innerClasses.set(adtClass, buildAdtClass(adtClass, arity, ci));
     }
   }
 
+    // Also generate inner classes + register exception declarations as nullary ADT constructors
+    for (const node of program.body) {
+      if (!node || node.kind !== 'ExceptionDecl') continue;
+      const excClass = className + '$' + (node as { name: string }).name;
+      adtClassByConstructor.set((node as { name: string }).name, excClass);
+      adtConstructorArity.set((node as { name: string }).name, 0);
+      innerClasses.set(excClass, buildAdtClass(excClass, 0, 0));
+    }
+
+    // Seed adtClassByConstructor from imported ADT/exception names (for catch patterns + IdentExpr)
+    if (options.importedAdtClasses) {
+      for (const [localName, innerClass] of options.importedAdtClasses) {
+        adtClassByConstructor.set(localName, innerClass);
+        adtConstructorArity.set(localName, 0);
+      }
+    }
   const funNames = new Set<string>();
   const funArities = new Map<string, number>();
+  const topLevelFunDecls: FunDecl[] = [];
   const globalSlots = new Map<string, number>();
   const globalNames = new Set<string>();
+  const globalVarNames = new Set<string>();
   let nextGlobalSlot = 0;
   for (const node of program.body) {
     if (!node) continue;
     if (node.kind === 'FunDecl') {
-      funNames.add(node.name);
-      funArities.set(node.name, (node as FunDecl).params.length);
+      const fun = node as FunDecl;
+      funNames.add(fun.name);
+      funArities.set(fun.name, fun.params.length);
+      topLevelFunDecls.push(fun);
     }
     if (node.kind === 'ValDecl' || node.kind === 'VarDecl' || node.kind === 'ValStmt' || node.kind === 'VarStmt') {
       const name = node.kind === 'ValStmt' || node.kind === 'VarStmt' ? (node as { name: string }).name : (node as ValDecl).name;
       globalSlots.set(name, nextGlobalSlot++);
       globalNames.add(name);
+      if (node.kind === 'VarDecl' || node.kind === 'VarStmt') globalVarNames.add(name);
     }
+  }
+
+  const funByName = new Map<string, FunDecl>();
+  for (const fun of topLevelFunDecls) funByName.set(fun.name, fun);
+
+  function collectCalledTopLevelFns(fun: FunDecl): Set<string> {
+    const out = new Set<string>();
+    const visitUnknown = (v: unknown): void => {
+      if (v == null) return;
+      if (Array.isArray(v)) {
+        for (const item of v) visitUnknown(item);
+        return;
+      }
+      if (typeof v !== 'object') return;
+      const obj = v as Record<string, unknown>;
+      if (obj.kind === 'CallExpr') {
+        const callee = obj.callee as { kind?: unknown; name?: unknown } | undefined;
+        if (callee?.kind === 'IdentExpr' && typeof callee.name === 'string' && funByName.has(callee.name)) {
+          out.add(callee.name);
+        }
+      }
+      for (const child of Object.values(obj)) visitUnknown(child);
+    };
+    visitUnknown(fun.body);
+    return out;
+  }
+
+  const edgeMap = new Map<string, Set<string>>();
+  for (const fun of topLevelFunDecls) edgeMap.set(fun.name, collectCalledTopLevelFns(fun));
+
+  const indexByName = new Map<string, number>();
+  const lowByName = new Map<string, number>();
+  const onStack = new Set<string>();
+  const stack: string[] = [];
+  let nextSccIndex = 0;
+  const sccs: string[][] = [];
+  const strongConnect = (name: string): void => {
+    indexByName.set(name, nextSccIndex);
+    lowByName.set(name, nextSccIndex);
+    nextSccIndex++;
+    stack.push(name);
+    onStack.add(name);
+
+    for (const to of edgeMap.get(name) ?? []) {
+      if (!indexByName.has(to)) {
+        strongConnect(to);
+        lowByName.set(name, Math.min(lowByName.get(name)!, lowByName.get(to)!));
+      } else if (onStack.has(to)) {
+        lowByName.set(name, Math.min(lowByName.get(name)!, indexByName.get(to)!));
+      }
+    }
+
+    if (lowByName.get(name) === indexByName.get(name)) {
+      const scc: string[] = [];
+      while (stack.length > 0) {
+        const w = stack.pop()!;
+        onStack.delete(w);
+        scc.push(w);
+        if (w === name) break;
+      }
+      sccs.push(scc);
+    }
+  };
+  for (const fun of topLevelFunDecls) {
+    if (!indexByName.has(fun.name)) strongConnect(fun.name);
+  }
+
+  const mutualGroupByFun = new Map<string, JvmMutualGroupInfo>();
+  for (const scc of sccs) {
+    if (scc.length < 2) continue;
+    const arity = funByName.get(scc[0]!)?.params.length;
+    if (arity == null) continue;
+    if (!scc.every((name) => funByName.get(name)?.params.length === arity)) continue;
+    const orderedMembers = topLevelFunDecls.map((f) => f.name).filter((n) => scc.includes(n));
+    const memberStateByName = new Map<string, number>();
+    for (let i = 0; i < orderedMembers.length; i++) memberStateByName.set(orderedMembers[i]!, i);
+    const group: JvmMutualGroupInfo = {
+      helperMethod: `$mtc$arity_${arity}_${orderedMembers[0]}`,
+      arity,
+      memberNames: orderedMembers,
+      memberStateByName,
+    };
+    for (const name of orderedMembers) mutualGroupByFun.set(name, group);
   }
 
   cf.addField('$initialized', 'Z', ACC_PRIVATE | ACC_STATIC);
@@ -556,6 +775,28 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     return innerCf.toBytes();
   }
 
+  function emitIntConst(mb: MethodBuilder, n: number): void {
+    if (n >= -1 && n <= 5) {
+      const ops = [JvmOp.ICONST_M1, JvmOp.ICONST_0, JvmOp.ICONST_1, JvmOp.ICONST_2, JvmOp.ICONST_3, JvmOp.ICONST_4, JvmOp.ICONST_5];
+      mb.emit1(ops[n + 1]!);
+      return;
+    }
+    if (n >= -128 && n <= 127) {
+      mb.emit1b(JvmOp.BIPUSH, n);
+      return;
+    }
+    if (n >= -32768 && n <= 32767) {
+      mb.emit1s(JvmOp.SIPUSH, n);
+      return;
+    }
+    mb.emit1s(JvmOp.LDC_W, cf.constantInt(n));
+  }
+
+  function emitLongObjectConst(mb: MethodBuilder, n: number): void {
+    mb.emit1s(JvmOp.LDC2_W, cf.constantLong(BigInt(n)));
+    mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(LONG, 'valueOf', '(J)Ljava/lang/Long;'));
+  }
+
   function emitExpr(expr: Expr, mb: MethodBuilder, tailCtx?: JvmEmitTailContext, stackDepth: number = 0): boolean {
     const tcN = subJvmTail(tailCtx, false);
     const tcT = subJvmTail(tailCtx, true);
@@ -601,7 +842,16 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       }
       case 'IdentExpr': {
         if (localFunNamesInEnv?.has(expr.name)) {
-          mb.emit1b(JvmOp.ALOAD, 0);
+          if (freeVarToIndex) {
+            // Capturing lambda: slot 0 is Object[] env, and env[0] holds the local-fun record.
+            mb.emit1b(JvmOp.ALOAD, 0);
+            mb.emit1s(JvmOp.CHECKCAST, cf.classRef('[Ljava/lang/Object;'));
+            mb.emit1b(JvmOp.BIPUSH, 0);
+            mb.emit1(JvmOp.AALOAD);
+          } else {
+            // Non-capturing lambda/fun-stmt path: slot 0 is already the record.
+            mb.emit1b(JvmOp.ALOAD, 0);
+          }
           mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
           mb.emit1s(JvmOp.LDC_W, cf.string(expr.name));
           mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
@@ -609,6 +859,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         }
         if (freeVarToIndex?.has(expr.name)) {
           mb.emit1b(JvmOp.ALOAD, 0);
+          mb.emit1s(JvmOp.CHECKCAST, cf.classRef('[Ljava/lang/Object;'));
           mb.emit1s(JvmOp.LDC_W, cf.constantInt(freeVarToIndex.get(expr.name)!));
           mb.emit1(JvmOp.AALOAD);
           if (varNames.has(expr.name)) {
@@ -630,6 +881,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         }
         if (globalNames.has(expr.name)) {
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(className, jvmMangleName(expr.name), 'Ljava/lang/Object;'));
+          if (globalVarNames.has(expr.name)) {
+            mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+            mb.emit1s(JvmOp.LDC_W, cf.string('0'));
+            mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
+          }
           return false;
         }
         if (funNames.has(expr.name)) {
@@ -653,6 +909,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           const originalName = options.importedNameToOriginal?.get(expr.name) ?? expr.name;
           mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedValVarClass, '$init', '()V'));
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(importedValVarClass, jvmMangleName(originalName), 'Ljava/lang/Object;'));
+          if (options.importedVarNames?.has(expr.name)) {
+            mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+            mb.emit1s(JvmOp.LDC_W, cf.string('0'));
+            mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
+          }
           return false;
         }
         const importedFunClass = options.importedNameToClass?.get(expr.name);
@@ -679,6 +940,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         }
         if (expr.name === 'Nil' || expr.name === '[]') {
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
+          return false;
+        }
+        // User-defined nullary ADT constructor (e.g. Red, Eof, CTrue)
+        const nullaryAdtClass = adtClassByConstructor.get(expr.name);
+        if (nullaryAdtClass != null && (adtConstructorArity.get(expr.name) ?? 0) === 0) {
+          mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(nullaryAdtClass, 'INSTANCE', 'L' + nullaryAdtClass + ';'));
           return false;
         }
         throw new Error(`JVM codegen: unknown variable ${expr.name}`);
@@ -797,7 +1064,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const op = jvmMangleName(expr.op) + 'Float';
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(KMATH, op, '(Ljava/lang/Double;Ljava/lang/Double;)Ljava/lang/Boolean;'));
           } else {
-            const floatOp = expr.op === '+' ? 'addFloat' : expr.op === '-' ? 'subFloat' : expr.op === '*' ? 'mulFloat' : 'divFloat';
+            const floatOp =
+              expr.op === '+' ? 'addFloat' :
+              expr.op === '-' ? 'subFloat' :
+              expr.op === '*' ? 'mulFloat' :
+              expr.op === '**' ? 'powFloat' :
+              'divFloat';
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(KMATH, floatOp, '(Ljava/lang/Double;Ljava/lang/Double;)Ljava/lang/Double;'));
           }
         } else {
@@ -814,15 +1086,32 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         return false;
       }
       case 'IfExpr': {
-        const ifResultSlot = 53;
         emitExpr(expr.cond, mb, tcN, stackDepth);
         mb.emit1s(JvmOp.CHECKCAST, cf.classRef(BOOLEAN));
         mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
         const ifBranchState = frameState(env, nextLocal, undefined, stackDepth);
-        const ifEndState = frameState(env, nextLocal, [ifResultSlot], stackDepth);
         const ifeqPos = mb.length();
         mb.emit1s(JvmOp.IFEQ, 0);
         mb.addBranchTarget(mb.length(), ifBranchState);
+
+        if (tailCtx?.inTail === true) {
+          const thenXfer = emitExpr(expr.then, mb, tcT, stackDepth);
+          if (!thenXfer) mb.emit1(JvmOp.ARETURN);
+          const elseStart = mb.length();
+          mb.addBranchTarget(elseStart, ifBranchState);
+          patchShort(mb, ifeqPos + 1, elseStart - ifeqPos);
+          if (expr.else !== undefined) {
+            const elseXfer = emitExpr(expr.else, mb, tcT, stackDepth);
+            if (!elseXfer) mb.emit1(JvmOp.ARETURN);
+          } else {
+            mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+            mb.emit1(JvmOp.ARETURN);
+          }
+          return true;
+        }
+
+        const ifResultSlot = 53;
+        const ifEndState = frameState(env, nextLocal, [ifResultSlot], stackDepth);
         emitExpr(expr.then, mb, tcN, stackDepth);
         let thenSkipToEndPos: number | undefined;
         if (thenArmPushesValue(expr.then)) {
@@ -880,7 +1169,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         const blockEnv = new Map(env);
         let slot = nextLocal;
         const funStmts = expr.stmts.filter((s): s is FunStmt => s.kind === 'FunStmt');
-        const recordSlot = funStmts.length > 1 ? (slot++, slot - 1) : -1;
+          // Allocate a KRecord for mutual recursion (>1 funs) or any self-recursive single fun
+          const anyNeedRecord = funStmts.length > 1 || (funStmts.length === 1 && (() => {
+            const id = idByNode.get(funStmts[0]!);
+            return id !== undefined && (lambdas[id]?.localFunNames?.size ?? 0) > 0;
+          })());
+          const recordSlot = anyNeedRecord ? (slot++, slot - 1) : -1;
         if (recordSlot >= 0) {
           mb.emit1s(JvmOp.NEW, cf.classRef(KRECORD));
           mb.emit1(JvmOp.DUP);
@@ -937,6 +1231,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                   const g = env.get(name);
                   if (g !== undefined) {
                     mb.emit1b(JvmOp.ALOAD, g);
+                  } else if (freeVarToIndex?.has(name)) {
+                    // name is captured from outer lambda's env array (fun inside lambda)
+                    mb.emit1b(JvmOp.ALOAD, env.get('__env')!);
+                    mb.emit1s(JvmOp.CHECKCAST, cf.classRef('[Ljava/lang/Object;'));
+                    mb.emit1s(JvmOp.LDC_W, cf.constantInt(freeVarToIndex.get(name)!));
+                    mb.emit1(JvmOp.AALOAD);
                   } else if (globalNames.has(name)) {
                     mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(className, jvmMangleName(name), 'Ljava/lang/Object;'));
                   } else if (funNames.has(name)) {
@@ -986,6 +1286,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1s(JvmOp.LDC_W, cf.string(stmt.name));
               mb.emit1b(JvmOp.ALOAD, slot);
               mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
+              // Statement context: do not leak the original lambda value on the operand stack.
+              mb.emit1(JvmOp.POP);
             }
             blockEnv.set(stmt.name, slot);
             if (recordSlot < 0) mb.emit1b(JvmOp.ASTORE, slot);
@@ -1003,6 +1305,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 mb.emit1(JvmOp.POP);
               } else if (freeVarToIndex?.has(stmt.target.name) && varNames.has(stmt.target.name)) {
                 mb.emit1b(JvmOp.ALOAD, 0);
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef('[Ljava/lang/Object;'));
                 mb.emit1s(JvmOp.LDC_W, cf.constantInt(freeVarToIndex.get(stmt.target.name)!));
                 mb.emit1(JvmOp.AALOAD);
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
@@ -1016,6 +1319,25 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 mb.emit1b(JvmOp.ASTORE, s);
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
+              } else if (globalVarNames.has(stmt.target.name)) {
+                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(className, jvmMangleName(stmt.target.name), 'Ljava/lang/Object;'));
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+                mb.emit1s(JvmOp.LDC_W, cf.string('0'));
+                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
+                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+                mb.emit1(JvmOp.POP);
+              } else if (options.importedValVarToClass?.get(stmt.target.name) != null) {
+                const importedVarClass = options.importedValVarToClass.get(stmt.target.name)!;
+                const originalName = options.importedNameToOriginal?.get(stmt.target.name) ?? stmt.target.name;
+                mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedVarClass, '$init', '()V'));
+                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(importedVarClass, jvmMangleName(originalName), 'Ljava/lang/Object;'));
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+                mb.emit1s(JvmOp.LDC_W, cf.string('0'));
+                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
+                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+                mb.emit1(JvmOp.POP);
               } else {
                 emitExpr(stmt.value, mb, tcN, stackDepth);
                 mb.emit1(JvmOp.POP);
@@ -1023,14 +1345,32 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 mb.emit1(JvmOp.POP);
               }
             } else if (stmt.target.kind === 'FieldExpr') {
-              emitExpr(stmt.value, mb, tcN, stackDepth);
-              emitExpr(stmt.target.object, mb, tcN, stackDepth + 1);
+              // Check if it's a namespace var assignment (e.g. Helper.counter := 42)
+              if (
+                stmt.target.object.kind === 'IdentExpr' &&
+                options.namespaceClasses?.get(stmt.target.object.name) != null &&
+                options.namespaceVarFields?.get(stmt.target.object.name)?.has(stmt.target.field)
+              ) {
+                const nsClass = options.namespaceClasses!.get(stmt.target.object.name)!;
+                if (nsClass !== className) {
+                  mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, '$init', '()V'));
+                }
+                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(nsClass, jvmMangleName(stmt.target.field), 'Ljava/lang/Object;'));
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+                mb.emit1s(JvmOp.LDC_W, cf.string('0'));
+                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
+                mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+                mb.emit1(JvmOp.POP);
+              } else {
+              emitExpr(stmt.target.object, mb, tcN, stackDepth);
+              mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
               mb.emit1s(JvmOp.LDC_W, cf.string(stmt.target.field));
-              mb.emit1(JvmOp.DUP2_X1);
-              mb.emit1(JvmOp.SWAP);
+              emitExpr(stmt.value, mb, tcN, stackDepth + 2);
               mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
               mb.emit1(JvmOp.POP);
+              }
             } else {
               emitExpr(stmt.value, mb, tcN, stackDepth);
               mb.emit1(JvmOp.POP);
@@ -1080,14 +1420,16 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             return false;
           }
           if (name === 'Cons' && expr.args.length === 2) {
+            const consHeadSlot = nextLocal++;
+            const consTailSlot = nextLocal++;
             emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1b(JvmOp.ASTORE, 60);
+            mb.emit1b(JvmOp.ASTORE, consHeadSlot);
             emitExpr(expr.args[1], mb, tcN, stackDepth);
-            mb.emit1b(JvmOp.ASTORE, 61);
+            mb.emit1b(JvmOp.ASTORE, consTailSlot);
             mb.emit1s(JvmOp.NEW, cf.classRef(K_CONS));
             mb.emit1(JvmOp.DUP);
-            mb.emit1b(JvmOp.ALOAD, 60);
-            mb.emit1b(JvmOp.ALOAD, 61);
+            mb.emit1b(JvmOp.ALOAD, consHeadSlot);
+            mb.emit1b(JvmOp.ALOAD, consTailSlot);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_CONS, '<init>', '(Ljava/lang/Object;Lkestrel/runtime/KList;)V'));
             return false;
           }
@@ -1104,6 +1446,18 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_OK, '<init>', '(Ljava/lang/Object;)V'));
             return false;
+          }
+          // User-defined parameterized ADT constructor (e.g. Leaf(x), MkPoint(3,4), Num(42))
+          {
+            const adtCtorClass = adtClassByConstructor.get(name);
+            if (adtCtorClass != null && (adtConstructorArity.get(name) ?? -1) === expr.args.length) {
+              mb.emit1s(JvmOp.NEW, cf.classRef(adtCtorClass));
+              mb.emit1(JvmOp.DUP);
+              for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
+              const ctorDesc = '(' + 'Ljava/lang/Object;'.repeat(expr.args.length) + ')V';
+              mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(adtCtorClass, '<init>', ctorDesc));
+              return false;
+            }
           }
           if (name === 'println' || name === 'print') {
             const runtimeMethod = name === 'println' ? 'println' : 'print';
@@ -1334,10 +1688,28 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               funArities.get(name) === st.arity
             ) {
               for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
-              for (let i = st.arity - 1; i >= 0; i--) mb.emit1b(JvmOp.ASTORE, i);
+              const selfArgBase = st.argBase ?? 0;
+              for (let i = st.arity - 1; i >= 0; i--) mb.emit1b(JvmOp.ASTORE, selfArgBase + i);
               const gpos = mb.length();
               mb.emit1s(JvmOp.GOTO, 0);
               patchShort(mb, gpos + 1, st.loopHead - gpos);
+              return true;
+            }
+            const mt = tailCtx?.inTail === true ? tailCtx.mutual : undefined;
+            const mtState = mt?.memberStateByName.get(name);
+            if (
+              mt != null &&
+              mtState !== undefined &&
+              targetClass === className &&
+              expr.args.length === mt.arity
+            ) {
+              for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
+              for (let i = mt.arity - 1; i >= 0; i--) mb.emit1b(JvmOp.ASTORE, mt.argBase + i);
+              emitLongObjectConst(mb, mtState);
+              mb.emit1b(JvmOp.ASTORE, mt.stateLocal);
+              const gpos = mb.length();
+              mb.emit1s(JvmOp.GOTO, 0);
+              patchShort(mb, gpos + 1, mt.loopHead - gpos);
               return true;
             }
             for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
@@ -1351,6 +1723,20 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           if (fe.object.kind === 'IdentExpr') {
             const nsClass = options.namespaceClasses?.get(fe.object.name);
             if (nsClass != null) {
+              // Check if the field is a namespace ADT constructor (parameterized, e.g. Lib.PubNum(42))
+              const nsAdtCtors = options.namespaceAdtConstructors?.get(fe.object.name);
+              const ctorClass = nsAdtCtors?.get(fe.field);
+              if (ctorClass != null) {
+                if (nsClass !== className) {
+                  mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, '$init', '()V'));
+                }
+                mb.emit1s(JvmOp.NEW, cf.classRef(ctorClass));
+                mb.emit1(JvmOp.DUP);
+                for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + ai);
+                const ctorDesc = '(' + 'Ljava/lang/Object;'.repeat(expr.args.length) + ')V';
+                mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(ctorClass, '<init>', ctorDesc));
+                return false;
+              }
               if (nsClass !== className) {
                 mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, '$init', '()V'));
               }
@@ -1367,7 +1753,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         const ARG_TEMP_BASE = 61;
         mb.emit1b(JvmOp.ASTORE, CALLEE_TEMP);
         for (let ai = 0; ai < expr.args.length; ai++) emitExpr(expr.args[ai]!, mb, tcN, stackDepth + 1 + ai);
-        for (let i = 0; i < n; i++) mb.emit1b(JvmOp.ASTORE, ARG_TEMP_BASE + i);
+        // Pop stack right-to-left so temp slots preserve original left-to-right arg order.
+        for (let i = n - 1; i >= 0; i--) mb.emit1b(JvmOp.ASTORE, ARG_TEMP_BASE + i);
         mb.emit1s(JvmOp.LDC_W, cf.constantInt(n));
         mb.emit1s(JvmOp.ANEWARRAY, cf.classRef('java/lang/Object'));
         for (let i = 0; i < n; i++) {
@@ -1410,7 +1797,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1b(JvmOp.ASTORE, scrutSlot);
         mb.emit1(JvmOp.ACONST_NULL);
         mb.emit1b(JvmOp.ASTORE, matchResultSlot);
-        const matchBaseState = frameState(env, nextLocal, [55, matchResultSlot]);
+        const matchBaseState = frameState(env, nextLocal, [55, matchResultSlot], stackDepth);
         const endLabels: number[] = [];
         const savedNextLocal = nextLocal;
         env.set('$matchScrut', scrutSlot);
@@ -1424,7 +1811,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const ifeq = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
             mb.addBranchTarget(ifeq + 3, matchBaseState);
-            const xfer = emitExpr(c.body, mb, tcT);
+            const xfer = emitExpr(c.body, mb, tcT, stackDepth);
             if (!xfer) {
               mb.emit1b(JvmOp.ASTORE, matchResultSlot);
               const gotoEnd = mb.length();
@@ -1444,7 +1831,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
               mb.addBranchTarget(ifeq + 3, matchBaseState);
-              const xferNone = emitExpr(c.body, mb, tcT);
+              const xferNone = emitExpr(c.body, mb, tcT, stackDepth);
               if (!xferNone) {
                 mb.emit1b(JvmOp.ASTORE, matchResultSlot);
                 const gotoEnd = mb.length();
@@ -1474,7 +1861,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 // Some(_) / wildcard: discard payload so stack is empty before body (fixes VerifyError).
                 mb.emit1(JvmOp.POP);
               }
-              const xferSome = emitExpr(c.body, mb, tcT);
+              const xferSome = emitExpr(c.body, mb, tcT, stackDepth);
               if (varName) env.delete(varName);
               if (!xferSome) {
                 mb.emit1b(JvmOp.ASTORE, matchResultSlot);
@@ -1493,7 +1880,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
               mb.addBranchTarget(mb.length(), matchBaseState);
-              const xferNil = emitExpr(c.body, mb, tcT);
+              const xferNil = emitExpr(c.body, mb, tcT, stackDepth);
               if (!xferNil) {
                 mb.emit1b(JvmOp.ASTORE, matchResultSlot);
                 const gotoEnd = mb.length();
@@ -1529,10 +1916,107 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 env.set(tailPat.name, slot);
                 mb.emit1b(JvmOp.ASTORE, slot);
               }
-              const xferCons = emitExpr(c.body, mb, tcT);
+              const xferCons = emitExpr(c.body, mb, tcT, stackDepth);
               if (headPat?.kind === 'VarPattern') env.delete(headPat.name);
               if (tailPat?.kind === 'VarPattern') env.delete(tailPat.name);
               if (!xferCons) {
+                mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                endLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
+              patchShort(mb, ifeq + 1, afterGoto - ifeq);
+              mb.addBranchTarget(afterGoto, matchBaseState);
+              continue;
+            }
+            if (p.name === 'Ok' || p.name === 'Err') {
+              const ctorClass = p.name === 'Ok' ? K_OK : K_ERR;
+              mb.emit1b(JvmOp.ALOAD, scrutSlot);
+              mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(ctorClass));
+              const ifeq = mb.length();
+              mb.emit1s(JvmOp.IFEQ, 0);
+              mb.addBranchTarget(ifeq + 3, matchBaseState);
+              const vpat = p.fields?.[0]?.pattern;
+              if (vpat?.kind === 'VarPattern') {
+                mb.emit1b(JvmOp.ALOAD, scrutSlot);
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef(ctorClass));
+                mb.emit1s(JvmOp.GETFIELD, cf.fieldref(ctorClass, 'value', 'Ljava/lang/Object;'));
+                const slot = nextLocal++;
+                env.set(vpat.name, slot);
+                mb.emit1b(JvmOp.ASTORE, slot);
+              }
+              const xferRes = emitExpr(c.body, mb, tcT, stackDepth);
+              if (vpat?.kind === 'VarPattern') env.delete(vpat.name);
+              if (!xferRes) {
+                mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                endLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
+              patchShort(mb, ifeq + 1, afterGoto - ifeq);
+              mb.addBranchTarget(afterGoto, matchBaseState);
+              continue;
+            }
+            if (p.name === 'True' || p.name === 'False') {
+              mb.emit1b(JvmOp.ALOAD, scrutSlot);
+              mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, p.name === 'True' ? 'TRUE' : 'FALSE', 'Ljava/lang/Boolean;'));
+              mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
+              mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
+              const ifeq = mb.length();
+              mb.emit1s(JvmOp.IFEQ, 0);
+              mb.addBranchTarget(ifeq + 3, matchBaseState);
+              const xferBool = emitExpr(c.body, mb, tcT, stackDepth);
+              if (!xferBool) {
+                mb.emit1b(JvmOp.ASTORE, matchResultSlot);
+                const gotoEnd = mb.length();
+                mb.emit1s(JvmOp.GOTO, 0);
+                endLabels.push(gotoEnd);
+              }
+              const afterGoto = mb.length();
+              patchShort(mb, ifeq + 1, afterGoto - ifeq);
+              mb.addBranchTarget(afterGoto, matchBaseState);
+              continue;
+            }
+
+            // User-defined ADT constructor patterns (including opaque ADTs)
+            const adtClass = adtClassByConstructor.get(p.name);
+            if (adtClass != null) {
+              mb.emit1b(JvmOp.ALOAD, scrutSlot);
+              mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(adtClass));
+              const ifeq = mb.length();
+              mb.emit1s(JvmOp.IFEQ, 0);
+              mb.addBranchTarget(ifeq + 3, matchBaseState);
+
+              const prevFieldBindings: Array<{ name: string; prev: number | undefined }> = [];
+              if (p.fields?.length) {
+                for (let fi = 0; fi < p.fields.length; fi++) {
+                  const f = p.fields[fi]!;
+                  const fieldName = f.name ?? String(fi);
+                  mb.emit1b(JvmOp.ALOAD, scrutSlot);
+                  mb.emit1s(JvmOp.CHECKCAST, cf.classRef(adtClass));
+                  mb.emit1s(JvmOp.GETFIELD, cf.fieldref(adtClass, fieldName, 'Ljava/lang/Object;'));
+                  if (f.pattern?.kind === 'VarPattern') {
+                    const bindName = (f.pattern as { name: string }).name;
+                    const slot = nextLocal++;
+                    prevFieldBindings.push({ name: bindName, prev: env.get(bindName) });
+                    env.set(bindName, slot);
+                    mb.emit1b(JvmOp.ASTORE, slot);
+                  } else {
+                    // Wildcard / non-binding field pattern: discard extracted field value.
+                    mb.emit1(JvmOp.POP);
+                  }
+                }
+              }
+
+              const xferAdt = emitExpr(c.body, mb, tcT, stackDepth);
+              for (let bi = prevFieldBindings.length - 1; bi >= 0; bi--) {
+                const b = prevFieldBindings[bi]!;
+                if (b.prev !== undefined) env.set(b.name, b.prev);
+                else env.delete(b.name);
+              }
+              if (!xferAdt) {
                 mb.emit1b(JvmOp.ASTORE, matchResultSlot);
                 const gotoEnd = mb.length();
                 mb.emit1s(JvmOp.GOTO, 0);
@@ -1568,7 +2052,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               env.set(tailPat.name, slot);
               mb.emit1b(JvmOp.ASTORE, slot);
             }
-            const xferConsPat = emitExpr(c.body, mb, tcT);
+            const xferConsPat = emitExpr(c.body, mb, tcT, stackDepth);
             if (headPat.kind === 'VarPattern') env.delete(headPat.name);
             if (tailPat.kind === 'VarPattern') env.delete(tailPat.name);
             if (!xferConsPat) {
@@ -1590,7 +2074,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
               mb.addBranchTarget(ifeq + 3, matchBaseState);
-              const xferLitNan = emitExpr(c.body, mb, tcT);
+              const xferLitNan = emitExpr(c.body, mb, tcT, stackDepth);
               if (!xferLitNan) {
                 mb.emit1b(JvmOp.ASTORE, matchResultSlot);
                 const gotoEnd = mb.length();
@@ -1610,7 +2094,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const ifeq = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
             mb.addBranchTarget(ifeq + 3, matchBaseState);
-            const xferLit = emitExpr(c.body, mb, tcT);
+            const xferLit = emitExpr(c.body, mb, tcT, stackDepth);
             if (!xferLit) {
               mb.emit1b(JvmOp.ASTORE, matchResultSlot);
               const gotoEnd = mb.length();
@@ -1703,7 +2187,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
 
             emitTupleSlots(scrutSlot, c.pattern, scrutT?.kind === 'tuple' ? scrutT : undefined);
 
-            const xferTuple = emitExpr(c.body, mb, tcT);
+            const xferTuple = emitExpr(c.body, mb, tcT, stackDepth);
             deleteTupleBindings(c.pattern);
 
             if (!xferTuple) {
@@ -1724,7 +2208,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             env.set(c.pattern.name, slot);
             mb.emit1b(JvmOp.ALOAD, scrutSlot);
             mb.emit1b(JvmOp.ASTORE, slot);
-            const xferVar = emitExpr(c.body, mb, tcT);
+            const xferVar = emitExpr(c.body, mb, tcT, stackDepth);
             env.delete(c.pattern.name);
             if (!xferVar) {
               mb.emit1b(JvmOp.ASTORE, matchResultSlot);
@@ -1735,7 +2219,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             continue;
           }
           if (c.pattern.kind === 'WildcardPattern') {
-            const xferWild = emitExpr(c.body, mb, tcT);
+            const xferWild = emitExpr(c.body, mb, tcT, stackDepth);
             if (!xferWild) {
               mb.emit1b(JvmOp.ASTORE, matchResultSlot);
               const gotoEnd = mb.length();
@@ -1759,8 +2243,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
           return false;
         }
-        const listTemp = 62;
-        const elemTemp = 63;
+        const listTemp = nextLocal++;
+        const elemTemp = nextLocal++;
         mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(K_NIL, 'INSTANCE', 'Lkestrel/runtime/KNil;'));
         mb.emit1b(JvmOp.ASTORE, listTemp);
         for (let i = expr.elements.length - 1; i >= 0; i--) {
@@ -1787,14 +2271,16 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         return false;
       }
       case 'ConsExpr': {
+        const consHeadSlot = nextLocal++;
+        const consTailSlot = nextLocal++;
         emitExpr(expr.head, mb, tcN);
-        mb.emit1b(JvmOp.ASTORE, 60);
+        mb.emit1b(JvmOp.ASTORE, consHeadSlot);
         emitExpr(expr.tail, mb, tcN);
-        mb.emit1b(JvmOp.ASTORE, 61);
+        mb.emit1b(JvmOp.ASTORE, consTailSlot);
         mb.emit1s(JvmOp.NEW, cf.classRef(K_CONS));
         mb.emit1(JvmOp.DUP);
-        mb.emit1b(JvmOp.ALOAD, 60);
-        mb.emit1b(JvmOp.ALOAD, 61);
+        mb.emit1b(JvmOp.ALOAD, consHeadSlot);
+        mb.emit1b(JvmOp.ALOAD, consTailSlot);
         mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_LIST));
         mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_CONS, '<init>', '(Ljava/lang/Object;Lkestrel/runtime/KList;)V'));
         return false;
@@ -1856,6 +2342,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const s = env.get(name);
             if (s !== undefined) {
               mb.emit1b(JvmOp.ALOAD, s);
+            } else if (freeVarToIndex?.has(name)) {
+              // name is captured from outer lambda's env array (lambda inside lambda)
+              mb.emit1b(JvmOp.ALOAD, env.get('__env')!);
+              mb.emit1s(JvmOp.CHECKCAST, cf.classRef('[Ljava/lang/Object;'));
+              mb.emit1s(JvmOp.LDC_W, cf.constantInt(freeVarToIndex.get(name)!));
+              mb.emit1(JvmOp.AALOAD);
             } else if (globalNames.has(name)) {
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(className, jvmMangleName(name), 'Ljava/lang/Object;'));
             } else if (funNames.has(name)) {
@@ -1918,6 +2410,50 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         return false;
       }
       case 'FieldExpr': {
+        if (expr.object.kind === 'IdentExpr') {
+          const nsClass = options.namespaceClasses?.get(expr.object.name);
+          if (nsClass != null) {
+            const nsFunArity = options.namespaceFunArities?.get(expr.object.name)?.get(expr.field);
+            if (nsFunArity !== undefined) {
+              if (nsClass !== className) {
+                mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, '$init', '()V'));
+              }
+              mb.emit1s(JvmOp.LDC_W, cf.classRef(nsClass));
+              mb.emit1s(JvmOp.LDC_W, cf.string(jvmMangleName(expr.field)));
+              mb.emit1s(JvmOp.LDC_W, cf.constantInt(nsFunArity));
+              mb.emit1s(
+                JvmOp.INVOKESTATIC,
+                cf.methodref(
+                  K_FUNCTION_REF,
+                  'of',
+                  '(Ljava/lang/Class;Ljava/lang/String;I)L' + K_FUNCTION_REF + ';'
+                )
+              );
+              return false;
+            }
+            // Check if this is a namespace nullary ADT constructor (e.g. Lib.PubEof)
+            const nsAdtCtors = options.namespaceAdtConstructors?.get(expr.object.name);
+            const ctorClass = nsAdtCtors?.get(expr.field);
+            if (ctorClass != null) {
+              if (nsClass !== className) {
+                mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, '$init', '()V'));
+              }
+              mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(ctorClass, 'INSTANCE', 'L' + ctorClass + ';'));
+              return false;
+            }
+            if (nsClass !== className) {
+              mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, '$init', '()V'));
+            }
+            mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(nsClass, jvmMangleName(expr.field), 'Ljava/lang/Object;'));
+            // If the field is a var, unwrap the KRecord to get the actual value
+            if (options.namespaceVarFields?.get(expr.object.name)?.has(expr.field)) {
+              mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
+              mb.emit1s(JvmOp.LDC_W, cf.string('0'));
+              mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
+            }
+            return false;
+          }
+        }
         emitExpr(expr.object, mb, tcN);
         mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
         mb.emit1s(JvmOp.LDC_W, cf.string(expr.field));
@@ -1940,28 +2476,58 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         emitExpr(expr.value, mb, tcN);
         mb.emit1s(JvmOp.NEW, cf.classRef(K_EXCEPTION));
         mb.emit1(JvmOp.DUP_X1);
+        mb.emit1(JvmOp.SWAP);
         mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_EXCEPTION, '<init>', '(Ljava/lang/Object;)V'));
         mb.emit1(JvmOp.ATHROW);
-        return false;
+        return true;
       }
       case 'TryExpr': {
+        const kExceptionClassIdx = cf.classRef(K_EXCEPTION);
+        const throwableClassIdx = cf.classRef('java/lang/Throwable');
+        const ambientDepth = stackDepth;
+        const ambientSlots: number[] = [];
+        const ambientNames: string[] = [];
+        if (ambientDepth > 0) {
+          for (let i = ambientDepth - 1; i >= 0; i--) {
+            const slot = nextLocal++;
+            ambientSlots[i] = slot;
+            const ambientName = `$tryAmbient${i}`;
+            ambientNames[i] = ambientName;
+            env.set(ambientName, slot);
+            mb.emit1b(JvmOp.ASTORE, slot);
+          }
+        }
+        const innerStackDepth = 0;
+        const tryResultSlot = nextLocal++;
         const tryStart = mb.length();
-        mb.addBranchTarget(tryStart, frameState(env, nextLocal));
-        const tryBodyXfer = emitExpr(expr.body, mb, tcT);
+        mb.addBranchTarget(tryStart, frameState(env, nextLocal, undefined, innerStackDepth));
+        const tryBodyXfer = emitExpr(expr.body, mb, tcT, innerStackDepth);
         const tryEnd = mb.length();
         let gotoAfter: number | undefined;
         if (!tryBodyXfer) {
+          mb.emit1b(JvmOp.ASTORE, tryResultSlot);
           gotoAfter = mb.length();
           mb.emit1s(JvmOp.GOTO, 0);
         }
         const handlerStart = mb.length();
-        mb.addBranchTarget(handlerStart, frameState(env, nextLocal, [57]));
+        const handlerFrame = frameState(env, nextLocal, undefined, 1);
+        handlerFrame.stackItemCpIdx = throwableClassIdx;
+        mb.addBranchTarget(handlerStart, handlerFrame);
         const EXN_SLOT = 57;
         const PAYLOAD_SLOT = 56;
+        const arithOverflowClass = adtClassByConstructor.get('ArithmeticOverflow');
+        const divideByZeroClass = adtClassByConstructor.get('DivideByZero');
         mb.emit1b(JvmOp.ASTORE, EXN_SLOT);
         mb.emit1b(JvmOp.ALOAD, EXN_SLOT);
-        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_EXCEPTION));
-        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(K_EXCEPTION, 'getPayload', '()Ljava/lang/Object;'));
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Throwable'));
+        if (arithOverflowClass != null) mb.emit1s(JvmOp.LDC_W, cf.string(arithOverflowClass));
+        else mb.emit1(JvmOp.ACONST_NULL);
+        if (divideByZeroClass != null) mb.emit1s(JvmOp.LDC_W, cf.string(divideByZeroClass));
+        else mb.emit1(JvmOp.ACONST_NULL);
+        mb.emit1s(
+          JvmOp.INVOKESTATIC,
+          cf.methodref(RUNTIME, 'normalizeCaught', '(Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;')
+        );
         mb.emit1b(JvmOp.ASTORE, PAYLOAD_SLOT);
         const prevCatchVar = expr.catchVar != null ? env.get(expr.catchVar) : undefined;
         if (expr.catchVar != null) env.set(expr.catchVar, PAYLOAD_SLOT);
@@ -1973,9 +2539,10 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             env.set(c.pattern.name, slot);
             mb.emit1b(JvmOp.ALOAD, PAYLOAD_SLOT);
             mb.emit1b(JvmOp.ASTORE, slot);
-            const xferTryVar = emitExpr(c.body, mb, tcT);
+            const xferTryVar = emitExpr(c.body, mb, tcT, innerStackDepth);
             env.delete(c.pattern.name);
             if (!xferTryVar) {
+              mb.emit1b(JvmOp.ASTORE, tryResultSlot);
               const gotoEnd = mb.length();
               mb.emit1s(JvmOp.GOTO, 0);
               catchEndLabels.push(gotoEnd);
@@ -1983,8 +2550,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             continue;
           }
           if (c.pattern.kind === 'WildcardPattern') {
-            const xferTryWild = emitExpr(c.body, mb, tcT);
+            const xferTryWild = emitExpr(c.body, mb, tcT, innerStackDepth);
             if (!xferTryWild) {
+              mb.emit1b(JvmOp.ASTORE, tryResultSlot);
               const gotoEnd = mb.length();
               mb.emit1s(JvmOp.GOTO, 0);
               catchEndLabels.push(gotoEnd);
@@ -1999,7 +2567,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(adtClass));
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
-              mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57]));
+              mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57, 56]));
               if (p.fields?.length) {
                 mb.emit1b(JvmOp.ALOAD, PAYLOAD_SLOT);
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(adtClass));
@@ -2011,19 +2579,23 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                     const slot = nextLocal++;
                     env.set((f.pattern as { name: string }).name, slot);
                     mb.emit1b(JvmOp.ASTORE, slot);
+                  } else {
+                    // Wildcard / non-binding field pattern: discard extracted field value.
+                    mb.emit1(JvmOp.POP);
                   }
                 }
               }
-              const xferTryAdt = emitExpr(c.body, mb, tcT);
+              const xferTryAdt = emitExpr(c.body, mb, tcT, innerStackDepth);
               if (p.fields?.length) for (const f of p.fields) if (f.pattern?.kind === 'VarPattern') env.delete((f.pattern as { name: string }).name);
               if (!xferTryAdt) {
+                mb.emit1b(JvmOp.ASTORE, tryResultSlot);
                 const gotoEnd = mb.length();
                 mb.emit1s(JvmOp.GOTO, 0);
                 catchEndLabels.push(gotoEnd);
               }
               const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
-              mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57]));
+              mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57, 56]));
               continue;
             }
             if (p.name === 'None') {
@@ -2031,16 +2603,17 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_NONE));
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
-              mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57]));
-              const xferTryNone = emitExpr(c.body, mb, tcT);
+              mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57, 56]));
+              const xferTryNone = emitExpr(c.body, mb, tcT, innerStackDepth);
               if (!xferTryNone) {
+                mb.emit1b(JvmOp.ASTORE, tryResultSlot);
                 const gotoEnd = mb.length();
                 mb.emit1s(JvmOp.GOTO, 0);
                 catchEndLabels.push(gotoEnd);
               }
               const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
-              mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57]));
+              mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57, 56]));
               continue;
             }
             if (p.name === 'Some') {
@@ -2048,7 +2621,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_SOME));
               const ifeq = mb.length();
               mb.emit1s(JvmOp.IFEQ, 0);
-              mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57]));
+              mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57, 56]));
               mb.emit1b(JvmOp.ALOAD, PAYLOAD_SLOT);
               mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_SOME));
               mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_SOME, 'value', 'Ljava/lang/Object;'));
@@ -2060,51 +2633,64 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               } else {
                 mb.emit1(JvmOp.POP);
               }
-              const xferTrySome = emitExpr(c.body, mb, tcT);
+              const xferTrySome = emitExpr(c.body, mb, tcT, innerStackDepth);
               if (varName) env.delete(varName);
               if (!xferTrySome) {
+                mb.emit1b(JvmOp.ASTORE, tryResultSlot);
                 const gotoEnd = mb.length();
                 mb.emit1s(JvmOp.GOTO, 0);
                 catchEndLabels.push(gotoEnd);
               }
               const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
-              mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57]));
+              mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57, 56]));
               continue;
             }
           }
           if (c.pattern.kind === 'LiteralPattern') {
             mb.emit1b(JvmOp.ALOAD, PAYLOAD_SLOT);
             emitExpr({ kind: 'LiteralExpr', literal: c.pattern.literal, value: c.pattern.value, span: undefined } as import('../ast/nodes.js').LiteralExpr, mb, tcN);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Z'));
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
             mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref('java/lang/Boolean', 'booleanValue', '()Z'));
             const ifeq = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
-            mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57]));
-            const xferTryLit = emitExpr(c.body, mb, tcT);
+            mb.addBranchTarget(mb.length(), frameState(env, nextLocal, [57, 56]));
+            const xferTryLit = emitExpr(c.body, mb, tcT, innerStackDepth);
             if (!xferTryLit) {
+              mb.emit1b(JvmOp.ASTORE, tryResultSlot);
               const gotoEnd = mb.length();
               mb.emit1s(JvmOp.GOTO, 0);
               catchEndLabels.push(gotoEnd);
             }
             const afterGoto = mb.length();
             patchShort(mb, ifeq + 1, afterGoto - ifeq);
-            mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57]));
+            mb.addBranchTarget(afterGoto, frameState(env, nextLocal, [57, 56]));
             continue;
           }
         }
         const rethrowPos = mb.length();
-        mb.addBranchTarget(rethrowPos, frameState(env, nextLocal, [57]));
+        mb.addBranchTarget(rethrowPos, frameState(env, nextLocal, [57, 56]));
         mb.emit1b(JvmOp.ALOAD, EXN_SLOT);
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Throwable'));
         mb.emit1(JvmOp.ATHROW);
         const afterCatch = mb.length();
-        mb.addBranchTarget(afterCatch, frameState(env, nextLocal));
+        mb.addBranchTarget(afterCatch, frameState(env, nextLocal, [tryResultSlot], innerStackDepth));
         for (const gotoPos of catchEndLabels) patchShort(mb, gotoPos + 1, afterCatch - gotoPos);
         if (gotoAfter !== undefined) patchShort(mb, gotoAfter + 1, afterCatch - gotoAfter);
-        mb.addException(tryStart, tryEnd, handlerStart, cf.classRef(K_EXCEPTION));
+        mb.addException(tryStart, tryEnd, handlerStart, throwableClassIdx);
         if (expr.catchVar != null) {
           if (prevCatchVar !== undefined) env.set(expr.catchVar, prevCatchVar);
           else env.delete(expr.catchVar);
+        }
+        if (ambientDepth > 0) {
+          const restoredResultSlot = nextLocal++;
+          mb.emit1b(JvmOp.ALOAD, tryResultSlot);
+          mb.emit1b(JvmOp.ASTORE, restoredResultSlot);
+          for (let i = 0; i < ambientSlots.length; i++) mb.emit1b(JvmOp.ALOAD, ambientSlots[i]!);
+          mb.emit1b(JvmOp.ALOAD, restoredResultSlot);
+          for (const name of ambientNames) env.delete(name);
+        } else {
+          mb.emit1b(JvmOp.ALOAD, tryResultSlot);
         }
         return false;
       }
@@ -2137,8 +2723,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           mb.emit1b(JvmOp.ALOAD, tmpSlot);
           mb.emit1s(JvmOp.LDC_W, cf.constantInt(6));
           mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'isValueKind', '(Ljava/lang/Object;I)Z'));
-          const jumps: number[] = [];
-          jumps.push(mb.length());
+          const falseJumps: number[] = [];
+          falseJumps.push(mb.length());
           mb.emit1s(JvmOp.IFEQ, 0);
           for (const f of tested.fields) {
             if (f.type.kind !== 'PrimType') {
@@ -2153,20 +2739,21 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               JvmOp.INVOKESTATIC,
               cf.methodref(RUNTIME, 'recordFieldIsKind', '(Ljava/lang/Object;Ljava/lang/String;I)Z')
             );
-            jumps.push(mb.length());
+            falseJumps.push(mb.length());
             mb.emit1s(JvmOp.IFEQ, 0);
           }
-          mb.emit1(JvmOp.ICONST_1);
+          mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'TRUE', 'Ljava/lang/Boolean;'));
           const gotoEnd = mb.length();
           mb.emit1s(JvmOp.GOTO, 0);
           const falseLab = mb.length();
-          mb.emit1(JvmOp.ICONST_0);
+          mb.addBranchTarget(falseLab, frameState(env, nextLocal, undefined, stackDepth));
+          mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'FALSE', 'Ljava/lang/Boolean;'));
           const endLab = mb.length();
+          mb.addBranchTarget(endLab, frameState(env, nextLocal, undefined, stackDepth + 1));
           patchShort(mb, gotoEnd + 1, endLab - gotoEnd);
-          for (const j of jumps) {
+          for (const j of falseJumps) {
             patchShort(mb, j + 1, falseLab - j);
           }
-          boxBoolFromInt();
           return false;
         }
         if (tested.kind === 'IdentType') {
@@ -2185,6 +2772,13 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           const subjApp = subjT?.kind === 'app' ? subjT : null;
           if (subjApp != null && subjApp.name === tested.name) {
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'TRUE', 'Ljava/lang/Boolean;'));
+            return false;
+          }
+          const adtCtorClass = adtClassByConstructor.get(tested.name);
+          if (adtCtorClass != null) {
+            emitExpr(expr.expr, mb, tcN);
+            mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(adtCtorClass));
+            boxBoolFromInt();
             return false;
           }
           emitExpr(expr.expr, mb, tcN);
@@ -2225,6 +2819,13 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           }
           if (subjT?.kind === 'app' && subjT.name === tested.name) {
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(BOOLEAN, 'TRUE', 'Ljava/lang/Boolean;'));
+            return false;
+          }
+          const adtCtorClass = adtClassByConstructor.get(tested.name);
+          if (adtCtorClass != null) {
+            emitExpr(expr.expr, mb, tcN);
+            mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(adtCtorClass));
+            boxBoolFromInt();
             return false;
           }
           throw new Error(`JVM codegen: is ${tested.name}<...> not supported`);
@@ -2304,19 +2905,106 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     innerClasses.set(className + '$Lambda' + i, buildLambdaClass(className, i, arity, l.capturing));
   }
 
-  for (const node of program.body) {
-    if (!node || node.kind !== 'FunDecl') continue;
-    const fun = node as FunDecl;
+  const emittedMutualHelpers = new Set<string>();
+  for (const fun of topLevelFunDecls) {
+    const group = mutualGroupByFun.get(fun.name);
+    if (group == null) continue;
+    if (emittedMutualHelpers.has(group.helperMethod)) continue;
+    emittedMutualHelpers.add(group.helperMethod);
+
+    const helperDesc = '(Ljava/lang/Object;' + 'Ljava/lang/Object;'.repeat(group.arity) + ')Ljava/lang/Object;';
+    const helperMb = cf.addMethod(group.helperMethod, helperDesc, ACC_PRIVATE | ACC_STATIC);
+    const helperArgEnv = new Map<string, number>();
+    helperArgEnv.set('$state', 0);
+    for (let i = 0; i < group.arity; i++) helperArgEnv.set(`$arg${i}`, i + 1);
+    const dispatchHead = helperMb.length();
+    helperMb.addBranchTarget(dispatchHead, frameState(helperArgEnv, group.arity + 1));
+
+    const stateChecks: number[] = [];
+    for (let i = 0; i < group.memberNames.length; i++) {
+      helperMb.emit1b(JvmOp.ALOAD, 0);
+      emitLongObjectConst(helperMb, i);
+      helperMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'equals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
+      helperMb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
+      const check = helperMb.length();
+      helperMb.emit1s(JvmOp.IFNE, 0);
+      stateChecks.push(check);
+    }
+
+    helperMb.emit1s(JvmOp.NEW, cf.classRef('java/lang/IllegalStateException'));
+    helperMb.emit1(JvmOp.DUP);
+    helperMb.emit1s(JvmOp.LDC_W, cf.string('Invalid mutual tail-call dispatch state'));
+    helperMb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref('java/lang/IllegalStateException', '<init>', '(Ljava/lang/String;)V'));
+    helperMb.emit1(JvmOp.ATHROW);
+
+    for (let i = 0; i < group.memberNames.length; i++) {
+      const caseStart = helperMb.length();
+      patchShort(helperMb, stateChecks[i]! + 1, caseStart - stateChecks[i]!);
+      const name = group.memberNames[i]!;
+      const member = funByName.get(name);
+      if (!member) continue;
+      const paramEnv = new Map<string, number>();
+      paramEnv.set('__state', 0);
+      member.params.forEach((p, pi) => paramEnv.set(p.name, pi + 1));
+      helperMb.addBranchTarget(caseStart, frameState(paramEnv, group.arity + 1));
+      env.clear();
+      for (const [k, v] of paramEnv) env.set(k, v);
+      for (let pi = 0; pi < group.arity; pi++) env.set(`__param$${pi}`, pi + 1);
+      nextLocal = group.arity + 1;
+      const helperTailCtx: JvmEmitTailContext = {
+        self: { name: member.name, arity: group.arity, loopHead: dispatchHead, argBase: 1 },
+        mutual: {
+          memberStateByName: group.memberStateByName,
+          arity: group.arity,
+          loopHead: dispatchHead,
+          stateLocal: 0,
+          argBase: 1,
+        },
+        inTail: true,
+      };
+      const bodyXfer = emitExpr(member.body, helperMb, helperTailCtx);
+      if (member.async) {
+        helperMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'completedTask', '(Ljava/lang/Object;)Ljava/lang/Object;'));
+      }
+      if (!bodyXfer) helperMb.emit1(JvmOp.ARETURN);
+    }
+    helperMb.setMaxs(32, Math.max(Math.max(group.arity + 1, nextLocal) + 8, 70));
+    cf.flushLastMethod();
+    env.clear();
+    nextLocal = 0;
+  }
+
+  for (const fun of topLevelFunDecls) {
     const arity = fun.params.length;
+    const group = mutualGroupByFun.get(fun.name);
     const mb = cf.addMethod(jvmMangleName(fun.name), descriptor(arity), ACC_PUBLIC | ACC_STATIC);
+    if (group != null) {
+      const state = group.memberStateByName.get(fun.name);
+      if (state == null) throw new Error(`JVM codegen: missing mutual state for ${fun.name}`);
+      emitLongObjectConst(mb, state);
+      for (let i = 0; i < arity; i++) mb.emit1b(JvmOp.ALOAD, i);
+      const helperDesc = '(Ljava/lang/Object;' + 'Ljava/lang/Object;'.repeat(arity) + ')Ljava/lang/Object;';
+      mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(className, group.helperMethod, helperDesc));
+      mb.emit1(JvmOp.ARETURN);
+      mb.setMaxs(32, Math.max(Math.max(arity, nextLocal) + 8, 70));
+      cf.flushLastMethod();
+      continue;
+    }
+
     const paramEnv = new Map<string, number>();
+    const fixedParamKeys: string[] = [];
     fun.params.forEach((p, i) => paramEnv.set(p.name, i));
     for (const [k, v] of paramEnv) env.set(k, v);
+    for (let i = 0; i < arity; i++) {
+      const fixedKey = `__param$${i}`;
+      fixedParamKeys.push(fixedKey);
+      env.set(fixedKey, i);
+    }
     nextLocal = arity;
     const funLoopHead = mb.length();
     mb.addBranchTarget(funLoopHead, frameState(env, nextLocal));
     const funSelfTail: JvmEmitTailContext = {
-      self: { name: fun.name, arity, loopHead: funLoopHead },
+      self: { name: fun.name, arity, loopHead: funLoopHead, argBase: 0 },
       inTail: true,
     };
     const funXfer = emitExpr(fun.body, mb, funSelfTail);
@@ -2324,6 +3012,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     if (!funXfer) mb.emit1(JvmOp.ARETURN);
     cf.flushLastMethod();
     for (const k of paramEnv.keys()) env.delete(k);
+    for (const k of fixedParamKeys) env.delete(k);
   }
 
   nextLocal = 0;

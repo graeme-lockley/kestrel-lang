@@ -34,20 +34,16 @@ const CP_NAME_AND_TYPE = 12;
 function encodeUtf8(s: string): Uint8Array {
   const buf: number[] = [];
   for (let i = 0; i < s.length; i++) {
-    let c = s.charCodeAt(i);
-    if (c < 0x80) {
+    const c = s.charCodeAt(i);
+    // JVM constant pool uses modified UTF-8:
+    // - U+0000 must be encoded as 0xC0 0x80
+    // - UTF-16 surrogate code units are encoded individually as 3-byte sequences
+    if (c === 0) {
+      buf.push(0xc0, 0x80);
+    } else if (c <= 0x7f) {
       buf.push(c);
-    } else if (c < 0x800) {
+    } else if (c <= 0x7ff) {
       buf.push(0xc0 | (c >> 6), 0x80 | (c & 0x3f));
-    } else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) {
-      const c2 = s.charCodeAt(i + 1);
-      if (c2 >= 0xdc00 && c2 <= 0xdfff) {
-        const u = ((c - 0xd800) << 10) + (c2 - 0xdc00) + 0x10000;
-        buf.push(0xf0 | (u >> 18), 0x80 | ((u >> 12) & 0x3f), 0x80 | ((u >> 6) & 0x3f), 0x80 | (u & 0x3f));
-        i++;
-      } else {
-        buf.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
-      }
     } else {
       buf.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 0x3f), 0x80 | (c & 0x3f));
     }
@@ -72,6 +68,8 @@ export interface StackMapFrameState {
   objectSlots: Set<number>;
   /** Number of stack slots at this target (all emitted as Object when > 0). */
   stackDepth?: number;
+  /** If set, use this class name for the single stack slot (for exception handlers). */
+  stackItemCpIdx?: number;
 }
 
 /** Frame state for "only params are Object" (e.g. at else start after condition). Use when merging with other targets at same offset. */
@@ -154,9 +152,15 @@ function buildStackMapTable(
     }
     const nStack = state?.stackDepth ?? 0;
     out.push((nStack >> 8) & 0xff, nStack & 0xff);
-    for (let k = 0; k < nStack; k++) {
+    if (nStack === 1 && state?.stackItemCpIdx != null) {
+      // Exception handler: use the specific exception class type for the stack item
       out.push(VERIFICATION_OBJECT);
-      out.push((objectClassCpIndex >> 8) & 0xff, objectClassCpIndex & 0xff);
+      out.push((state.stackItemCpIdx >> 8) & 0xff, state.stackItemCpIdx & 0xff);
+    } else {
+      for (let k = 0; k < nStack; k++) {
+        out.push(VERIFICATION_OBJECT);
+        out.push((objectClassCpIndex >> 8) & 0xff, objectClassCpIndex & 0xff);
+      }
     }
   }
   const count = 1 + uniq.filter((o) => o > 0).length;
@@ -476,6 +480,9 @@ export class ClassFileBuilder {
               numLocals: Math.max(existing.numLocals, frameState.numLocals),
               objectSlots: mergedSlots,
               ...(mergedStackDepth > 0 ? { stackDepth: mergedStackDepth } : {}),
+              ...(mergedStackDepth === 1
+                ? { stackItemCpIdx: existing.stackItemCpIdx ?? frameState.stackItemCpIdx }
+                : {}),
             });
           } else {
             branchTargetFrameState.set(offset, frameState);

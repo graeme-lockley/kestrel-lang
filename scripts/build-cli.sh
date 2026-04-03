@@ -89,12 +89,10 @@ is_story_in_done() {
 # and bash disables errexit during that evaluation, so a bare failing subshell would not stop
 # the function and "Full test suite passed." could print anyway.
 run_full_test_suite() {
-  echo "Running full test suite (compiler build + tests, VM, E2E, Kestrel harness)…"
+  echo "Running full test suite (compiler build + tests, E2E, Kestrel JVM harness)..."
   (cd "$REPO_ROOT/compiler" && npm run build && npm test) || return 1
-  (cd "$REPO_ROOT/vm" && zig build test --verbose 2>&1) || return 1
   "$REPO_ROOT/scripts/run-e2e.sh" || return 1
   "$REPO_ROOT/scripts/kestrel" test || return 1
-  "$REPO_ROOT/scripts/kestrel" test --target jvm || return 1
   echo "Full test suite passed."
 }
 

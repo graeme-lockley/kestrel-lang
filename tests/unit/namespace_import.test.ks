@@ -12,6 +12,7 @@ export fun run(s: Suite): Unit =
       eq(s2, "Str.indexOf", Str.indexOf("hello", "ll"), 2)
       isTrue(s2, "Str.equals", Str.equals("a", "a"))
       eq(s2, "Str.toUpperCase", Str.toUpperCase("hello"), "HELLO")
+      eq(s2, "namespace function as value", ((f: (String) -> Int) => f("hello"))(Str.length), 5)
     })
     group(s1, "value bindings", (s2: Suite) => {
       eq(s2, "Console.ESC", Console.ESC, "\u{1b}")
