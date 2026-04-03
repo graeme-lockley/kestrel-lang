@@ -53,7 +53,7 @@ function collectJvmNamespaceConstructorDiags(
 ): Diagnostic[] {
   const diags: Diagnostic[] = [];
   const msgCall = (ns: string, f: string) =>
-    `Namespace-qualified ADT constructor ${ns}.${f} is not supported when compiling to JVM; use the VM (kestrel run) or a wrapper function in the dependency.`;
+    `Namespace-qualified ADT constructor ${ns}.${f} is not supported; use a wrapper function in the dependency.`;
 
   function visit(e: Expr, isCallCallee: boolean): void {
     switch (e.kind) {

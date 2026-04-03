@@ -95,7 +95,7 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 **Exit criteria (before moving to `planned/`)**
 
 - **Summary** states the outcome in one place.
-- **Current state** explains what exists today (compiler, VM, stdlib, tests) and gaps.
+- **Current state** explains what exists today (compiler, JVM runtime, stdlib, tests) and gaps.
 - **Relationship to other stories** calls out dependencies, ordering, or merges (by sequence or path), or states **None** if truly isolated.
 - **Goals** list the concrete outcomes you want (numbered or bulleted)-the "why and what" before the pass/fail **Acceptance criteria**.
 - **Acceptance criteria** are testable and agreed (even if high level).
@@ -113,9 +113,9 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 
 **Exit criteria (before moving to `doing/`)**
 
-- **Impact analysis** covers compiler, VM, stdlib, scripts, and tests as applicable (what files/areas change, risk, roll-forward/rollback). It should **incorporate or reference** bullet risks from unplanned **Risks / notes** (expand into file-level impact where needed).
+- **Impact analysis** covers compiler, JVM runtime, stdlib, scripts, and tests as applicable (what files/areas change, risk, roll-forward/rollback). It should **incorporate or reference** bullet risks from unplanned **Risks / notes** (expand into file-level impact where needed).
 - **Tasks** section exists with concrete checkboxes (implementation + verification steps).
-- **Tests to add** lists harness layers (e.g. Vitest paths, `tests/unit/*.test.ks`, conformance files, `zig build test`) with intent per item.
+- **Tests to add** lists harness layers (e.g. Vitest paths, `tests/unit/*.test.ks`, conformance files, E2E scenarios) with intent per item.
 - **Documentation and specs to update** lists every `docs/specs/` (and other docs) file to change.
 - **Notes** (optional) holds research spikes, planning-only open questions, or links-anything useful for the implementer beyond what is already under **Risks / notes**.
 
@@ -133,7 +133,7 @@ When actionable: move to `unplanned/NN-<slug>.md` with full unplanned sections.
 - Every **Task** is `[x]` (add new tasks if scope grew; then complete them too).
 - **Build notes** capture material decisions, surprises, and follow-ups worth keeping in the story.
 - Implementation matches **acceptance criteria** and listed spec updates are either done or explicitly deferred with a tracked follow-up.
-- **Tests**: required suites pass per [AGENTS.md](../../AGENTS.md) (at minimum `cd compiler && npm run build && npm test`, `./scripts/kestrel test`, and `cd vm && zig build test` when VM/bytecode touched; add E2E/conformance when the story demands it).
+- **Tests**: required suites pass per [AGENTS.md](../../AGENTS.md) (at minimum `cd compiler && npm run build && npm test`, `./scripts/kestrel test`; add E2E/conformance when the story demands it).
 
 ### `done/`
 

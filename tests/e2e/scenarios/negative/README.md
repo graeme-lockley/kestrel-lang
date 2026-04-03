@@ -1,6 +1,6 @@
 # E2E negative scenarios
 
-Programs here must **not** succeed end-to-end: **`node compiler/dist/cli.js <file>.ks -o …`** should fail **or** compilation succeeds and **`vm/zig-out/bin/kestrel`** exits non-zero.
+Programs here must **not** succeed end-to-end: **`node compiler/dist/cli.js <file>.ks -o …`** should fail **or** compilation succeeds and the JVM runtime execution exits non-zero.
 
 **Conventions**
 

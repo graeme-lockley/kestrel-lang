@@ -1,6 +1,6 @@
 # Runtime conformance (spec 08 §2.4–2.5, §3.2)
 
-- **valid/** — `.ks` programs that must **compile**, run on the Zig VM with **exit code 0**, and produce **stdout** that matches golden lines derived from the source file.
+- **valid/** — `.ks` programs that must **compile**, execute on the JVM runtime with **exit code 0**, and produce **stdout** that matches golden lines derived from the source file.
 
 ## Golden stdout lines
 
@@ -14,7 +14,7 @@ These scenarios run under **`cd compiler && npm test`** via `compiler/test/integ
 
 Compilation uses `node compiler/dist/cli.js <file.ks> -o <kbc>` with **`KESTREL_CACHE`** pointing at a per-run temp directory whose layout matches `scripts/kestrel` (`KBC_CACHE` + absolute source directory + basename `.kbc`), so multi-module programs resolve the same way as `kestrel run`.
 
-The VM binary is **`vm/zig-out/bin/kestrel`** (built **ReleaseSafe** in the test `beforeAll`).
+The JVM runtime is executed via the compiled `.class` files using the `kestrel-runtime.jar` (built in the test `beforeAll`).
 
 **Note:** `./scripts/run-e2e.sh` exercises `tests/e2e/scenarios/*` only; it does **not** run this tree.
 

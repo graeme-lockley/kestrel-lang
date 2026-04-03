@@ -1,5 +1,5 @@
 /**
- * Kestrel compiler — parse, typecheck, emit .kbc bytecode.
+ * Kestrel compiler — parse, typecheck, emit bytecode.
  */
 import { tokenize } from './lexer/index.js';
 import { parse, ParseError } from './parser/index.js';

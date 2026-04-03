@@ -4,7 +4,7 @@ Version: 1.0
 
 ---
 
-This document describes how to validate that a Kestrel implementation conforms to the language and VM specifications. It covers compiler, VM, and end-to-end behaviour using **conformance tests** (pass/fail and expected-error checks) and **golden tests** (locked observable output for regression).
+This document describes how to validate that a Kestrel implementation conforms to the language and JVM runtime specifications. It covers compiler, JVM runtime, and end-to-end behaviour using **conformance tests** (pass/fail and expected-error checks) and **golden tests** (locked observable output for regression).
 
 ---
 
@@ -57,7 +57,7 @@ A conforming implementation must:
 
 - **Resolution:** Local path imports and (where supported) URL imports resolve deterministically; lockfile and cache behaviour match [07-modules.md](07-modules.md).
 - **Re-export and conflicts:** Re-exports and name conflicts are tested; conflicts produce compile errors unless renamed.
-- **Namespace imports and ADT constructors:** `import * as M from "…"` exposes exported **non-opaque** ADT constructors as `M.Ctor` / `M.Ctor(…)` with correct typing and VM interop (same ADT identity as construction in the exporter). Coverage includes nullary, unary, and multi-argument constructors; opaque constructor rejection; wrong name, arity, and argument types; and at least one **`.kti`-only** dependency path (importer uses a fresh types file without re-parsing dependency source). See `tests/unit/namespace_import.test.ks`, `tests/fixtures/opaque_pkg/`, and `compiler/test/integration/compile-file.test.ts`.
+- **Namespace imports and ADT constructors:** `import * as M from "…"` exposes exported **non-opaque** ADT constructors as `M.Ctor` / `M.Ctor(…)` with correct typing and runtime interop (same ADT identity as construction in the exporter). Coverage includes nullary, unary, and multi-argument constructors; opaque constructor rejection; wrong name, arity, and argument types; and at least one **`.kti`-only** dependency path (importer uses a fresh types file without re-parsing dependency source). See `tests/unit/namespace_import.test.ks`, `tests/fixtures/opaque_pkg/`, and `compiler/test/integration/compile-file.test.ts`.
 
 ### 2.7 Standard Library
 
@@ -71,7 +71,7 @@ A conforming implementation must:
 
 ### 3.1 Purpose
 
-Golden tests lock observable output (stdout, stderr, return code, or selected VM state) for a fixed source program. They catch unintended changes in compiler or VM behaviour and document expected results.
+Golden tests lock observable output (stdout, stderr, return code, or selected runtime state) for a fixed source program. They catch unintended changes in compiler or JVM runtime behaviour and document expected results.
 
 ### 3.2 Layout
 
@@ -86,10 +86,10 @@ tests/
     typecheck/
       valid/
       invalid/
-    runtime/       # .ks files run by VM; compare stdout/stderr/exit
+    runtime/       # .ks files run by JVM runtime; compare stdout/stderr/exit
   e2e/
     scenarios/
-      negative/    # .ks files: compile failure OR VM non-zero; optional E2E_EXPECT_STACK_TRACE stderr checks
+      negative/    # .ks files: compile failure OR JVM runtime non-zero; optional E2E_EXPECT_STACK_TRACE stderr checks
       positive/    # .ks files with sibling *.expected stdout goldens
   golden/          # optional: separate expected files if not in-source
     source/        # .ks files
@@ -99,12 +99,12 @@ tests/
 
 Expected output may be stored either in separate golden files (`expected/<name>.stdout`, etc.) or **in-file**: for **positive** E2E under `tests/e2e/scenarios/positive/`, expected stdout lives in a sibling `*.expected` file; the runner compares runtime stdout to that file.
 
-**Negative E2E** (`tests/e2e/scenarios/negative/`): `./scripts/run-e2e.sh` compiles each top-level `*.ks` with `node compiler/dist/cli.js` and, if compilation succeeds, executes the emitted `.kbc` on the JVM runtime. The scenario passes if compilation fails **or** the JVM runtime exits non-zero. Selected scenarios may include `E2E_EXPECT_STACK_TRACE` in a top comment so the harness asserts stderr shape (uncaught exception / stack trace, operand stack overflow, or call-depth limit) — see `scripts/run-e2e.sh`.
+**Negative E2E** (`tests/e2e/scenarios/negative/`): `./scripts/run-e2e.sh` compiles each top-level `*.ks` with `node compiler/dist/cli.js` and, if compilation succeeds, executes the compiled `.class` files on the JVM runtime. The scenario passes if compilation fails **or** the JVM runtime exits non-zero. Selected scenarios may include `E2E_EXPECT_STACK_TRACE` in a top comment so the harness asserts stderr shape (uncaught exception / stack trace, operand stack overflow, or call-depth limit) — see `scripts/run-e2e.sh`.
 
 ### 3.3 Running Golden Tests
 
-- **Compile** the source (and dependencies) to bytecode.
-- **Run** the bytecode in the VM with defined stdin (e.g. empty or fixed).
+- **Compile** the source (and dependencies) to `.class` files.
+- **Run** the `.class` files on the JVM runtime with defined stdin (e.g. empty or fixed).
 - **Capture** stdout, stderr, and exit code.
 - **Compare** to golden files (byte-for-byte or normalized). Diff on mismatch fails the test. Tests should use fixed stdin and, where possible, a deterministic environment (e.g. no reliance on wall-clock time or random) so that goldens are stable across runs.
 - **Conformance corpora in CI (compiler Vitest):** From the repo root, `cd compiler && npm run build && npm test` runs:
@@ -121,13 +121,13 @@ When behaviour is intentionally changed, goldens must be updated (e.g. `UPDATE_G
 
 - **Core language:** At least one golden (or conformance) test per major feature: literals (all bases, strings with interpolation, chars), conditionals, **`is` type tests and narrowing** (`tests/unit/narrowing.test.ks`, conformance `narrowing_*.ks`), **blocks in statement vs expression context** (01 §3.3: e.g. implicit **Unit** after the last `:=` / `val` / `var` / `fun` in `while` bodies and top-level expression statements; parse rejection when the same shape appears in expression position—see compiler `parse.test.ts`), match (including exhaustiveness), try/catch, lambdas, **nested functions and closures** (block-local `fun`, capture of block/function scope, CALL_INDIRECT, LOAD_FN, MAKE_CLOSURE; recursive nested fun with full signature, by-reference capture of `var`, return-type checking and expected type error for mismatch, chained call of returned closure e.g. `makeAdd(2)(3)`; see [functions.test.ks](../../tests/unit/functions.test.ks) and compiler typecheck/parse tests such as typecheck-conformance and nested_fun_return_type_mismatch), **top-level recursion** (self-recursion and mutual recursion: top-level functions calling each other regardless of declaration order), **tail-call optimization** on the VM (deep self-tail in [tail_self_recursion.test.ks](../../tests/unit/tail_self_recursion.test.ks); mutual tail and indirect fallback in [tail_mutual_recursion.test.ks](../../tests/unit/tail_mutual_recursion.test.ks); compiler bytecode checks in `compiler/test/unit/mutual-tail-codegen.test.ts`), records, ADTs, pipelines (`|>`/`<|`), async/await.
 - **Stdlib:** At least one test that calls each standard module’s main entry points (e.g. string ops, **`kestrel:stack`** `format` / `print` / **`trace`** with a caught exception — see **`stdlib/kestrel/stack.test.ks`**; http server start/stop; `kestrel:json` `parse` / `stringify` / `Result` error paths; fs read).
-- **Errors:** Conformance and unit tests cover expected compile and runtime errors (e.g. type error messages via `tests/conformance/typecheck/invalid/`). **Negative E2E** under `tests/e2e/scenarios/negative/` adds full **compiler emit → `.kbc` → JVM runtime** checks for representative failures (compile rejections and non-zero runtime exits), with optional stderr assertions for uncaught-exception-style output where marked.
+- **Errors:** Conformance and unit tests cover expected compile and runtime errors (e.g. type error messages via `tests/conformance/typecheck/invalid/`). **Negative E2E** under `tests/e2e/scenarios/negative/` adds full **compiler emit → `.class` → JVM runtime** checks for representative failures (compile rejections and non-zero runtime exits), with optional stderr assertions for uncaught-exception-style output where marked.
 
 ---
 
 ## 4. CI and Conformance Statement
 
-- **CI:** Run the full conformance and golden suite on every commit (or on every PR). Fail the build if any test fails or if goldens differ unless explicitly updated. **`./scripts/test-all.sh`** runs compiler tests (`cd compiler && npm test`, which includes parse, typecheck, and runtime conformance per §3.3), VM unit tests, E2E (`run-e2e.sh`), and Kestrel harness tests as defined in the project scripts. The “official conformance suite” is the canonical set of tests (layout and cases as described in §2–§3) that may be published alongside the spec; until then, implementors use this document as the test plan.
+- **CI:** Run the full conformance and golden suite on every commit (or on every PR). Fail the build if any test fails or if goldens differ unless explicitly updated. **`./scripts/test-all.sh`** runs compiler tests (`cd compiler && npm test`, which includes parse, typecheck, and runtime conformance per §3.3), JVM runtime unit tests, E2E (`run-e2e.sh`), and Kestrel harness tests as defined in the project scripts. The "official conformance suite" is the canonical set of tests (layout and cases as described in §2–§3) that may be published alongside the spec; until then, implementors use this document as the test plan.
 - **Conformance statement:** Implementations may claim “Kestrel v1 conformant” only if they pass the official conformance suite (when published) and do not contradict the contracts in specs 01–08. Implementations may extend behaviour where the specs allow it (e.g. additional stdlib modules or functions per 02).
 
 ---
@@ -136,8 +136,8 @@ When behaviour is intentionally changed, goldens must be updated (e.g. `UPDATE_G
 
 - [01-language.md](01-language.md) – Grammar and language features under test
 - [02-stdlib.md](02-stdlib.md) – Stdlib contract tests
-- [03-bytecode-format.md](03-bytecode-format.md), [04-bytecode-isa.md](04-bytecode-isa.md) – Bytecode/VM tests
+- [03-bytecode-format.md](03-bytecode-format.md), [04-bytecode-isa.md](04-bytecode-isa.md) – Bytecode format and instruction set
 - [05-runtime-model.md](05-runtime-model.md) – Runtime and GC behaviour
 - [06-typesystem.md](06-typesystem.md) – Type-checker tests
 - [07-modules.md](07-modules.md) – Module resolution tests
-- [09-tools.md](09-tools.md) – `kestrel` CLI (user-facing run/build; E2E harness uses compiler/VM directly)
+- [09-tools.md](09-tools.md) – `kestrel` CLI (user-facing run/build; E2E harness uses compiler/JVM runtime directly)

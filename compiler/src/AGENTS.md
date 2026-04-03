@@ -10,11 +10,13 @@ compiler/src/
 ├── bundle.ts         # Bundles multiple source files
 ├── resolve.ts        # Module resolution
 ├── types-file.ts     # Type inference for files
-├── compile-file.ts   # Single file compilation
+├── compile-file.ts   # Single file compilation (.kbc for stdlib)
+├── compile-file-jvm.ts # Multi-module JVM compilation (primary)
 ├── lexer/            # Tokenization
 ├── parser/           # AST generation
 ├── typecheck/        # Hindley-Milner type inference
-├── codegen/          # Bytecode emission
+├── codegen/          # .kbc bytecode emission (stdlib packages)
+├── jvm-codegen/      # JVM .class generation (primary target)
 ├── bytecode/         # .kbc format definitions
 ├── types/            # Type system primitives
 ├── ast/              # AST node definitions
@@ -26,7 +28,7 @@ compiler/src/
 1. **Lex** → Token stream
 2. **Parse** → AST
 3. **Typecheck** → Annotated AST + diagnostics
-4. **Codegen** → Bytecode
+4. **JVM Codegen** → `.class` bytes (primary); or **Codegen** → `.kbc` bytes (stdlib only)
 
 ## Module Responsibilities
 
@@ -36,7 +38,8 @@ compiler/src/
 | `lexer/` | `tokenize(source): Token[]` |
 | `parser/` | `parse(tokens): Program` |
 | `typecheck/` | `typecheck(ast): { ok, type, diagnostics }` |
-| `codegen/` | `codegen(ast): BytecodeFunction[]` |
+| `jvm-codegen/` | `jvmCodegen(ast): JvmCodegenResult` (primary JVM target) |
+| `codegen/` | `codegen(ast): BytecodeFunction[]` (used for stdlib .kbc) |
 | `bytecode/` | Instruction set, .kbc serialization |
 | `types/` | TypeExpr, TypeVar, unify, generalize |
 | `ast/` | Node types (Program, Expr, Decl, etc.) |

@@ -25,10 +25,9 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 - **Effect:** Compiles the named Kestrel script (and its constituent packages) if the target binary is stale or missing, then executes it via the JVM runtime.
 - **Target:** `jvm` is the execution target; compiled `.class` files are generated for the Java Virtual Machine.
-- **Freshness:** For `vm`, the script is compiled when (a) the `.kbc` binary does not exist, or (b) the entry `.ks` is newer than the `.kbc`, or (c) a `.kbc.deps` file exists beside the cached bytecode and any listed path (transitive `.ks` sources and each imported module’s `.kbc`) has modification time greater than or equal to the entry `.kbc`—so consumers recompile when a dependency’s bytecode or source changes. For `jvm`, compilation is also driven by `.class` freshness using a dependency list stored alongside the class in `.class.deps`.
+- **Freshness:** The script is compiled when (a) the `.class` files do not exist, or (b) the entry `.ks` is newer than the compiled `.class`, or (c) a `.class.deps` file exists beside the cached classes and any listed path (transitive `.ks` sources and each imported module's `.class`) has modification time greater than or equal to the compiled `.class`—so consumers recompile when a dependency's source or class files change.
 - **Cache:**
-  - For `vm`, compiled `.kbc` files are stored under `~/.kestrel/kbc/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/kbc/Users/me/proj/foo.kbc`. This avoids cluttering the project directory. Override with `KESTREL_CACHE` (e.g. `KESTREL_CACHE=/tmp/kbc kestrel run foo.ks`).
-  - For `jvm`, compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run --target jvm foo.ks`).
+  - Compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/jvm/Users/me/proj/foo.class`. This avoids cluttering the project directory. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run foo.ks`).
 - **Execution:** `kestrel` runs `java` with a classpath containing `kestrel-runtime.jar` and the JVM cache root, and uses a main class derived from the entry source file path (strip leading `/`, remove `.ks`, capitalize the last path segment; convert `/` to `.` for the Java binary name). Entry-point discovery is implementation-defined, but the derived class name is stable for a given absolute source path.
 - **Errors:** Compile errors are reported on stderr; the process exits non-zero. Diagnostic format and behaviour are specified in [10-compile-diagnostics.md](10-compile-diagnostics.md). JVM runtime errors (e.g. uncaught exception) produce non-zero exit as per the runtime model.
 
@@ -36,15 +35,15 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 **Usage:** `kestrel dis [--verbose|--code-only] <script[.ks]>`
 
-- **Effect:** Compiles the named script if needed (same freshness rules as `run`; output cached under `~/.kestrel/kbc/` as for `run`), then unpacks the `.kbc` and prints the disassembled bytecode in mnemonic form.
+- **Effect:** Compiles the named script if needed (same freshness rules as `run`; output cached under `~/.kestrel/jvm/` as for `run`), then unpacks and disassembles the JVM `.class` file bytecode in mnemonic form.
 - **Output modes:**
-  - **Default:** Shows code section with function boundaries (`; --- function "name" (arity N, offset 0xABC) ---`), debug annotations when present (`; --- file:line ---`), and constant comments.
-  - **`--verbose`:** Additionally shows import table, shape table, and ADT table before the code section.
-  - **`--code-only`:** Shows only raw instruction lines without comments, headers, or table dumps.
-- **Function boundaries:** When the bytecode contains a function table (03 §6.1), the disassembler marks each function's code region with a boundary comment. The module initializer (top-level code) is labeled `"<module>"` if no function claims offset 0.
-- **Table dumps (--verbose only):** Imports list module specifiers; shapes show field names and types; ADTs show constructor names and payload status.
-- **Format:** Each instruction is printed with its byte offset and mnemonic (e.g. `LOAD_CONST 0`, `ADD`, `RET`). Format follows [04-bytecode-isa.md](04-bytecode-isa.md) instruction encoding. When the bytecode includes a non-empty debug section (03 §8), instructions are annotated with source file and line.
-- **Purpose:** Debugging and inspection of emitted bytecode.
+  - **Default:** Shows code section with method/function boundaries, debug annotations when present, and constant comments.
+  - **`--verbose`:** Additionally shows class structure, method signatures, and constant pool.
+  - **`--code-only`:** Shows only raw instruction lines without comments, headers, or structural information.
+- **Function/method boundaries:** The disassembler marks each method's code region with a boundary comment including arity and bytecode offset. The module initializer (top-level code) is labeled `"<module>"` if no explicit method claims that code.
+- **Detailed output (--verbose only):** Shows class name, extended bytecode metadata, method signatures with parameter and return types.
+- **Format:** Each instruction is printed with its byte offset and mnemonic (e.g. `aload_0`, `invokestatic`, `ireturn`). Format follows the JVM instruction set encoding. When available, source line information allows instructions to be annotated with their source file and line.
+- **Purpose:** Inspection and debugging of compiled JVM bytecode.
 
 ### 2.3 build
 

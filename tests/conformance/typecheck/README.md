@@ -8,7 +8,7 @@ The compiler test suite runs these under `compiler/test/integration/typecheck-co
 ## Other conformance trees
 
 - **Parse** — `tests/conformance/parse/` ([README](../parse/README.md)); Vitest: `compiler/test/integration/parse-conformance.test.ts`.
-- **Runtime (VM)** — `tests/conformance/runtime/valid/` ([README](../runtime/README.md)); Vitest: `compiler/test/integration/runtime-conformance.test.ts`.
+- **Runtime (JVM)** — `tests/conformance/runtime/` ([README](../runtime/README.md)); Vitest: `compiler/test/integration/runtime-conformance.test.ts`.
 
 All three drivers run as part of **`cd compiler && npm test`**.
 

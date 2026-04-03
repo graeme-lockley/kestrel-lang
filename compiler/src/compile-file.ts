@@ -88,7 +88,7 @@ export interface CompileFileOptions {
   onCompilingFile?: (absolutePath: string, durationMs: number) => void;
   /** If set, only call onCompilingFile for paths in this set (so only "stale" files are reported). */
   stalePaths?: Set<string>;
-  /** If set, write each compiled package's .kbc and .kti here. Enables VM to load deps on first use. */
+  /** If set, write each compiled package's .kbc and .kti here. Enables lazy loading of deps on first use. */
   getOutputPaths?: (sourcePath: string) => { kbc: string; kti: string };
 }
 
@@ -324,7 +324,7 @@ export function compileFile(
           fromTypesFile: true;
         };
     const depResults: DepResult[] = [];
-    /** Imported exception ADTs (e.g. `kestrel:runtime`) for codegen catch patterns + VM cross-module `==`. */
+    /** Imported exception ADTs (e.g. `kestrel:runtime`) for codegen catch patterns + cross-module `==`. */
     const exceptionImports: { canonical: string; local: string }[] = [];
     const namespaceImportConstructors = new Map<string, Map<string, NamespaceImportConstructorInfo>>();
 
