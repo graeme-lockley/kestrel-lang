@@ -1,0 +1,141 @@
+---
+name: build-story
+description: >-
+  Implements a Kestrel kanban story end-to-end: locates the story, runs
+  plan-story first if it is still in unplanned/, then confirms the impact
+  analysis, executes all tasks, records decisions as build notes, verifies
+  tests pass, and moves the story to done/.
+---
+
+# Kestrel kanban — build a story
+
+Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill drives a story from any phase to **`done/`**. See **kanban-story-migrate** for the formal gates.
+
+## 0. Locate the story and determine phase
+
+Find the story file in `docs/kanban/`:
+
+| Story is in | Action |
+|-------------|--------|
+| `future/` | Not roadmap-ready — use **story-create** or **kanban-story-migrate** to promote to `unplanned/` first |
+| `unplanned/` | Run **plan-story** first, then continue from step 1 |
+| `planned/` | Continue from step 1 |
+| `doing/` | Continue from step 2 (already in progress) |
+| `done/` | Nothing to do |
+
+Open the owning epic file (`docs/kanban/epics/unplanned/EXX-*.md`) and note any cross-story dependencies.
+
+## 1. Confirm the story is ready
+
+Read the story file in full. Verify:
+
+- **Impact analysis** covers all relevant areas (compiler, JVM, stdlib, scripts, tests).
+- **Tasks** are concrete and file-level (not vague).
+- **Tests to add** is populated.
+- **Documentation and specs to update** is populated.
+
+If any section is thin, run **plan-story** to fill the gaps before proceeding.
+
+## 2. Move to doing/
+
+Move `docs/kanban/planned/S##-##-slug.md` → `docs/kanban/doing/S##-##-slug.md`.
+
+Add a **Build notes** section at the end of the story:
+
+```markdown
+## Build notes
+
+- YYYY-MM-DD: Started implementation.
+```
+
+## 3. Confirm impact against the codebase
+
+Before writing code, open the files listed in the impact analysis and verify they are shaped as expected. If the codebase has diverged from the plan:
+
+- Update the **Tasks** list to reflect reality.
+- Append a **Build note** recording what changed and why.
+- Add new `- [ ]` tasks for any scope that emerged; complete them before closing.
+
+## 4. Implement in pipeline order
+
+Work through changes in this order when the story spans multiple layers:
+
+| Area | Path |
+|------|------|
+| Parser / AST | `compiler/src/parser/`, `compiler/src/ast/` |
+| Typecheck | `compiler/src/typecheck/check.ts` |
+| Codegen (bytecode) | `compiler/src/codegen/codegen.ts` |
+| Codegen (JVM) | `compiler/src/jvm-codegen/codegen.ts` |
+| JVM runtime | `runtime/jvm/src/` |
+| Stdlib | `stdlib/kestrel/` |
+| CLI / scripts | `scripts/` |
+
+**As you go:**
+
+- **Tick `- [x]`** immediately when a task is complete — do not batch.
+- **Append a Build note** for every non-obvious decision, trade-off, or approach that did not work.
+- **Add `- [ ]` tasks** if new scope is discovered; complete them before closing.
+- Keep changes minimal: match project style, no drive-by refactors, `.js` import suffixes in TypeScript.
+
+### Code quality
+
+- New logic lives next to analogous cases (match arms, literal types, etc.).
+- Shared behaviour is extracted only where duplication is real — not as speculative abstraction.
+- Explicit return types on exported functions; no `any`.
+- If JVM codegen changed, check the bytecode codegen for the same patterns (and vice versa) — keep backends in parity.
+- Diagnostics reference the failing construct with a code consistent with `compiler/src/diagnostics/`.
+
+## 5. Add tests
+
+Add every test listed under **Tests to add**. Use project patterns:
+
+- **Vitest** (`compiler/test/unit/` or `integration/`): `describe`/`it`/`expect`; `.js` import suffixes in TS.
+- **Kestrel harness** (`tests/unit/*.test.ks`): `test:expect` / `test:assert`.
+- **Conformance** (`tests/conformance/typecheck/` or `runtime/`): `.ks` files with `// EXPECT:` for invalid cases; `// <output>` comment-based goldens for runtime.
+- **E2E** (`tests/e2e/scenarios/positive/` or `negative/`): positive cases need `.expected`; negative cases must exit non-zero.
+
+Tests must cover: happy-path acceptance criteria, boundary / edge conditions, and regression guards for each behaviour the feature introduces. If a test is also a kestrel library test, place it alongside the library file.
+
+## 6. Update specs and docs
+
+For every item in **Documentation and specs to update**:
+
+- Edit the `docs/specs/` file.
+- Tick the checkbox in the story.
+- Append a **Build note** if the spec change required a non-trivial decision.
+
+Specs are the source of truth; keep them accurate.
+
+## 7. Verify
+
+Run the required suites. Fix all failures before closing.
+
+```bash
+cd compiler && npm run build && npm test
+./scripts/kestrel test
+```
+
+Add these when the story modifies JVM runtime code or user-visible E2E behaviour:
+
+```bash
+cd runtime/jvm && bash build.sh
+./scripts/run-e2e.sh
+```
+
+## 8. Close the story
+
+1. Every **Task** is `[x]` (including any added during implementation).
+2. Every **Documentation and specs to update** item is ticked.
+3. **Build notes** capture material decisions.
+4. Move `docs/kanban/doing/S##-##-slug.md` → `docs/kanban/done/S##-##-slug.md`.
+5. Update the owning epic file in `docs/kanban/epics/unplanned/`:
+   - Mark this story complete in the story list.
+   - If all member stories are now in `done/`, move the epic file to `docs/kanban/epics/done/`.
+
+## Related
+
+- Plan a story (unplanned → planned): skill **plan-story**
+- Phase gates: skill **kanban-story-migrate**
+- Create a story: skill **story-create**
+- Create an epic: skill **epic-create**
+- Kanban rules: `docs/kanban/README.md`

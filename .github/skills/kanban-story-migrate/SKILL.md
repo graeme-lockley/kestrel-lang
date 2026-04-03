@@ -107,5 +107,8 @@ Only for **explicitly agreed** trivial work (doc-only, single-file regression). 
 
 ## Related
 
-- Create new stories: skill **kanban-story-create**
-- Build the feature: skill **feature-delivery**
+- Create an epic: skill **epic-create**
+- Create a story: skill **story-create**
+- Decompose an epic into stories: skill **plan-epic**
+- Plan a story (unplanned → planned): skill **plan-story**
+- Build a story (planned → done): skill **build-story**

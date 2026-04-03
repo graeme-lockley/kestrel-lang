@@ -1,0 +1,80 @@
+---
+name: story-create
+description: >-
+  Creates a new Kestrel kanban story in docs/kanban/unplanned/ or
+  docs/kanban/future/, linked to an existing epic. Use when adding a roadmap
+  item to an existing epic, splitting a story, or capturing a pre-roadmap idea.
+---
+
+# Kestrel kanban — create a story
+
+Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**.
+
+---
+
+## A. Future (investigations / ideas) — optional pre-roadmap
+
+Use **`docs/kanban/future/`** when the work is **not** ready for the prioritized queue: spikes, observations, or "maybe later" ideas without clear acceptance criteria.
+
+1. Filename: **`slug.md`** only — no `S##-##-` prefix, no story id.
+2. Content: free-form. Include a **`## Kind`** line (e.g. `investigation / idea / spike`).
+3. Do **not** add **Sequence**, **Tier**, or full unplanned sections until promoting to `unplanned/` (use **kanban-story-migrate**).
+
+---
+
+## B. Unplanned (roadmap story)
+
+### Before you write
+
+1. Identify the owning epic in `docs/kanban/epics/unplanned/`. The epic must already exist — create it first with **epic-create** if needed.
+2. Find the next free story index within that epic (scan `docs/kanban/unplanned/` and `done/` for `S<epic-id>-*` filenames).
+3. Check for duplicates or superseded stories in `unplanned/` and `done/`.
+4. Read [docs/kanban/README.md](docs/kanban/README.md) for tier definitions and unplanned entry/exit criteria.
+
+### File location and name
+
+- Path: `docs/kanban/unplanned/S##-##-slug.md`
+- `##-##` = epic id — story index within that epic (e.g. `S03-04`).
+- Keep `## Sequence: S##-##` in the body aligned with the filename.
+
+### Required sections
+
+```markdown
+# <Title>
+
+## Sequence: S##-##
+## Tier: <tier or Optional>
+## Former ID: (none)
+
+## Epic
+
+- Epic: [EXX Name](../epics/unplanned/EXX-name.md)
+
+## Summary
+
+## Current State
+
+## Relationship to other stories
+
+## Goals
+
+## Acceptance Criteria
+
+## Spec References
+
+## Risks / Notes
+```
+
+**Do not add yet:** Impact analysis, Tasks, Tests to add, Documentation and specs to update — those belong in `planned/` (added by **plan-story**).
+
+### After the file exists
+
+- Add the story to the owning epic's **Stories** list with a markdown link and one-line description.
+- Ensure the story meets unplanned exit criteria before promoting to `planned/` (use **kanban-story-migrate**).
+
+## Related
+
+- Create the epic first: skill **epic-create**
+- Promote future → unplanned: skill **kanban-story-migrate** (section 0)
+- Plan the story (add tasks, tests, impact): skill **plan-story**
+- Kanban rules: `docs/kanban/README.md`

@@ -228,22 +228,35 @@ Epics live in `docs/kanban/epics/` with folders: **unplanned** and **done**.
 
 ### Workflow
 
+**Skills for each phase:**
+
+| Phase transition | Skill |
+|-----------------|-------|
+| Create an epic | `epic-create` |
+| Decompose epic into stories | `plan-epic` |
+| Capture idea | `story-create` |
+| `future/` → `unplanned/` | `story-create` + `kanban-story-migrate` |
+| `unplanned/` → `planned/` | **`plan-story`** |
+| `planned/` → `doing/` → `done/` | **`build-story`** |
+| End-to-end (any phase → done) | **`build-story`** |
+
 1. **future** (optional) — Capture investigations and ideas before they are roadmap items; promote to **unplanned** with a new **`S##-##-slug.md`** when scoped.
 2. **unplanned** — High-level feature stories on the ordered roadmap (summary, state, relationships, **goals**, acceptance, spec refs, **risks / notes**).
-3. **planned** — Scoped but not yet built: adds impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**.
-4. **doing** — Active implementation; tick tasks; add **Build notes** as needed.
+3. **planned** — Scoped but not yet built: adds impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**. Use **`plan-story`** to produce this content.
+4. **doing** — Active implementation; tick tasks; add **Build notes** as needed. Use **`build-story`** to execute.
 5. **done** — All tasks ticked, acceptance satisfied, and **required tests passing**.
 6. **epics** — Each roadmap story links to one epic in `docs/kanban/epics/unplanned/`; move epic to `docs/kanban/epics/done/` when all member stories are done.
 
 ### When promoting a story
 
 - **future → unplanned** — Choose epic id + next story index, rename to **`S##-##-slug.md`**, move to `docs/kanban/unplanned/`, add full unplanned sections per `docs/kanban/README.md`.
-- **unplanned → planned** — Meet unplanned exit criteria in `docs/kanban/README.md`; move the file to `docs/kanban/planned/`.
-- **planned → doing** — Meet planned exit criteria (tasks and test/doc lists complete); move to `docs/kanban/doing/`.
-- **doing → done** — Meet doing exit criteria; run verification commands; move to `docs/kanban/done/`.
+- **unplanned → planned** — Use the **`plan-story`** skill: it explores the codebase and specs, adds impact analysis, Tasks, Tests to add, and Docs to update, then moves the file to `docs/kanban/planned/`.
+- **planned → doing → done** — Use the **`build-story`** skill: it confirms the plan, implements all tasks, records build notes, verifies tests, and moves the file to `docs/kanban/done/`.
 - **epic unplanned → done** — When all member stories are in `docs/kanban/done/`, move epic file from `docs/kanban/epics/unplanned/` to `docs/kanban/epics/done/`.
 
 ### When implementing (in `doing/`)
+
+Use the **`build-story`** skill to execute planned work. Key steps:
 
 1. Tick tasks as you complete them: `- [x] Task 1`.
 2. Add tasks if scope discovers new work; finish them before closing.
@@ -267,7 +280,7 @@ Epics live in `docs/kanban/epics/` with folders: **unplanned** and **done**.
 - **CLI**: `scripts/kestrel`
 - **Specs**: `docs/specs/` (01-language, 09-tools, etc.)
 - **Kestrel tests**: `tests/e2e/`, `tests/conformance/`
-- **Kanban**: `docs/kanban/README.md` (phases and gates); skills `.cursor/skills/kestrel-kanban-story-create/`, `kestrel-kanban-story-migrate/`; subagents `.cursor/agents/kanban-*.md`
+- **Kanban**: `docs/kanban/README.md` (phases and gates); skills `.github/skills/epic-create/`, `story-create/`, `plan-epic/`, `kanban-story-migrate/`, `plan-story/`, `build-story/`; subagents `.cursor/agents/kanban-*.md`
 
 ---
 
