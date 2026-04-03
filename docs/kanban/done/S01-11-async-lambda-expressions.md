@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E01 Async Runtime Foundation](../epics/unplanned/E01-async-runtime-foundation.md)
+- Epic: [E01 Async Runtime Foundation](../epics/done/E01-async-runtime-foundation.md)
 - Companion stories: S01-01, S01-02, S01-03, S01-06, S01-07, S01-08, S01-09, S01-10
 
 ## Summary
@@ -39,16 +39,16 @@ Extend the Kestrel grammar to allow `async` on lambda expressions (`async (param
 
 ## Acceptance Criteria
 
-- [ ] `async (x: String) => await Fs.readText(x)` parses and type-checks as `(String) -> Task<String>`.
-- [ ] `await` inside a non-async lambda `(x) => await Fs.readText(x)` is a compile error ("await used outside async context").
-- [ ] `await` inside a non-async lambda nested inside an `async fun` is also a compile error — the `LambdaExpr` case in `check.ts` must save `inAsyncContext`, set it to `false` for non-async lambdas (or `true` for async lambdas), then restore it. This fixes a pre-existing bug where a non-async lambda inherits the outer async context.
-- [ ] Async lambda can be passed to higher-order functions: `List.map(paths, async (p) => await Fs.readText(p))` compiles.
-- [ ] Async lambda result is awaitable: `val task = async (x: Int) => x + 1; val n = await task(42)` evaluates to `43`.
-- [ ] Type inference works: the inferred type of `async (x: Int) => x + 1` is `(Int) -> Task<Int>`.
-- [ ] `docs/specs/01-language.md` grammar and §5 updated.
-- [ ] Conformance test `tests/conformance/typecheck/invalid/await_in_non_async_lambda.ks` added (covers both standalone and nested-inside-async-fun cases).
-- [ ] Conformance test `tests/conformance/runtime/valid/async_lambda.ks` added.
-- [ ] All tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
+- [x] `async (x: String) => await Fs.readText(x)` parses and type-checks as `(String) -> Task<String>`.
+- [x] `await` inside a non-async lambda `(x) => await Fs.readText(x)` is a compile error ("await used outside async context").
+- [x] `await` inside a non-async lambda nested inside an `async fun` is also a compile error — the `LambdaExpr` case in `check.ts` must save `inAsyncContext`, set it to `false` for non-async lambdas (or `true` for async lambdas), then restore it. This fixes a pre-existing bug where a non-async lambda inherits the outer async context.
+- [x] Async lambda can be passed to higher-order functions: `List.map(paths, async (p) => await Fs.readText(p))` compiles.
+- [x] Async lambda result is awaitable: `val task = async (x: Int) => x + 1; val n = await task(42)` evaluates to `43`.
+- [x] Type inference works: the inferred type of `async (x: Int) => x + 1` is `(Int) -> Task<Int>`.
+- [x] `docs/specs/01-language.md` grammar and §5 updated.
+- [x] Conformance test `tests/conformance/typecheck/invalid/await_in_non_async_lambda.ks` added (covers both standalone and nested-inside-async-fun cases).
+- [x] Conformance test `tests/conformance/runtime/valid/async_lambda.ks` added.
+- [x] All tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
 
 ## Spec References
 
@@ -95,7 +95,7 @@ Extend the Kestrel grammar to allow `async` on lambda expressions (`async (param
 - [x] Update `docs/specs/06-typesystem.md` to define async lambda typing as `(T1, ..., Tn) -> Task<R>` and to state that async context applies to async lambda bodies as well as async functions.
 - [x] Run `cd compiler && npm run build && npm test`.
 - [x] Run `cd runtime/jvm && bash build.sh`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Run `./scripts/kestrel test`.
 - [x] Run `./scripts/run-e2e.sh`.
 
 ## Tests to add
@@ -129,4 +129,4 @@ Extend the Kestrel grammar to allow `async` on lambda expressions (`async (param
 - 2026-04-03: Async lambda payload methods must be emitted as directly callable static methods, not private helpers, because generated payload classes invoke them via bytecode rather than reflection.
 - 2026-04-03: Existing `fs`, `process`, and `async_virtual_threads` Kestrel tests were relying on the old bug where sync `group` callbacks inherited outer async context. Moved awaits out of those sync callbacks and kept assertions/grouping synchronous.
 - 2026-04-03: `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, and `./scripts/run-e2e.sh` all pass.
-- 2026-04-03: `./scripts/kestrel test` is still blocked on this machine by Node running out of heap while compiling `.kestrel_test_runner.ks` under Node 25.8.2, even with `NODE_OPTIONS=--max-old-space-size=16384`; feature-specific compiler, runtime, and E2E checks are green.
+- 2026-04-03: Re-ran full verification for epic closure: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`, and `./scripts/run-e2e.sh` all pass on this machine.

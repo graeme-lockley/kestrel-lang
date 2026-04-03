@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E01 Async Runtime Foundation](../epics/unplanned/E01-async-runtime-foundation.md)
+- Epic: [E01 Async Runtime Foundation](../epics/done/E01-async-runtime-foundation.md)
 - Companion stories: S01-01, S01-02, S01-03, S01-06, S01-07, S01-08, S01-09
 
 ## Summary
@@ -39,14 +39,14 @@ Standardize all Kestrel test suite `run` functions to `async fun run(s: Suite): 
 
 ## Acceptance Criteria
 
-- [ ] Every `stdlib/kestrel/*.test.ks` exports `async fun run(s: Suite): Task<Unit>`.
-- [ ] Every `tests/unit/*.test.ks` exports `async fun run(s: Suite): Task<Unit>`.
-- [ ] `scripts/run_tests.ks` `buildCalls` generates `await run${idx}(root)`.
-- [ ] The generated test runner script is valid Kestrel in an async context (entry point is async or top-level `await` is valid).
-- [ ] `./scripts/kestrel test` still runs all suites and produces correct pass/fail counts.
-- [ ] `docs/specs/08-tests.md` updated: suite `run` signature documented as `Task<Unit>`.
-- [ ] No suite's test results are silently lost due to un-awaited tasks.
-- [ ] All test suites pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
+- [x] Every `stdlib/kestrel/*.test.ks` exports `async fun run(s: Suite): Task<Unit>`.
+- [x] Every `tests/unit/*.test.ks` exports `async fun run(s: Suite): Task<Unit>`.
+- [x] `scripts/run_tests.ks` `buildCalls` generates `await run${idx}(root)`.
+- [x] The generated test runner script is valid Kestrel in an async context (entry point is async or top-level `await` is valid).
+- [x] `./scripts/kestrel test` still runs all suites and produces correct pass/fail counts.
+- [x] `docs/specs/08-tests.md` updated: suite `run` signature documented as `Task<Unit>`.
+- [x] No suite's test results are silently lost due to un-awaited tasks.
+- [x] All test suites pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
 
 ## Spec References
 

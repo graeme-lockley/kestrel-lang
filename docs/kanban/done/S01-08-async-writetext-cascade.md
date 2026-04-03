@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E01 Async Runtime Foundation](../epics/unplanned/E01-async-runtime-foundation.md)
+- Epic: [E01 Async Runtime Foundation](../epics/done/E01-async-runtime-foundation.md)
 - Companion stories: S01-01, S01-02, S01-03, S01-04, S01-05, S01-06, S01-07, S01-09
 
 ## Summary
@@ -42,15 +42,15 @@ Promote the stale `writeText` migration story to a build-ready plan that matches
 
 ## Acceptance Criteria
 
-- [ ] `stdlib/kestrel/fs.ks` continues to export `writeText(path: String, content: String): Task<Result<Unit, FsError>>` and maps runtime error codes to `FsError` consistently with `readText` and `listDir`.
-- [ ] `compiler/src/typecheck/check.ts` `__write_text` binding remains aligned with the runtime contract: `(String, String) -> Task<Result<Unit, String>>` at the intrinsic layer, with stdlib mapping to `FsError` at the public layer.
-- [ ] `compiler/src/jvm-codegen/codegen.ts` emits the async intrinsic call to `KRuntime.writeTextAsync(Object, Object): KTask` for `__write_text` and does not synthesize a separate `KUnit.INSTANCE` push in the caller path.
-- [ ] `runtime/jvm/src/kestrel/runtime/KRuntime.java` `writeTextAsync()` dispatches to the virtual-thread executor and returns `KOk(KUnit.INSTANCE)` / `KErr(code)` rather than throwing write failures into user code.
-- [ ] `stdlib/kestrel/fs.test.ks` covers a successful write/read roundtrip and a stable write failure path with awaited `Fs.writeText(...)`.
-- [ ] `scripts/run_tests.ks` continues to await the generated-runner write and preserves current non-zero exit behavior when writing fails.
-- [ ] `compiler/test/integration/runtime-stdlib.test.ts` includes writeText-specific JVM integration coverage for success and failure.
-- [ ] User-facing docs do not describe stale synchronous or pre-Result `writeText` behavior.
-- [ ] Verification passes: `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test`, `./scripts/run-e2e.sh`.
+- [x] `stdlib/kestrel/fs.ks` continues to export `writeText(path: String, content: String): Task<Result<Unit, FsError>>` and maps runtime error codes to `FsError` consistently with `readText` and `listDir`.
+- [x] `compiler/src/typecheck/check.ts` `__write_text` binding remains aligned with the runtime contract: `(String, String) -> Task<Result<Unit, String>>` at the intrinsic layer, with stdlib mapping to `FsError` at the public layer.
+- [x] `compiler/src/jvm-codegen/codegen.ts` emits the async intrinsic call to `KRuntime.writeTextAsync(Object, Object): KTask` for `__write_text` and does not synthesize a separate `KUnit.INSTANCE` push in the caller path.
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java` `writeTextAsync()` dispatches to the virtual-thread executor and returns `KOk(KUnit.INSTANCE)` / `KErr(code)` rather than throwing write failures into user code.
+- [x] `stdlib/kestrel/fs.test.ks` covers a successful write/read roundtrip and a stable write failure path with awaited `Fs.writeText(...)`.
+- [x] `scripts/run_tests.ks` continues to await the generated-runner write and preserves current non-zero exit behavior when writing fails.
+- [x] `compiler/test/integration/runtime-stdlib.test.ts` includes writeText-specific JVM integration coverage for success and failure.
+- [x] User-facing docs do not describe stale synchronous or pre-Result `writeText` behavior.
+- [x] Verification passes: `cd compiler && npm run build && npm test`, `cd runtime/jvm && bash build.sh`, `./scripts/kestrel test`, `./scripts/run-e2e.sh`.
 
 ## Spec References
 
