@@ -39,7 +39,7 @@ A conforming implementation must:
 ### 2.3 Exceptions and Async
 
 - **Exceptions:** Declaring, throwing, and catching exceptions (including pattern matching in `catch`) behave as in [01-language.md](01-language.md). When no catch case matches, the exception is rethrown (01 §4). Stack traces are available via the Stack module; a conforming implementation must provide some representation of the call stack when `Stack.trace` is used (05 §5).
-- **Async:** `async`/`await` and `Task<T>` semantics (including suspension and resumption) are tested; `await` outside async context is rejected.
+- **Async:** `async`/`await` and `Task<T>` semantics (including suspension and resumption) are tested; `await` outside async context is rejected. Tests for independent tasks must assert aggregated outcomes without depending on completion order.
 
 ### 2.4 Bytecode and Runtime
 

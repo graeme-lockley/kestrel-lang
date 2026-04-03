@@ -16,6 +16,7 @@ Programs here must **not** succeed end-to-end: **`node compiler/dist/cli.js <fil
 | `compile_unknown_import.ks` | compile | Missing `kestrel:` module |
 | `compile_nonexhaustive_match.ks` | compile | Non-exhaustive `match` |
 | `compile_duplicate_export.ks` | compile | Duplicate export via `_fixtures/` re-exports |
+| `compile_await_outside_async.ks` | compile | `await` used outside an async context |
 | `uncaught_throw.ks` | runtime | Uncaught `throw` + stderr contract |
 | `runtime_exit_one.ks` | runtime | `exit(1)` |
 | `runtime_divide_by_zero.ks` | runtime | Uncaught `DivideByZero` |

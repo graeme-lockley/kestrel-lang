@@ -120,32 +120,6 @@ Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on 
 
 ## kestrel:list
 
-File system. File operations are async and return `Task<Result<T, FsError>>` so callers use `await` and pattern matching instead of exception control flow.
-
-| Type | Definition |
-|------|------------|
-| `FsError` | `NotFound | PermissionDenied | IoError(String)` |
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `readText` | `(String) -> Task<Result<String, FsError>>` | Read file contents as UTF-8 text. Returns `Ok(contents)` on success. |
-| `writeText` | `(String, String) -> Task<Result<Unit, FsError>>` | Write UTF-8 text to a path (creates or truncates the file per host semantics). Returns `Ok(())` on success. |
-| `listDir` | `(String) -> Task<Result<List<String>, FsError>>` | Non-recursive directory listing. `Ok(entries)` on success where each entry is `"<fullPath>\tfile"` or `"<fullPath>\tdir"`. |
-
----
-
-## kestrel:process
-
-Process information and subprocess execution.
-
-| Type | Definition |
-|------|------------|
-| `ProcessError` | `ProcessSpawnError(String)` |
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `getProcess` | `() -> { os: String, args: List<String>, env: List<(String, String)>, cwd: String }` | Returns process metadata for the current invocation. |
-| `runProcess` | `(String, List<String>) -> Task<Result<Int, ProcessError>>` | Spawn a subprocess, stream stdout/stderr to the current process output, and return `Ok(exitCode)` on completion. Returns `Err(ProcessSpawnError(message))` when process start/execution fails. |
 | `map` | `(List<A>, (A) -> B) -> List<B>` | Element-wise map |
 | `filter` | `(List<A>, (A) -> Bool) -> List<A>` | Keep elements satisfying predicate |
 | `foldl` | `(List<A>, B, (B, A) -> B) -> B` | Left fold |
@@ -172,6 +146,37 @@ Process information and subprocess execution.
 | `unzip` | `(List<(A, B)>) -> (List<A>, List<B>)` | |
 | `sort` | `(List<Int>) -> List<Int>` | Insertion sort |
 | `head` / `tail` | `List<A> -> Option<…>` | |
+
+---
+
+## kestrel:fs
+
+File system. File operations are async and return `Task<Result<T, FsError>>` so callers use `await` and pattern matching instead of exception control flow.
+
+| Type | Definition |
+|------|------------|
+| `FsError` | `NotFound | PermissionDenied | IoError(String)` |
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `readText` | `(String) -> Task<Result<String, FsError>>` | Read file contents as UTF-8 text. Returns `Ok(contents)` on success. |
+| `writeText` | `(String, String) -> Task<Result<Unit, FsError>>` | Write UTF-8 text to a path (creates or truncates the file per host semantics). Returns `Ok(())` on success. |
+| `listDir` | `(String) -> Task<Result<List<String>, FsError>>` | Non-recursive directory listing. `Ok(entries)` on success where each entry is `"<fullPath>\tfile"` or `"<fullPath>\tdir"`. |
+
+---
+
+## kestrel:process
+
+Process information and subprocess execution.
+
+| Type | Definition |
+|------|------------|
+| `ProcessError` | `ProcessSpawnError(String)` |
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `getProcess` | `() -> { os: String, args: List<String>, env: List<(String, String)>, cwd: String }` | Returns process metadata for the current invocation. |
+| `runProcess` | `(String, List<String>) -> Task<Result<Int, ProcessError>>` | Spawn a subprocess, stream stdout/stderr to the current process output, and return `Ok(exitCode)` on completion. Returns `Err(ProcessSpawnError(message))` when process start/execution fails. |
 
 ---
 
@@ -285,18 +290,6 @@ JSON parsing and serialisation implemented **in Kestrel** (no host JSON primitiv
 **Numbers:** Integers and IEEE-754 floats as in JSON; leading-zero and `NaN`/`Infinity` rules follow strict JSON rejection in the reference implementation.
 
 **Migration:** Code that relied on an unqualified prelude `Null` / `Int` / … as JSON `Value` constructors must **import** from `kestrel:json` (or re-export locally).
-
----
-
-## kestrel:fs
-
-File system. `readText` is **async-shaped** (`Task<String>`) so callers use `await` inside `async` functions. On the JVM backend the task is dispatched onto the virtual-thread runtime; callers observe the same API surface but the file read no longer completes synchronously on the calling thread.
-
-| Function | Signature | Description |
-|----------|-----------|-------------|
-| `readText` | `(String) -> Task<String>` | Read file contents as UTF-8 text. On the JVM backend, missing path, unreadable path, or read failure currently complete the task **exceptionally** and `await` rethrows that failure; this provisional surface is replaced by typed `Result<T, E>` payloads in S01-04. |
-| `writeText` | `(String, String) -> Unit` | Write UTF-8 text to a path (creates or truncates the file per host semantics). |
-| `listDir` | `(String) -> List<String>` | Non-recursive directory listing. Each element is `"<fullPath>\\tfile"` or `"<fullPath>\\tdir"` for a regular file or directory entry. If the path cannot be opened, returns an **empty** list. |
 
 ---
 
