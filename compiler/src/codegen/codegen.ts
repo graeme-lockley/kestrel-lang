@@ -245,7 +245,7 @@ function asRecordInternal(t: InternalType | undefined): (InternalType & { kind: 
   return null;
 }
 
-/** Operand for KIND_IS (must match vm exec.zig). */
+/** Operand for KIND_IS (must match runtime bytecode format spec 04). */
 function primKindDiscriminant(name: string): number {
   switch (name) {
     case 'Int':

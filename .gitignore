@@ -2,10 +2,7 @@
 out/
 compiler/dist/
 compiler/node_modules/
-vm/zig-out/
-vm/.zig-cache/
 *.kbc
-!vm/test/fixtures/*.kbc
 *.kti
 *.kbc.deps
 

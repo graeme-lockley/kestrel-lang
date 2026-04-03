@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync, mkdirSync, rmSync, utimesSync, statSync } 
 import { join } from 'path';
 import { tmpdir } from 'os';
 
-/** Read imported function table from .kbc (03 §6.6). Matches VM load.zig section 2 parsing. */
+/** Read imported function table from .kbc (03 §6.6). */
 function readImportedFunctionTable(kbc: Uint8Array): { importIndex: number; functionIndex: number }[] {
   const dv = new DataView(kbc.buffer, kbc.byteOffset, kbc.byteLength);
   if (kbc.length < 36) return [];
