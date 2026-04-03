@@ -2,7 +2,7 @@
 
 ## Status
 
-Done
+Unplanned
 
 ## Summary
 
@@ -25,8 +25,20 @@ Async execution exploits **Project Loom virtual threads** (Java 21+) rather than
 9. [x] [S01-10-async-test-harness-suite-runner.md](../../done/S01-10-async-test-harness-suite-runner.md) — Standardize all test suite `run` functions to `async fun run(s: Suite): Task<Unit>` and update the generated test runner to `await` each call. Completed.
 10. [x] [S01-05-cli-exit-wait-exit-no-wait.md](../../done/S01-05-cli-exit-wait-exit-no-wait.md) — CLI --exit-wait (default) and --exit-no-wait flags for process lifetime. Completed.
 11. [x] [S01-06-specs-conformance-e2e-tests.md](../../done/S01-06-specs-conformance-e2e-tests.md) — Spec updates, conformance tests, and E2E scenarios for the full async model. Completed.
+12. [ ] [S01-12-block-local-async-fun.md](../../unplanned/S01-12-block-local-async-fun.md) — Support `async fun` at block scope (FunStmt); grammar, AST, type-checker, codegen.
+13. [ ] [S01-13-task-combinator-api.md](../../unplanned/S01-13-task-combinator-api.md) — Add `Task.all`, `Task.race`, and `Task.map` combinators to stdlib and runtime.
+14. [ ] [S01-14-in-async-context-param-refactor.md](../../unplanned/S01-14-in-async-context-param-refactor.md) — Refactor `inAsyncContext` from mutable closure state into an explicit parameter on `inferExpr`.
+15. [ ] [S01-15-await-parser-dead-branch-cleanup.md](../../unplanned/S01-15-await-parser-dead-branch-cleanup.md) — Remove dead `CallExpr` branch in the `await` / `parsePrimary` parser path.
+16. [ ] [S01-16-await-type-error-message.md](../../unplanned/S01-16-await-type-error-message.md) — Improve `await`-on-non-Task diagnostic to include the actual resolved type.
+17. [ ] [S01-17-task-cancellation-api.md](../../unplanned/S01-17-task-cancellation-api.md) — Expose task cancellation via `Task.cancel` backed by `CompletableFuture.cancel()`.
+18. [ ] [S01-18-run-process-stdout-capture.md](../../unplanned/S01-18-run-process-stdout-capture.md) — Return captured stdout string from `runProcess`; update result ADT and stdlib.
+19. [ ] [S01-19-listdir-direntry-adt.md](../../unplanned/S01-19-listdir-direntry-adt.md) — Replace raw tab-embedded strings from `listDir` with a typed `DirEntry` ADT.
+20. [ ] [S01-20-scc-trampoline-async-fix.md](../../unplanned/S01-20-scc-trampoline-async-fix.md) — Preserve trampoline optimization for sync members of SCCs that contain async functions.
+21. [ ] [S01-21-async-quiescence-counter-contention.md](../../unplanned/S01-21-async-quiescence-counter-contention.md) — Replace `asyncTasksInFlight` monitor with `LongAdder`/`Phaser` to reduce lock contention.
+22. [ ] [S01-22-await-behavior-validation-real-tests.md](../../unplanned/S01-22-await-behavior-validation-real-tests.md) — Replace placeholder `1 == 1` assertions in `await-behavior-validation.test.ks` with real behavioral tests.
+23. [ ] [S01-23-async-module-interface-docs.md](../../unplanned/S01-23-async-module-interface-docs.md) — Document async semantics and structural async typing in the module system spec.
 
-Stories 4–6 (listDir, writeText, runProcess) can be implemented in any order relative to each other; they all depend on S01-03. S01-11 and S01-10 should follow those three.
+Stories 4–6 (listDir, writeText, runProcess) can be implemented in any order relative to each other; they all depend on S01-03. S01-11 and S01-10 should follow those three. Stories S01-12–S01-23 address gaps identified in the post-delivery critical analysis and can be tackled in any order unless otherwise noted.
 
 ## Stub Strategy
 
@@ -48,3 +60,15 @@ Each story may stub dependencies on later stories with TODO errors (e.g. S01-01 
 - CLI exit flags documented and working.
 - Specs accurate; conformance and E2E tests passing.
 - `cd compiler && npm run build && npm test`, `./scripts/kestrel test`, `./scripts/run-e2e.sh` all green.
+- Block-local `async fun` compiles and executes correctly (S01-12).
+- `Task.all`, `Task.race`, and `Task.map` combinators available in stdlib with tests (S01-13).
+- `inAsyncContext` passed as explicit parameter to `inferExpr`; no mutable module-level state (S01-14).
+- Dead `CallExpr` branch removed from `parsePrimary` await path (S01-15).
+- `await`-on-non-Task diagnostic includes the actual resolved type (S01-16).
+- `Task.cancel()` backed by `CompletableFuture.cancel()` and accessible from Kestrel (S01-17).
+- `runProcess` returns captured stdout; result ADT and stdlib updated (S01-18).
+- `listDir` returns `List<DirEntry>` ADT; raw tab-string format retired (S01-19).
+- Trampoline optimization applied to sync SCC members even when async members are present (S01-20).
+- `asyncTasksInFlight` uses `LongAdder`/`Phaser`; `synchronized(asyncMonitor)` removed (S01-21).
+- `await-behavior-validation.test.ks` contains only real behavioral assertions; no `1 == 1` stubs (S01-22).
+- Module system spec documents async structural typing and `async fun` interface rules (S01-23).
