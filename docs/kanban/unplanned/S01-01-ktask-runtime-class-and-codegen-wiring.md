@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E01 Async Runtime Foundation](../epics/unplanned/E01-async-runtime-foundation.md)
-- Companion stories: S01-02, S01-03, S01-04, S01-05, S01-06
+- Companion stories: S01-02, S01-03, S01-04, S01-05, S01-06, S01-07, S01-08, S01-09, S01-10, S01-11
 
 ## Summary
 

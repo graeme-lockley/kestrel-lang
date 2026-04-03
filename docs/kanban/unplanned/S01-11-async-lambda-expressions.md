@@ -41,11 +41,12 @@ Extend the Kestrel grammar to allow `async` on lambda expressions (`async (param
 
 - [ ] `async (x: String) => await Fs.readText(x)` parses and type-checks as `(String) -> Task<String>`.
 - [ ] `await` inside a non-async lambda `(x) => await Fs.readText(x)` is a compile error ("await used outside async context").
+- [ ] `await` inside a non-async lambda nested inside an `async fun` is also a compile error — the `LambdaExpr` case in `check.ts` must save `inAsyncContext`, set it to `false` for non-async lambdas (or `true` for async lambdas), then restore it. This fixes a pre-existing bug where a non-async lambda inherits the outer async context.
 - [ ] Async lambda can be passed to higher-order functions: `List.map(paths, async (p) => await Fs.readText(p))` compiles.
 - [ ] Async lambda result is awaitable: `val task = async (x: Int) => x + 1; val n = await task(42)` evaluates to `43`.
 - [ ] Type inference works: the inferred type of `async (x: Int) => x + 1` is `(Int) -> Task<Int>`.
 - [ ] `docs/specs/01-language.md` grammar and §5 updated.
-- [ ] Conformance test `tests/conformance/typecheck/invalid/await_in_non_async_lambda.ks` added.
+- [ ] Conformance test `tests/conformance/typecheck/invalid/await_in_non_async_lambda.ks` added (covers both standalone and nested-inside-async-fun cases).
 - [ ] Conformance test `tests/conformance/runtime/valid/async_lambda.ks` added.
 - [ ] All tests pass: `cd compiler && npm run build && npm test`, `./scripts/kestrel test`.
 

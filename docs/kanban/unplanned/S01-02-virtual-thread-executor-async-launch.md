@@ -39,6 +39,8 @@ After S01-01:
 
 ## Acceptance Criteria
 
+- [ ] `runtime/jvm/build.sh` updated from `-source 11 -target 11` to `--release 21` (Project Loom requires Java 21+).
+- [ ] `README.md` and `CONTRIBUTING.md` updated to require Java 21+ (currently state "Java 11+").
 - [ ] A virtual thread executor is created at runtime startup and accessible from `KRuntime`.
 - [ ] Calling an `async fun` dispatches its body to a virtual thread and returns a `KTask`.
 - [ ] JVM codegen emits the dispatch call for async function invocation (wrapping the body in a `Runnable`/`Callable` submitted to the executor).
