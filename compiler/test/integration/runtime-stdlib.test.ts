@@ -279,4 +279,101 @@ run()
       rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  it('await Fs.writeText(...) returns Ok(()) and content is readable back', () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'kestrel-runtime-stdlib-writetext-'));
+    const outPath = join(tmpRoot, 'written.txt');
+    const srcPath = join(tmpRoot, 'RuntimeStdlibWriteText.ks');
+
+    writeFileSync(
+      srcPath,
+      `import * as Fs from "kestrel:fs"
+import * as Str from "kestrel:string"
+
+async fun run(): Task<Unit> = {
+  val writeResult = await Fs.writeText(${JSON.stringify(outPath)}, "hello write\\n");
+  val ok =
+    match (writeResult) {
+      Ok(_) => 1,
+      _ => 0
+    };
+  println(ok);
+  val text =
+    match (await Fs.readText(${JSON.stringify(outPath)})) {
+      Ok(v) => v,
+      Err(_) => ""
+    };
+  println(Str.length(text));
+  ()
+}
+
+run()
+`
+    );
+
+    try {
+      const compileResult = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpRoot,
+      });
+      expect(compileResult.ok).toBe(true);
+      if (!compileResult.ok) return;
+
+      const mainClass = compileResult.mainClass.replace(/\//g, '.');
+      const stdout = execSync(`java -cp "${runtimeJar}:${tmpRoot}" "${mainClass}"`, {
+        cwd: kestrelRoot,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      expect(stdout).toBe('1\n12\n');
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('await Fs.writeText(...) returns Err(NotFound) for missing parent directory', () => {
+    const tmpRoot = mkdtempSync(join(tmpdir(), 'kestrel-runtime-stdlib-writetext-missing-'));
+    const badPath = join(tmpRoot, '__no_such_parent__', 'out.txt');
+    const srcPath = join(tmpRoot, 'RuntimeStdlibWriteTextMissing.ks');
+
+    writeFileSync(
+      srcPath,
+      `import * as Fs from "kestrel:fs"
+import { NotFound } from "kestrel:fs"
+
+async fun run(): Task<Unit> = {
+  val caught =
+    match (await Fs.writeText(${JSON.stringify(badPath)}, "x")) {
+      Err(NotFound) => 1,
+      _ => 0
+    };
+  println(caught);
+  ()
+}
+
+run()
+`
+    );
+
+    try {
+      const compileResult = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpRoot,
+      });
+      expect(compileResult.ok).toBe(true);
+      if (!compileResult.ok) return;
+
+      const mainClass = compileResult.mainClass.replace(/\//g, '.');
+      const stdout = execSync(`java -cp "${runtimeJar}:${tmpRoot}" "${mainClass}"`, {
+        cwd: kestrelRoot,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      expect(stdout).toBe('1\n');
+    } finally {
+      rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
 });

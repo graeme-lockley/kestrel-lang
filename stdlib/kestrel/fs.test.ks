@@ -73,6 +73,16 @@ export async fun run(s: Suite): Task<Unit> = {
       eq(sg, "read back", text, "roundtrip\n");
     });
 
+    group(s1, "writeText missing parent returns Err(NotFound)", (sg: Suite) => {
+      val badPath = "${cwd}/tests/fixtures/fs/__no_such_parent__/out.txt";
+      val isNotFound =
+        match (await Fs.writeText(badPath, "x")) {
+          Err(NotFound) => True,
+          _ => False
+        };
+      isTrue(sg, "returns Err(NotFound)", isNotFound)
+    });
+
     group(s1, "listDir", (sg: Suite) => {
       val dir = "${cwd}/tests/fixtures/fs/list_sample";
       val entries =
