@@ -7,13 +7,13 @@ println(y)
 // 2.5
 val sum = x + y
 println(sum)
-// 4
+// 4.0
 val prod = x * y
 println(prod)
 // 3.75
 val cmp = 1.0 < 2.0
 println(cmp)
-// true
+// True
 val eq = 3.14 == 3.14
 println(eq)
-// true
+// True

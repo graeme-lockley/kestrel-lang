@@ -1,5 +1,5 @@
 /**
- * Expected VM stdout lines for runtime conformance (spec 08 §3.2).
+ * Expected runtime stdout lines for runtime conformance (spec 08 §3.2).
  * Source files list golden lines as full-line `//` comments whose bodies are not
  * documentation (see isDocOnlyCommentBody). Order matches println output order.
  */

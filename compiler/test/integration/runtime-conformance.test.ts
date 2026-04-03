@@ -1,11 +1,11 @@
 /**
  * Runtime conformance (spec 08 §2.4–2.5, §3.2).
- * Compiles each valid/*.ks to .kbc via dist/cli.js, runs vm/zig-out/bin/kestrel, compares stdout
+ * Compiles each valid/*.ks to JVM classes via dist/cli.js, runs them on the JVM, compares stdout
  * to golden lines from // comments (see helpers/runtime-stdout-goldens.ts).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readdirSync, readFileSync, mkdtempSync, mkdirSync, rmSync } from 'fs';
-import { join, dirname, basename, resolve } from 'path';
+import { readdirSync, readFileSync, mkdtempSync, rmSync } from 'fs';
+import { join, dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 import { tmpdir } from 'os';
 import { execSync } from 'child_process';
@@ -16,7 +16,7 @@ const compilerRoot = join(thisDir, '..', '..');
 const repoRoot = join(compilerRoot, '..');
 const runtimeValidDir = join(repoRoot, 'tests', 'conformance', 'runtime', 'valid');
 const cliJs = join(compilerRoot, 'dist', 'cli.js');
-const vmExe = join(repoRoot, 'vm', 'zig-out', 'bin', 'kestrel');
+const runtimeJar = join(repoRoot, 'runtime', 'jvm', 'kestrel-runtime.jar');
 
 function listKs(dir: string): string[] {
   try {
@@ -30,30 +30,31 @@ function normalizeStdout(s: string): string {
   return s.replace(/\r\n/g, '\n').replace(/\n$/, '');
 }
 
-/** Same layout as `scripts/kestrel` `kbc_path_for`: multi-module .kbc must live under KESTREL_CACHE + abs source dir. */
-function kbcCacheOutputPath(ksAbsolute: string, cacheRoot: string): string {
-  const absDir = dirname(ksAbsolute);
-  const base = basename(ksAbsolute, '.ks');
-  const out = join(cacheRoot, absDir, `${base}.kbc`);
-  mkdirSync(dirname(out), { recursive: true });
-  return out;
+function mainClassFor(ksAbsolute: string): string {
+  const normalized = resolve(ksAbsolute).replace(/\\/g, '/');
+  const rel = normalized.startsWith('/') ? normalized.slice(1) : normalized;
+  const withoutExt = rel.endsWith('.ks') ? rel.slice(0, -3) : rel;
+  const parts = withoutExt.split('/').map((part) => part.replace(/[^a-zA-Z0-9_]/g, '_'));
+  const last = parts[parts.length - 1] ?? '';
+  const main = last.charAt(0).toUpperCase() + last.slice(1);
+  if (parts.length === 1) return main;
+  return parts.slice(0, -1).join('.') + '.' + main;
 }
 
-let testKbcCache: string | undefined;
+let testJvmClassDir: string | undefined;
 
 beforeAll(() => {
-  testKbcCache = mkdtempSync(join(tmpdir(), 'kestrel-runtime-kbc-'));
-  process.env.KESTREL_CACHE = testKbcCache;
-  execSync('zig build -Doptimize=ReleaseSafe', {
-    cwd: join(repoRoot, 'vm'),
+  testJvmClassDir = mkdtempSync(join(tmpdir(), 'kestrel-runtime-jvm-'));
+  execSync('./build.sh', {
+    cwd: join(repoRoot, 'runtime', 'jvm'),
     stdio: 'pipe',
   });
 });
 
 afterAll(() => {
-  if (testKbcCache == null) return;
+  if (testJvmClassDir == null) return;
   try {
-    rmSync(testKbcCache, { recursive: true, force: true });
+    rmSync(testJvmClassDir, { recursive: true, force: true });
   } catch {
     /* temp cleanup best-effort */
   }
@@ -70,13 +71,13 @@ describe('runtime conformance (valid)', () => {
       const ksPath = resolve(runtimeValidDir, file);
       const source = readFileSync(ksPath, 'utf-8');
       const expectedLines = extractExpectedStdoutLines(source);
-      const kbcPath = kbcCacheOutputPath(ksPath, testKbcCache);
+      const classDir = testJvmClassDir;
+      const mainClass = mainClassFor(ksPath);
       try {
-        execSync(`node "${cliJs}" "${ksPath}" -o "${kbcPath}"`, {
+        execSync(`node "${cliJs}" "${ksPath}" --target jvm -o "${classDir}"`, {
           cwd: repoRoot,
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env, KESTREL_CACHE: testKbcCache },
         });
       } catch (e) {
         throw new Error(`Compile failed for ${file}: ${String(e)}`);
@@ -85,7 +86,7 @@ describe('runtime conformance (valid)', () => {
       let stdout = '';
       let stderr = '';
       try {
-        const out = execSync(`"${vmExe}" "${kbcPath}"`, {
+        const out = execSync(`java -cp "${runtimeJar}:${classDir}" "${mainClass}"`, {
           cwd: repoRoot,
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'pipe'],
@@ -95,7 +96,7 @@ describe('runtime conformance (valid)', () => {
         const err = e as { stdout?: string; stderr?: string; status?: number };
         stdout = err.stdout?.toString() ?? '';
         stderr = err.stderr?.toString() ?? '';
-        throw new Error(`VM exit ${err.status} for ${file}. stderr: ${stderr}`);
+        throw new Error(`JVM exit ${err.status} for ${file}. stderr: ${stderr}`);
       }
 
       expect(stderr.trim(), `stderr should be empty for ${file}`).toBe('');

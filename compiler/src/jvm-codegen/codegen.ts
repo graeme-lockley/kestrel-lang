@@ -216,7 +216,9 @@ function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, num
         for (const el of e.elements) walk(el as Expr);
         return;
       case 'LiteralExpr':
+        return;
       case 'ThrowExpr':
+        walk(e.value);
         return;
       case 'AwaitExpr':
         walk(e.value);
@@ -2890,8 +2892,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       ? `([Ljava/lang/Object;${'Ljava/lang/Object;'.repeat(arity)})Ljava/lang/Object;`
       : descriptor(arity);
     const mb = cf.addMethod('$lambda' + i, desc, ACC_PUBLIC | ACC_STATIC);
-    emitExpr(l.body, mb, undefined);
-    mb.emit1(JvmOp.ARETURN);
+    const lambdaXfer = emitExpr(l.body, mb, undefined);
+    if (!lambdaXfer) mb.emit1(JvmOp.ARETURN);
     // Match top-level fun decls: emitExpr uses fixed high slots (e.g. ConsExpr 60–61); nextLocal alone is too small.
     mb.setMaxs(32, Math.max(Math.max(lambdaNext, nextLocal) + 8, 70));
     cf.flushLastMethod();
