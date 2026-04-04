@@ -130,7 +130,7 @@ cd runtime/jvm && bash build.sh
 4. Move `docs/kanban/doing/S##-##-slug.md` → `docs/kanban/done/S##-##-slug.md`.
 5. Update the owning epic file in `docs/kanban/epics/unplanned/`:
    - Mark this story complete in the story list.
-   - If all member stories are now in `done/`, move the epic file to `docs/kanban/epics/done/`.
+   - If all member stories are now in `done/`, report back to the user that all epic stories are complete.
 
 ## Related
 
