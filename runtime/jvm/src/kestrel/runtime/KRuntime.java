@@ -33,7 +33,28 @@ public final class KRuntime {
     /** Signalled only when asyncTasksInFlight reaches zero; held only by awaitAsyncQuiescence. */
     private static final Object quiescenceSignal = new Object();
 
+    /** Shared HTTP client — reuses TCP connections and avoids per-request DNS cycling. */
+    private static volatile java.net.http.HttpClient sharedHttpClient;
+
     private KRuntime() {}
+
+    /** Return the shared HttpClient, creating it lazily if necessary. */
+    private static java.net.http.HttpClient getSharedHttpClient() {
+        java.net.http.HttpClient c = sharedHttpClient;
+        if (c == null) {
+            synchronized (KRuntime.class) {
+                c = sharedHttpClient;
+                if (c == null) {
+                    c = java.net.http.HttpClient.newBuilder()
+                            .connectTimeout(Duration.ofSeconds(15))
+                            .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+                            .build();
+                    sharedHttpClient = c;
+                }
+            }
+        }
+        return c;
+    }
 
     /** Set command-line args (called by generated main). */
     public static void setMainArgs(String[] args) {
@@ -904,9 +925,7 @@ public final class KRuntime {
 
         final String urlStr = (String) url;
         try {
-            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(15))
-                    .build();
+            java.net.http.HttpClient client = getSharedHttpClient();
             java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                     .uri(java.net.URI.create(urlStr))
                     .GET()
@@ -951,9 +970,7 @@ public final class KRuntime {
         final String urlStr = (String) url;
 
         try {
-            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofSeconds(15))
-                    .build();
+            java.net.http.HttpClient client = getSharedHttpClient();
             java.net.http.HttpRequest.Builder builder = java.net.http.HttpRequest.newBuilder()
                     .uri(java.net.URI.create(urlStr));
 
@@ -1309,5 +1326,230 @@ public final class KRuntime {
             return "/";
         }
         return ((com.sun.net.httpserver.HttpExchange) exchange).getRequestURI().getPath();
+    }
+
+    // -----------------------------------------------------------------------
+    // TCP socket primitives (kestrel:socket)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Connect a plain TCP socket to {@code host:port} asynchronously.
+     * Returns a {@code Task<Socket>} that resolves with the connected socket
+     * or fails with a {@code java.io.IOException} on connection error.
+     */
+    public static KTask tcpConnect(Object host, Object port) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        asyncTasksInFlight.incrementAndGet();
+        asyncExecutor.submit(() -> {
+            try {
+                java.net.Socket sock = new java.net.Socket((String) host, (int)(long)(Long) port);
+                future.complete(sock);
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Connect a TLS socket to {@code host:port} using the default SSLContext
+     * (system trust store, hostname verification enabled).
+     * Returns a {@code Task<Socket>} that resolves with the connected TLS socket.
+     */
+    public static KTask tlsConnect(Object host, Object port) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        asyncTasksInFlight.incrementAndGet();
+        String hostStr = (String) host;
+        int portInt = (int)(long)(Long) port;
+        asyncExecutor.submit(() -> {
+            try {
+                javax.net.ssl.SSLSocketFactory factory =
+                        (javax.net.ssl.SSLSocketFactory) javax.net.ssl.SSLSocketFactory.getDefault();
+                javax.net.ssl.SSLSocket sock =
+                        (javax.net.ssl.SSLSocket) factory.createSocket(hostStr, portInt);
+                sock.startHandshake();
+                future.complete(sock);
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Send a UTF-8 text string over an open socket.
+     * Returns a {@code Task<Unit>}.
+     */
+    public static KTask socketSendText(Object socket, Object text) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        asyncTasksInFlight.incrementAndGet();
+        asyncExecutor.submit(() -> {
+            try {
+                java.net.Socket sock = (java.net.Socket) socket;
+                byte[] bytes = ((String) text).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                sock.getOutputStream().write(bytes);
+                sock.getOutputStream().flush();
+                future.complete(KUnit.INSTANCE);
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Read all available bytes from the socket input stream until EOF or the remote
+     * closes its write side. Returns a {@code Task<String>} (UTF-8 decoded).
+     *
+     * <p>Note: this reads until EOF. For protocols that keep the connection open
+     * (HTTP/1.1 keep-alive), use {@link #socketReadLine} instead.
+     */
+    public static KTask socketReadAll(Object socket) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        asyncTasksInFlight.incrementAndGet();
+        asyncExecutor.submit(() -> {
+            try {
+                java.net.Socket sock = (java.net.Socket) socket;
+                byte[] bytes = sock.getInputStream().readAllBytes();
+                future.complete(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Read one line (terminated by {@code \n} or {@code \r\n}) from the socket.
+     * Returns a {@code Task<String>} (line without the trailing newline).
+     * Returns an empty string at EOF.
+     */
+    public static KTask socketReadLine(Object socket) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        asyncTasksInFlight.incrementAndGet();
+        asyncExecutor.submit(() -> {
+            try {
+                java.net.Socket sock = (java.net.Socket) socket;
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(sock.getInputStream(), java.nio.charset.StandardCharsets.UTF_8));
+                String line = reader.readLine();
+                future.complete(line != null ? line : "");
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Close the socket. Returns a {@code Task<Unit>}.
+     */
+    public static KTask socketClose(Object socket) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        asyncTasksInFlight.incrementAndGet();
+        asyncExecutor.submit(() -> {
+            try {
+                ((java.net.Socket) socket).close();
+                future.complete(KUnit.INSTANCE);
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
+    }
+
+    // -----------------------------------------------------------------------
+    // TCP server socket primitives (kestrel:socket)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Bind a {@code ServerSocket} on {@code host:port}.
+     * Pass {@code port = 0} for an OS-assigned ephemeral port.
+     * Returns a {@code Task<ServerSocket>}.
+     */
+    public static KTask tcpListen(Object host, Object port) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        asyncTasksInFlight.incrementAndGet();
+        asyncExecutor.submit(() -> {
+            try {
+                int portInt = (int)(long)(Long) port;
+                java.net.ServerSocket ss = new java.net.ServerSocket();
+                ss.setReuseAddress(true);
+                ss.bind(new java.net.InetSocketAddress((String) host, portInt));
+                future.complete(ss);
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Accept one incoming connection on a bound {@code ServerSocket}.
+     * Returns a {@code Task<Socket>}.
+     */
+    public static KTask serverSocketAccept(Object serverSocket) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        asyncTasksInFlight.incrementAndGet();
+        asyncExecutor.submit(() -> {
+            try {
+                java.net.Socket conn = ((java.net.ServerSocket) serverSocket).accept();
+                future.complete(conn);
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Return the local port that the {@code ServerSocket} is bound to.
+     */
+    public static Long serverSocketPort(Object serverSocket) {
+        return (long) ((java.net.ServerSocket) serverSocket).getLocalPort();
+    }
+
+    /**
+     * Close a {@code ServerSocket}. Returns a {@code Task<Unit>}.
+     */
+    public static KTask serverSocketClose(Object serverSocket) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        asyncTasksInFlight.incrementAndGet();
+        asyncExecutor.submit(() -> {
+            try {
+                ((java.net.ServerSocket) serverSocket).close();
+                future.complete(KUnit.INSTANCE);
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
     }
 }

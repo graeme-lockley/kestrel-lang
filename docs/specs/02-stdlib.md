@@ -433,6 +433,102 @@ Passing assertions increment `passed`. In **verbose** and expanded compact, they
 
 ---
 
+## kestrel:socket
+
+TCP and TLS socket library. Provides plain TCP and TLS (HTTPS-style) client/server sockets backed by `java.net.Socket` and `javax.net.ssl.SSLSocket` via `extern type`/`extern fun` bindings. Implemented without JVM-specific transport stacks — all socket classes are part of the standard JDK (Java 21+). All I/O operations are `Task`-shaped and run on virtual threads.
+
+### Types
+
+| Type | JVM backing | Description |
+|------|-------------|-------------|
+| `Socket` | `java.net.Socket` | A connected TCP or TLS socket. Produced by `tcpConnect`, `tlsConnect`, or `accept`. Used for `sendText`, `readAll`, `readLine`, and `close`. |
+| `ServerSocket` | `java.net.ServerSocket` | A bound TCP server socket. Produced by `listen`. Used for `accept`, `serverPort`, and `serverClose`. |
+
+Both types are opaque: not constructible by user code; produced exclusively by the module functions listed below.
+
+### Client functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `tcpConnect` | `(String, Int) -> Task<Socket>` | Connect a plain TCP socket to `host:port`. Task fails with `java.io.IOException` on connection error (refused, unreachable, DNS failure). |
+| `tlsConnect` | `(String, Int) -> Task<Socket>` | Connect a TLS socket to `host:port`. Uses the JDK default `SSLContext` (system trust store, hostname verification enabled). Performs a full TLS handshake before the task resolves. Task fails on TLS or connection error. |
+
+### I/O functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `sendText` | `(Socket, String) -> Task<Unit>` | Write the UTF-8 text to the socket output stream and flush. Task fails on socket error. |
+| `readAll` | `(Socket) -> Task<String>` | Read all bytes until EOF (remote closes its write side). Returns UTF-8-decoded text. Use for HTTP/1.0 or other close-on-response protocols. **Blocks until EOF.** |
+| `readLine` | `(Socket) -> Task<String>` | Read one line terminated by `\n` or `\r\n`. Returns the line without the trailing newline. Returns `""` at EOF. Useful for line-oriented protocols (SMTP, FTP, etc.). |
+| `close` | `(Socket) -> Task<Unit>` | Close the socket. Further I/O will fail. |
+
+### Server functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `listen` | `(String, Int) -> Task<ServerSocket>` | Bind a TCP server socket on `host:port`. Pass `0` as port for an OS-assigned ephemeral port. Enables `SO_REUSEADDR`. Task fails if the port is already in use. |
+| `accept` | `(ServerSocket) -> Task<Socket>` | Accept one incoming connection. Blocks until a client connects. Returns a connected `Socket`. |
+| `serverPort` | `(ServerSocket) -> Int` | Return the actual local port the server is bound to. Useful when started with port `0`. |
+| `serverClose` | `(ServerSocket) -> Task<Unit>` | Close the server socket. Pending `accept` calls will fail. |
+
+### Security notes
+
+- `tlsConnect` uses the system trust store and enables **hostname verification** by default. There is no API to disable these checks.
+- Raw socket access (server and client) is intentionally low-level. Servers must not run with elevated OS trust without host hardening.
+
+### Typical usage
+
+**TCP client (HTTP/1.0 GET):**
+```kestrel
+import * as Socket from "kestrel:socket"
+
+async fun run(): Task<Unit> = {
+  val sock = await Socket.tcpConnect("example.com", 80);
+  await Socket.sendText(sock, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
+  val resp = await Socket.readAll(sock);
+  await Socket.close(sock);
+  println(resp)
+}
+```
+
+**TLS client (HTTPS):**
+```kestrel
+import * as Socket from "kestrel:socket"
+
+async fun run(): Task<Unit> = {
+  val sock = await Socket.tlsConnect("example.com", 443);
+  await Socket.sendText(sock, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
+  val resp = await Socket.readAll(sock);
+  await Socket.close(sock);
+  println(resp)
+}
+```
+
+**TCP server (one connection):**
+```kestrel
+import * as Socket from "kestrel:socket"
+
+async fun handleConn(ss: Socket.ServerSocket): Task<String> = {
+  val conn = await Socket.accept(ss);
+  val msg = await Socket.readAll(conn);
+  await Socket.close(conn);
+  msg
+}
+
+async fun run(): Task<Unit> = {
+  val ss = await Socket.listen("127.0.0.1", 0);
+  val serverTask = handleConn(ss);
+  val client = await Socket.tcpConnect("127.0.0.1", Socket.serverPort(ss));
+  await Socket.sendText(client, "hello");
+  await Socket.close(client);
+  val received = await serverTask;
+  await Socket.serverClose(ss);
+  println(received)
+}
+```
+
+---
+
 ## kestrel:web
 
 Lightweight routing framework built on top of `kestrel:http`. Provides Sinatra-style route registration (pattern matching, path parameters, wildcard segments) and automatic 404/405 responses. Implemented entirely in Kestrel — no additional JVM primitives.
