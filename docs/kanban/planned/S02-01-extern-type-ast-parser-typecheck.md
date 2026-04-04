@@ -58,3 +58,44 @@ Introduce `extern type` as a new top-level declaration that binds a named Kestre
 - **JVM class descriptor format**: `jvm("fully.qualified.ClassName")` uses dot-separated class names (Java source form). The codegen must convert to internal JVM form (`fully/qualified/ClassName`) when emitting bytecode. Establish this conversion helper early (it will be reused by S02-02).
 - **Type parameters**: `extern type JList<E> = jvm("java.util.List")` — type params on `extern type` are purely a Kestrel-side construct (Java erases them). The typecheck simply creates a generic alias. Codegen always maps to the raw JVM class regardless. Explicitly test this to avoid confusion.
 - **No body typecheck needed**: Unlike `TypeDecl`, an `extern type` has no body to typecheck — the `jvm("...")` string is an opaque annotation for the codegen layer. Typecheck only validates form (valid string literal) and registers the name.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| AST | Add an `ExternTypeDecl` node and include it in `TopLevelDecl` so modules can represent `extern type` declarations. |
+| Lexer | Add `extern` as a reserved keyword token (with a compatibility check against existing corpus usage). |
+| Parser | Parse `extern type Name = jvm("...")` in local/opaque/export forms and emit targeted parse diagnostics for invalid RHS forms. |
+| Typecheck | Register `extern type` names in the type environment as nominal opaque types, validate clashes/duplicates, and include exported extern types in module type exports. |
+| Module/type artifacts | Extend compiler type export serialization to preserve exported extern type signatures for importer-side typechecking. |
+| Tests | Add parser and typecheck coverage in compiler vitest and conformance suites for valid/invalid `extern type` declarations. |
+| Specs | Update `docs/specs/01-language.md` and `docs/specs/06-typesystem.md` to define syntax and typing semantics. |
+
+## Tasks
+
+- [ ] Add `ExternTypeDecl` to `compiler/src/ast/nodes.ts` and include it in `TopLevelDecl`.
+- [ ] Add `extern` keyword support in lexer tokenization under `compiler/src/lexer/`.
+- [ ] Extend top-level parser in `compiler/src/parser/parse.ts` to parse `extern type` declarations (local, `extern opaque type`, and `export extern type`) and require `= jvm("...")`.
+- [ ] Add parser diagnostics for missing `= jvm(...)` and invalid non-`jvm(...)` RHS in `compiler/src/parser/parse.ts`.
+- [ ] Extend type declaration/type environment handling in `compiler/src/typecheck/check.ts` to register extern types, detect duplicate/conflicting names, and expose exported extern types as opaque to importers.
+- [ ] Extend module types export serialization/reading in compiler module/type metadata paths (including `compiler/src/module-specifiers.ts` and related type export plumbing) so extern type names round-trip to importing modules.
+- [ ] Add parser unit/integration coverage in `compiler/test/` for successful and failing `extern type` syntax.
+- [ ] Add typecheck conformance fixtures under `tests/conformance/typecheck/` that exercise extern type use in type positions and duplicate-declaration failures.
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `./scripts/kestrel test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest parser | `compiler/test/unit/parser/*.test.ts` | Parse `extern type` (local/export/opaque) and assert AST shape includes `ExternTypeDecl`. |
+| Vitest parser negative | `compiler/test/unit/parser/*.test.ts` | Reject missing `= jvm(...)` and reject non-`jvm(...)` RHS with clear diagnostics. |
+| Vitest typecheck | `compiler/test/unit/typecheck/*.test.ts` | Confirm extern type names resolve in type positions and duplicate extern type names fail. |
+| Conformance parse | `tests/conformance/parse/` | Add valid/invalid extern type fixtures to lock syntax behavior. |
+| Conformance typecheck | `tests/conformance/typecheck/` | Ensure extern type declarations typecheck and duplicate/clash cases produce expected errors. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/01-language.md` — add `extern type` to top-level declaration grammar and keyword set.
+- [ ] `docs/specs/06-typesystem.md` — define typing semantics for extern nominal/opaque type bindings.
+- [ ] `docs/specs/07-modules.md` — document importer visibility of exported extern types as opaque module-surface types.
