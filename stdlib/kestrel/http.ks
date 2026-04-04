@@ -128,3 +128,21 @@ export async fun request(opts: { method: String, url: String, headers: List<(Str
 export fun responseHeaders(resp: Response): List<(String, String)> = httpResponseHeaders_(resp)
 
 export fun responseHeader(resp: Response, name: String): Option<String> = httpResponseHeader_(resp, name)
+
+// ---------------------------------------------------------------------------
+// KRuntime extern bindings (S03-04: request inspection — method and path)
+// ---------------------------------------------------------------------------
+
+extern fun httpRequestMethod_(req: Request): String =
+  jvm("kestrel.runtime.KRuntime#httpRequestMethod(java.lang.Object)")
+
+extern fun httpRequestPath_(req: Request): String =
+  jvm("kestrel.runtime.KRuntime#httpRequestPath(java.lang.Object)")
+
+// ---------------------------------------------------------------------------
+// Public HTTP server request-inspection API (S03-04)
+// ---------------------------------------------------------------------------
+
+export fun requestMethod(req: Request): String = httpRequestMethod_(req)
+
+export fun requestPath(req: Request): String = httpRequestPath_(req)

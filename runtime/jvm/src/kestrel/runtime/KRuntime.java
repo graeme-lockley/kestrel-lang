@@ -17,7 +17,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.LongAdder;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.HashMap;
 import java.util.stream.Stream;
 import java.time.Duration;
@@ -28,8 +28,8 @@ import java.time.Duration;
 public final class KRuntime {
     private static String[] mainArgs = new String[0];
     private static ExecutorService asyncExecutor;
-    /** Tracks in-flight async tasks — contention-free increment/decrement on the hot path. */
-    private static final LongAdder asyncTasksInFlight = new LongAdder();
+    /** Tracks in-flight async tasks — atomic counter for correct quiescence signalling. */
+    private static final AtomicLong asyncTasksInFlight = new AtomicLong(0);
     /** Signalled only when asyncTasksInFlight reaches zero; held only by awaitAsyncQuiescence. */
     private static final Object quiescenceSignal = new Object();
 
@@ -82,7 +82,7 @@ public final class KRuntime {
         synchronized (KRuntime.class) {
             executor = asyncExecutor;
         }
-        asyncTasksInFlight.increment();
+        asyncTasksInFlight.incrementAndGet();
         try {
             executor.submit(() -> {
                 try {
@@ -102,8 +102,8 @@ public final class KRuntime {
 
     /** Decrement the in-flight counter and notify quiescence waiters if it reaches zero. */
     private static void decrementAndSignal() {
-        asyncTasksInFlight.decrement();
-        if (asyncTasksInFlight.sum() <= 0) {
+        long remaining = asyncTasksInFlight.decrementAndGet();
+        if (remaining <= 0) {
             synchronized (quiescenceSignal) {
                 quiescenceSignal.notifyAll();
             }
@@ -112,7 +112,7 @@ public final class KRuntime {
 
     private static void awaitAsyncQuiescence() {
         synchronized (quiescenceSignal) {
-            while (asyncTasksInFlight.sum() > 0) {
+            while (asyncTasksInFlight.get() > 0) {
                 try {
                     quiescenceSignal.wait();
                 } catch (InterruptedException e) {
@@ -619,7 +619,7 @@ public final class KRuntime {
         }
 
         String resolvedPath = (String) path;
-        asyncTasksInFlight.increment();
+        asyncTasksInFlight.incrementAndGet();
 
         try {
             executor.submit(() -> {
@@ -653,7 +653,7 @@ public final class KRuntime {
         }
 
         String resolvedPath = (String) path;
-        asyncTasksInFlight.increment();
+        asyncTasksInFlight.incrementAndGet();
 
         try {
             executor.submit(() -> {
@@ -701,7 +701,7 @@ public final class KRuntime {
 
         String resolvedPath = (String) path;
         String resolvedContent = formatOne(content);
-        asyncTasksInFlight.increment();
+        asyncTasksInFlight.incrementAndGet();
 
         try {
             executor.submit(() -> {
@@ -768,7 +768,7 @@ public final class KRuntime {
         synchronized (KRuntime.class) {
             executor = asyncExecutor;
         }
-        asyncTasksInFlight.increment();
+        asyncTasksInFlight.incrementAndGet();
 
         try {
             executor.submit(() -> {
@@ -900,36 +900,33 @@ public final class KRuntime {
         }
 
         initAsyncRuntime();
-        ExecutorService executor;
-        synchronized (KRuntime.class) {
-            executor = asyncExecutor;
-        }
-        asyncTasksInFlight.increment();
+        asyncTasksInFlight.incrementAndGet();
 
         final String urlStr = (String) url;
         try {
-            executor.submit(() -> {
-                try {
-                    java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
-                            .connectTimeout(Duration.ofSeconds(15))
-                            .build();
-                    java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
-                            .uri(java.net.URI.create(urlStr))
-                            .timeout(Duration.ofSeconds(30))
-                            .GET()
-                            .build();
-                    java.net.http.HttpResponse<String> response =
-                            client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
-                    future.complete(response);
-                } catch (Throwable t) {
-                    future.completeExceptionally(KTask.unwrapFailure(t));
-                } finally {
-                    decrementAndSignal();
-                }
-            });
-        } catch (RuntimeException e) {
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(15))
+                    .build();
+            java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(urlStr))
+                    .GET()
+                    .build();
+            client.sendAsync(request, java.net.http.HttpResponse.BodyHandlers.ofString())
+                    .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .whenComplete((response, error) -> {
+                        try {
+                            if (error != null) {
+                                future.completeExceptionally(KTask.unwrapFailure(error));
+                            } else {
+                                future.complete(response);
+                            }
+                        } finally {
+                            decrementAndSignal();
+                        }
+                    });
+        } catch (Exception e) {
             decrementAndSignal();
-            throw e;
+            future.completeExceptionally(e);
         }
 
         return KTask.fromFuture(future);
@@ -948,57 +945,54 @@ public final class KRuntime {
         }
 
         initAsyncRuntime();
-        ExecutorService executor;
-        synchronized (KRuntime.class) {
-            executor = asyncExecutor;
-        }
-        asyncTasksInFlight.increment();
+        asyncTasksInFlight.incrementAndGet();
 
         final String methodStr = ((String) method).toUpperCase(java.util.Locale.ROOT);
         final String urlStr = (String) url;
 
         try {
-            executor.submit(() -> {
-                try {
-                    java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
-                            .connectTimeout(Duration.ofSeconds(15))
-                            .build();
-                    java.net.http.HttpRequest.Builder builder = java.net.http.HttpRequest.newBuilder()
-                            .uri(java.net.URI.create(urlStr))
-                            .timeout(Duration.ofSeconds(30));
+            java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(15))
+                    .build();
+            java.net.http.HttpRequest.Builder builder = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create(urlStr));
 
-                    // Apply headers from List<(String,String)> — tuples are KRecord{0→k, 1→v}
-                    KList xs = (KList) headers;
-                    while (xs instanceof KCons) {
-                        KRecord pair = (KRecord) ((KCons) xs).head;
-                        String k = (String) pair.get("0");
-                        String v = (String) pair.get("1");
-                        builder.header(k, v);
-                        xs = ((KCons) xs).tail;
-                    }
+            // Apply headers from List<(String,String)> — tuples are KRecord{0→k, 1→v}
+            KList xs = (KList) headers;
+            while (xs instanceof KCons) {
+                KRecord pair = (KRecord) ((KCons) xs).head;
+                String k = (String) pair.get("0");
+                String v = (String) pair.get("1");
+                builder.header(k, v);
+                xs = ((KCons) xs).tail;
+            }
 
-                    // Body
-                    java.net.http.HttpRequest.BodyPublisher bodyPublisher;
-                    if (body instanceof KSome) {
-                        String bodyStr = (String) ((KSome) body).value;
-                        bodyPublisher = java.net.http.HttpRequest.BodyPublishers.ofString(bodyStr, StandardCharsets.UTF_8);
-                    } else {
-                        bodyPublisher = java.net.http.HttpRequest.BodyPublishers.noBody();
-                    }
+            // Body
+            java.net.http.HttpRequest.BodyPublisher bodyPublisher;
+            if (body instanceof KSome) {
+                String bodyStr = (String) ((KSome) body).value;
+                bodyPublisher = java.net.http.HttpRequest.BodyPublishers.ofString(bodyStr, StandardCharsets.UTF_8);
+            } else {
+                bodyPublisher = java.net.http.HttpRequest.BodyPublishers.noBody();
+            }
 
-                    builder.method(methodStr, bodyPublisher);
-                    java.net.http.HttpResponse<String> response =
-                            client.send(builder.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
-                    future.complete(response);
-                } catch (Throwable t) {
-                    future.completeExceptionally(KTask.unwrapFailure(t));
-                } finally {
-                    decrementAndSignal();
-                }
-            });
-        } catch (RuntimeException e) {
+            builder.method(methodStr, bodyPublisher);
+            client.sendAsync(builder.build(), java.net.http.HttpResponse.BodyHandlers.ofString())
+                    .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                    .whenComplete((response, error) -> {
+                        try {
+                            if (error != null) {
+                                future.completeExceptionally(KTask.unwrapFailure(error));
+                            } else {
+                                future.complete(response);
+                            }
+                        } finally {
+                            decrementAndSignal();
+                        }
+                    });
+        } catch (Exception e) {
             decrementAndSignal();
-            throw e;
+            future.completeExceptionally(e);
         }
 
         return KTask.fromFuture(future);
@@ -1198,7 +1192,7 @@ public final class KRuntime {
         com.sun.net.httpserver.HttpServer httpServer =
                 (com.sun.net.httpserver.HttpServer) server;
         initAsyncRuntime();
-        asyncTasksInFlight.increment();
+        asyncTasksInFlight.incrementAndGet();
         asyncExecutor.submit(() -> {
             try {
                 httpServer.stop(1); // wait up to 1s for in-flight exchanges
@@ -1274,7 +1268,7 @@ public final class KRuntime {
         synchronized (KRuntime.class) {
             executor = asyncExecutor;
         }
-        asyncTasksInFlight.increment();
+        asyncTasksInFlight.incrementAndGet();
         final com.sun.net.httpserver.HttpExchange ex =
                 (com.sun.net.httpserver.HttpExchange) exchange;
         try {
@@ -1293,5 +1287,27 @@ public final class KRuntime {
             throw e;
         }
         return KTask.fromFuture(future);
+    }
+
+    /**
+     * Return the HTTP method of an incoming server {@code Request} as an uppercase string
+     * (e.g. {@code "GET"}, {@code "POST"}).
+     */
+    public static String httpRequestMethod(Object exchange) {
+        if (!(exchange instanceof com.sun.net.httpserver.HttpExchange)) {
+            return "GET";
+        }
+        return ((com.sun.net.httpserver.HttpExchange) exchange).getRequestMethod().toUpperCase(java.util.Locale.ROOT);
+    }
+
+    /**
+     * Return the URL path (without query string) of an incoming server {@code Request}.
+     * e.g. {@code "/user/42"} for a request to {@code "/user/42?lang=en"}.
+     */
+    public static String httpRequestPath(Object exchange) {
+        if (!(exchange instanceof com.sun.net.httpserver.HttpExchange)) {
+            return "/";
+        }
+        return ((com.sun.net.httpserver.HttpExchange) exchange).getRequestURI().getPath();
     }
 }

@@ -433,6 +433,97 @@ Passing assertions increment `passed`. In **verbose** and expanded compact, they
 
 ---
 
+## kestrel:web
+
+Lightweight routing framework built on top of `kestrel:http`. Provides Sinatra-style route registration (pattern matching, path parameters, wildcard segments) and automatic 404/405 responses. Implemented entirely in Kestrel — no additional JVM primitives.
+
+### Overview
+
+A `Router` holds an ordered list of registered routes. `serve(router)` produces a `(Http.Request) -> Task<Http.Response>` suitable for `Http.createServer`. Requests are dispatched to the **first matching route** (first-match-wins). Unmatched paths return `404 Not Found`; a path that exists but with a different HTTP method returns `405 Method Not Allowed`.
+
+### Types
+
+| Type | Description |
+|------|-------------|
+| `Router` | Record `{ routes: List<Route> }`. Opaque in practice; created with `newRouter()` and updated by `route`/`get`/etc. through function calls or the pipeline operator. |
+| `PathSegment` | ADT used internally for compiled route patterns: `Literal(String)` (exact segment), `Param(String)` (named capture, e.g. `:id`), `Wildcard` (matches any suffix). Not exported; used by internal helpers. |
+
+### Functions
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `newRouter` | `() -> Router` | Create an empty router with no routes. |
+| `route` | `(Router, String, String, (Http.Request, Dict<String, String>) -> Task<Http.Response>) -> Router` | Register a route for the given HTTP method (case-insensitive) and URL pattern. Returns a **new** `Router` with the route appended (immutable update; original is unchanged). Routes match in registration order. |
+| `get` | `(Router, String, (Http.Request, Dict<String, String>) -> Task<Http.Response>) -> Router` | Shorthand for `route(router, "GET", pattern, handler)`. |
+| `post` | `(Router, String, (Http.Request, Dict<String, String>) -> Task<Http.Response>) -> Router` | Shorthand for `route(router, "POST", pattern, handler)`. |
+| `put` | `(Router, String, (Http.Request, Dict<String, String>) -> Task<Http.Response>) -> Router` | Shorthand for `route(router, "PUT", pattern, handler)`. |
+| `delete` | `(Router, String, (Http.Request, Dict<String, String>) -> Task<Http.Response>) -> Router` | Shorthand for `route(router, "DELETE", pattern, handler)`. |
+| `patch` | `(Router, String, (Http.Request, Dict<String, String>) -> Task<Http.Response>) -> Router` | Shorthand for `route(router, "PATCH", pattern, handler)`. |
+| `serve` | `(Router) -> (Http.Request) -> Task<Http.Response>` | Return a request handler closure suitable for `Http.createServer`. The closure dispatches each request against the router's routes. |
+
+### Route patterns
+
+Patterns are URL paths with optional dynamic segments:
+
+| Syntax | Meaning |
+|--------|---------|
+| `/literal` | Matches the exact segment `literal`. |
+| `/:name` | Matches any single segment; captured as `name` in the params dictionary. |
+| `/*` | Wildcard: matches the current segment and all remaining segments (tail-match). |
+
+Pattern matching is case-sensitive. The leading `/` is optional in patterns. Segments are split on `/`. The wildcard `*` short-circuits: once encountered as a pattern segment, the rest of the path is consumed without further matching.
+
+**Example:**
+```kestrel
+val router =
+  Web.newRouter()
+  |> Web.get("/hello", helloHandler)
+  |> Web.get("/greet/:name", greetHandler)
+  |> Web.get("/files/*", fileHandler)
+```
+
+### Handler signature
+
+Handlers receive the raw `Http.Request` and a `Dict<String, String>` of captured path parameters:
+
+```kestrel
+async fun greetHandler(req: Http.Request, params: Dict<String, String>): Task<Http.Response> = {
+  val name = match (Dict.get(params, "name")) {
+    Some(n) => n,
+    None => "stranger"
+  };
+  Http.makeResponse(200, "Hello ${name}")
+}
+```
+
+### Default responses
+
+- **404 Not Found** — no route pattern (for any method) matches the request path.
+- **405 Method Not Allowed** — at least one route matches the path, but none matches the method.
+- Body text is plain text (`"Not Found"` / `"Method Not Allowed"`).
+
+### Typical usage
+
+```kestrel
+import * as Http from "kestrel:http"
+import * as Web from "kestrel:web"
+
+async fun run(): Task<Unit> = {
+  val router =
+    Web.newRouter()
+    |> Web.get("/hello", (req, _p) => Http.makeResponse(200, "Hello!"))
+    |> Web.post("/echo", (req, _p) => Http.makeResponse(200, Http.bodyText(req)));
+
+  val server = await Http.createServer(Web.serve(router));
+  await Http.listen(server, { host = "0.0.0.0", port = 8080 });
+  ()
+}
+
+run()
+```
+
+---
+
 ## Standard Types
 
 Types referenced in the above signatures are part of the standard contract:

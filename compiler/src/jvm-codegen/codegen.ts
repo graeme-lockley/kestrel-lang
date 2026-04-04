@@ -2,7 +2,7 @@
  * JVM codegen: typed AST → .class file(s).
  * Uses same Program + getInferredType pipeline as the main compiler.
  */
-import type { Program, Expr, TopLevelStmt, TopLevelDecl, TuplePattern } from '../ast/nodes.js';
+import type { Program, Expr, TopLevelStmt, TopLevelDecl, TuplePattern, Pattern } from '../ast/nodes.js';
 import type { FunDecl, ExternFunDecl, ValDecl, VarDecl, BlockExpr, LambdaExpr, FunStmt, TypeDecl, Type } from '../ast/nodes.js';
 import { getInferredType } from '../typecheck/check.js';
 import type { InternalType } from '../types/internal.js';
@@ -136,6 +136,28 @@ function thenArmPushesValue(thenExpr: Expr): boolean {
 }
 
 /** Collect free variables of expr (in scope but not in paramNames), first occurrence order. */
+/** Collect all variable names bound by a pattern (VarPattern, ConsPattern head/tail, etc.). */
+function collectPatternVars(pat: Pattern): string[] {
+  const vars: string[] = [];
+  function walk(p: Pattern): void {
+    switch (p.kind) {
+      case 'VarPattern': vars.push(p.name); return;
+      case 'ConsPattern': walk(p.head); walk(p.tail); return;
+      case 'ListPattern':
+        for (const el of p.elements) walk(el);
+        if (p.rest !== undefined) vars.push(p.rest);
+        return;
+      case 'ConstructorPattern':
+        if (p.fields) for (const f of p.fields) if (f.pattern) walk(f.pattern); else vars.push(f.name);
+        return;
+      case 'TuplePattern': for (const el of p.elements) walk(el); return;
+      default: return;
+    }
+  }
+  walk(pat);
+  return vars;
+}
+
 function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, number>): string[] {
   const result: string[] = [];
   const seen = new Set<string>();
@@ -197,7 +219,12 @@ function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, num
         return;
       case 'MatchExpr':
         walk(e.scrutinee);
-        for (const c of e.cases) walk(c.body);
+        for (const c of e.cases) {
+          const patVars = collectPatternVars(c.pattern);
+          for (const v of patVars) bound.add(v);
+          walk(c.body);
+          for (const v of patVars) bound.delete(v);
+        }
         return;
       case 'PipeExpr':
         walk(e.left);
@@ -226,7 +253,12 @@ function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, num
         return;
       case 'TryExpr':
         walk(e.body);
-        for (const c of e.cases) walk(c.body);
+        for (const c of e.cases) {
+          const patVars = collectPatternVars(c.pattern);
+          for (const v of patVars) bound.add(v);
+          walk(c.body);
+          for (const v of patVars) bound.delete(v);
+        }
         return;
       case 'RecordExpr':
         if (e.spread) walk(e.spread);
@@ -347,7 +379,14 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
         return;
       case 'MatchExpr':
         walk(e.scrutinee);
-        for (const c of e.cases) walk(c.body);
+        for (const c of e.cases) {
+          const patVars = collectPatternVars(c.pattern);
+          const savedScope = new Map(scope);
+          for (const v of patVars) scope.set(v, scope.size);
+          walk(c.body);
+          scope.clear();
+          for (const [k, v] of savedScope) scope.set(k, v);
+        }
         return;
       case 'PipeExpr':
         walk(e.left);
@@ -374,7 +413,14 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
         return;
       case 'TryExpr':
         walk(e.body);
-        for (const c of e.cases) walk(c.body);
+        for (const c of e.cases) {
+          const patVars = collectPatternVars(c.pattern);
+          const savedScope = new Map(scope);
+          for (const v of patVars) scope.set(v, scope.size);
+          walk(c.body);
+          scope.clear();
+          for (const [k, v] of savedScope) scope.set(k, v);
+        }
         return;
       case 'RecordExpr':
         if (e.spread) walk(e.spread);
@@ -1181,6 +1227,59 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   function emitLongObjectConst(mb: MethodBuilder, n: number): void {
     mb.emit1s(JvmOp.LDC2_W, cf.constantLong(BigInt(n)));
     mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(LONG, 'valueOf', '(J)Ljava/lang/Long;'));
+  }
+
+  /**
+   * Emit pattern-binding code for a sub-pattern where the value is already stored in `valueSlot`.
+   * Recurses into nested ConstructorPatterns.
+   * Returns a list of IFEQ byte positions whose short offset must be patched to jump past the arm
+   * when the nested pattern does not match.
+   * Any new variable bindings are appended to `fieldBindings` for later cleanup.
+   */
+  function emitSubPatternBindings(
+    mb: MethodBuilder,
+    valueSlot: number,
+    pat: Pattern,
+    fieldBindings: Array<{ name: string; prev: number | undefined }>
+  ): number[] {
+    const ifeqList: number[] = [];
+    function walkPat(slot: number, p: Pattern): void {
+      if (p.kind === 'VarPattern') {
+        const bindName = p.name;
+        fieldBindings.push({ name: bindName, prev: env.get(bindName) });
+        env.set(bindName, slot);
+        // value is already in slot — nothing to emit
+      } else if (p.kind === 'ConstructorPattern') {
+        const adtCls = adtClassByConstructor.get(p.name);
+        if (adtCls != null) {
+          mb.emit1b(JvmOp.ALOAD, slot);
+          mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(adtCls));
+          const ifeq = mb.length();
+          mb.emit1s(JvmOp.IFEQ, 0);
+          ifeqList.push(ifeq);
+          if (p.fields?.length) {
+            for (let fi = 0; fi < p.fields.length; fi++) {
+              const f = p.fields[fi]!;
+              const fieldName = f.name ?? String(fi);
+              mb.emit1b(JvmOp.ALOAD, slot);
+              mb.emit1s(JvmOp.CHECKCAST, cf.classRef(adtCls));
+              mb.emit1s(JvmOp.GETFIELD, cf.fieldref(adtCls, fieldName, 'Ljava/lang/Object;'));
+              if (f.pattern && f.pattern.kind !== 'WildcardPattern') {
+                const subSlot = nextLocal++;
+                mb.emit1b(JvmOp.ASTORE, subSlot);
+                walkPat(subSlot, f.pattern);
+              } else {
+                mb.emit1(JvmOp.POP);
+              }
+            }
+          }
+        }
+        // Unknown constructor (None/Some/etc handled by caller) — ignore
+      }
+      // WildcardPattern / other: value is already in slot, simply unused
+    }
+    walkPat(valueSlot, pat);
+    return ifeqList;
   }
 
   function emitExpr(expr: Expr, mb: MethodBuilder, tailCtx?: JvmEmitTailContext, stackDepth: number = 0): boolean {
@@ -2060,17 +2159,29 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1b(JvmOp.ALOAD, scrutSlot);
               mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_SOME));
               mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_SOME, 'value', 'Ljava/lang/Object;'));
-              const varName = p.fields?.[0] && p.fields[0].pattern?.kind === 'VarPattern' ? (p.fields[0].pattern as { name: string }).name : null;
-              if (varName) {
+              const innerPat = p.fields?.[0]?.pattern;
+              const innerFieldBindings: Array<{ name: string; prev: number | undefined }> = [];
+              let subIfeqs: number[] = [];
+              if (innerPat && innerPat.kind === 'VarPattern') {
                 const slot = nextLocal++;
-                env.set(varName, slot);
+                innerFieldBindings.push({ name: innerPat.name, prev: env.get(innerPat.name) });
+                env.set(innerPat.name, slot);
                 mb.emit1b(JvmOp.ASTORE, slot);
+              } else if (innerPat && innerPat.kind !== 'WildcardPattern') {
+                // Nested constructor pattern (e.g. Some(Foo(a, b))): store in temp slot then recurse.
+                const innerSlot = nextLocal++;
+                mb.emit1b(JvmOp.ASTORE, innerSlot);
+                subIfeqs = emitSubPatternBindings(mb, innerSlot, innerPat, innerFieldBindings);
               } else {
-                // Some(_) / wildcard: discard payload so stack is empty before body (fixes VerifyError).
+                // Some(_) / wildcard / None field: discard payload so stack is empty before body (fixes VerifyError).
                 mb.emit1(JvmOp.POP);
               }
               const xferSome = emitExpr(c.body, mb, tcT, stackDepth);
-              if (varName) env.delete(varName);
+              for (let bi = innerFieldBindings.length - 1; bi >= 0; bi--) {
+                const b = innerFieldBindings[bi]!;
+                if (b.prev !== undefined) env.set(b.name, b.prev);
+                else env.delete(b.name);
+              }
               if (!xferSome) {
                 mb.emit1b(JvmOp.ASTORE, matchResultSlot);
                 const gotoEnd = mb.length();
@@ -2079,6 +2190,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               }
               const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
+              for (const sq of subIfeqs) patchShort(mb, sq + 1, afterGoto - sq);
               mb.addBranchTarget(afterGoto, matchBaseState);
               continue;
             }
@@ -2198,6 +2310,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.addBranchTarget(ifeq + 3, matchBaseState);
 
               const prevFieldBindings: Array<{ name: string; prev: number | undefined }> = [];
+              const subIfeqs: number[] = [];
               if (p.fields?.length) {
                 for (let fi = 0; fi < p.fields.length; fi++) {
                   const f = p.fields[fi]!;
@@ -2211,6 +2324,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                     prevFieldBindings.push({ name: bindName, prev: env.get(bindName) });
                     env.set(bindName, slot);
                     mb.emit1b(JvmOp.ASTORE, slot);
+                  } else if (f.pattern && f.pattern.kind !== 'WildcardPattern') {
+                    // Nested constructor pattern (e.g. Foo(Bar(x))): store in temp slot then recurse.
+                    const subSlot = nextLocal++;
+                    mb.emit1b(JvmOp.ASTORE, subSlot);
+                    const nestedIfeqs = emitSubPatternBindings(mb, subSlot, f.pattern, prevFieldBindings);
+                    subIfeqs.push(...nestedIfeqs);
                   } else {
                     // Wildcard / non-binding field pattern: discard extracted field value.
                     mb.emit1(JvmOp.POP);
@@ -2232,6 +2351,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               }
               const afterGoto = mb.length();
               patchShort(mb, ifeq + 1, afterGoto - ifeq);
+              for (const sq of subIfeqs) patchShort(mb, sq + 1, afterGoto - sq);
               mb.addBranchTarget(afterGoto, matchBaseState);
               continue;
             }
@@ -2244,6 +2364,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const ifeq = mb.length();
             mb.emit1s(JvmOp.IFEQ, 0);
             mb.addBranchTarget(mb.length(), matchBaseState);
+            const headFieldBindings: Array<{ name: string; prev: number | undefined }> = [];
+            let ifeqHead = -1;
             if (headPat.kind === 'VarPattern') {
               mb.emit1b(JvmOp.ALOAD, scrutSlot);
               mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
@@ -2251,6 +2373,39 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               const slot = nextLocal++;
               env.set(headPat.name, slot);
               mb.emit1b(JvmOp.ASTORE, slot);
+              headFieldBindings.push({ name: headPat.name, prev: undefined });
+            } else if (headPat.kind === 'ConstructorPattern') {
+              const headAdtClass = adtClassByConstructor.get(headPat.name);
+              if (headAdtClass != null) {
+                // Check instanceof the head ADT class without storing head in a local
+                mb.emit1b(JvmOp.ALOAD, scrutSlot);
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
+                mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'head', 'Ljava/lang/Object;'));
+                mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(headAdtClass));
+                ifeqHead = mb.length();
+                mb.emit1s(JvmOp.IFEQ, 0);
+                mb.addBranchTarget(mb.length(), matchBaseState);
+                // Bind the constructor fields by reloading the head element each time
+                if (headPat.fields?.length) {
+                  for (let fi = 0; fi < headPat.fields.length; fi++) {
+                    const f = headPat.fields[fi]!;
+                    if (f.pattern?.kind === 'VarPattern') {
+                      mb.emit1b(JvmOp.ALOAD, scrutSlot);
+                      mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
+                      mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'head', 'Ljava/lang/Object;'));
+                      mb.emit1s(JvmOp.CHECKCAST, cf.classRef(headAdtClass));
+                      mb.emit1s(JvmOp.GETFIELD, cf.fieldref(headAdtClass, f.name, 'Ljava/lang/Object;'));
+                      const bindName = (f.pattern as { name: string }).name;
+                      const slot = nextLocal++;
+                      headFieldBindings.push({ name: bindName, prev: env.get(bindName) });
+                      env.set(bindName, slot);
+                      mb.emit1b(JvmOp.ASTORE, slot);
+                    }
+                    // Wildcard / non-binding field: no load needed
+                  }
+                }
+              }
+              // Zero-arity constructor (no fields) or Wildcard: just check instanceof, no field bindings
             }
             if (tailPat.kind === 'VarPattern') {
               mb.emit1b(JvmOp.ALOAD, scrutSlot);
@@ -2261,7 +2416,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               mb.emit1b(JvmOp.ASTORE, slot);
             }
             const xferConsPat = emitExpr(c.body, mb, tcT, stackDepth);
-            if (headPat.kind === 'VarPattern') env.delete(headPat.name);
+            for (let bi = headFieldBindings.length - 1; bi >= 0; bi--) {
+              const b = headFieldBindings[bi]!;
+              if (b.prev !== undefined) env.set(b.name, b.prev);
+              else env.delete(b.name);
+            }
             if (tailPat.kind === 'VarPattern') env.delete(tailPat.name);
             if (!xferConsPat) {
               mb.emit1b(JvmOp.ASTORE, matchResultSlot);
@@ -2271,6 +2430,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             }
             const afterGoto = mb.length();
             patchShort(mb, ifeq + 1, afterGoto - ifeq);
+            if (ifeqHead >= 0) patchShort(mb, ifeqHead + 1, afterGoto - ifeqHead);
             mb.addBranchTarget(afterGoto, matchBaseState);
             continue;
           }

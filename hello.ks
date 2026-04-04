@@ -1,6 +1,7 @@
 import { message as message1 } from "./m1.ks"
 import { message as message2 } from "./m2.ks"
 import * as Http from "kestrel:http"
+import * as Str from "kestrel:string"
 
 import { hello } from "./m3.ks"
 
@@ -31,9 +32,14 @@ println([1, 2, 3, 123, 5])
 println(Some("hello"))
 
 async fun fetchNews(): Task<Unit> = {
-  val resp = await Http.get("https://www.news24.com");
-  println(Http.statusCode(resp));
-  println(Http.bodyText(resp))
+  try {
+    val resp = await Http.get("https://www.news24.com");
+    println(Http.statusCode(resp));
+    println(Str.left(Http.bodyText(resp), 200))
+  } catch {
+    HttpNotImplemented => println("fetchNews: Http not yet implemented"),
+    _ => println("fetchNews: HTTP request failed (network error or timeout)")
+  }
 }
 
 fetchNews()
