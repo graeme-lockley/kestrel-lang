@@ -81,15 +81,15 @@ No runtime or E2E tests are added in this story — only spec and stub work.
 
 ## Tasks
 
-- [ ] Update `docs/specs/02-stdlib.md` §`kestrel:http`: full normative section with all seven functions, `Server`/`Request`/`Response` type shapes, error semantics, TLS defaults, concurrency model, queryParam duplicate-key rule (last wins)
-- [ ] Create `docs/specs/05-runtime-model.md` with §`HTTP server concurrency model`
-- [ ] Update `docs/specs/07-modules.md`: add opaque type note for `kestrel:http` entry
-- [ ] Update `stdlib/kestrel/http.ks`: add `extern type` stubs for `Server`, `Request`, `Response`; add stub function export declarations with `TODO` comments
-- [ ] Add `tests/conformance/typecheck/http-types.ks` conformance typecheck test
-- [ ] Add `compiler/test/unit/http-types.test.ts` Vitest unit test
-- [ ] Add `compiler/test/integration/http-module.test.ts` Vitest integration test
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `./scripts/kestrel test`
+- [x] Update `docs/specs/02-stdlib.md` §`kestrel:http`: full normative section with all seven functions, `Server`/`Request`/`Response` type shapes, error semantics, TLS defaults, concurrency model, queryParam duplicate-key rule (last wins)
+- [x] Create `docs/specs/05-runtime-model.md` with §`HTTP server concurrency model`
+- [x] Update `docs/specs/07-modules.md`: add opaque type note for `kestrel:http` entry
+- [x] Update `stdlib/kestrel/http.ks`: add `extern type` stubs for `Server`, `Request`, `Response`; add stub function export declarations with `TODO` comments
+- [x] Add `tests/conformance/typecheck/http-types.ks` conformance typecheck test
+- [x] Add `compiler/test/unit/http-types.test.ts` Vitest unit test
+- [x] Add `compiler/test/integration/http-module.test.ts` Vitest integration test
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
 
 ## Risks / Notes
 
@@ -100,4 +100,8 @@ No runtime or E2E tests are added in this story — only spec and stub work.
 
 ## Build notes
 
-- 2025-01-01: Started implementation. Decided on single `Response` type with `makeResponse(status, body)` for server use and `get(url)` for client use. `Request` wraps `HttpExchange` (server side only). `bodyText` for client reads from `Response`, for server reads from `Request`. Concurrency: virtual thread per request.
+- 2025-03-07: Decided on single `Response` type with `makeResponse(status, body)` for server use and `get(url)` for client use. `Request` wraps `HttpExchange` (server side only); `bodyText` on `Response` reads the client response body, `requestBodyText` on `Request` reads the server request body. Concurrency model: one virtual thread per accepted request via Java 21 virtual-thread executor on `HttpServer`.
+- 2025-03-07: JDK class mapping fixed: `Server` ← `com.sun.net.httpserver.HttpServer`, `Request` ← `com.sun.net.httpserver.HttpExchange`, `Response` ← `java.lang.Object` (unified opaque for both client `HttpResponse<String>` and server-side constructed response via `makeResponse`). Using `java.lang.Object` for `Response` defers the concrete wrapper to S03-05/S03-06 implementation.
+- 2025-03-07: Discovered that top-level `val` without `export` goes to `parseTopLevelStmt()` which does NOT support type annotations (only `parseTopLevelDecl` does, for exported val). Unit tests adjusted to remove type annotations from bare `val` bindings.
+- 2025-03-07: Conformance test (`tests/conformance/typecheck/valid/http-types.ks`) must use inline `extern type` declarations (not `import * as Http from "kestrel:http"`) because typecheck conformance tests do not resolve stdlib imports. Must also use `export exception` (not bare `exception`) since bare `exception` at top level is not recognized by the parser.
+- 2025-03-07: All tests passing: 339 compiler (vitest), 1020 Kestrel (kestrel test), 64 typecheck conformance including new http-types case.
