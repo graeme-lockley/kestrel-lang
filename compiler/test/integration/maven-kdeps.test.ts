@@ -363,3 +363,96 @@ describe('resolve-maven-classpath: missing jar', () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+// ---------------------------------------------------------------------------
+// compile-file-jvm: compile-time Maven version conflict detection
+// ---------------------------------------------------------------------------
+
+describe('maven imports: compile-time version conflict detection', () => {
+  it('rejects a multi-file program where two files require the same artifact at different versions', () => {
+    const tmpDir = join(compilerRoot, 'test', 'integration', `_tmp_maven_conflict_${Date.now()}`);
+    const cacheRoot = join(tmpDir, 'maven-cache');
+    const libPath = join(tmpDir, 'lib.ks');
+    const mainPath = join(tmpDir, 'main.ks');
+    mkdirSync(tmpDir, { recursive: true });
+    populateCache(cacheRoot, 'org.example', 'alpha', '1.0.0');
+    populateCache(cacheRoot, 'org.example', 'alpha', '2.0.0');
+
+    // lib.ks uses version 1.0.0, main.ks uses version 2.0.0
+    writeFileSync(libPath, 'import "maven:org.example:alpha:1.0.0"\nexport fun libFun(): Unit = println("lib")\n');
+    writeFileSync(mainPath, 'import { libFun } from "./lib"\nimport "maven:org.example:alpha:2.0.0"\nfun main(): Unit = libFun()\n');
+
+    withMavenEnv(cacheRoot, () => {
+      const result = compileFileJvm(mainPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpDir,
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      const msgs = result.diagnostics.map((d) => d.message).join('\n');
+      expect(msgs).toContain('Maven version conflict');
+      expect(msgs).toContain('org.example:alpha');
+      expect(msgs).toContain('1.0.0');
+      expect(msgs).toContain('2.0.0');
+      expect(msgs).toContain('Fix:');
+    });
+
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('accepts a multi-file program where both files require the same artifact at the same version', () => {
+    const tmpDir = join(compilerRoot, 'test', 'integration', `_tmp_maven_noconflict_${Date.now()}`);
+    const cacheRoot = join(tmpDir, 'maven-cache');
+    const libPath = join(tmpDir, 'lib.ks');
+    const mainPath = join(tmpDir, 'main.ks');
+    mkdirSync(tmpDir, { recursive: true });
+    populateCache(cacheRoot, 'org.example', 'alpha', '1.0.0');
+
+    writeFileSync(libPath, 'import "maven:org.example:alpha:1.0.0"\nexport fun libFun(): Unit = println("lib")\n');
+    writeFileSync(mainPath, 'import { libFun } from "./lib"\nimport "maven:org.example:alpha:1.0.0"\nfun main(): Unit = libFun()\n');
+
+    withMavenEnv(cacheRoot, () => {
+      const result = compileFileJvm(mainPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpDir,
+      });
+      expect(result.ok).toBe(true);
+    });
+
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('rejects extern import whose version does not match the resolved side-effect import', () => {
+    const tmpDir = join(compilerRoot, 'test', 'integration', `_tmp_maven_extver_${Date.now()}`);
+    const cacheRoot = join(tmpDir, 'maven-cache');
+    const srcPath = join(tmpDir, 'main.ks');
+    mkdirSync(tmpDir, { recursive: true });
+    populateCache(cacheRoot, 'org.example', 'alpha', '1.0.0');
+
+    // Side-effect import declares 1.0.0 but extern import references 2.0.0
+    writeFileSync(
+      srcPath,
+      `import "maven:org.example:alpha:1.0.0"\nextern import "maven:org.example:alpha:2.0.0#org.example.Alpha" as Alpha {}\nfun main(): Unit = println("ok")\n`
+    );
+
+    withMavenEnv(cacheRoot, () => {
+      const result = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpDir,
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      const msgs = result.diagnostics.map((d) => d.message).join('\n');
+      expect(msgs).toContain('version mismatch');
+      expect(msgs).toContain('org.example:alpha');
+      expect(msgs).toContain('2.0.0');
+      expect(msgs).toContain('1.0.0');
+      expect(msgs).toContain('Fix:');
+    });
+
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

@@ -134,6 +134,16 @@ function expandExternImports(
           span, source));
         continue;
       }
+      // Check that the version in the extern import target matches the resolved version.
+      // parts[2] may include the '#className' fragment, so strip it first.
+      const rawVersionPart = parts.length >= 3 ? parts[2] : undefined;
+      const requestedVersion = rawVersionPart ? rawVersionPart.split('#')[0] : undefined;
+      if (requestedVersion !== undefined && requestedVersion !== jarDep.version) {
+        diagnostics.push(diag(filePath, CODES.resolve.module_not_found,
+          `extern import: version mismatch for '${ga}': extern import requests version '${requestedVersion}' but the resolved dependency uses version '${jarDep.version}'. Fix: align the extern import version with the import declaration.`,
+          span, source));
+        continue;
+      }
       // maven: extern import target must supply the class name after a '#' separator
       // e.g. "maven:org.apache.commons:commons-lang3:3.20.0#org.apache.commons.lang3.StringUtils"
       const hash = target.lastIndexOf('#');
@@ -505,6 +515,7 @@ export function compileFileJvm(
       exportedTypeAliases: Map<string, InternalType>;
       exportedConstructors: Map<string, InternalType>;
       exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>;
+      mavenDeps: MavenResolvedDependency[];
     }
   >();
   const onCompilingFile = options?.onCompilingFile;
@@ -523,6 +534,7 @@ export function compileFileJvm(
     exportedTypeAliases: Map<string, InternalType>;
     exportedConstructors: Map<string, InternalType>;
     exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>;
+    mavenDeps: MavenResolvedDependency[];
   } | { ok: false; diagnostics: Diagnostic[] } {
     if (visited.has(filePath)) {
       return { ok: false, diagnostics: [diag(filePath, CODES.file.circular_import, `Circular import: ${filePath}`)] };
@@ -908,6 +920,7 @@ export function compileFileJvm(
       exportedTypeAliases: tc.exportedTypeAliases,
       exportedConstructors: tc.exportedConstructors,
       exportedTypeVisibility: tc.exportedTypeVisibility,
+      mavenDeps,
     });
     visited.delete(filePath);
     onCompilingFile?.(filePath, Math.round(performance.now() - compileStart));
@@ -921,11 +934,34 @@ export function compileFileJvm(
       exportedTypeAliases: tc.exportedTypeAliases,
       exportedConstructors: tc.exportedConstructors,
       exportedTypeVisibility: tc.exportedTypeVisibility,
+      mavenDeps,
     };
   }
 
   const out = compileOne(absPath);
   if (!out.ok) return out;
+
+  // Check for Maven version conflicts across all compiled modules
+  const gaVersionMap = new Map<string, { version: string; filePath: string }>();
+  const conflictDiags: Diagnostic[] = [];
+  for (const [fp, cached] of cache.entries()) {
+    for (const dep of cached.mavenDeps) {
+      const existing = gaVersionMap.get(dep.ga);
+      if (existing) {
+        if (existing.version !== dep.version) {
+          conflictDiags.push({
+            severity: 'error',
+            code: CODES.resolve.module_not_found,
+            message: `Maven version conflict for '${dep.ga}': '${fp}' requires version ${dep.version} but '${existing.filePath}' requires version ${existing.version}. Fix: align both imports to the same version.`,
+            location: locationFileOnly(fp),
+          });
+        }
+      } else {
+        gaVersionMap.set(dep.ga, { version: dep.version, filePath: fp });
+      }
+    }
+  }
+  if (conflictDiags.length > 0) return { ok: false, diagnostics: conflictDiags };
 
   const classDir = getClassOutputDir ? getClassOutputDir(absPath) : '';
   return {
