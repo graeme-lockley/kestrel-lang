@@ -258,56 +258,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       args: [{ kind: 'app', name: 'Result', args: [tString, tString] }],
     },
   }, new Set()));
-  env.set('__now_ms', generalize({
-    kind: 'arrow',
-    params: [],
-    return: tInt,
-  }, new Set()));
-  env.set('__int_to_float', generalize({
-    kind: 'arrow',
-    params: [tInt],
-    return: tFloat,
-  }, new Set()));
-  env.set('__float_to_int', generalize({
-    kind: 'arrow',
-    params: [tFloat],
-    return: tInt,
-  }, new Set()));
-  env.set('__float_floor', generalize({
-    kind: 'arrow',
-    params: [tFloat],
-    return: tInt,
-  }, new Set()));
-  env.set('__float_ceil', generalize({
-    kind: 'arrow',
-    params: [tFloat],
-    return: tInt,
-  }, new Set()));
-  env.set('__float_round', generalize({
-    kind: 'arrow',
-    params: [tFloat],
-    return: tInt,
-  }, new Set()));
-  env.set('__float_sqrt', generalize({
-    kind: 'arrow',
-    params: [tFloat],
-    return: tFloat,
-  }, new Set()));
-  env.set('__float_is_nan', generalize({
-    kind: 'arrow',
-    params: [tFloat],
-    return: tBool,
-  }, new Set()));
-  env.set('__float_is_infinite', generalize({
-    kind: 'arrow',
-    params: [tFloat],
-    return: tBool,
-  }, new Set()));
-  env.set('__float_abs', generalize({
-    kind: 'arrow',
-    params: [tFloat],
-    return: tFloat,
-  }, new Set()));
   // Stack primitives (kestrel:stack): format one value to string, print one value
   const formatArgT = freshVar();
   env.set('__format_one', generalize({

@@ -82,13 +82,13 @@ Numeric, boolean, and general utilities. **Int remainder note:** `%` on `Int` fo
 | `remainderBy` | `(Int, Int) -> Int` | Truncated remainder (sign of dividend) |
 | `xor` | `(Bool, Bool) -> Bool` | Exclusive or |
 | `not` | `(Bool) -> Bool` | Boolean negation |
-| `toFloat` | `(Int) -> Float` | Primitive `__int_to_float` |
-| `truncate` | `(Float) -> Int` | Toward zero (`__float_to_int`) |
-| `floor` / `ceiling` / `round` | `(Float) -> Int` | `__float_floor` / `__float_ceil` / `__float_round` |
-| `abs` | `(Float) -> Float` | `__float_abs` |
-| `sqrt` | `(Float) -> Float` | `__float_sqrt` (NaN for negative input) |
-| `isNaN` / `isInfinite` | `(Float) -> Bool` | `__float_is_nan` / `__float_is_infinite` |
-| `nowMs` | `() -> Int` | Wall-clock milliseconds (`__now_ms`); also used by `kestrel:http` `nowMs` |
+| `toFloat` | `(Int) -> Float` | `KRuntime#intToFloat` |
+| `truncate` | `(Float) -> Int` | Toward zero (`KRuntime#floatToInt`) |
+| `floor` / `ceiling` / `round` | `(Float) -> Int` | `KRuntime#floatFloor` / `KRuntime#floatCeil` / `KRuntime#floatRound` |
+| `abs` | `(Float) -> Float` | `KRuntime#floatAbs` |
+| `sqrt` | `(Float) -> Float` | `KRuntime#floatSqrt` (NaN for negative input) |
+| `isNaN` / `isInfinite` | `(Float) -> Bool` | `KRuntime#floatIsNan` / `KRuntime#floatIsInfinite` |
+| `nowMs` | `() -> Int` | Wall-clock milliseconds (`KRuntime#nowMs`); also used by `kestrel:http` `nowMs` |
 
 ---
 

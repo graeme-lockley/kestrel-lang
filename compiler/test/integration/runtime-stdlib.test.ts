@@ -125,14 +125,15 @@ run()
       srcPath,
       `import * as Fs from "kestrel:fs"
 import * as Str from "kestrel:string"
+import * as Basics from "kestrel:basics"
 
 async fun run(): Task<Unit> = {
-  val launchStart = __now_ms();
+  val launchStart = Basics.nowMs();
   val leftTask = Fs.readText(${JSON.stringify(leftPath)});
   val rightTask = Fs.readText(${JSON.stringify(rightPath)});
-  val launchedMs = __now_ms() - launchStart;
+  val launchedMs = Basics.nowMs() - launchStart;
 
-  val waitStart = __now_ms();
+  val waitStart = Basics.nowMs();
   val left =
     match (await leftTask) {
       Ok(v) => v,
@@ -143,7 +144,7 @@ async fun run(): Task<Unit> = {
       Ok(v) => v,
       Err(_) => ""
     };
-  val waitedMs = __now_ms() - waitStart;
+  val waitedMs = Basics.nowMs() - waitStart;
 
   println(Str.length(left) + Str.length(right));
   println(if (launchedMs < waitedMs) "overlap" else "serial");

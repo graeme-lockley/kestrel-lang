@@ -41,23 +41,33 @@ export fun xor(a: Bool, b: Bool): Bool = (a | b) & !(a & b)
 
 export fun not(b: Bool): Bool = !b
 
-export fun toFloat(n: Int): Float = __int_to_float(n)
+export extern fun toFloat(n: Int): Float =
+  jvm("kestrel.runtime.KRuntime#intToFloat(java.lang.Object)")
 
-export fun truncate(f: Float): Int = __float_to_int(f)
+export extern fun truncate(f: Float): Int =
+  jvm("kestrel.runtime.KRuntime#floatToInt(java.lang.Object)")
 
-export fun floor(f: Float): Int = __float_floor(f)
+export extern fun floor(f: Float): Int =
+  jvm("kestrel.runtime.KRuntime#floatFloor(java.lang.Object)")
 
-export fun ceiling(f: Float): Int = __float_ceil(f)
+export extern fun ceiling(f: Float): Int =
+  jvm("kestrel.runtime.KRuntime#floatCeil(java.lang.Object)")
 
-export fun round(f: Float): Int = __float_round(f)
+export extern fun round(f: Float): Int =
+  jvm("kestrel.runtime.KRuntime#floatRound(java.lang.Object)")
 
-export fun abs(f: Float): Float = __float_abs(f)
+export extern fun abs(f: Float): Float =
+  jvm("kestrel.runtime.KRuntime#floatAbs(java.lang.Object)")
 
-export fun sqrt(f: Float): Float = __float_sqrt(f)
+export extern fun sqrt(f: Float): Float =
+  jvm("kestrel.runtime.KRuntime#floatSqrt(java.lang.Object)")
 
-export fun isNaN(f: Float): Bool = __float_is_nan(f)
+export extern fun isNaN(f: Float): Bool =
+  jvm("kestrel.runtime.KRuntime#floatIsNan(java.lang.Object)")
 
-export fun isInfinite(f: Float): Bool = __float_is_infinite(f)
+export extern fun isInfinite(f: Float): Bool =
+  jvm("kestrel.runtime.KRuntime#floatIsInfinite(java.lang.Object)")
 
-/** Wall-clock time in milliseconds (VM `__now_ms`). */
-export fun nowMs(): Int = __now_ms()
+/** Wall-clock time in milliseconds. */
+export extern fun nowMs(): Int =
+  jvm("kestrel.runtime.KRuntime#nowMs()")

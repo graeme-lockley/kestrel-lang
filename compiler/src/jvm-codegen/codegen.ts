@@ -1843,51 +1843,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
-          if (name === '__int_to_float' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'intToFloat', '(Ljava/lang/Object;)Ljava/lang/Double;'));
-            return false;
-          }
-          if (name === '__float_to_int' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatToInt', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            return false;
-          }
-          if (name === '__float_floor' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatFloor', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            return false;
-          }
-          if (name === '__float_ceil' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatCeil', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            return false;
-          }
-          if (name === '__float_round' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatRound', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            return false;
-          }
-          if (name === '__float_sqrt' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatSqrt', '(Ljava/lang/Object;)Ljava/lang/Double;'));
-            return false;
-          }
-          if (name === '__float_is_nan' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsNan', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
-            return false;
-          }
-          if (name === '__float_is_infinite' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatIsInfinite', '(Ljava/lang/Object;)Ljava/lang/Boolean;'));
-            return false;
-          }
-          if (name === '__float_abs' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatAbs', '(Ljava/lang/Object;)Ljava/lang/Double;'));
-            return false;
-          }
           if (name === '__read_file_async' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'readFileAsync', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
@@ -1902,10 +1857,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'writeTextAsync', '(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
-            return false;
-          }
-          if (name === '__now_ms' && expr.args.length === 0) {
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'nowMs', '()Ljava/lang/Long;'));
             return false;
           }
           if (name === '__get_os' && expr.args.length === 0) {

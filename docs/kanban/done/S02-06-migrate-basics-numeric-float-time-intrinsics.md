@@ -65,13 +65,13 @@ export fun nowMs(): Int                = __now_ms()
 
 ## Acceptance Criteria
 
-- [ ] `stdlib/kestrel/basics.ks` contains no `__int_to_float`, `__float_to_int`, `__float_*`, or `__now_ms` calls.
-- [ ] Ten `extern fun` declarations exist in `basics.ks` covering all ten intrinsics.
-- [ ] `codegen.ts` has no remaining dispatch blocks for these ten intrinsics.
-- [ ] `check.ts` has no remaining `env.set` calls for these ten intrinsics.
-- [ ] `stdlib/kestrel/basics.test.ks` (if it exists) passes; runtime conformance tests involving `floor`, `ceil`, `sqrt`, `isNaN` pass.
-- [ ] `./scripts/kestrel test` passes.
-- [ ] `cd compiler && npm test` passes.
+- [x] `stdlib/kestrel/basics.ks` contains no `__int_to_float`, `__float_to_int`, `__float_*`, or `__now_ms` calls.
+- [x] Ten `extern fun` declarations exist in `basics.ks` covering all ten intrinsics.
+- [x] `codegen.ts` has no remaining dispatch blocks for these ten intrinsics.
+- [x] `check.ts` has no remaining `env.set` calls for these ten intrinsics.
+- [x] `stdlib/kestrel/basics.test.ks` (if it exists) passes; runtime conformance tests involving `floor`, `ceil`, `sqrt`, `isNaN` pass.
+- [x] `./scripts/kestrel test` passes.
+- [x] `cd compiler && npm test` passes.
 
 ## Impact analysis
 
@@ -85,12 +85,12 @@ export fun nowMs(): Int                = __now_ms()
 
 ## Tasks
 
-- [ ] Replace 10 functions in `stdlib/kestrel/basics.ks` with `export extern fun` declarations
-- [ ] Remove 10 `env.set` intrinsic entries from `compiler/src/typecheck/check.ts` (lines ~261–310)
-- [ ] Remove 10 `if (name === '__*')` dispatch blocks from `compiler/src/jvm-codegen/codegen.ts` (lines ~1846–1891, 1907–1911)
-- [ ] Check for stray `__int_to_float`, `__float_*`, `__now_ms` references anywhere else in compiler or stdlib; remove any found
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `./scripts/kestrel test`
+- [x] Replace 10 functions in `stdlib/kestrel/basics.ks` with `export extern fun` declarations
+- [x] Remove 10 `env.set` intrinsic entries from `compiler/src/typecheck/check.ts` (lines ~261–310)
+- [x] Remove 10 `if (name === '__*')` dispatch blocks from `compiler/src/jvm-codegen/codegen.ts` (lines ~1846–1891, 1907–1911)
+- [x] Check for stray `__int_to_float`, `__float_*`, `__now_ms` references anywhere else in compiler or stdlib; remove any found
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
 
 ## Tests to add
 
@@ -100,7 +100,7 @@ export fun nowMs(): Int                = __now_ms()
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/02-stdlib.md` — confirm `kestrel:basics` section is accurate (no API change; implementation note not required)
+- [x] `docs/specs/02-stdlib.md` — updated implementation note to reference `KRuntime` method names instead of old intrinsic names
 
 ## Spec References
 
@@ -111,3 +111,7 @@ export fun nowMs(): Int                = __now_ms()
 - **`nowMs()` temporal coupling**: `__now_ms` is in `basics.ks` rather than `process.ks`. This is an existing organizational inconsistency. Migrating it as-is preserves the inconsistency. Do not reorganize during this story — keep the same module structure.
 - **Return type coercions**: the existing codegen emits each as a static call returning a boxed Java type matching the Kestrel type. When `extern fun` emits the same `INVOKESTATIC`, the return value on the JVM stack is already a `Long`, `Double`, or `Boolean` — no further boxing needed. Confirm this for each intrinsic to avoid double-boxing.
 - **`KRuntime.floatFloor` vs `Math.floor`**: the runtime helpers exist because Kestrel's `Int` is `Long` and Java's `Math.floor` returns `double`. The helpers bridge this gap. Using the `KRuntime` static methods in extern bindings keeps this delegation pattern.
+
+## Build notes
+
+- 2025-06-11: All 10 intrinsics replaced with `extern fun` in `basics.ks`. Stray `__now_ms()` references found in `scripts/run_tests.ks` (generated template) and `compiler/test/integration/runtime-stdlib.test.ts` (embedded source literal) — both updated to import `nowMs` from `kestrel:basics` and call it directly. `docs/specs/02-stdlib.md` updated to reference `KRuntime` method names. All 256 compiler tests and 1014 Kestrel tests pass.
