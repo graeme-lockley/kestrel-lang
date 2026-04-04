@@ -169,36 +169,40 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
 
   const builtinTypeNames = new Set(['Int', 'Float', 'Bool', 'String', 'Unit', 'Char', 'Rune', 'Array', 'Task', 'Option', 'Result', 'List']);
 
-  function assertKnownTypeNames(ast: import('../ast/nodes.js').Type, blameNode: unknown): void {
+  function assertKnownTypeNames(
+    ast: import('../ast/nodes.js').Type,
+    blameNode: unknown,
+    localTypeParams?: Set<string>
+  ): void {
     switch (ast.kind) {
       case 'PrimType':
         return;
       case 'IdentType':
-        if (builtinTypeNames.has(ast.name) || typeAliases.has(ast.name)) return;
+        if (builtinTypeNames.has(ast.name) || typeAliases.has(ast.name) || localTypeParams?.has(ast.name)) return;
         throw new TypeCheckError(`Unknown type: ${ast.name}`, blameNode);
       case 'QualifiedType':
         if (resolveQualified(ast.namespace, ast.name) != null) return;
         throw new TypeCheckError(`Unknown qualified type: ${ast.namespace}.${ast.name}`, blameNode);
       case 'ArrowType':
-        for (const p of ast.params) assertKnownTypeNames(p, blameNode);
-        assertKnownTypeNames(ast.return, blameNode);
+        for (const p of ast.params) assertKnownTypeNames(p, blameNode, localTypeParams);
+        assertKnownTypeNames(ast.return, blameNode, localTypeParams);
         return;
       case 'RecordType':
-        for (const f of ast.fields) assertKnownTypeNames(f.type, blameNode);
+        for (const f of ast.fields) assertKnownTypeNames(f.type, blameNode, localTypeParams);
         return;
       case 'AppType':
-        if (!(builtinTypeNames.has(ast.name) || typeAliases.has(ast.name))) {
+        if (!(builtinTypeNames.has(ast.name) || typeAliases.has(ast.name) || localTypeParams?.has(ast.name))) {
           throw new TypeCheckError(`Unknown type: ${ast.name}`, blameNode);
         }
-        for (const a of ast.args) assertKnownTypeNames(a, blameNode);
+        for (const a of ast.args) assertKnownTypeNames(a, blameNode, localTypeParams);
         return;
       case 'UnionType':
       case 'InterType':
-        assertKnownTypeNames(ast.left, blameNode);
-        assertKnownTypeNames(ast.right, blameNode);
+        assertKnownTypeNames(ast.left, blameNode, localTypeParams);
+        assertKnownTypeNames(ast.right, blameNode, localTypeParams);
         return;
       case 'TupleType':
-        for (const e of ast.elements) assertKnownTypeNames(e, blameNode);
+        for (const e of ast.elements) assertKnownTypeNames(e, blameNode, localTypeParams);
         return;
       case 'RowVarType':
         return;
@@ -1611,14 +1615,22 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         const scheme = generalize(appliedFnType, envForGen);
         env.set(node.name, scheme);
       } else if (node.kind === 'ExternFunDecl') {
-        for (const p of node.params) {
-          if (p.type) assertKnownTypeNames(p.type, node);
+        const sigScope = new Map<string, InternalType>();
+        const localTypeParams = new Set<string>();
+        if (node.typeParams) {
+          for (const tp of node.typeParams) {
+            sigScope.set(tp, freshVar());
+            localTypeParams.add(tp);
+          }
         }
-        assertKnownTypeNames(node.returnType, node);
+        for (const p of node.params) {
+          if (p.type) assertKnownTypeNames(p.type, node, localTypeParams);
+        }
+        assertKnownTypeNames(node.returnType, node, localTypeParams);
         const paramTs = node.params.map((p) =>
-          p.type ? astTypeToInternal(p.type, typeAliases, resolveQualified) : freshVar()
+          p.type ? astTypeToInternalWithScope(p.type, sigScope, typeAliases, resolveQualified) : freshVar()
         );
-        const returnT = astTypeToInternal(node.returnType, typeAliases, resolveQualified);
+        const returnT = astTypeToInternalWithScope(node.returnType, sigScope, typeAliases, resolveQualified);
         const fnType = { kind: 'arrow' as const, params: paramTs, return: returnT };
         const fnVar = env.get(node.name);
         if (fnVar != null) unifyWithBlame(fnVar, fnType, node);

@@ -498,6 +498,7 @@ interface ExternBinding {
   kind: ExternCallKind;
   returnsTask: boolean;
   declaredReturnType: Type;
+  returnIsTypeParam: boolean;
 }
 
 function javaTypeNameToDescriptor(typeName: string): string {
@@ -769,6 +770,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         kind,
         returnsTask: isTaskTypeAst(fun.returnType),
         declaredReturnType: fun.returnType,
+        returnIsTypeParam:
+          fun.returnType.kind === 'IdentType' &&
+          (fun.typeParams?.includes(fun.returnType.name) ?? false),
       };
       externBindings.set(fun.name, binding);
       funNames.add(fun.name);
@@ -1001,6 +1005,21 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       default:
         return;
     }
+  }
+
+  function externCheckcastOwnerForInferredType(t: InternalType | undefined): string | undefined {
+    if (t == null) return undefined;
+    if (t.kind === 'var') return undefined;
+    if (t.kind === 'prim') {
+      if (t.name === 'String') return 'java/lang/String';
+      return undefined;
+    }
+    if (t.kind === 'app') {
+      if (t.name === 'Task') return K_TASK;
+      const externCls = externTypeClassByName.get(t.name);
+      if (externCls) return externCls;
+    }
+    return undefined;
   }
 
   /** Nearest enclosing `while` for `break`/`continue` (JVM emitExpr closure). */
@@ -2063,6 +2082,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               JvmOp.INVOKESTATIC,
               cf.methodref(targetClass, jvmMangleName(methodName), methodDescriptorForDirectCall(name, arity))
             );
+            const externBinding = externBindings.get(name);
+            if (externBinding?.returnIsTypeParam) {
+              const inferredCallType = getInferredType(expr);
+              const castOwner = externCheckcastOwnerForInferredType(inferredCallType);
+              if (castOwner != null) {
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef(castOwner));
+              }
+            }
             return false;
           }
         }

@@ -79,6 +79,7 @@ export interface ExternFunDecl extends NodeBase {
   kind: 'ExternFunDecl';
   exported: boolean;
   name: string;
+  typeParams?: string[];
   params: Param[];
   returnType: Type;
   jvmDescriptor: string;

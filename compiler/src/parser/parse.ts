@@ -272,6 +272,16 @@ class Parser {
       if (this.at('keyword', 'fun')) {
         this.advance();
         const name = this.expect('ident').value!;
+        let typeParams: string[] | undefined;
+        if (this.at('op', '<')) {
+          this.advance();
+          typeParams = [this.expect('ident').value!];
+          while (this.at('comma')) {
+            this.advance();
+            typeParams.push(this.expect('ident').value!);
+          }
+          this.expect('op', '>');
+        }
         this.expect('lparen');
         const params = this.parseParamList();
         this.expect('colon');
@@ -279,24 +289,24 @@ class Parser {
         if (!this.at('op', '=')) {
           const sp = this.current().span;
           this.pushError(CODES.parse.unexpected_token, 'Expected = jvm("...") in extern fun declaration', sp);
-          return { kind: 'ExternFunDecl', exported, name, params, returnType, jvmDescriptor: '' };
+          return { kind: 'ExternFunDecl', exported, name, typeParams, params, returnType, jvmDescriptor: '' };
         }
         this.advance();
         if (!(this.at('ident') && this.current().value === 'jvm')) {
           const sp = this.current().span;
           this.pushError(CODES.parse.unexpected_token, 'Expected jvm("...") in extern fun declaration', sp);
-          return { kind: 'ExternFunDecl', exported, name, params, returnType, jvmDescriptor: '' };
+          return { kind: 'ExternFunDecl', exported, name, typeParams, params, returnType, jvmDescriptor: '' };
         }
         this.advance();
         this.expect('lparen');
         if (!this.at('string')) {
           const sp = this.current().span;
           this.pushError(CODES.parse.unexpected_token, 'Expected string literal inside jvm("...")', sp);
-          return { kind: 'ExternFunDecl', exported, name, params, returnType, jvmDescriptor: '' };
+          return { kind: 'ExternFunDecl', exported, name, typeParams, params, returnType, jvmDescriptor: '' };
         }
         const jvmDescriptor = this.advance().value ?? '';
         this.expect('rparen');
-        return { kind: 'ExternFunDecl', exported, name, params, returnType, jvmDescriptor };
+        return { kind: 'ExternFunDecl', exported, name, typeParams, params, returnType, jvmDescriptor };
       }
 
       let visibility: 'local' | 'opaque' | 'export' = exported ? 'export' : 'local';

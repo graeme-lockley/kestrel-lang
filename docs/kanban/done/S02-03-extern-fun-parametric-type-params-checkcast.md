@@ -40,15 +40,15 @@ The missing capability: when a type parameter appears in the return type of `Ext
 
 ## Acceptance Criteria
 
-- [ ] `extern fun get<V>(m: JHashMap, k: Any): V = jvm("java.util.HashMap#get(java.lang.Object)")` parses and typechecks without error.
-- [ ] Calling `get(myMap, "key")` where context infers `V = String` emits `CHECKCAST java/lang/String` after the `invokevirtual` call.
-- [ ] Calling `get(myMap, "key")` where context does not constrain `V` (polymorphic use) does NOT emit `checkcast`.
-- [ ] A multi-parameter type param form `extern fun zip<A, B>(a: List<A>, b: List<B>): List<(A, B)> = jvm("...")` parses and typechecks.
-- [ ] `stack.ks` `trace<T>(value: T): StackTrace<T>` can be declared as a parametric `extern fun<T>`.
-- [ ] The dict rewrite in a standalone test (may be pre-S02-11) demonstrates `jhmGet` returning a typed value without explicit casts upstream.
-- [ ] `cd compiler && npm test` passes.
-- [ ] Parse-conformance test for the parametric `extern fun` syntax.
-- [ ] Typecheck-conformance test: parametric `extern fun` return type unifies correctly with call context.
+- [x] `extern fun get<V>(m: JHashMap, k: Any): V = jvm("java.util.HashMap#get(java.lang.Object)")` parses and typechecks without error.
+- [x] Calling `get(myMap, "key")` where context infers `V = String` emits `CHECKCAST java/lang/String` after the `invokevirtual` call.
+- [x] Calling `get(myMap, "key")` where context does not constrain `V` (polymorphic use) does NOT emit `checkcast`.
+- [x] A multi-parameter type param form `extern fun zip<A, B>(a: List<A>, b: List<B>): List<(A, B)> = jvm("...")` parses and typechecks.
+- [x] `stack.ks` `trace<T>(value: T): StackTrace<T>` can be declared as a parametric `extern fun<T>`.
+- [x] The dict rewrite in a standalone test (may be pre-S02-11) demonstrates `jhmGet` returning a typed value without explicit casts upstream.
+- [x] `cd compiler && npm test` passes.
+- [x] Parse-conformance test for the parametric `extern fun` syntax.
+- [x] Typecheck-conformance test: parametric `extern fun` return type unifies correctly with call context.
 
 ## Spec References
 
@@ -75,17 +75,17 @@ The missing capability: when a type parameter appears in the return type of `Ext
 
 ## Tasks
 
-- [ ] Add `typeParams?: string[]` to `ExternFunDecl` in `compiler/src/ast/nodes.ts`.
-- [ ] Extend extern fun parser path in `compiler/src/parser/parse.ts` to parse `<T, ...>` after function name.
-- [ ] Update extern fun typecheck branch in `compiler/src/typecheck/check.ts` to resolve signature types with a scoped type-parameter map.
-- [ ] Adjust extern fun unknown-type validation in `compiler/src/typecheck/check.ts` so local extern type params are treated as known names.
-- [ ] Add parametric extern binding metadata in `compiler/src/jvm-codegen/codegen.ts` and emit `CHECKCAST` when inferred call-site return type is concrete.
-- [ ] Ensure no `CHECKCAST` is emitted for unresolved/open type variables.
-- [ ] Add parse integration coverage in `compiler/test/integration/parse.test.ts` for `extern fun get<T>(...)` form.
-- [ ] Add typecheck conformance fixtures for parametric extern fun inference success/failure.
-- [ ] Update `docs/specs/01-language.md` and `docs/specs/06-typesystem.md` for parametric extern fun behavior.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Add `typeParams?: string[]` to `ExternFunDecl` in `compiler/src/ast/nodes.ts`.
+- [x] Extend extern fun parser path in `compiler/src/parser/parse.ts` to parse `<T, ...>` after function name.
+- [x] Update extern fun typecheck branch in `compiler/src/typecheck/check.ts` to resolve signature types with a scoped type-parameter map.
+- [x] Adjust extern fun unknown-type validation in `compiler/src/typecheck/check.ts` so local extern type params are treated as known names.
+- [x] Add parametric extern binding metadata in `compiler/src/jvm-codegen/codegen.ts` and emit `CHECKCAST` when inferred call-site return type is concrete.
+- [x] Ensure no `CHECKCAST` is emitted for unresolved/open type variables.
+- [x] Add parse integration coverage in `compiler/test/integration/parse.test.ts` for `extern fun get<T>(...)` form.
+- [x] Add typecheck conformance fixtures for parametric extern fun inference success/failure.
+- [x] Update `docs/specs/01-language.md` and `docs/specs/06-typesystem.md` for parametric extern fun behavior.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -98,5 +98,13 @@ The missing capability: when a type parameter appears in the return type of `Ext
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — document extern fun type parameter syntax.
-- [ ] `docs/specs/06-typesystem.md` — document cast-promise semantics and runtime `CHECKCAST` behavior for parametric extern returns.
+- [x] `docs/specs/01-language.md` — document extern fun type parameter syntax.
+- [x] `docs/specs/06-typesystem.md` — document cast-promise semantics and runtime `CHECKCAST` behavior for parametric extern returns.
+
+## Build notes
+
+- 2026-04-04: Started implementation.
+- 2026-04-04: Added generic parameter parsing and signature-scoped type resolution for `ExternFunDecl`.
+- 2026-04-04: Added call-site `CHECKCAST` emission for concrete parametric extern returns based on inferred call type.
+- 2026-04-04: Added parse and conformance fixtures for parametric extern syntax/typecheck behavior.
+- 2026-04-04: Verification passed with `cd compiler && npm run build && npm test` and `cd /Users/graemelockley/Projects/kestrel && ./scripts/kestrel test`.

@@ -197,6 +197,12 @@ describe('parse (integration)', () => {
     }
   });
 
+  it('parses parametric extern fun decl', () => {
+    const ast = parse(tokenize('extern fun get<V>(k: String): V = jvm("kestrel.runtime.KRuntime#formatOne(java.lang.Object)")'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'ExternFunDecl', name: 'get', typeParams: ['V'] });
+  });
+
   it('errors on export opaque type (both cannot be used together)', () => {
     const result = parse(tokenize('export opaque type Foo = Int'));
     expect('ok' in result && !result.ok).toBe(true);

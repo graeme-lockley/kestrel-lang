@@ -53,6 +53,7 @@ Type ::=
 
 - `extern fun f(p1: T1, ..., pn: Tn): R = jvm("Class#method(...)")` introduces a function binding with type `(T1, ..., Tn) -> R`.
 - Extern function typing is signature-driven: there is no body inference step.
+- Parametric extern fun declarations (`extern fun f<T>(...): T = ...`) are author assertions over erased JVM values; at concrete call sites, codegen may insert runtime `CHECKCAST` to enforce the instantiated type.
 - Parameter and return types in extern fun signatures must resolve like ordinary function annotations.
 
 ### 1.1 Structural types (summary)
