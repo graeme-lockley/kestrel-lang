@@ -1,5 +1,6 @@
 import { message as message1 } from "./m1.ks"
 import { message as message2 } from "./m2.ks"
+import * as Http from "kestrel:http"
 
 import { hello } from "./m3.ks"
 
@@ -10,7 +11,7 @@ extern fun reverse(str: String): String =
 
 extern fun upperCase(str: String): String =
   jvm("org.apache.commons.lang3.StringUtils#upperCase(java.lang.String)")
-  
+
 extern fun swapCase(str: String): String =
   jvm("org.apache.commons.lang3.StringUtils#swapCase(java.lang.String)")
 
@@ -28,6 +29,14 @@ hello := "hello"
 println({a = 1, b = hello})
 println([1, 2, 3, 123, 5])
 println(Some("hello"))
+
+async fun fetchNews(): Task<Unit> = {
+  val resp = await Http.get("https://www.news24.com");
+  println(Http.statusCode(resp));
+  println(Http.bodyText(resp))
+}
+
+fetchNews()
 
 // --- Var captured by reference: closure and block share the same storage ---
 // inc() mutates n and returns the new value; calling inc() + inc() gives 1 + 2 = 3

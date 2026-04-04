@@ -976,4 +976,204 @@ public final class KRuntime {
         }
         throw new IllegalArgumentException("statusCode: expected Response from get() or makeResponse()");
     }
+
+    // ── HTTP server helpers for kestrel:http (S03-06) ────────────────────────
+
+    /**
+     * Create an HTTP server that dispatches each incoming request to the given Kestrel handler.
+     * Uses a virtual-thread-per-request executor. The server is not yet bound; call
+     * {@link #httpListenAsync} to bind and start it.
+     *
+     * <p>The handler is a Kestrel {@code (Request) -> Task&lt;Response&gt;} function.
+     * Each call runs on a virtual thread (from the server executor); the handler's
+     * {@code Task&lt;Response&gt;} is awaited synchronously on that virtual thread, then the
+     * {@code Response} is written back to the {@code HttpExchange}.
+     *
+     * <p>If the handler throws or returns a failed task, a 500 response is sent.
+     */
+    public static KTask httpCreateServer(Object handler) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        try {
+            KFunction kHandler = (KFunction) handler;
+            com.sun.net.httpserver.HttpServer server =
+                    com.sun.net.httpserver.HttpServer.create();
+            server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
+            server.createContext("/", (exchange) -> {
+                try {
+                    Object result = kHandler.apply(new Object[]{ exchange });
+                    Object response = (result instanceof KTask) ? ((KTask) result).get() : result;
+                    String body = httpBodyText(response);
+                    int status = (int)(long) httpStatusCode(response);
+                    byte[] bodyBytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    exchange.sendResponseHeaders(status, bodyBytes.length);
+                    try (java.io.OutputStream os = exchange.getResponseBody()) {
+                        os.write(bodyBytes);
+                    }
+                } catch (Throwable t) {
+                    try {
+                        byte[] errBytes = "Internal Server Error"
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                        exchange.sendResponseHeaders(500, errBytes.length);
+                        try (java.io.OutputStream os = exchange.getResponseBody()) {
+                            os.write(errBytes);
+                        }
+                    } catch (Throwable ignored) {}
+                }
+            });
+            future.complete(server);
+        } catch (Throwable t) {
+            future.completeExceptionally(KTask.unwrapFailure(t));
+        }
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Bind the server to host:port and start accepting connections.
+     * Returns a {@code Task&lt;Unit&gt;} that completes immediately once the server is listening.
+     * Use port 0 to let the OS assign a free port; retrieve it with {@link #httpServerPort}.
+     */
+    public static KTask httpListenAsync(Object server, Object host, Object port) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(server instanceof com.sun.net.httpserver.HttpServer)) {
+            future.completeExceptionally(new IllegalArgumentException("listen: expected Server"));
+            return KTask.fromFuture(future);
+        }
+        if (!(host instanceof String)) {
+            future.completeExceptionally(new IllegalArgumentException("listen: expected String host"));
+            return KTask.fromFuture(future);
+        }
+        if (!(port instanceof Long)) {
+            future.completeExceptionally(new IllegalArgumentException("listen: expected Int port"));
+            return KTask.fromFuture(future);
+        }
+        try {
+            com.sun.net.httpserver.HttpServer httpServer =
+                    (com.sun.net.httpserver.HttpServer) server;
+            int portInt = (int)(long)(Long) port;
+            java.net.InetSocketAddress addr = new java.net.InetSocketAddress((String) host, portInt);
+            httpServer.bind(addr, 0);
+            httpServer.start();
+            future.complete(KUnit.INSTANCE);
+        } catch (Throwable t) {
+            future.completeExceptionally(KTask.unwrapFailure(t));
+        }
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Return the actual port the server is bound to.
+     * Useful when the server was started with port 0 (OS-assigned).
+     */
+    public static Long httpServerPort(Object server) {
+        return (long) ((com.sun.net.httpserver.HttpServer) server).getAddress().getPort();
+    }
+
+    /**
+     * Stop the server asynchronously.
+     * Runs {@code HttpServer.stop(1)} on a virtual thread and returns a
+     * {@code Task<Unit>} that resolves once the server has fully stopped.
+     * Using a background thread avoids blocking the caller on the platform-thread
+     * dispatcher join inside {@code HttpServer.stop()}.
+     */
+    public static KTask httpServerStop(Object server) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        com.sun.net.httpserver.HttpServer httpServer =
+                (com.sun.net.httpserver.HttpServer) server;
+        initAsyncRuntime();
+        asyncTasksInFlight.increment();
+        asyncExecutor.submit(() -> {
+            try {
+                httpServer.stop(1); // wait up to 1s for in-flight exchanges
+                future.complete(KUnit.INSTANCE);
+            } catch (Throwable t) {
+                future.completeExceptionally(KTask.unwrapFailure(t));
+            } finally {
+                decrementAndSignal();
+            }
+        });
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Extract a named query parameter from an incoming server {@code Request}.
+     * Last-wins for duplicate keys. Handles percent-encoded keys and values.
+     * Returns {@code KSome(value)} if found, {@code KNone.INSTANCE} if absent.
+     */
+    public static Object httpQueryParam(Object exchange, Object name) {
+        if (!(exchange instanceof com.sun.net.httpserver.HttpExchange) || !(name instanceof String)) {
+            return KNone.INSTANCE;
+        }
+        com.sun.net.httpserver.HttpExchange ex = (com.sun.net.httpserver.HttpExchange) exchange;
+        String rawQuery = ex.getRequestURI().getRawQuery();
+        if (rawQuery == null || rawQuery.isEmpty()) {
+            return KNone.INSTANCE;
+        }
+        String keyName = (String) name;
+        String found = null;
+        for (String pair : rawQuery.split("&", -1)) {
+            String[] kv = pair.split("=", 2);
+            String k;
+            try {
+                k = java.net.URLDecoder.decode(kv[0], java.nio.charset.StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                k = kv[0];
+            }
+            if (k.equals(keyName)) {
+                if (kv.length > 1) {
+                    try {
+                        found = java.net.URLDecoder.decode(kv[1], java.nio.charset.StandardCharsets.UTF_8);
+                    } catch (Exception e) {
+                        found = kv[1];
+                    }
+                } else {
+                    found = "";
+                }
+            }
+        }
+        return found != null ? new KSome(found) : KNone.INSTANCE;
+    }
+
+    /**
+     * Return a unique identifier string for this request (UUID v4, in standard form).
+     */
+    public static String httpRequestId(Object exchange) {
+        return java.util.UUID.randomUUID().toString();
+    }
+
+    /**
+     * Read the full body of an incoming server {@code Request} as a UTF-8 string.
+     * Returns a {@code KTask&lt;String&gt;} because body reading is I/O.
+     */
+    public static KTask httpRequestBodyText(Object exchange) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(exchange instanceof com.sun.net.httpserver.HttpExchange)) {
+            future.completeExceptionally(
+                    new IllegalArgumentException("requestBodyText: expected Request"));
+            return KTask.fromFuture(future);
+        }
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+        asyncTasksInFlight.increment();
+        final com.sun.net.httpserver.HttpExchange ex =
+                (com.sun.net.httpserver.HttpExchange) exchange;
+        try {
+            executor.submit(() -> {
+                try {
+                    byte[] bytes = ex.getRequestBody().readAllBytes();
+                    future.complete(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+                } catch (Throwable t) {
+                    future.completeExceptionally(KTask.unwrapFailure(t));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
 }

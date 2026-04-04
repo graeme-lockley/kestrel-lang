@@ -1,11 +1,11 @@
 // kestrel:http — HTTP server and client (spec 02 §kestrel:http, runtime model 05 §2–3).
-// Opaque types: Server (HttpServer), Request (HttpExchange), Response (synthetic or HttpResponse).
-// S03-05: get, bodyText, statusCode, makeResponse implemented via KRuntime helpers.
-// S03-06: createServer, listen, requestBodyText, queryParam, requestId to be implemented.
+// S03-05: get, bodyText, statusCode, makeResponse implemented.
+// S03-06: createServer, listen, queryParam, requestId, requestBodyText,
+//         serverPort, serverStop implemented.
 import * as Basics from "kestrel:basics"
 
 // ---------------------------------------------------------------------------
-// Opaque types (backed by JDK classes via KRuntime helpers added in S03-05/S03-06)
+// Opaque types (backed by JDK classes via KRuntime helpers)
 // ---------------------------------------------------------------------------
 
 // Server — wraps com.sun.net.httpserver.HttpServer
@@ -19,7 +19,7 @@ extern type Request = jvm("com.sun.net.httpserver.HttpExchange")
 extern type Response = jvm("java.lang.Object")
 
 // ---------------------------------------------------------------------------
-// Exception for unimplemented stubs (removed when S03-06 lands)
+// Exception — thrown when calling a stub (should not appear in production)
 // ---------------------------------------------------------------------------
 
 export exception HttpNotImplemented
@@ -47,6 +47,31 @@ extern fun httpMakeResponse_(status: Int, body: String): Response =
   jvm("kestrel.runtime.KRuntime#httpMakeResponse(java.lang.Object,java.lang.Object)")
 
 // ---------------------------------------------------------------------------
+// KRuntime extern bindings (S03-06: HTTP server)
+// ---------------------------------------------------------------------------
+
+extern fun httpCreateServer_(handler: (Request) -> Task<Response>): Task<Server> =
+  jvm("kestrel.runtime.KRuntime#httpCreateServer(java.lang.Object)")
+
+extern fun httpListenAsync_(server: Server, host: String, port: Int): Task<Unit> =
+  jvm("kestrel.runtime.KRuntime#httpListenAsync(java.lang.Object,java.lang.Object,java.lang.Object)")
+
+extern fun httpServerPort_(server: Server): Int =
+  jvm("kestrel.runtime.KRuntime#httpServerPort(java.lang.Object)")
+
+extern fun httpServerStop_(server: Server): Task<Unit> =
+  jvm("kestrel.runtime.KRuntime#httpServerStop(java.lang.Object)")
+
+extern fun httpQueryParam_(request: Request, name: String): Option<String> =
+  jvm("kestrel.runtime.KRuntime#httpQueryParam(java.lang.Object,java.lang.Object)")
+
+extern fun httpRequestId_(request: Request): String =
+  jvm("kestrel.runtime.KRuntime#httpRequestId(java.lang.Object)")
+
+extern fun httpRequestBodyText_(request: Request): Task<String> =
+  jvm("kestrel.runtime.KRuntime#httpRequestBodyText(java.lang.Object)")
+
+// ---------------------------------------------------------------------------
 // Public HTTP client API (S03-05)
 // ---------------------------------------------------------------------------
 
@@ -59,25 +84,22 @@ export fun statusCode(resp: Response): Int = httpStatusCode_(resp)
 export fun makeResponse(status: Int, body: String): Response = httpMakeResponse_(status, body)
 
 // ---------------------------------------------------------------------------
-// Server-side stubs — implemented in S03-06.
+// Public HTTP server API (S03-06)
 // ---------------------------------------------------------------------------
 
-// TODO(S03-06): implement createServer via KRuntime.httpCreateServer
-export async fun createServer(_handler: (Request) -> Task<Response>): Task<Server> =
-  throw HttpNotImplemented
+export async fun createServer(handler: (Request) -> Task<Response>): Task<Server> =
+  await httpCreateServer_(handler)
 
-// TODO(S03-06): implement listen via KRuntime.httpListen
-export async fun listen(_server: Server, _opts: { host: String, port: Int }): Task<Unit> =
-  throw HttpNotImplemented
+export async fun listen(server: Server, opts: { host: String, port: Int }): Task<Unit> =
+  await httpListenAsync_(server, opts.host, opts.port)
 
-// TODO(S03-06): implement requestBodyText via KRuntime.httpRequestBodyText
-export async fun requestBodyText(_request: Request): Task<String> =
-  throw HttpNotImplemented
+export fun serverPort(server: Server): Int = httpServerPort_(server)
 
-// TODO(S03-06): implement queryParam via KRuntime.httpQueryParam
-export fun queryParam(_request: Request, _name: String): Option<String> =
-  throw HttpNotImplemented
+export async fun serverStop(server: Server): Task<Unit> = await httpServerStop_(server)
 
-// TODO(S03-06): implement requestId via KRuntime.httpRequestId
-export fun requestId(_request: Request): String =
-  throw HttpNotImplemented
+export fun queryParam(request: Request, name: String): Option<String> = httpQueryParam_(request, name)
+
+export fun requestId(request: Request): String = httpRequestId_(request)
+
+export async fun requestBodyText(request: Request): Task<String> =
+  await httpRequestBodyText_(request)

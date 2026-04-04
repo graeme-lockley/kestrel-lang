@@ -303,14 +303,16 @@ HTTP server and client. Provides an HTTP GET client and an HTTP server that disp
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `createServer` | `((Request) -> Task<Response>) -> Task<Server>` | Create an HTTP server with the given request handler. The handler is called once per incoming request on a fresh virtual thread. Returns a `Task<Server>` (the server is created asynchronously). |
-| `listen` | `(Server, { host: String, port: Int }) -> Task<Unit>` | Bind the server to the given host and port and start accepting connections. The task completes as soon as the server is listening; it does **not** await shutdown. |
+| `listen` | `(Server, { host: String, port: Int }) -> Task<Unit>` | Bind the server to the given host and port and start accepting connections. The task completes as soon as the server is listening; it does **not** await shutdown. Use port `0` to let the OS assign a free port; retrieve the bound port with `serverPort`. |
+| `serverPort` | `(Server) -> Int` | Return the actual port the server is bound to. Useful when the server was started on port `0`. |
+| `serverStop` | `(Server) -> Task<Unit>` | Stop the server and release its port. Waits briefly for in-flight requests to complete before forcibly closing connections. |
 | `get` | `(String) -> Task<Response>` | Issue an HTTP GET request to the given URL. Supports `http://` and `https://` schemes. The task resolves with the server's response (including non-2xx responses). The task fails for network/TLS errors (e.g. unreachable host, certificate validation failure, unsupported scheme). |
 | `bodyText` | `(Response) -> String` | Extract the body of a `Response` (from `get`) as a UTF-8 string. The body is buffered in memory; there is no streaming. |
 | `requestBodyText` | `(Request) -> Task<String>` | Read the full body of an incoming server `Request` as a UTF-8 string. Returns a `Task` because the body read is I/O. |
 | `statusCode` | `(Response) -> Int` | Return the HTTP status code of a `Response` produced by `get`. |
 | `makeResponse` | `(Int, String) -> Response` | Construct a `Response` for use as the return value of a server handler. The first argument is the HTTP status code (e.g. `200`); the second is the response body text. |
-| `queryParam` | `(Request, String) -> Option<String>` | Extract a query parameter by name from an incoming `Request`. If the parameter appears multiple times, the **last** occurrence wins. Returns `None` if the parameter is absent. |
-| `requestId` | `(Request) -> String` | Return a stable unique identifier string for the request (implementation-defined format; suitable for logging). |
+| `queryParam` | `(Request, String) -> Option<String>` | Extract a query parameter by name from an incoming `Request`. If the parameter appears multiple times, the **last** occurrence wins. Returns `None` if the parameter is absent. Percent-encoded values are decoded automatically. |
+| `requestId` | `(Request) -> String` | Return a stable unique identifier string for the request (UUID format; unique per accepted connection). |
 | `nowMs` | `() -> Int` | Current time in milliseconds (forwards to `kestrel:basics` `nowMs`). |
 
 ### Error semantics

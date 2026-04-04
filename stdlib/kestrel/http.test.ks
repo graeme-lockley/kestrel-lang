@@ -1,14 +1,55 @@
-// Tests for kestrel:http client API (S03-05).
-// Tests in this file are network-free: only makeResponse, bodyText, and statusCode
-// are exercised here. HTTP GET integration tests live in tests/e2e/scenarios/positive/.
-import { Suite, group, eq, isTrue } from "kestrel:test"
+// Tests for kestrel:http client API (S03-05) and server API (S03-06).
+// S03-05: Network-free tests — makeResponse, bodyText, statusCode.
+// S03-06: Server round-trip tests — createServer/listen on port 0, query via Http.get.
+// HTTP GET integration tests also live in tests/e2e/scenarios/positive/.
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
 import * as Http from "kestrel:http"
 import * as Str from "kestrel:string"
+
+// Handler that echoes back the value of the "v" query param, or "none" if absent.
+async fun echoQueryParam(req: Http.Request): Task<Http.Response> = {
+  val v = Http.queryParam(req, "v");
+  val body = match (v) {
+    Some(s) => s,
+    None => "none"
+  };
+  Http.makeResponse(200, body)
+}
+
+// Handler that returns the request's unique id as the response body.
+async fun echoRequestId(req: Http.Request): Task<Http.Response> = {
+  val id = Http.requestId(req);
+  Http.makeResponse(200, id)
+}
 
 export async fun run(s: Suite): Task<Unit> = {
   val resp200 = Http.makeResponse(200, "OK")
   val resp404 = Http.makeResponse(404, "Not Found")
   val respEmpty = Http.makeResponse(204, "")
+
+  // S03-06: queryParam — start a server on OS-assigned port, fire requests, stop.
+  val qServer = await Http.createServer(echoQueryParam);
+  await Http.listen(qServer, { host = "127.0.0.1", port = 0 });
+  val qPort = Http.serverPort(qServer);
+
+  val rPresent   = await Http.get("http://127.0.0.1:${qPort}/?v=hello");
+  val rAbsent    = await Http.get("http://127.0.0.1:${qPort}/path");
+  val rDuplicate = await Http.get("http://127.0.0.1:${qPort}/?v=first&v=second");
+  val rEncoded   = await Http.get("http://127.0.0.1:${qPort}/?v=hello%20world");
+
+  await Http.serverStop(qServer);
+
+  // S03-06: requestId uniqueness — two requests to the same server must get different ids.
+  val idServer = await Http.createServer(echoRequestId);
+  await Http.listen(idServer, { host = "127.0.0.1", port = 0 });
+  val idPort = Http.serverPort(idServer);
+
+  val idResp1 = await Http.get("http://127.0.0.1:${idPort}/");
+  val idResp2 = await Http.get("http://127.0.0.1:${idPort}/");
+  val id1 = Http.bodyText(idResp1);
+  val id2 = Http.bodyText(idResp2);
+
+  await Http.serverStop(idServer);
 
   group(s, "http", (s1: Suite) => {
     group(s1, "makeResponse + statusCode", (sg: Suite) => {
@@ -29,6 +70,17 @@ export async fun run(s: Suite): Task<Unit> = {
       val statusMatches = Http.statusCode(resp) == 301
       isTrue(sg, "bodyText consistent", bodyMatches);
       isTrue(sg, "statusCode consistent", statusMatches)
+    });
+
+    group(s1, "queryParam (server round-trip)", (sg: Suite) => {
+      eq(sg, "present key", Http.bodyText(rPresent), "hello");
+      eq(sg, "absent key", Http.bodyText(rAbsent), "none");
+      eq(sg, "last-wins for duplicate keys", Http.bodyText(rDuplicate), "second");
+      eq(sg, "percent-encoded value", Http.bodyText(rEncoded), "hello world")
+    });
+
+    group(s1, "requestId", (sg: Suite) => {
+      isFalse(sg, "each request gets a unique id", Str.equals(id1, id2))
     });
   });
 
