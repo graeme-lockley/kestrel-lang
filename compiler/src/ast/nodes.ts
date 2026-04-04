@@ -32,7 +32,7 @@ export interface SideEffectImport extends NodeBase {
   spec: string;
 }
 
-export type TopLevelDecl = FunDecl | TypeDecl | ExceptionDecl | ExportDecl | ValDecl | VarDecl;
+export type TopLevelDecl = FunDecl | TypeDecl | ExternTypeDecl | ExceptionDecl | ExportDecl | ValDecl | VarDecl;
 
 export interface ValDecl extends NodeBase {
   kind: 'ValDecl';
@@ -89,6 +89,14 @@ export interface TypeDecl extends NodeBase {
   name: string;
   typeParams?: string[];
   body: TypeDeclBody;
+}
+
+export interface ExternTypeDecl extends NodeBase {
+  kind: 'ExternTypeDecl';
+  visibility: TypeVisibility;
+  name: string;
+  typeParams?: string[];
+  jvmClass: string;
 }
 
 export type TypeDeclBody = TypeAliasBody | ADTBody;

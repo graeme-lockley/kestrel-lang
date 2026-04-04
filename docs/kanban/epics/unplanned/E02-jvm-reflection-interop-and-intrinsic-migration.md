@@ -208,7 +208,7 @@ Key properties of this example:
 
 ## Stories (ordered — implement sequentially)
 
-1. [S02-01-extern-type-ast-parser-typecheck.md](../../unplanned/S02-01-extern-type-ast-parser-typecheck.md) — `extern type` AST node, parser grammar, typecheck registration
+1. [x] [S02-01-extern-type-ast-parser-typecheck.md](../../done/S02-01-extern-type-ast-parser-typecheck.md) — `extern type` AST node, parser grammar, typecheck registration
 2. [S02-02-extern-fun-non-parametric-ast-parser-typecheck-codegen.md](../../unplanned/S02-02-extern-fun-non-parametric-ast-parser-typecheck-codegen.md) — `extern fun` (non-parametric) full pipeline: AST, parser, typecheck, JVM codegen
 3. [S02-03-extern-fun-parametric-type-params-checkcast.md](../../unplanned/S02-03-extern-fun-parametric-type-params-checkcast.md) — `extern fun` (parametric) type params + `checkcast` emission
 4. [S02-04-migrate-char-intrinsics-to-extern-fun.md](../../unplanned/S02-04-migrate-char-intrinsics-to-extern-fun.md) — Migrate `char.ks` intrinsics (`__char_code_point`, `__char_from_code`, `__char_to_string`)

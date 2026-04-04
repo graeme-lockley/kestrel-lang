@@ -36,16 +36,16 @@ Introduce `extern type` as a new top-level declaration that binds a named Kestre
 
 ## Acceptance Criteria
 
-- [ ] `ExternTypeDecl` node is defined in `compiler/src/ast/nodes.ts` and included in the `TopLevelDecl` union.
-- [ ] Parser parses `extern type HashMap = jvm("java.util.HashMap")` and `export extern type HashMap = jvm("java.util.HashMap")` without error.
-- [ ] Parser rejects `extern type HashMap` (missing `= jvm(...)`) with a meaningful error.
-- [ ] Parser rejects `extern type HashMap = "some-string"` (missing `jvm(...)` wrapper) with a meaningful error.
-- [ ] Typecheck registers the name in the type environment so it can be used as a type in `extern fun` declarations within the same file.
-- [ ] `ExternTypeDecl` with `visibility === 'export'` is included in the exported type surface (visible to importers as an opaque type).
-- [ ] Typecheck error on duplicate `extern type` declaration in the same module.
-- [ ] `cd compiler && npm test` passes.
-- [ ] A parse-conformance test exists for `extern type` syntax.
-- [ ] A typecheck-conformance test exists that verifies `extern type` names are accepted in type positions.
+- [x] `ExternTypeDecl` node is defined in `compiler/src/ast/nodes.ts` and included in the `TopLevelDecl` union.
+- [x] Parser parses `extern type HashMap = jvm("java.util.HashMap")` and `export extern type HashMap = jvm("java.util.HashMap")` without error.
+- [x] Parser rejects `extern type HashMap` (missing `= jvm(...)`) with a meaningful error.
+- [x] Parser rejects `extern type HashMap = "some-string"` (missing `jvm(...)` wrapper) with a meaningful error.
+- [x] Typecheck registers the name in the type environment so it can be used as a type in `extern fun` declarations within the same file.
+- [x] `ExternTypeDecl` with `visibility === 'export'` is included in the exported type surface (visible to importers as an opaque type).
+- [x] Typecheck error on duplicate `extern type` declaration in the same module.
+- [x] `cd compiler && npm test` passes.
+- [x] A parse-conformance test exists for `extern type` syntax.
+- [x] A typecheck-conformance test exists that verifies `extern type` names are accepted in type positions.
 
 ## Spec References
 
@@ -73,16 +73,16 @@ Introduce `extern type` as a new top-level declaration that binds a named Kestre
 
 ## Tasks
 
-- [ ] Add `ExternTypeDecl` to `compiler/src/ast/nodes.ts` and include it in `TopLevelDecl`.
-- [ ] Add `extern` keyword support in lexer tokenization under `compiler/src/lexer/`.
-- [ ] Extend top-level parser in `compiler/src/parser/parse.ts` to parse `extern type` declarations (local, `extern opaque type`, and `export extern type`) and require `= jvm("...")`.
-- [ ] Add parser diagnostics for missing `= jvm(...)` and invalid non-`jvm(...)` RHS in `compiler/src/parser/parse.ts`.
-- [ ] Extend type declaration/type environment handling in `compiler/src/typecheck/check.ts` to register extern types, detect duplicate/conflicting names, and expose exported extern types as opaque to importers.
-- [ ] Extend module types export serialization/reading in compiler module/type metadata paths (including `compiler/src/module-specifiers.ts` and related type export plumbing) so extern type names round-trip to importing modules.
-- [ ] Add parser unit/integration coverage in `compiler/test/` for successful and failing `extern type` syntax.
-- [ ] Add typecheck conformance fixtures under `tests/conformance/typecheck/` that exercise extern type use in type positions and duplicate-declaration failures.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Add `ExternTypeDecl` to `compiler/src/ast/nodes.ts` and include it in `TopLevelDecl`.
+- [x] Add `extern` keyword support in lexer tokenization under `compiler/src/lexer/`.
+- [x] Extend top-level parser in `compiler/src/parser/parse.ts` to parse `extern type` declarations (local, `extern opaque type`, and `export extern type`) and require `= jvm("...")`.
+- [x] Add parser diagnostics for missing `= jvm(...)` and invalid non-`jvm(...)` RHS in `compiler/src/parser/parse.ts`.
+- [x] Extend type declaration/type environment handling in `compiler/src/typecheck/check.ts` to register extern types, detect duplicate/conflicting names, and expose exported extern types as opaque to importers.
+- [x] Extend module types export serialization/reading in compiler module/type metadata paths (including `compiler/src/module-specifiers.ts` and related type export plumbing) so extern type names round-trip to importing modules.
+- [x] Add parser unit/integration coverage in `compiler/test/` for successful and failing `extern type` syntax.
+- [x] Add typecheck conformance fixtures under `tests/conformance/typecheck/` that exercise extern type use in type positions and duplicate-declaration failures.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -96,6 +96,13 @@ Introduce `extern type` as a new top-level declaration that binds a named Kestre
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — add `extern type` to top-level declaration grammar and keyword set.
-- [ ] `docs/specs/06-typesystem.md` — define typing semantics for extern nominal/opaque type bindings.
-- [ ] `docs/specs/07-modules.md` — document importer visibility of exported extern types as opaque module-surface types.
+- [x] `docs/specs/01-language.md` — add `extern type` to top-level declaration grammar and keyword set.
+- [x] `docs/specs/06-typesystem.md` — define typing semantics for extern nominal/opaque type bindings.
+- [x] `docs/specs/07-modules.md` — document importer visibility of exported extern types as opaque module-surface types.
+
+## Build notes
+
+- 2026-04-04: Started implementation.
+- 2026-04-04: Reserved `extern` as a language keyword for parser simplicity and deterministic declaration dispatch.
+- 2026-04-04: Added conformance fixtures for parse/typecheck plus integration coverage for `extern type` and invalid RHS forms.
+- 2026-04-04: Ran `cd compiler && npm run build && npm test` (pass) and `cd /Users/graemelockley/Projects/kestrel && ./scripts/kestrel test` (pass, 1014 tests).

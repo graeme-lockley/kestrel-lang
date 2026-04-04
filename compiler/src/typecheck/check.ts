@@ -1629,6 +1629,29 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             }
           }
         }
+      } else if (node.kind === 'ExternTypeDecl') {
+        if (typeAliases.has(node.name) || genericTypeAliasDefs.has(node.name) || adtConstructors.has(node.name)) {
+          throw new TypeCheckError(`Duplicate type declaration: ${node.name}`, node);
+        }
+        if (node.typeParams && node.typeParams.length > 0) {
+          const paramVarIds: number[] = [];
+          for (const _tp of node.typeParams) {
+            const v = freshVar();
+            if (v.kind !== 'var') throw new TypeCheckError('Internal error: freshVar expected var', node);
+            paramVarIds.push(v.id);
+          }
+          const templateApp: InternalType = {
+            kind: 'app',
+            name: node.name,
+            args: paramVarIds.map((id) => ({ kind: 'var', id })),
+          };
+          genericTypeAliasDefs.set(node.name, { paramVarIds, body: templateApp });
+          typeAliases.set(node.name, templateApp);
+        } else {
+          const externType: InternalType = { kind: 'app', name: node.name, args: [] };
+          env.set(node.name, externType);
+          typeAliases.set(node.name, externType);
+        }
       } else if (node.kind === 'ExceptionDecl') {
         const adtType: InternalType = { kind: 'app', name: node.name, args: [] };
         const ctorType: InternalType =
@@ -1877,13 +1900,28 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             registerExportSource(c.name, 'local', c.span ?? node.span);
           }
         }
+      } else if (node.kind === 'ExternTypeDecl' && (node.visibility === 'export' || node.visibility === 'opaque')) {
+        if (!registerExportSource(node.name, 'local', node.span)) continue;
+        const genDef = genericTypeAliasDefs.get(node.name);
+        if (genDef != null) {
+          const exportArgs = genDef.paramVarIds.map((id) => ({ kind: 'var' as const, id }));
+          const exportApp: InternalType = { kind: 'app', name: node.name, args: exportArgs };
+          exports.set(node.name, apply(exportApp));
+          exportedTypeAliases.set(node.name, apply(exportApp));
+        } else {
+          const t = typeAliases.get(node.name);
+          if (t != null) {
+            exports.set(node.name, apply(t));
+            exportedTypeAliases.set(node.name, apply(t));
+          }
+        }
       } else if (node.kind === 'ExceptionDecl' && node.exported) {
         if (!registerExportSource(node.name, 'local', node.span)) continue;
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));
       }
 
-      if (node.kind === 'TypeDecl') {
+      if (node.kind === 'TypeDecl' || node.kind === 'ExternTypeDecl') {
         exportedTypeVisibility.set(node.name, node.visibility);
       }
     }

@@ -42,6 +42,13 @@ Type ::=
 - **Library types:** `Option<T>`, `Result<T,E>`, and `List<T>` are provided by the standard library (see [02-stdlib.md](02-stdlib.md)). `Option<T>`: optional value; `Result<T,E>`: success `T` or error `E`; `List<T>`: immutable list with special syntax `[a, b, ...c]` and `::` (expression and pattern). In the bytecode type table (03 §6.3), `Result<T,E>` is encoded as **ADT** (tag 8) with the Result adt_index and two type arguments; there is no dedicated Result type tag.
 - **IDENT:** Named types (e.g. type aliases, ADTs) from the current scope. **FieldList** is defined in 01 §3.6 (TypeFieldList): `ident : [mut] Type` comma-separated; use the same for record types in 06. **Char** and **Rune** denote the same type (one Unicode code point); both names are valid in types and have the same runtime representation (05).
 
+### 1.2 Extern nominal types
+
+- `extern type T = jvm("pkg.Class")` introduces a named nominal type `T` whose runtime representation is the referenced JVM class.
+- Within the declaring module, `T` is available in type positions like any other named type.
+- `export extern type T = ...` exports only the type name to importers; importers treat `T` as opaque and do not gain constructor or structural visibility from the JVM binding.
+- Type parameters on `extern type` are compile-time only and model erased JVM generics.
+
 ### 1.1 Structural types (summary)
 
 Kestrel supports the following **structural types** (in addition to built-in primitives and generics):

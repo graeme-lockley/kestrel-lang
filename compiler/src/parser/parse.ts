@@ -155,6 +155,7 @@ class Parser {
       } else if (
         this.at('keyword', 'async') ||
         this.at('keyword', 'fun') ||
+        this.at('keyword', 'extern') ||
         this.at('keyword', 'type') ||
         this.at('keyword', 'opaque') ||
         (this.at('keyword', 'export') && this.tokens[this.i + 1]?.value === 'exception')
@@ -266,6 +267,50 @@ class Parser {
       return { kind: 'ExceptionDecl', name, fields, exported: true };
     }
     // After parseExport() consumes 'export', we are at 'exception'
+    if (this.at('keyword', 'extern')) {
+      this.advance();
+      let visibility: 'local' | 'opaque' | 'export' = exported ? 'export' : 'local';
+      if (this.at('keyword', 'opaque')) {
+        this.advance();
+        visibility = 'opaque';
+      }
+      this.expect('keyword', 'type');
+      const name = this.expect('ident').value!;
+      let typeParams: string[] | undefined;
+      if (this.at('op', '<')) {
+        this.advance();
+        typeParams = [this.expect('ident').value!];
+        while (this.at('comma')) {
+          this.advance();
+          typeParams.push(this.expect('ident').value!);
+        }
+        this.expect('op', '>');
+      }
+
+      if (!this.at('op', '=')) {
+        const sp = this.current().span;
+        this.pushError(CODES.parse.unexpected_token, 'Expected = jvm("...") in extern type declaration', sp);
+        return { kind: 'ExternTypeDecl', visibility, name, typeParams, jvmClass: '' };
+      }
+      this.advance();
+
+      if (!(this.at('ident') && this.current().value === 'jvm')) {
+        const sp = this.current().span;
+        this.pushError(CODES.parse.unexpected_token, 'Expected jvm("...") in extern type declaration', sp);
+        return { kind: 'ExternTypeDecl', visibility, name, typeParams, jvmClass: '' };
+      }
+      this.advance();
+      this.expect('lparen');
+      if (!this.at('string')) {
+        const sp = this.current().span;
+        this.pushError(CODES.parse.unexpected_token, 'Expected string literal inside jvm("...")', sp);
+        return { kind: 'ExternTypeDecl', visibility, name, typeParams, jvmClass: '' };
+      }
+      const jvmClass = this.advance().value ?? '';
+      this.expect('rparen');
+      return { kind: 'ExternTypeDecl', visibility, name, typeParams, jvmClass };
+    }
+
     if (this.at('keyword', 'exception')) {
       this.advance();
       const name = this.expect('ident').value!;
@@ -341,7 +386,7 @@ class Parser {
       return { kind: 'VarDecl', name, type, value };
     }
     const span = this.current().span;
-    this.pushError(CODES.parse.unexpected_token, 'Expected fun, type, export exception, val, or var', span);
+    this.pushError(CODES.parse.unexpected_token, 'Expected fun, extern type, type, export exception, val, or var', span);
     this.advance();
     return { kind: 'ValDecl', name: '_', type: undefined, value: { kind: 'LiteralExpr', literal: 'unit', value: '()', span } };
   }

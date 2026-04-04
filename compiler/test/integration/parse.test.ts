@@ -149,6 +149,34 @@ describe('parse (integration)', () => {
     expect(ast.body[0]).toMatchObject({ kind: 'TypeDecl', visibility: 'opaque', name: 'Result' });
   });
 
+  it('parses extern type decl', () => {
+    const ast = parse(tokenize('extern type HashMap = jvm("java.util.HashMap")'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'ExternTypeDecl', visibility: 'local', name: 'HashMap', jvmClass: 'java.util.HashMap' });
+  });
+
+  it('parses export extern type decl', () => {
+    const ast = parse(tokenize('export extern type HashMap = jvm("java.util.HashMap")'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'ExternTypeDecl', visibility: 'export', name: 'HashMap', jvmClass: 'java.util.HashMap' });
+  });
+
+  it('errors on extern type missing = jvm(...)', () => {
+    const result = parse(tokenize('extern type HashMap'));
+    expect('ok' in result && !result.ok).toBe(true);
+    if ('ok' in result && !result.ok) {
+      expect(result.errors.some((e) => e.message.includes('Expected = jvm("...")'))).toBe(true);
+    }
+  });
+
+  it('errors on extern type non-jvm RHS', () => {
+    const result = parse(tokenize('extern type HashMap = "java.util.HashMap"'));
+    expect('ok' in result && !result.ok).toBe(true);
+    if ('ok' in result && !result.ok) {
+      expect(result.errors.some((e) => e.message.includes('Expected jvm("...")'))).toBe(true);
+    }
+  });
+
   it('errors on export opaque type (both cannot be used together)', () => {
     const result = parse(tokenize('export opaque type Foo = Int'));
     expect('ok' in result && !result.ok).toBe(true);

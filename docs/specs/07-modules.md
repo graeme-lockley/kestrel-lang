@@ -70,6 +70,8 @@ For an **exported ADT** (e.g., `export type Color = Red | Green | Blue`), the ex
 
 For an **opaque ADT** (e.g., `opaque type Token = Num(Int) | Op(String)`), only the type name `Token` is in the export set. The constructors `Num` and `Op` are not importable.
 
+For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashMap")`), only the type name is exported. Importers may reference the name in type signatures, but the underlying JVM descriptor and representation details are not exposed through the module surface.
+
 ### 3.2 Re-export
 
 - **Export all:** `export "*" "from" STRING`. The specifier is resolved. For **every** name in that module’s export set, the current module re-exports that name (as if it had exported it itself). Each such name is added to the current module’s export set with source **re-export from &lt;specifier&gt;**.

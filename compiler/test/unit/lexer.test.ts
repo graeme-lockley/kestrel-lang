@@ -9,13 +9,14 @@ describe('tokenize', () => {
   });
 
   it('tokenizes keywords', () => {
-    const tokens = tokenize('fun val if else match while break continue');
+    const tokens = tokenize('fun val if else match while break continue extern');
     const kinds = tokens.map((t) => t.kind);
     expect(kinds).toContain('keyword');
     expect(tokens.find((t) => t.value === 'fun')?.kind).toBe('keyword');
     expect(tokens.find((t) => t.value === 'val')?.kind).toBe('keyword');
     expect(tokens.find((t) => t.value === 'break')?.kind).toBe('keyword');
     expect(tokens.find((t) => t.value === 'continue')?.kind).toBe('keyword');
+    expect(tokens.find((t) => t.value === 'extern')?.kind).toBe('keyword');
   });
 
   it('tokenizes True and False as boolean literals', () => {
