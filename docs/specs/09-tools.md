@@ -29,6 +29,8 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Cache:**
   - Compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/jvm/Users/me/proj/foo.class`. This avoids cluttering the project directory. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run foo.ks`).
 - **Execution:** `kestrel` runs `java` with a classpath containing `kestrel-runtime.jar` and the JVM cache root, and uses a main class derived from the entry source file path (strip leading `/`, remove `.ks`, capitalize the last path segment; convert `/` to `.` for the Java binary name). Entry-point discovery is implementation-defined, but the derived class name is stable for a given absolute source path.
+- **Maven classpath:** when modules in the run graph emit `.kdeps` sidecars (from `maven:` imports), `kestrel run` reads those sidecars transitively, appends resolved jars to the JVM classpath, and validates coordinate version consistency.
+- **Dependency conflicts:** if two modules require different versions of the same Maven coordinate (`groupId:artifactId`), `kestrel run` reports a conflict and exits non-zero before launching the JVM.
 - **Exit mode flags:**
   - **`--exit-wait` (default):** wait for pending async runtime work to quiesce before process exit, then perform orderly executor shutdown.
   - **`--exit-no-wait`:** exit after `main` returns; pending async tasks are abandoned and virtual threads may be interrupted via immediate shutdown.
@@ -74,6 +76,15 @@ When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
 ### 2.7 JVM backend limitations
 
 - **Namespace-qualified ADT constructors** (`M.Ctor` / `M.Ctor(…)` after `import * as M`, 07 §2.3) are **not** supported on the JVM compile path. The compiler must fail with a clear diagnostic (stable code `compile:jvm_namespace_constructor`, 10 §4). Expose a normal exported function in the dependency that performs the construction.
+
+### 2.8 Maven cache and sidecars
+
+- **`maven:` import declaration:** `import "maven:groupId:artifactId:version"` is a compile-time classpath declaration.
+- **Cache location:** downloaded jars are cached at `~/.kestrel/maven/<groupId path>/<artifactId>/<version>/<artifactId>-<version>.jar`.
+- **Cache override:** set `KESTREL_MAVEN_CACHE` to change the local Maven cache root.
+- **Repository override:** set `KESTREL_MAVEN_REPO` to change the Maven repository root (default `https://repo1.maven.org/maven2`).
+- **Offline mode:** set `KESTREL_MAVEN_OFFLINE=1` (or `true`) to disable downloads and fail on cache miss.
+- **Sidecar format:** for modules with `maven:` imports, the compiler emits `<ClassName>.kdeps` alongside `<ClassName>.class`, recording Maven coordinates, resolved jar paths, and checksums.
 
 ---
 

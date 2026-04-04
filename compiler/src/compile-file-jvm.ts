@@ -2,7 +2,7 @@
  * Multi-module JVM compilation: resolve imports, emit .class files per module.
  * Uses jvmCodegen and writes .class + inner classes.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync, utimesSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, utimesSync, unlinkSync } from 'fs';
 import { resolve as pathResolve, dirname } from 'path';
 import { tokenize } from './lexer/index.js';
 import { parse } from './parser/index.js';
@@ -10,6 +10,7 @@ import { typecheck, type TypecheckOptions, type DependencyExportSnapshot } from 
 import { distinctSpecifiersInSourceOrder, spanForSpecifier } from './module-specifiers.js';
 import { jvmCodegen, type JvmCodegenResult } from './jvm-codegen/index.js';
 import { resolveSpecifier } from './resolve.js';
+import { isMavenSpecifier, resolveMavenSpecifiers, type MavenResolvedDependency } from './maven.js';
 import type { Program, ImportDecl, Expr, TopLevelStmt, TopLevelDecl, BlockExpr } from './ast/nodes.js';
 import type { FunDecl, ExternFunDecl, TypeDecl } from './ast/nodes.js';
 import { getInferredType } from './typecheck/check.js';
@@ -326,10 +327,31 @@ export function compileFileJvm(
     }
     program = parseResult as Program;
 
+    for (const imp of program.imports) {
+      if (isMavenSpecifier(imp.spec) && imp.kind !== 'SideEffectImport') {
+        return {
+          ok: false,
+          diagnostics: [diag(filePath, CODES.resolve.module_not_found, `maven imports are classpath declarations only; use side-effect form: import \"${imp.spec}\"`, imp.span, source)],
+        };
+      }
+    }
+
     const resolveOpts = { fromFile: filePath, projectRoot, stdlibDir };
     const specs = distinctSpecifiersInSourceOrder(program);
+    const mavenSpecs = specs.filter((s) => isMavenSpecifier(s));
+    const sourceSpecs = specs.filter((s) => !isMavenSpecifier(s));
+    let mavenDeps: MavenResolvedDependency[] = [];
+    try {
+      mavenDeps = resolveMavenSpecifiers(mavenSpecs);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        ok: false,
+        diagnostics: [diag(filePath, CODES.resolve.module_not_found, `maven resolution failed: ${message}`)],
+      };
+    }
     const resolved = new Map<string, string>();
-    for (const spec of specs) {
+    for (const spec of sourceSpecs) {
       const r = resolveSpecifier(spec, resolveOpts);
       if (!r.ok) {
         const span = spanForSpecifier(program, spec);
@@ -349,7 +371,7 @@ export function compileFileJvm(
       dependencyPaths: string[];
     }[] = [];
 
-    for (const spec of specs) {
+    for (const spec of sourceSpecs) {
       const depPath = resolved.get(spec)!;
       const depOut = compileOne(depPath);
       if (!depOut.ok) return depOut;
@@ -585,6 +607,7 @@ export function compileFileJvm(
     const dependencyPaths = [
       filePath,
       ...depResults.flatMap((d) => [d.path, ...d.dependencyPaths]),
+      ...mavenDeps.map((d) => d.jarPath),
     ];
     if (getClassOutputDir && existsSync(runtimeKsPathForDeps)) {
       if (!dependencyPaths.includes(runtimeKsPathForDeps)) dependencyPaths.push(runtimeKsPathForDeps);
@@ -612,6 +635,19 @@ export function compileFileJvm(
       const depsPath = pathResolve(classDir, jvmResult.className + '.class.deps');
       mkdirSync(dirname(depsPath), { recursive: true });
       writeFileSync(depsPath, dependencyPathsUnique.join('\n') + '\n');
+
+      const kdepsPath = pathResolve(classDir, jvmResult.className + '.kdeps');
+      if (mavenDeps.length > 0) {
+        const sorted = [...mavenDeps].sort((a, b) => a.ga.localeCompare(b.ga));
+        const payload = {
+          maven: Object.fromEntries(sorted.map((d) => [d.ga, d.version])),
+          jars: Object.fromEntries(sorted.map((d) => [d.ga, d.jarPath])),
+          checksums: Object.fromEntries(sorted.map((d) => [d.ga, d.sha1])),
+        };
+        writeFileSync(kdepsPath, JSON.stringify(payload, null, 2) + '\n');
+      } else if (existsSync(kdepsPath)) {
+        unlinkSync(kdepsPath);
+      }
     }
 
     cache.set(filePath, {

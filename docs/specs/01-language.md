@@ -175,6 +175,8 @@ ImportDecl     ::= "import" ImportClause "from" STRING
 ImportClause   ::= "{" ImportSpec { "," ImportSpec } "}"
 ImportSpec     ::= IDENT [ "as" IDENT ]
 
+`maven:` module specifiers use the side-effect import form (`import "maven:groupId:artifactId:version"`). They are classpath declarations only: they do not bind names into scope and therefore cannot be used with named or namespace import clauses.
+
 ExportDecl     ::= "export" (TopLevelDecl
                      | "*" "from" STRING
                      | "{" ExportSpec { "," ExportSpec } "}" "from" STRING)

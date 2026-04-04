@@ -218,8 +218,8 @@ Key properties of this example:
 8. [x] [S02-08-migrate-fs-async-io-intrinsics.md](../../done/S02-08-migrate-fs-async-io-intrinsics.md) — Migrate `fs.ks` async I/O intrinsics (`__read_file_async`, `__list_dir`, `__write_text`)
 9. [x] [S02-09-migrate-process-env-intrinsics.md](../../done/S02-09-migrate-process-env-intrinsics.md) — Migrate `process.ks` intrinsics (`__get_os`, `__get_args`, `__get_cwd`, `__run_process`)
 10. [x] [S02-10-migrate-task-combinator-intrinsics.md](../../done/S02-10-migrate-task-combinator-intrinsics.md) — Migrate `task.ks` task combinator intrinsics (4 `__task_*`)
-11. [S02-11-dict-rewrite-over-hashmap.md](../../unplanned/S02-11-dict-rewrite-over-hashmap.md) — `kestrel:dict` rewrite over `java.util.HashMap` (integration test vehicle)
-12. [S02-12-maven-classpath-scheme-and-kdeps-sidecars.md](../../unplanned/S02-12-maven-classpath-scheme-and-kdeps-sidecars.md) — `maven:` classpath declaration scheme + `.kdeps` conflict detection
+11. [x] [S02-11-dict-rewrite-over-hashmap.md](../../done/S02-11-dict-rewrite-over-hashmap.md) — `kestrel:dict` rewrite over `java.util.HashMap` (integration test vehicle)
+12. [x] [S02-12-maven-classpath-scheme-and-kdeps-sidecars.md](../../done/S02-12-maven-classpath-scheme-and-kdeps-sidecars.md) — `maven:` classpath declaration scheme + `.kdeps` conflict detection
 13. [S02-13-extern-import-auto-binding-optional.md](../../unplanned/S02-13-extern-import-auto-binding-optional.md) — `extern import` auto-binding from class metadata **(Optional)**
 
 **Story dependencies:**

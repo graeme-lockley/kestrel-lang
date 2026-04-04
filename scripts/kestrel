@@ -15,6 +15,7 @@ COMPILER_CLI="$COMPILER/dist/cli.js"
 # Cache root: .class files under ~/.kestrel/jvm (clean: rm -rf ~/.kestrel)
 JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
 RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
+MAVEN_CLASSPATH_RESOLVER="$ROOT/scripts/resolve-maven-classpath.mjs"
 
 usage() {
   echo "Usage: kestrel <command> [options]" >&2
@@ -187,6 +188,16 @@ _run_unit_tests() {
   java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" "$@"
 }
 
+maven_classpath_for_entry() {
+  local entry_source="$1"
+  local class_dir="$2"
+  if [ ! -f "$MAVEN_CLASSPATH_RESOLVER" ]; then
+    echo ""
+    return 0
+  fi
+  node "$MAVEN_CLASSPATH_RESOLVER" "$entry_source" "$class_dir"
+}
+
 cmd_build() {
   ensure_tools
   build_compiler_jvm
@@ -259,10 +270,16 @@ cmd_run() {
     fi
   fi
   main_class=$(main_class_for "$resolved")
+  local maven_cp=""
+  maven_cp=$(maven_classpath_for_entry "$resolved" "$class_dir")
+  local java_cp="$RUNTIME_JAR:$class_dir"
+  if [ -n "$maven_cp" ]; then
+    java_cp="$java_cp:$maven_cp"
+  fi
   if [ "$exit_mode" = "no-wait" ]; then
-    exec java -Dkestrel.exitWait=false -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
+    exec java -Dkestrel.exitWait=false -cp "$java_cp" "$main_class" "$@"
   else
-    exec java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "$@"
+    exec java -cp "$java_cp" "$main_class" "$@"
   fi
 }
 

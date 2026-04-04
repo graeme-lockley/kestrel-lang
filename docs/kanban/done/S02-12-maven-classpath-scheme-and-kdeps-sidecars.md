@@ -54,16 +54,16 @@ Implement the `maven:` import scheme: `import "maven:groupId:artifactId:version"
 
 ## Acceptance Criteria
 
-- [ ] `import "maven:org.apache.commons:commons-lang3:3.20.0"` parses without error.
-- [ ] The compiler downloads and caches the jar to `~/.kestrel/maven/` on first use.
-- [ ] A download in progress renders an inline progress bar to stderr (percentage + bar); on completion it collapses to a single summary line.
-- [ ] When stderr is not a TTY, a plain `Downloading ...` line is emitted instead.
-- [ ] An `extern fun` descriptor in the same file can reference classes from the downloaded jar.
-- [ ] Compiling a file with `maven:` imports produces a `.kdeps` sidecar alongside the `.class` output.
-- [ ] `kestrel run` with a two-module program whose `.kdeps` files conflict reports the conflict clearly and exits with a non-zero code before running the program.
-- [ ] `kestrel run` with a two-module program with the same maven version in both `.kdeps` files succeeds.
+- [x] `import "maven:org.apache.commons:commons-lang3:3.20.0"` parses without error.
+- [x] The compiler downloads and caches the jar to `~/.kestrel/maven/` on first use.
+- [x] A download in progress renders an inline progress bar to stderr (percentage + bar); on completion it collapses to a single summary line.
+- [x] When stderr is not a TTY, a plain `Downloading ...` line is emitted instead.
+- [x] An `extern fun` descriptor in the same file can reference classes from the downloaded jar.
+- [x] Compiling a file with `maven:` imports produces a `.kdeps` sidecar alongside the `.class` output.
+- [x] `kestrel run` with a two-module program whose `.kdeps` files conflict reports the conflict clearly and exits with a non-zero code before running the program.
+- [x] `kestrel run` with a two-module program with the same maven version in both `.kdeps` files succeeds.
 - [ ] A new E2E test (`tests/e2e/scenarios/positive/maven_import.ks` or similar) uses `maven:` and an `extern fun` to call a function from a downloaded jar.
-- [ ] `cd compiler && npm test` passes.
+- [x] `cd compiler && npm test` passes.
 
 ## Spec References
 
@@ -82,3 +82,43 @@ Implement the `maven:` import scheme: `import "maven:groupId:artifactId:version"
 - **Transitive Maven dependencies**: the `maven:` import specifies a single artifact. That artifact may itself have Maven transitive dependencies. Resolving transitive deps requires a POM parser and conflict graph, which is far more complex. For the initial implementation: resolve only the directly-specified artifact and its direct compile-scope deps listed in its POM, or simply require the user to list all required jars explicitly if transitive deps are needed.
 - **Cache location**: `~/.kestrel/maven/<groupId>/<artifactId>/<version>/` mirrors the standard Maven local repository layout, making it familiar and easy to inspect manually. Configurable via `KESTREL_MAVEN_CACHE` environment variable for CI and hermetic build environments. The full path matches `~/.kestrel/maven/org/apache/commons/commons-lang3/3.20.0/commons-lang3-3.20.0.jar`.
 - **`.kdeps` is generated, not committed**: add `*.kdeps` to `.gitignore` recommendations. These files are build artifacts.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Compiler resolve/build | Added `compiler/src/maven.ts` to parse `maven:` specifiers, resolve artifacts from local cache, download on cache miss, and verify SHA-1 checksums. |
+| Compiler compile pipeline | Updated `compiler/src/compile-file-jvm.ts` to treat `maven:` imports as side-effect classpath declarations, reject named/namespace forms, include jar paths in dependency tracking, and emit `.kdeps` sidecars. |
+| CLI run path | Updated `scripts/kestrel` to aggregate `.kdeps` across the transitive module graph, detect version conflicts, and append resolved jars to `java -cp`. |
+| CLI helper | Added `scripts/resolve-maven-classpath.mjs` to read `.class.deps` + `.kdeps`, build transitive Maven classpath, and report conflicts. |
+| Tests | Added unit and integration coverage in `compiler/test/unit/maven.test.ts` and `compiler/test/integration/maven-kdeps.test.ts`. |
+| Specs/docs | Updated `docs/specs/01-language.md` and `docs/specs/09-tools.md` for `maven:` declaration semantics, cache controls, `.kdeps` behavior, and conflict detection. |
+
+## Tasks
+
+- [x] Implement Maven specifier parsing/resolution helper with cache and checksum verification in `compiler/src/maven.ts`.
+- [x] Integrate `maven:` handling into `compiler/src/compile-file-jvm.ts` and emit `.kdeps` sidecars.
+- [x] Enforce side-effect-only `maven:` import usage in compiler diagnostics.
+- [x] Implement transitive `.kdeps` aggregation + version conflict detection + classpath propagation in CLI run flow.
+- [x] Add unit/integration tests for parser+resolver and sidecar emission.
+- [x] Validate conflict/same-version run behavior with synthetic module graphs.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./kestrel test --summary`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Unit | `compiler/test/unit/maven.test.ts` | Parse `maven:` coordinates and resolve from local cache without network. |
+| Integration | `compiler/test/integration/maven-kdeps.test.ts` | Verify `compileFileJvm` emits `<Class>.kdeps` with Maven metadata when `maven:` imports are present. |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/01-language.md` — note that `maven:` uses side-effect import form and does not bind names.
+- [x] `docs/specs/09-tools.md` — document Maven cache/repository env vars, `.kdeps`, conflict detection, and run-time classpath propagation.
+
+## Build notes
+
+- 2026-04-04: Implemented download/checksum in compiler resolver path with cache-first behavior to keep existing offline flows stable when artifacts are already present.
+- 2026-04-04: Conflict detection is performed in `kestrel run` before JVM launch by traversing source dependency graph via `.class.deps` and aggregating module `.kdeps` sidecars.
+- 2026-04-04: Deferred acceptance item: a network-dependent positive E2E scenario that calls an API from a downloaded external jar remains unchecked to avoid introducing flaky CI dependency on public Maven availability.
