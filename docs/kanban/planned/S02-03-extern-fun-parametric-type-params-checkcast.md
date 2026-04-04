@@ -61,3 +61,42 @@ The missing capability: when a type parameter appears in the return type of `Ext
 - **When NOT to emit checkcast**: if the parametric return type is `Any` (or an unresolved type variable), no `checkcast` should be emitted. Emitting an incorrect checkcast would throw a spurious `ClassCastException`. The safest rule: only emit `checkcast` when the type variable is instantiated to a *concrete* named reference type (not `Any`, not a still-open type variable).
 - **`Any` type**: Kestrel does not currently have a first-class `Any` type, but the epic design uses `Any` in examples (`extern fun jhmGet<V>(m: JHashMap, k: Any): V`). This may require introducing `Any` as a special type alias for `java.lang.Object` in the typecheck environment. Clarify this before implementing — it is a potential S02-01 or S02-02 prerequisite or a new constraint on this story.
 - **Interaction with async extern fun**: a parametric `extern fun` that returns `Task<V>` would require the codegen to know the method returns `KTask` (not `Object`). This is the same `taskDescriptor` distinction already in the codebase. Parametric async extern funs are out of scope for this story.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| AST | Extend `ExternFunDecl` with optional `typeParams` (matching `FunDecl`). |
+| Parser | Parse `extern fun name<T, U>(...)` generic parameter lists before params. |
+| Typecheck | Introduce extern-fun signature scope for type params (mirroring generic `FunDecl` behavior) and keep unknown-type validation compatible with local extern type params. |
+| JVM codegen | Emit `CHECKCAST` at call sites when a parametric extern fun return resolves to a concrete reference type. |
+| Conformance/tests | Add parse and typecheck conformance for parametric extern fun syntax and inference behavior. |
+| Specs | Update language/typesystem docs to describe parametric extern cast-promise semantics. |
+
+## Tasks
+
+- [ ] Add `typeParams?: string[]` to `ExternFunDecl` in `compiler/src/ast/nodes.ts`.
+- [ ] Extend extern fun parser path in `compiler/src/parser/parse.ts` to parse `<T, ...>` after function name.
+- [ ] Update extern fun typecheck branch in `compiler/src/typecheck/check.ts` to resolve signature types with a scoped type-parameter map.
+- [ ] Adjust extern fun unknown-type validation in `compiler/src/typecheck/check.ts` so local extern type params are treated as known names.
+- [ ] Add parametric extern binding metadata in `compiler/src/jvm-codegen/codegen.ts` and emit `CHECKCAST` when inferred call-site return type is concrete.
+- [ ] Ensure no `CHECKCAST` is emitted for unresolved/open type variables.
+- [ ] Add parse integration coverage in `compiler/test/integration/parse.test.ts` for `extern fun get<T>(...)` form.
+- [ ] Add typecheck conformance fixtures for parametric extern fun inference success/failure.
+- [ ] Update `docs/specs/01-language.md` and `docs/specs/06-typesystem.md` for parametric extern fun behavior.
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `./scripts/kestrel test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Parse integration | `compiler/test/integration/parse.test.ts` | Accept generic extern fun declarations with multiple type params. |
+| Parse conformance | `tests/conformance/parse/valid/*.ks` | Lock grammar for parametric extern fun declarations. |
+| Typecheck conformance (valid) | `tests/conformance/typecheck/valid/*.ks` | Verify instantiated return typing (`V` inferred to concrete context type). |
+| Typecheck conformance (invalid) | `tests/conformance/typecheck/invalid/*.ks` | Verify bad instantiations or unknown generic names fail with diagnostics. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/01-language.md` — document extern fun type parameter syntax.
+- [ ] `docs/specs/06-typesystem.md` — document cast-promise semantics and runtime `CHECKCAST` behavior for parametric extern returns.
