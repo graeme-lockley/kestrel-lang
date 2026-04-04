@@ -6,19 +6,26 @@ Unplanned
 
 ## Summary
 
-Adds deterministic dependency management for remote modules by pairing lockfile support with URL import resolution.
+Adds deterministic dependency management for remote modules by pairing lockfile support with URL import resolution. Also removes the hardcoded stdlib whitelist so that `kestrel:` sub-path specifiers (needed by E08) resolve by file-existence rather than an explicit list.
 
 ## Stories
 
 - [S04-01-url-import-resolution.md](../../unplanned/S04-01-url-import-resolution.md)
 - [S04-02-lockfile-kestrel-lock.md](../../unplanned/S04-02-lockfile-kestrel-lock.md)
+- [S04-03-stdlib-subpath-resolver.md](../../unplanned/S04-03-stdlib-subpath-resolver.md)
 
 ## Dependencies
 
-- Story 63 should land before or alongside story 62.
+- S04-02 (Lockfile) should land before S04-01 (URL imports); S04-01 depends on S04-02's cache and lockfile infrastructure.
+- S04-03 (stdlib sub-path resolver) is independent and can land at any time; it should land before E08.
 
 ## Epic Completion Criteria
 
-- Lockfile behavior is implemented and documented.
-- URL imports use lockfile/cache rules deterministically.
-- Integration coverage demonstrates reproducible dependency resolution.
+- `kestrel.lock` format is defined (JSON), implemented, and documented in docs/specs/09-tools.md.
+- `kestrel lock` CLI command resolves all dependencies and writes/updates the lockfile.
+- When a lockfile is present, URL resolution uses only locked artifacts (no live network fetch for known specifiers).
+- Specifiers starting with `https://` or `http://` are fetched, content-hashed (SHA-256), and cached under `~/.kestrel/cache/`.
+- Compile errors for URL resolution failures include source span information.
+- Integration tests demonstrate reproducible URL dependency resolution using a local mock server and a lockfile.
+- `kestrel:X` and `kestrel:X/Y` specifiers resolve by file existence under `stdlib/`, not a hardcoded whitelist.
+- The project root is determined canonically (walk up from entry file to first `kestrel.lock` or project root sentinel, documented in spec).
