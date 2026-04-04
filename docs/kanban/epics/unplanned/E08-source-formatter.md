@@ -22,7 +22,7 @@ Because the formatter is the first major developer tool, this epic begins with e
 
 - Existing flat stdlib modules are moved to `kestrel:data/*`, `kestrel:io/*`, and `kestrel:sys/*`; all import sites in `stdlib/`, `tests/`, and example programs are updated.
 - The `kestrel:dev/*` and `kestrel:tools/*` sub-namespaces are defined in specs and the resolver supports all sub-paths via file-existence fallback (no hardcoded whitelist for sub-paths).
-- `kestrel:tools/cli` is implemented with `CliSpec`, `parse`, `run`, `help`, and `version`; `--help` and `--version` work automatically for any tool built on it.
+- `kestrel:dev/cli` is implemented with `CliSpec`, `parse`, `run`, `help`, and `version`; `--help` and `--version` work automatically for any tool built on it.
 - `./kestrel run kestrel:tools/test` runs the test tool directly; `kestrel test` is a thin alias for it.
 - `kestrel fmt <file.ks>` reformats a Kestrel source file in-place according to the opinionated rules.
 - `kestrel fmt --check <file.ks>` exits non-zero when the file is not already canonical; used in CI without modifying files.
@@ -59,9 +59,9 @@ Because the formatter is the first major developer tool, this epic begins with e
 | `kestrel:sys/task` | Async tasks | `stdlib/kestrel/sys/task.ks` | `kestrel:task` |
 | `kestrel:sys/runtime` | Runtime errors | `stdlib/kestrel/sys/runtime.ks` | `kestrel:runtime` |
 | `kestrel:dev/stack` | Stack trace (debug) | `stdlib/kestrel/dev/stack.ks` | `kestrel:stack` |
+| `kestrel:dev/cli` | CLI argument parser and self-description library | `stdlib/kestrel/dev/cli.ks` | *(new)* |
 | `kestrel:dev/parser` | Lexer + AST + parser (single module) | `stdlib/kestrel/dev/parser.ks` | *(new)* |
 | `kestrel:dev/doc` | Wadler–Lindig Doc IR | `stdlib/kestrel/dev/doc.ks` | *(new)* |
-| `kestrel:tools/cli` | CLI argument parser and self-description library | `stdlib/kestrel/tools/cli.ks` | *(new)* |
 | `kestrel:tools/test` | Test framework + runner | `stdlib/kestrel/tools/test.ks` | `kestrel:test` |
 | `kestrel:tools/format` | Source formatter | `stdlib/kestrel/tools/format.ks` | *(new)* |
 
@@ -70,8 +70,8 @@ Because the formatter is the first major developer tool, this epic begins with e
 - **`kestrel:data/*`** — pure, stateless modules: data structures, algorithms, type utilities. No I/O.
 - **`kestrel:io/*`** — effectful modules that communicate with the outside world: console, filesystem, network.
 - **`kestrel:sys/*`** — system-level concerns: processes, concurrency, runtime error types.
-- **`kestrel:dev/*`** — infrastructure for working with Kestrel source code; not end-user-visible, consumed by tools. `kestrel:dev/parser` is a single flat module (no sub-modules) that exports everything needed to lex and parse Kestrel: `Token`, `TokenKind`, all AST ADTs (`Expr`, `Pattern`, `Type`, `TopLevelDecl`, …), `lex : String -> Result<List<Token>, LexError>`, and `parse : List<Token> -> Result<Program, ParseError>`.
-- **`kestrel:tools/*`** — user-facing tools. Each tool module has a `cli.ks` that declares its `CliSpec` and exports `main : List<String> -> Task<Int>`. The `kestrel:tools/cli` library provides argument parsing and automatic `--help`/`--version` rendering from the spec.
+- **`kestrel:dev/*`** — infrastructure for working with Kestrel source code; not end-user-visible, consumed by tools. Includes `kestrel:dev/cli` (CLI argument parsing and self-description), `kestrel:dev/parser` (single flat module exporting everything needed to lex and parse Kestrel), `kestrel:dev/doc` (Wadler–Lindig Doc IR), and `kestrel:dev/stack` (debug stack traces).
+- **`kestrel:tools/*`** — user-facing tools. Each tool module has a `cli.ks` that declares its `CliSpec` and exports `main : List<String> -> Task<Int>`. The `kestrel:dev/cli` library provides argument parsing and automatic `--help`/`--version` rendering from the spec.
 
 #### Resolver change
 
@@ -85,9 +85,9 @@ specifier = "kestrel:data/string"
 
 ### Tool infrastructure
 
-#### `kestrel:tools/cli` — CLI argument parser and self-description
+#### `kestrel:dev/cli` — CLI argument parser and self-description
 
-Every tool uses `kestrel:tools/cli` to declare what arguments it accepts. The library provides:
+Every tool uses `kestrel:dev/cli` to declare what arguments it accepts. The library provides:
 
 - Declarative `CliSpec`, `CliOption`, and `CliArg` ADTs
 - `parse : CliSpec -> List<String> -> Result<ParsedArgs, CliError>` — parses raw argv
@@ -139,7 +139,7 @@ Each `kestrel:tools/X` module contains (or is structured around) a `cli.ks` that
 Example — the formatter's `cli.ks` sketch:
 
 ```
-import { CliSpec, CliOption, CliArg, Flag, run } from "kestrel:tools/cli"
+import { CliSpec, CliOption, CliArg, Flag, run } from "kestrel:dev/cli"
 
 let spec : CliSpec =
   { name        = "format"
@@ -205,7 +205,7 @@ New tools are added by creating a `kestrel:tools/X` module with a `cli.ks` — n
 
 ```
 kestrel:tools/format
-  ├── import kestrel:tools/cli     → CliSpec, run (cli.ks convention)
+  ├── import kestrel:dev/cli     → CliSpec, run (cli.ks convention)
   ├── import kestrel:dev/parser    → Token, AST types, lex, parse
   ├── import kestrel:dev/doc       → Doc IR, pretty
   └── import kestrel:io/fs / kestrel:io/console  → I/O
