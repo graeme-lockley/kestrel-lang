@@ -220,7 +220,7 @@ Key properties of this example:
 10. [x] [S02-10-migrate-task-combinator-intrinsics.md](../../done/S02-10-migrate-task-combinator-intrinsics.md) — Migrate `task.ks` task combinator intrinsics (4 `__task_*`)
 11. [x] [S02-11-dict-rewrite-over-hashmap.md](../../done/S02-11-dict-rewrite-over-hashmap.md) — `kestrel:dict` rewrite over `java.util.HashMap` (integration test vehicle)
 12. [x] [S02-12-maven-classpath-scheme-and-kdeps-sidecars.md](../../done/S02-12-maven-classpath-scheme-and-kdeps-sidecars.md) — `maven:` classpath declaration scheme + `.kdeps` conflict detection
-13. [S02-13-extern-import-auto-binding-optional.md](../../unplanned/S02-13-extern-import-auto-binding-optional.md) — `extern import` auto-binding from class metadata **(Optional)**
+13. [S02-13-extern-import-auto-binding-optional.md](../../planned/S02-13-extern-import-auto-binding-optional.md) — `extern import` auto-binding from class metadata **(Optional)**
 
 **Story dependencies:**
 - S02-01, S02-02, S02-03 are strictly sequential; each blocks the next.

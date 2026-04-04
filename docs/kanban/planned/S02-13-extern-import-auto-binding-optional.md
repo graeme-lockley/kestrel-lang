@@ -63,3 +63,49 @@ Implement `extern import "java:pkg.Class" as Name { ... }` — a convenience for
 - **Stub output file location**: emitted alongside the `.class` output for the containing module (same directory, named `<ClassName>.extern.ks`). This parallels the `.kdeps` sidecar from S02-12. The file should be added to `.gitignore` (or the build system should treat the output directory as generated). If a module has multiple `extern import` declarations, each produces its own sidecar file.
 - **Auto-generated overloads**: Java allows method overloading; Kestrel does not. If a Java class has multiple `put(K, V)` overloads, the auto-generator must either pick one, rename them, or emit `put_1`, `put_2`, etc. None of these options is clean. The override block allows the user to provide explicit bindings and rename as needed.
 - **This feature is genuinely Optional — but has a concrete future trigger**: the only concrete value over hand-written `extern fun` declarations is reducing boilerplate when wrapping many methods. For the stdlib migrations (S02-04 through S02-10), hand-written declarations are used and are already minimal enough. **However**, an LLVM backend investigation is the anticipated trigger that makes this story non-optional. LLVM Java bindings (e.g. Bytedeco JavaCPP LLVM, LLVM4J) expose hundreds of functions; hand-writing `extern fun` stubs for exploratory API sketching would be prohibitively tedious. `extern import` would allow rapid stub generation during exploration, with precise type overrides added progressively as the needed API surface converges. Implement this story before or alongside any LLVM backend story — not after. **Note on JavaCPP-style bindings**: Bytedeco's LLVM bindings use a pointer-wrapper model (`LLVMContextRef`, `LLVMModuleRef`, etc.). Auto-generated stubs will treat these as `Any`; explicit `extern type` declarations and inline overrides will still be needed for each pointer type of interest, but this is far less work than starting from scratch.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| AST | Add top-level `ExternImportDecl` node with `java:` target class, local alias, and optional override declarations. |
+| Parser | Add `extern import "java:..." as Alias { ... }` grammar and parse override methods in declaration body. |
+| Typecheck | Register generated + overridden extern declarations in module environment exactly like hand-written `extern type` / `extern fun`. |
+| Compiler JVM pipeline | Resolve target class metadata using classpath (JDK + maven sidecars from S02-12), generate synthetic extern declarations before typecheck/codegen, and emit `<Alias>.extern.ks` sidecar stubs. |
+| CLI/runtime | No runtime behavior changes; compile-time only feature. |
+| Tests | Add parser, typecheck, and integration coverage for class metadata-driven stub generation and override precedence. |
+| Specs | Update language spec declaration grammar and tooling notes for generated extern stub sidecars. |
+
+## Tasks
+
+- [ ] Add `ExternImportDecl` to `compiler/src/ast/nodes.ts` and include it in top-level declarations.
+- [ ] Extend parser (`compiler/src/parser/parse.ts`) for `extern import "java:..." as Alias { ... }` syntax and override method parsing.
+- [ ] Implement JVM class metadata reader utility (`compiler/src/jvm-metadata/*` or equivalent) to enumerate public methods/constructors from a target class.
+- [ ] Generate synthetic `extern type` + `extern fun` declarations from class metadata with primitive mappings (`int/long -> Int`, `boolean -> Bool`, `double -> Float`, `void -> Unit`, object/generic -> Any`).
+- [ ] Merge override declarations from extern-import body over generated defaults and validate arity/signature consistency.
+- [ ] Integrate synthetic declarations into `compile-file-jvm` prior to typecheck/codegen and emit `<Alias>.extern.ks` sidecar stubs.
+- [ ] Add parser integration tests for syntax success/failure and override parsing.
+- [ ] Add typecheck/codegen integration tests proving generated stubs are usable as normal extern declarations.
+- [ ] Add sidecar emission test for `<Alias>.extern.ks` output contents.
+- [ ] Update specs (`docs/specs/01-language.md`, `docs/specs/09-tools.md` if sidecar behavior needs tooling note).
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `./kestrel test --summary`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Integration (parser) | `compiler/test/integration/parse.test.ts` | Parse valid/invalid `extern import` declarations and override bodies. |
+| Integration (compile) | `compiler/test/integration/extern-import.test.ts` | Compile a module using `extern import` against a JDK class and call generated methods. |
+| Unit (metadata) | `compiler/test/unit/jvm-metadata.test.ts` | Validate Java descriptor-to-Kestrel type mapping and overload handling strategy. |
+| Integration (sidecar) | `compiler/test/integration/extern-import-sidecar.test.ts` | Verify `<Alias>.extern.ks` is emitted and contains valid extern declarations. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/01-language.md` — add `extern import` grammar and semantics.
+- [ ] `docs/specs/09-tools.md` — mention generated `<Alias>.extern.ks` sidecar behavior (if kept as tool-visible output).
+
+## Notes
+
+- Prefer deterministic overload naming in generated stubs (`name`, `name_2`, `name_3`, ...) so outputs are stable across runs.
+- Keep this feature compile-time only; never execute imported classes during metadata extraction.
