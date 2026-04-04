@@ -1,7 +1,10 @@
 // kestrel:string — spec 02 primitives plus additional string helpers.
 
-export extern fun length(s: String): Int = jvm("kestrel.runtime.KRuntime#stringLength(java.lang.Object)")
-export extern fun slice(s: String, start: Int, end: Int): String = jvm("kestrel.runtime.KRuntime#stringSlice(java.lang.Object,java.lang.Object,java.lang.Object)")
+export extern fun length(s: String): Int = 
+  jvm("kestrel.runtime.KRuntime#stringLength(java.lang.Object)")
+
+export extern fun slice(s: String, start: Int, end: Int): String = 
+  jvm("kestrel.runtime.KRuntime#stringSlice(java.lang.Object,java.lang.Object,java.lang.Object)")
 
 export fun left(s: String, n: Int): String =
   if (n <= 0) ""
@@ -33,21 +36,36 @@ export fun dropRight(s: String, n: Int): String =
     if (n >= len) "" else slice(s, 0, len - n)
   }
 
-extern fun charAt(s: String, i: Int): Char = jvm("kestrel.runtime.KRuntime#stringCharAt(java.lang.Object,java.lang.Object)")
-extern fun charStr(c: Char): String = jvm("kestrel.runtime.KRuntime#charToString(java.lang.Object)")
+extern fun charAt(s: String, i: Int): Char = 
+  jvm("kestrel.runtime.KRuntime#stringCharAt(java.lang.Object,java.lang.Object)")
 
-export extern fun indexOf(s: String, sub: String): Int = jvm("kestrel.runtime.KRuntime#stringIndexOf(java.lang.Object,java.lang.Object)")
-export extern fun equals(a: String, b: String): Bool = jvm("kestrel.runtime.KRuntime#stringEquals(java.lang.Object,java.lang.Object)")
-export extern fun toUpperCase(s: String): String = jvm("kestrel.runtime.KRuntime#stringUpper(java.lang.Object)")
-export fun toUpper(s: String): String = toUpperCase(s)
+extern fun charStr(c: Char): String = 
+  jvm("kestrel.runtime.KRuntime#charToString(java.lang.Object)")
 
-export extern fun trim(s: String): String = jvm("kestrel.runtime.KRuntime#stringTrim(java.lang.Object)")
+export extern fun indexOf(s: String, sub: String): Int = 
+  jvm("kestrel.runtime.KRuntime#stringIndexOf(java.lang.Object,java.lang.Object)")
 
-export fun isEmpty(s: String): Bool = length(s) == 0
+export extern fun equals(a: String, b: String): Bool = 
+  jvm("kestrel.runtime.KRuntime#stringEquals(java.lang.Object,java.lang.Object)")
 
-export extern fun codePointAt(s: String, i: Int): Int = jvm("kestrel.runtime.KRuntime#stringCodePointAt(java.lang.Object,java.lang.Object)")
+export extern fun toUpperCase(s: String): String = 
+  jvm("kestrel.runtime.KRuntime#stringUpper(java.lang.Object)")
 
-fun normIdx(i: Int, len: Int): Int = if (i < 0) len + i else i
+export fun toUpper(s: String): String = 
+  toUpperCase(s)
+
+export extern fun trim(s: String): String = 
+  jvm("kestrel.runtime.KRuntime#stringTrim(java.lang.Object)")
+
+export fun isEmpty(s: String): Bool = 
+  length(s) == 0
+
+export extern fun codePointAt(s: String, i: Int): Int = 
+  jvm("kestrel.runtime.KRuntime#stringCodePointAt(java.lang.Object,java.lang.Object)")
+
+fun normIdx(i: Int, len: Int): Int = 
+  if (i < 0) len + i else i
+
 fun clampIdx(a: Int, lo: Int, hi: Int): Int =
   if (a < lo) lo else if (a > hi) hi else a
 
@@ -74,7 +92,8 @@ export fun parseInt(s: String): Int = {
 }
 
 fun isAllDigitsUnsigned(t: String, i: Int): Bool =
-  if (i >= length(t)) True
+  if (i >= length(t)) 
+    True
   else {
     val cp = codePointAt(t, i)
     if (cp >= 48 & cp <= 57) isAllDigitsUnsigned(t, i + 1) else False
