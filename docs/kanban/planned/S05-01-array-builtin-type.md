@@ -150,3 +150,39 @@ Note: `arrayListSet` and `arrayListAdd` return `void` (not their natural Java re
 - **Index type**: Kestrel `Int` is boxed as `Long` on the JVM. The helper casts `((Long) indexObj).intValue()` before passing to `ArrayList.get/set`. Passing a `Long` directly to `ArrayList.get(int)` would throw `ClassCastException`.
 - **Mutation semantics**: unlike `Dict`, `Array` is intentionally mutable in place. `push` and `set` operate on the same array object passed in. Callers requiring snapshot semantics must call `fromList(toList(arr))` or a future `copy()` helper.
 - **Spec cleanup**: the spec currently describes an unimplemented ARRAY heap kind. Update it to reflect the ArrayList strategy rather than inventing a custom runtime type.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `runtime/jvm/src/kestrel/runtime/KRuntime.java` | Add `import java.util.ArrayList;` and 8 static helpers: `arrayListNew`, `arrayListCopy`, `arrayListGet`, `arrayListSet`, `arrayListAdd`, `arrayListSize`, `arrayListFromList`, `arrayListToList`. No changes to existing methods. |
+| `stdlib/kestrel/array.ks` | New file. `extern type JArrayList`, 8 `jarrXxx` extern fun bindings, `opaque type Array<T> = JArrayList`, 7 exported functions. |
+| `stdlib/kestrel/array.test.ks` | New test file. Exercises all 7 public functions. |
+| `docs/specs/01-language.md §3.6` | Update Array<T> note: remove reference to custom ARRAY heap kind; document as ArrayList-backed stdlib type. |
+| `docs/specs/02-stdlib.md` | Add `## kestrel:array` section after `## kestrel:dict`. |
+
+## Tasks
+
+- [ ] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `import java.util.ArrayList;` at the top (with other imports)
+- [ ] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add 8 static helpers at the end of the class (after hashMap helpers): `arrayListNew`, `arrayListCopy`, `arrayListGet`, `arrayListSet` (void return), `arrayListAdd` (void return), `arrayListSize` (returns `Long`), `arrayListFromList`, `arrayListToList`
+- [ ] `cd runtime/jvm && bash build.sh` — verify helpers compile
+- [ ] Create `stdlib/kestrel/array.ks` with `import * as List from "kestrel:list"`, `extern type JArrayList = jvm("java.util.ArrayList")`, 8 `extern fun jarr*` bindings pointing at `kestrel.runtime.KRuntime#arrayList*(...)`, `opaque type Array<T> = JArrayList`, and exported funs: `new`, `get`, `set`, `push`, `length`, `fromList`, `toList`
+- [ ] Create `stdlib/kestrel/array.test.ks` with test suite covering: empty new array has length 0, push increments length, get returns pushed value, set mutates in place, fromList/toList round-trip, multiple pushes
+- [ ] `docs/specs/01-language.md §3.6`: replace the "Array<T> and Task<T> are runtime built-ins" note with text documenting ArrayList backing and reference to stdlib module
+- [ ] `docs/specs/02-stdlib.md`: add `## kestrel:array` section after `## kestrel:dict`
+- [ ] `cd compiler && npm run build && npm test`
+- [ ] `./scripts/kestrel test`
+- [ ] `./scripts/run-e2e.sh`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/array.test.ks` | All public API: `new`, `push`, `get`, `set`, `length`, `fromList`, `toList`; empty array length; round-trip |
+| Conformance typecheck valid | `tests/conformance/typecheck/valid/array_type.ks` | `Array<Int>` as a type annotation typechecks without error |
+| Conformance runtime valid | `tests/conformance/runtime/valid/array_basic.ks` | Create array, push 3 ints, length = 3, get each, set one, verify new value |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/01-language.md §3.6` — reword Array<T> description: `Array<T>` is a mutable, O(1)-indexed sequence backed by `java.util.ArrayList` and exposed as the opaque type `Array<T>` in `kestrel:array`. Remove reference to custom ARRAY heap kind.
+- [ ] `docs/specs/02-stdlib.md` — add `## kestrel:array` section documenting the opaque `Array<T>` type, mutation semantics, and the 7 exported functions (`new`, `get`, `set`, `push`, `length`, `fromList`, `toList`)
