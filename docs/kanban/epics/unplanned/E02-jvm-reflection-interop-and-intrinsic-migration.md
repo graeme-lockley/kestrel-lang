@@ -226,10 +226,10 @@ Key properties of this example:
 - S02-01, S02-02, S02-03 are strictly sequential; each blocks the next.
 - S02-04 through S02-10 depend on S02-01 + S02-02 + S02-03 and are otherwise independent; can be implemented in any order.
 - S02-07 additionally depends on S02-03 (parametric `extern fun` required for `capture_trace<T>`).
-- S02-08, S02-09 (partial: `__run_process`), S02-10 require async `extern fun` support (Task<T> return) — a gap in S02-02's current scope that must be resolved before those stories are planned.
+- S02-08, S02-09 (partial: `__run_process`), S02-10 require async `extern fun` support (Task<T> return); for this epic build run, that support is folded into S02-02 so later stories remain unblocked.
 - S02-11 depends on S02-01 + S02-02 + S02-03 and benefits from S02-04 being complete first (char type in dict keys).
 - S02-12 depends on S02-01 + S02-02 only; independent of all migration stories.
-- S02-13 is Optional and depends on S02-01 + S02-02 + S02-03.
+- S02-13 is Optional and depends on S02-01 + S02-02 + S02-03; this build run includes S02-13.
 
 ## Dependencies
 
