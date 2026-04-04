@@ -6,6 +6,9 @@ compiler/node_modules/
 *.kti
 *.kbc.deps
 
+# Test temp directories
+compiler/test/integration/_tmp_*/
+
 # JVM
 runtime/jvm/out/
 runtime/jvm/kestrel-runtime.jar
