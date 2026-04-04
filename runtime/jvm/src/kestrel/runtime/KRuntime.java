@@ -841,15 +841,13 @@ public final class KRuntime {
     }
 
     @SuppressWarnings("unchecked")
-    public static Object hashMapPut(Object mapObj, Object key, Object value) {
+    public static void hashMapPut(Object mapObj, Object key, Object value) {
         ((HashMap<Object, Object>) mapObj).put(key, value);
-        return KUnit.INSTANCE;
     }
 
     @SuppressWarnings("unchecked")
-    public static Object hashMapRemove(Object mapObj, Object key) {
+    public static void hashMapRemove(Object mapObj, Object key) {
         ((HashMap<Object, Object>) mapObj).remove(key);
-        return KUnit.INSTANCE;
     }
 
     @SuppressWarnings("unchecked")
