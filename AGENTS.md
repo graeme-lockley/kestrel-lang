@@ -239,6 +239,7 @@ Epics live in `docs/kanban/epics/` with folders: **unplanned** and **done**.
 | `unplanned/` → `planned/` | **`plan-story`** |
 | `planned/` → `doing/` → `done/` | **`build-story`** |
 | End-to-end (any phase → done) | **`build-story`** |
+| All epic stories → done (author reviews) | **`build-epic`** |
 
 1. **future** (optional) — Capture investigations and ideas before they are roadmap items; promote to **unplanned** with a new **`S##-##-slug.md`** when scoped.
 2. **unplanned** — High-level feature stories on the ordered roadmap (summary, state, relationships, **goals**, acceptance, spec refs, **risks / notes**).
@@ -280,7 +281,7 @@ Use the **`build-story`** skill to execute planned work. Key steps:
 - **CLI**: `scripts/kestrel`
 - **Specs**: `docs/specs/` (01-language, 09-tools, etc.)
 - **Kestrel tests**: `tests/e2e/`, `tests/conformance/`
-- **Kanban**: `docs/kanban/README.md` (phases and gates); skills `.github/skills/epic-create/`, `story-create/`, `plan-epic/`, `kanban-story-migrate/`, `plan-story/`, `build-story/`; subagents `.cursor/agents/kanban-*.md`
+- **Kanban**: `docs/kanban/README.md` (phases and gates); skills `.github/skills/epic-create/`, `story-create/`, `plan-epic/`, `kanban-story-migrate/`, `plan-story/`, `build-story/`, `build-epic/`; subagents `.cursor/agents/kanban-*.md`
 
 ---
 
