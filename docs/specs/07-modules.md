@@ -193,7 +193,30 @@ The types file is **JSON**. Implementations must produce and consume this format
 
 ---
 
-## 10. Implementor Checklist
+## 10. Async Exports and Cross-Module Async Calling
+
+This section specifies how `async fun` declarations interact with the module system.
+
+### 10.1 Async functions at export sites
+
+- An `export async fun f(params): Task<T>` is exported with the same type signature as `export fun f(params): Task<T>` — namely the function type `(params) -> Task<T>`. The `async` keyword is **not** part of the type; it is a codegen directive that instructs the compiler to emit the function as a virtual-thread payload.
+- Importing modules cannot distinguish an async export from a non-async export that returns `Task<T>`. Both have type `(params) -> Task<T>` at import sites.
+- There is no way to require a caller to pass an "actually async" function at the type level. Higher-order functions that accept `(A) -> Task<B>` work equally for `async fun` and for ordinary functions returning `Task<B>`.
+
+### 10.2 Importing and calling async functions from other modules
+
+- When module B imports `f` from module A where `f` is declared `async fun f(x: A): Task<B>`, B may call `f(arg)` to receive a `Task<B>`. The call site does not use the `async` keyword; it simply calls the function. The returned `Task<B>` may be awaited inside any `async` context in B: `val result = await f(arg)`.
+- At the codegen level, the JVM backend emits a call to the imported function using the `KTask`-returning descriptor for async exports (so that the foreign class's `submitAsync` wrapper is invoked). The caller in B does not need to know that `f` was declared `async`; it uses only the type `(A) -> Task<B>` to determine how to call it.
+- `await` on the result of a cross-module async call has the same semantics as `await` on a same-module async call: it blocks the current virtual thread until the task completes and returns `B` (or re-throws if the task failed).
+
+### 10.3 Top-level await restriction at module boundaries
+
+- `await` is prohibited outside an `async` context (01 §5, 06 §6). This applies equally within a module and at module boundaries. A module's top-level body (the module initializer) is **not** an async context, so `await` cannot appear at the top level of any module, even if it is importing and calling async functions from another module.
+- Modules that need to produce async effects at the top level must do so by defining an `async fun run()` (or equivalent) and calling it at the top level; the returned `Task<Unit>` is submitted to the async runtime, which then awaits quiescence before the program exits (see `kestrel.exitWait` system property in the JVM runtime).
+
+---
+
+## 11. Implementor Checklist
 
 1. **Parse** all ImportDecl and ExportDecl per 01 §3.1; extract the STRING value (specifier) for each.
 2. **Distinct specifiers:** Build the set of distinct specifiers (string equality) from all import **and** re-export declarations (§2.1).
@@ -207,10 +230,10 @@ The types file is **JSON**. Implementations must produce and consume this format
 
 ---
 
-## 11. Relation to Other Specs
+## 12. Relation to Other Specs
 
 | Spec | Relation |
 |------|----------|
 | **01** | ImportDecl, ExportDecl, TopLevelDecl grammar (01 §3.1). STRING is the specifier. UPPER_IDENT for namespace; IDENT for named import/export. Program order: imports first, then declarations and statements. |
 | **02** | Standard library module names (including `kestrel:string`, `kestrel:char`, `kestrel:list`, `kestrel:stack`, `kestrel:http`, `kestrel:json`, `kestrel:fs`) must resolve to modules that satisfy 02. No other spec may use those names for a different contract. |
-| **03** | One .kbc (binary) per module; references in bytecode are by offset/index only (03 §0). Import table (§6.5): `import_count` and one u32 (string table index) per distinct import specifier; the string is the **exact source specifier**. Exported names and their offsets appear in the package’s types file (07 §5); function table (§6.1), exported type declarations (§6.4), and ADT table (§10) hold the definitions in the binary. |
+| **03** | One .kbc (binary) per module; references in bytecode are by offset/index only (03 §0). Import table (§6.5): `import_count` and one u32 (string table index) per distinct import specifier; the string is the **exact source specifier**. Exported names and their offsets appear in the package’s types file (07 §5); function table (§6.1), exported type declarations (§6.4), and ADT table (§10) hold the definitions in the binary. || **06** | Structural async typing (06 §6): `async fun f(x: A): Task<B>` has the same type `(A) -> Task<B>` as a plain `fun f(x: A): Task<B>`. The `async` keyword is invisible at module boundaries. `await` prohibition at module scope enforced by the type checker (06 §6). |
