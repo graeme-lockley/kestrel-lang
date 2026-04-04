@@ -18,6 +18,8 @@ export interface MavenResolvedDependency extends MavenCoordinate {
   sha1: string;
 }
 
+const MAVEN_SEGMENT_RE = /^[a-zA-Z0-9._\-]+$/;
+
 function sanitizeSegment(value: string): string {
   return value.trim();
 }
@@ -34,6 +36,11 @@ export function parseMavenSpecifier(spec: string): MavenCoordinate {
   const parts = rest.split(':').map((p) => sanitizeSegment(p));
   if (parts.length !== 3 || parts.some((p) => p.length === 0)) {
     throw new Error(`Invalid maven specifier: ${spec}; expected maven:groupId:artifactId:version`);
+  }
+  for (const part of parts) {
+    if (!MAVEN_SEGMENT_RE.test(part)) {
+      throw new Error(`Invalid maven coordinate segment '${part}' in '${spec}'; segments must match [a-zA-Z0-9._-]`);
+    }
   }
   const [groupId, artifactId, version] = parts;
   return {

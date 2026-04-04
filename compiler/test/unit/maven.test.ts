@@ -40,4 +40,23 @@ describe('maven specifiers', () => {
       rmSync(cacheRoot, { recursive: true, force: true });
     }
   });
+
+  it('rejects path-traversal groupId', () => {
+    expect(() => parseMavenSpecifier('maven:../../../etc:passwd:1.0')).toThrow(/Invalid maven coordinate segment/);
+  });
+
+  it('rejects space in artifactId', () => {
+    expect(() => parseMavenSpecifier('maven:com.example:my lib:1.0')).toThrow(/Invalid maven coordinate segment/);
+  });
+
+  it('rejects null byte in version', () => {
+    expect(() => parseMavenSpecifier('maven:com.example:demo:1.0\x00evil')).toThrow(/Invalid maven coordinate segment/);
+  });
+
+  it('accepts valid coordinates with dots and hyphens', () => {
+    const parsed = parseMavenSpecifier('maven:org.apache.commons:commons-lang3:3.20.0');
+    expect(parsed.groupId).toBe('org.apache.commons');
+    expect(parsed.artifactId).toBe('commons-lang3');
+    expect(parsed.version).toBe('3.20.0');
+  });
 });

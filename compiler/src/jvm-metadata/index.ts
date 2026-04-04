@@ -38,14 +38,22 @@ export function readClassMetadata(className: string, jarPaths?: string[]): Class
   }
   args.push(className);
 
+  const timeoutMs = process.env.KESTREL_JAVAP_TIMEOUT_MS
+    ? parseInt(process.env.KESTREL_JAVAP_TIMEOUT_MS, 10)
+    : 15_000;
   let output: string;
   try {
     output = execSync(`javap ${args.map((a) => JSON.stringify(a)).join(' ')}`, {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: timeoutMs,
     });
   } catch (err) {
+    const asErr = err as { signal?: string | null; killed?: boolean; message?: string };
     const msg = err instanceof Error ? err.message : String(err);
+    if (asErr.killed || asErr.signal) {
+      throw new Error(`Timed out reading class metadata for '${className}' (javap did not respond within ${timeoutMs}ms); check the jar/classpath. Set KESTREL_JAVAP_TIMEOUT_MS to override.`);
+    }
     throw new Error(`Failed to read class metadata for '${className}': ${msg}`);
   }
 
