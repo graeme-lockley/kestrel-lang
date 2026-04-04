@@ -728,11 +728,13 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   const mutualGroupByFun = new Map<string, JvmMutualGroupInfo>();
   for (const scc of sccs) {
     if (scc.length < 2) continue;
-    const arity = funByName.get(scc[0]!)?.params.length;
+    // Filter to only sync members; async members are emitted via the payload/wrapper pattern
+    const syncMembers = scc.filter((name) => !funByName.get(name)?.async);
+    if (syncMembers.length < 2) continue;
+    const arity = funByName.get(syncMembers[0]!)?.params.length;
     if (arity == null) continue;
-    if (!scc.every((name) => funByName.get(name)?.params.length === arity)) continue;
-    if (scc.some((name) => funByName.get(name)?.async)) continue;
-    const orderedMembers = topLevelFunDecls.map((f) => f.name).filter((n) => scc.includes(n));
+    if (!syncMembers.every((name) => funByName.get(name)?.params.length === arity)) continue;
+    const orderedMembers = topLevelFunDecls.map((f) => f.name).filter((n) => syncMembers.includes(n));
     const memberStateByName = new Map<string, number>();
     for (let i = 0; i < orderedMembers.length; i++) memberStateByName.set(orderedMembers[i]!, i);
     const group: JvmMutualGroupInfo = {
