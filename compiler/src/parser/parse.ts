@@ -1240,6 +1240,9 @@ class Parser {
       } else if (this.at('keyword', 'continue')) {
         this.advance();
         stmts.push({ kind: 'ContinueStmt' });
+      } else if (this.at('keyword', 'ignore')) {
+        const span = this.advance().span;
+        stmts.push({ kind: 'IgnoreStmt', expr: this.parseExpr('expr'), span });
       } else {
         if (this.at('rbrace') || this.at('eof')) {
           const last = stmts[stmts.length - 1];
@@ -1254,8 +1257,13 @@ class Parser {
               last.kind === 'VarStmt' ||
               last.kind === 'FunStmt' ||
               last.kind === 'BreakStmt' ||
-              last.kind === 'ContinueStmt')
+              last.kind === 'ContinueStmt' ||
+              last.kind === 'IgnoreStmt')
           ) {
+            const span = this.current().span;
+            result = { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
+          } else if (last?.kind === 'IgnoreStmt') {
+            // ignore Expr is a valid final stmt in expr context too; produces Unit
             const span = this.current().span;
             result = { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
           } else if (

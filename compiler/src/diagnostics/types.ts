@@ -50,6 +50,8 @@ export const CODES = {
     narrow_impossible: 'type:narrow_impossible',
     /** `is` on an imported opaque ADT using a constructor or non-name RHS (07 §5.3). */
     narrow_opaque: 'type:narrow_opaque',
+    /** `ignore` applied to an expression of type `Unit`; use a bare expression statement instead. */
+    ignore_unit: 'type:ignore_unit',
   },
   export: {
     not_exported: 'export:not_exported',

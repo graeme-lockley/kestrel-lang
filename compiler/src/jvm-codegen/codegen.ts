@@ -165,6 +165,7 @@ function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, num
             walk(stmt.body);
             for (const p of stmt.params) bound.delete(p.name);
           } else if (stmt.kind === 'ExprStmt') walk(stmt.expr);
+          else if (stmt.kind === 'IgnoreStmt') walk(stmt.expr);
           else if (stmt.kind === 'AssignStmt') {
             if (stmt.target.kind === 'IdentExpr') walk(stmt.target);
             walk(stmt.value);
@@ -294,6 +295,7 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
         idByNode.set(stmt, id);
         walk(stmt.body);
       } else if (stmt.kind === 'ExprStmt') walk(stmt.expr);
+      else if (stmt.kind === 'IgnoreStmt') walk(stmt.expr);
       else if (stmt.kind === 'AssignStmt') {
         if (stmt.target.kind === 'IdentExpr') walk(stmt.target);
         walk(stmt.value);
@@ -403,6 +405,8 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
       const v = node as ValDecl | VarDecl | { name: string; value: Expr };
       walk(v.value);
     } else if (node.kind === 'ExprStmt') {
+      walk(node.expr);
+    } else if (node.kind === 'IgnoreStmt') {
       walk(node.expr);
     }
   }
@@ -1758,6 +1762,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.GOTO, 0);
             patchShort(mb, gotoPos + 1, top.loopHead - gotoPos);
           } else if (stmt.kind === 'ExprStmt') {
+            emitExpr(stmt.expr, mb, tcN, stackDepth);
+            mb.emit1(JvmOp.POP);
+          } else if (stmt.kind === 'IgnoreStmt') {
             emitExpr(stmt.expr, mb, tcN, stackDepth);
             mb.emit1(JvmOp.POP);
           }
@@ -3326,6 +3333,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       initMb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
       initMb.emit1s(JvmOp.PUTSTATIC, cf.fieldref(className, jvmMangleName(v.name), 'Ljava/lang/Object;'));
     } else if (node.kind === 'ExprStmt') {
+      emitExpr(node.expr, initMb);
+      initMb.emit1(JvmOp.POP);
+    } else if (node.kind === 'IgnoreStmt') {
       emitExpr(node.expr, initMb);
       initMb.emit1(JvmOp.POP);
     }

@@ -39,7 +39,7 @@ export interface Token {
 
 export const KEYWORDS = new Set([
   'as', 'fun', 'type', 'val', 'var', 'mut', 'if', 'else', 'while', 'break', 'continue', 'match', 'try', 'catch', 'throw',
-  'async', 'await', 'export', 'import', 'from', 'exception', 'is', 'opaque', 'extern', 'True', 'False',
+  'async', 'await', 'export', 'import', 'from', 'exception', 'is', 'opaque', 'extern', 'ignore', 'True', 'False',
 ]);
 
 export const MULTI_OPS = [

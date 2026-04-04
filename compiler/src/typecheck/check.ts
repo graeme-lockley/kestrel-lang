@@ -761,6 +761,17 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             env.set(stmt.name, apply(t));
           } else if (stmt.kind === 'ExprStmt') {
             inferExpr(stmt.expr, asyncCtx);
+          } else if (stmt.kind === 'IgnoreStmt') {
+            const t = apply(inferExpr(stmt.expr, asyncCtx));
+            if (t.kind === 'prim' && t.name === 'Unit') {
+              throw new TypeCheckError(
+                '`ignore` applied to a `Unit` expression; use a bare expression statement instead',
+                stmt,
+                undefined,
+                CODES.type.ignore_unit
+              );
+            }
+            setInferredType(stmt, tUnit);
           } else if (stmt.kind === 'BreakStmt') {
             if (loopDepth <= 0) {
               throw new TypeCheckError(
@@ -1523,6 +1534,16 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         env.set(node.name, t);
       } else if (node.kind === 'ExprStmt') {
         inferExpr(node.expr, false);
+      } else if (node.kind === 'IgnoreStmt') {
+        const t = apply(inferExpr(node.expr, false));
+        if (t.kind === 'prim' && t.name === 'Unit') {
+          throw new TypeCheckError(
+            '`ignore` applied to a `Unit` expression; use a bare expression statement instead',
+            node,
+            undefined,
+            CODES.type.ignore_unit
+          );
+        }
       } else if (node.kind === 'AssignStmt') {
         const targetT = inferExpr(node.target, false);
         const valueT = inferExpr(node.value, false);
@@ -1555,6 +1576,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         if (n2.kind === 'Program' && Array.isArray(n2.body)) n2.body.forEach((el) => { if (el != null) resolveNode(el); });
         if (n2.kind === 'ValStmt' || n2.kind === 'VarStmt' || n2.kind === 'ValDecl' || n2.kind === 'VarDecl') { resolveNode(n2.value); }
         if (n2.kind === 'ExprStmt') { resolveNode(n2.expr); }
+        if (n2.kind === 'IgnoreStmt') { resolveNode(n2.expr); }
         if (n2.kind === 'FunStmt') resolveNode(n2.body);
         if (n2.kind === 'FunDecl') resolveNode(n2.body);
         if (n2.kind === 'BlockExpr') {

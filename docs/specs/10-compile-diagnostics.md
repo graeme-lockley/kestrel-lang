@@ -89,6 +89,7 @@ Each diagnostic has a stable **code** from one of the following name spaces (or 
 | `type:continue_outside_loop` | `continue` is not inside a `while` body. |
 | `type:narrow_impossible` | `e is T` rejected: **T** does not structurally overlap the type of **e** (06 §4). |
 | `type:narrow_opaque` | `is` on an imported **opaque** ADT: RHS must be the exported type name only (06 §5.3, 07 §5.3). |
+| `type:ignore_unit` | `ignore` applied to a `Unit` expression; use a bare expression statement instead. |
 | `export:not_exported` | Module does not export the requested name. |
 | `export:reexport_conflict` | The same export name would come from more than one source (07 §3.3). |
 | `compile:jvm_namespace_constructor` | JVM compile path does not support namespace-qualified ADT constructor calls (`M.Ctor(…)`); use a wrapper function in the dependency. |

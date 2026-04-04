@@ -225,7 +225,7 @@ export interface TupleType extends NodeBase {
   elements: Type[];
 }
 
-export type TopLevelStmt = ValStmt | VarStmt | AssignStmt | ExprStmt;
+export type TopLevelStmt = ValStmt | VarStmt | AssignStmt | ExprStmt | IgnoreStmt;
 
 export interface ValStmt extends NodeBase {
   kind: 'ValStmt';
@@ -268,6 +268,11 @@ export interface BreakStmt extends NodeBase {
 
 export interface ContinueStmt extends NodeBase {
   kind: 'ContinueStmt';
+}
+
+export interface IgnoreStmt extends NodeBase {
+  kind: 'IgnoreStmt';
+  expr: Expr;
 }
 
 /** Synthetic block result when an expression-oriented block ends with `break`/`continue`: no value is produced (control never reaches the tail). Infers as a fresh type variable so the block unifies with any expected type. */
@@ -435,7 +440,7 @@ export interface TupleExpr extends NodeBase {
 
 export interface BlockExpr extends NodeBase {
   kind: 'BlockExpr';
-  stmts: (ValStmt | VarStmt | AssignStmt | ExprStmt | FunStmt | BreakStmt | ContinueStmt)[];
+  stmts: (ValStmt | VarStmt | AssignStmt | ExprStmt | FunStmt | BreakStmt | ContinueStmt | IgnoreStmt)[];
   result: Expr;
 }
 

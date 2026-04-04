@@ -90,3 +90,7 @@ Compatibility: purely additive; no existing code paths change. Rollback risk: lo
 - [ ] `docs/specs/01-language.md` §2.4 — add `ignore` to the keywords list.
 - [ ] `docs/specs/01-language.md` §3.3 — add `| "ignore" Expr` to `Stmt` grammar and explain semantics: evaluates `expr` for side effects, discards result; `expr` must not have type `Unit`.
 - [ ] `docs/specs/10-compile-diagnostics.md` §4 — add row: `type:ignore_unit` — "Expression passed to `ignore` has type `Unit`; use a bare expression statement instead."
+
+## Build notes
+
+- 2026-04-04: Started implementation.

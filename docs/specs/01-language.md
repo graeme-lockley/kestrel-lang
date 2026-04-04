@@ -66,7 +66,7 @@ The following are **reserved** and may not be used as identifiers:
 
 ```
 fun type val var mut if else while break continue match try catch throw async await
-export import from exception is opaque extern True False
+export import from exception is opaque extern ignore True False
 ```
 
 `True` and `False` are boolean literals; the rest are syntactic keywords.
@@ -355,6 +355,8 @@ Application and field access are **postfix** on an atom: parse one Atom, then ze
 **While loop:** `while (cond) block` evaluates `cond` (which must be **Bool**) before each iteration; while it is `True`, `block` runs. When **cond** is **`x is T`** with **`x`** an identifier, **`block`** is type-checked with **`x`** narrowed to **`original_type & T`** (06 §4), like the **then** branch of **`if`**. The **block** is always parsed in **statement-oriented** form (§3.3): it may end with `:=` / `val` / `var` / `fun` / `break` / `continue` and no trailing expression (implicit **Unit**). The block’s value each iteration is still evaluated and discarded on the stack; the `while` expression has type **Unit** (06). Lowering uses conditional and backward branches (04 §1.6).
 
 **`break` and `continue`:** These are **statements** (not general expressions) and may appear only as **BlockItem**s inside a **block** that is nested (lexically) within a `while` body (including nested blocks and `if`/`match` branch blocks inside the loop). **`break`** exits the **nearest** enclosing `while` loop (skipping the rest of the current iteration and any further iterations of that loop). **`continue`** skips the remainder of the current iteration of that same loop and jumps to the next **condition** test. In nested loops, both target the innermost enclosing `while`. Using `break` or `continue` outside any loop is a **compile-time error** (06, 10).
+
+**`ignore`:** `ignore Expr` is a statement that evaluates `Expr` for its side effects and discards the result. It may appear anywhere a statement is valid. The expression must have a **non-Unit** type; using `ignore` on a `Unit`-typed expression is a **compile-time error** (`type:ignore_unit`, §10 §4) — use a bare expression statement instead. The block may end with `ignore Expr` in both statement-oriented and expression-oriented contexts; the block's result type is **Unit** in this case.
 
 ### 3.3 Blocks and Statements
 
