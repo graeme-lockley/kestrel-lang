@@ -237,6 +237,18 @@ export function compileFileJvm(
   const stdlibDir = options?.stdlibDir ?? pathResolve(projectRoot, 'stdlib');
   const absPath = pathResolve(inputPath);
 
+  // Only write a .class file if the content has changed, to avoid bumping
+  // the file's mtime when the bytecode is identical. This prevents the
+  // staleness-check oscillation where repeated compilations of the same
+  // runtime dependency cause dependent files to appear stale on every run.
+  function writeClassIfChanged(path: string, bytes: Uint8Array): void {
+    if (existsSync(path)) {
+      const existing = readFileSync(path);
+      if (existing.length === bytes.length && existing.every((b, i) => b === bytes[i])) return;
+    }
+    writeFileSync(path, bytes);
+  }
+
   const visited = new Set<string>();
   const cache = new Map<
     string,
@@ -566,11 +578,11 @@ export function compileFileJvm(
       mkdirSync(classDir, { recursive: true });
       const mainClassPath = pathResolve(classDir, jvmResult.className + '.class');
       mkdirSync(dirname(mainClassPath), { recursive: true });
-      writeFileSync(mainClassPath, jvmResult.classBytes);
+      writeClassIfChanged(mainClassPath, jvmResult.classBytes);
       for (const [innerName, bytes] of jvmResult.innerClasses) {
         const innerPath = pathResolve(classDir, innerName + '.class');
         mkdirSync(dirname(innerPath), { recursive: true });
-        writeFileSync(innerPath, bytes);
+        writeClassIfChanged(innerPath, bytes);
       }
       const depsPath = pathResolve(classDir, jvmResult.className + '.class.deps');
       mkdirSync(dirname(depsPath), { recursive: true });
