@@ -17,6 +17,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Stream;
 /**
  * Kestrel runtime primitives — equivalent to VM built-in CALL 0xFFFFFFxx.
@@ -25,8 +26,10 @@ import java.util.stream.Stream;
 public final class KRuntime {
     private static String[] mainArgs = new String[0];
     private static ExecutorService asyncExecutor;
-    private static final Object asyncMonitor = new Object();
-    private static int asyncTasksInFlight = 0;
+    /** Tracks in-flight async tasks — contention-free increment/decrement on the hot path. */
+    private static final LongAdder asyncTasksInFlight = new LongAdder();
+    /** Signalled only when asyncTasksInFlight reaches zero; held only by awaitAsyncQuiescence. */
+    private static final Object quiescenceSignal = new Object();
 
     private KRuntime() {}
 
@@ -77,9 +80,7 @@ public final class KRuntime {
         synchronized (KRuntime.class) {
             executor = asyncExecutor;
         }
-        synchronized (asyncMonitor) {
-            asyncTasksInFlight++;
-        }
+        asyncTasksInFlight.increment();
         try {
             executor.submit(() -> {
                 try {
@@ -87,27 +88,31 @@ public final class KRuntime {
                 } catch (Throwable t) {
                     future.completeExceptionally(KTask.unwrapFailure(t));
                 } finally {
-                    synchronized (asyncMonitor) {
-                        asyncTasksInFlight--;
-                        asyncMonitor.notifyAll();
-                    }
+                    decrementAndSignal();
                 }
             });
         } catch (RuntimeException e) {
-            synchronized (asyncMonitor) {
-                asyncTasksInFlight--;
-                asyncMonitor.notifyAll();
-            }
+            decrementAndSignal();
             throw e;
         }
         return KTask.fromFuture(future);
     }
 
+    /** Decrement the in-flight counter and notify quiescence waiters if it reaches zero. */
+    private static void decrementAndSignal() {
+        asyncTasksInFlight.decrement();
+        if (asyncTasksInFlight.sum() <= 0) {
+            synchronized (quiescenceSignal) {
+                quiescenceSignal.notifyAll();
+            }
+        }
+    }
+
     private static void awaitAsyncQuiescence() {
-        synchronized (asyncMonitor) {
-            while (asyncTasksInFlight > 0) {
+        synchronized (quiescenceSignal) {
+            while (asyncTasksInFlight.sum() > 0) {
                 try {
-                    asyncMonitor.wait();
+                    quiescenceSignal.wait();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Interrupted while waiting for async tasks", e);
@@ -612,9 +617,7 @@ public final class KRuntime {
         }
 
         String resolvedPath = (String) path;
-        synchronized (asyncMonitor) {
-            asyncTasksInFlight++;
-        }
+        asyncTasksInFlight.increment();
 
         try {
             executor.submit(() -> {
@@ -623,17 +626,11 @@ public final class KRuntime {
                 } catch (Throwable t) {
                     future.complete(new KErr(fsErrorCode(t)));
                 } finally {
-                    synchronized (asyncMonitor) {
-                        asyncTasksInFlight--;
-                        asyncMonitor.notifyAll();
-                    }
+                    decrementAndSignal();
                 }
             });
         } catch (RuntimeException e) {
-            synchronized (asyncMonitor) {
-                asyncTasksInFlight--;
-                asyncMonitor.notifyAll();
-            }
+            decrementAndSignal();
             throw e;
         }
 
@@ -654,9 +651,7 @@ public final class KRuntime {
         }
 
         String resolvedPath = (String) path;
-        synchronized (asyncMonitor) {
-            asyncTasksInFlight++;
-        }
+        asyncTasksInFlight.increment();
 
         try {
             executor.submit(() -> {
@@ -678,17 +673,11 @@ public final class KRuntime {
                 } catch (Throwable t) {
                     future.complete(new KErr(fsErrorCode(t)));
                 } finally {
-                    synchronized (asyncMonitor) {
-                        asyncTasksInFlight--;
-                        asyncMonitor.notifyAll();
-                    }
+                    decrementAndSignal();
                 }
             });
         } catch (RuntimeException e) {
-            synchronized (asyncMonitor) {
-                asyncTasksInFlight--;
-                asyncMonitor.notifyAll();
-            }
+            decrementAndSignal();
             throw e;
         }
 
@@ -710,9 +699,7 @@ public final class KRuntime {
 
         String resolvedPath = (String) path;
         String resolvedContent = formatOne(content);
-        synchronized (asyncMonitor) {
-            asyncTasksInFlight++;
-        }
+        asyncTasksInFlight.increment();
 
         try {
             executor.submit(() -> {
@@ -722,17 +709,11 @@ public final class KRuntime {
                 } catch (Throwable t) {
                     future.complete(new KErr(fsErrorCode(t)));
                 } finally {
-                    synchronized (asyncMonitor) {
-                        asyncTasksInFlight--;
-                        asyncMonitor.notifyAll();
-                    }
+                    decrementAndSignal();
                 }
             });
         } catch (RuntimeException e) {
-            synchronized (asyncMonitor) {
-                asyncTasksInFlight--;
-                asyncMonitor.notifyAll();
-            }
+            decrementAndSignal();
             throw e;
         }
 
@@ -785,9 +766,7 @@ public final class KRuntime {
         synchronized (KRuntime.class) {
             executor = asyncExecutor;
         }
-        synchronized (asyncMonitor) {
-            asyncTasksInFlight++;
-        }
+        asyncTasksInFlight.increment();
 
         try {
             executor.submit(() -> {
@@ -811,17 +790,11 @@ public final class KRuntime {
                 } catch (Throwable t) {
                     future.complete(new KErr("process_error:" + messageOrDefault(t, "process failed")));
                 } finally {
-                    synchronized (asyncMonitor) {
-                        asyncTasksInFlight--;
-                        asyncMonitor.notifyAll();
-                    }
+                    decrementAndSignal();
                 }
             });
         } catch (RuntimeException e) {
-            synchronized (asyncMonitor) {
-                asyncTasksInFlight--;
-                asyncMonitor.notifyAll();
-            }
+            decrementAndSignal();
             throw e;
         }
 
