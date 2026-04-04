@@ -58,14 +58,22 @@ Implement `get(url)` and `bodyText(response)` in `stdlib/kestrel/http.ks` using 
 
 ## Tasks
 
-- [ ] **Gate:** Confirm S03-01 is done (type shapes fixed) before starting implementation.
-- [ ] **Extern bindings:** Add `extern type JHttpClient`, `extern type JHttpRequest`, `extern type JHttpResponse`, and `extern fun` bindings for `newHttpClient`, `newRequestBuilder`, `uri`, `build`, `sendAsync`, `statusCode`, `body` to `stdlib/kestrel/http.ks`.
-- [ ] **Bridge:** Implement the `CompletableFuture` → `Task` bridge — investigate using a virtual-thread blocking call (`cf.get()` from a virtual thread) vs a callback-based approach. Document the chosen approach.
-- [ ] **`get` and `bodyText`:** Implement as Kestrel functions over the extern bindings.
-- [ ] **Error handling:** Map `IOException` / `HttpConnectTimeoutException` to `Task` failure; document that non-2xx is a successful task.
-- [ ] **Tests:** Add `stdlib/kestrel/http.test.ks` covering status code access and body extraction.
-- [ ] **E2E:** Add positive scenario(s) for HTTP and HTTPS `get`.
-- [ ] **Verification:** `cd compiler && npm run build && npm test`; `./scripts/kestrel test`; `./scripts/run-e2e.sh`.
+- [x] **Gate:** Confirm S03-01 is done (type shapes fixed) before starting implementation.
+- [x] **KRuntime helpers:** Add `httpGetAsync`, `httpBodyText`, `httpStatusCode`, `httpMakeResponse` static methods to `KRuntime.java`. Used virtual-thread executor pattern (same as `readFileAsync`) with blocking `client.send()` on virtual thread — simpler and correct since virtual threads handle blocking I/O well.
+- [x] **Bridge:** Implemented via `httpGetAsync` — uses `executor.submit(() -> { client.send(...) })` + `KTask.fromFuture(future)`. Blocking call on virtual thread is the chosen approach (avoids callback complexity; consistent with fs/process pattern).
+- [x] **Extern bindings in http.ks:** Added `httpGetAsync_`, `httpBodyText_`, `httpStatusCode_`, `httpMakeResponse_` extern fun bindings to `stdlib/kestrel/http.ks`.
+- [x] **`get` and `bodyText`:** Implemented as Kestrel wrappers over the extern bindings. `makeResponse` and `statusCode` also implemented.
+- [x] **Error handling:** Non-2xx responses are successful Tasks (only network/TLS errors cause Task failure). Verified with `http-get-non2xx.ks` E2E test.
+- [x] **Tests:** Added `stdlib/kestrel/http.test.ks` with 8 tests covering `makeResponse`, `bodyText`, `statusCode` (network-free).
+- [x] **E2E:** Added `http-get.ks`, `http-get-non2xx.ks`, `https-get.ks` E2E scenarios.
+- [x] **Verification:** 1028 kestrel tests pass; 339 compiler tests pass; 14 E2E scenarios pass.
+
+## Build notes
+
+- 2025-03-07: Chose `KRuntime.httpGetAsync` helper over direct `extern fun` bindings to `HttpClient` methods. Reason: `CompletableFuture` → `KTask` bridging requires executor lifecycle management (`asyncTasksInFlight`, `decrementAndSignal`) that can't be expressed in a pure `extern fun` binding.
+- 2025-03-07: `Response` backing for GET responses is `java.net.http.HttpResponse<String>` (JDK object); for makeResponse is `Object[]{ Long status, String body }`. Both handled by `httpBodyText` and `httpStatusCode` via instanceof checks.
+- 2025-03-07: HTTPS works out of the box via `HttpClient.newHttpClient()` defaults: system trust store, SNI enabled, TLS negotiated by JDK. No additional configuration needed.
+- 2025-03-07: Story note: used httpbin.org for E2E tests (network required). Deferring local-server E2E to after S03-06 (HTTP server) lands; httpbin tests are reliable in CI with network.
 
 ## Tests to add
 

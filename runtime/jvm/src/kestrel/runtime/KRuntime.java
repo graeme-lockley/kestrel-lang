@@ -882,4 +882,98 @@ public final class KRuntime {
         }
         return result;
     }
+
+    // ── HTTP client helpers for kestrel:http (S03-05) ────────────────────────
+
+    /**
+     * Perform an HTTP GET request asynchronously and return a KTask&lt;Response&gt;.
+     * The completed value is a {@code java.net.http.HttpResponse&lt;String&gt;} object,
+     * which is the backing type for the Kestrel {@code Response} opaque type.
+     * Network/TLS errors propagate as KTask failures.
+     */
+    public static KTask httpGetAsync(Object url) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(url instanceof String)) {
+            future.completeExceptionally(new IllegalArgumentException("Http.get expects String url"));
+            return KTask.fromFuture(future);
+        }
+
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+        asyncTasksInFlight.increment();
+
+        final String urlStr = (String) url;
+        try {
+            executor.submit(() -> {
+                try {
+                    java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                    java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
+                            .uri(java.net.URI.create(urlStr))
+                            .GET()
+                            .build();
+                    java.net.http.HttpResponse<String> response =
+                            client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+                    future.complete(response);
+                } catch (Throwable t) {
+                    future.completeExceptionally(KTask.unwrapFailure(t));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Create a synthetic server-side {@code Response} value.
+     * Stored internally as {@code Object[]{Long status, String body}}.
+     * Both {@link #httpBodyText} and {@link #httpStatusCode} handle this form
+     * as well as the client-side {@code HttpResponse&lt;String&gt;} form.
+     */
+    public static Object httpMakeResponse(Object status, Object body) {
+        if (!(status instanceof Long)) {
+            throw new IllegalArgumentException("makeResponse expects Int status");
+        }
+        if (!(body instanceof String)) {
+            throw new IllegalArgumentException("makeResponse expects String body");
+        }
+        return new Object[]{status, body};
+    }
+
+    /**
+     * Extract the body text from a {@code Response}.
+     * Works for both client responses ({@code HttpResponse&lt;String&gt;}) and
+     * server-side responses created via {@link #httpMakeResponse}.
+     */
+    @SuppressWarnings("unchecked")
+    public static String httpBodyText(Object response) {
+        if (response instanceof java.net.http.HttpResponse) {
+            return ((java.net.http.HttpResponse<String>) response).body();
+        }
+        if (response instanceof Object[]) {
+            return (String) ((Object[]) response)[1];
+        }
+        throw new IllegalArgumentException("bodyText: expected Response from get() or makeResponse()");
+    }
+
+    /**
+     * Extract the HTTP status code from a {@code Response} as a Kestrel {@code Int} (Long).
+     * Works for both client responses and server-side responses created via {@link #httpMakeResponse}.
+     */
+    public static Long httpStatusCode(Object response) {
+        if (response instanceof java.net.http.HttpResponse) {
+            return (long) ((java.net.http.HttpResponse<?>) response).statusCode();
+        }
+        if (response instanceof Object[]) {
+            return (Long) ((Object[]) response)[0];
+        }
+        throw new IllegalArgumentException("statusCode: expected Response from get() or makeResponse()");
+    }
 }
