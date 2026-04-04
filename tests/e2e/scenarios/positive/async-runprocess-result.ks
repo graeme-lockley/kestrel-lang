@@ -4,7 +4,7 @@ import { ProcessSpawnError } from "kestrel:process"
 async fun run(): Task<Unit> = {
   val code =
     match (await Process.runProcess("sh", ["-c", "echo e2e-out; echo e2e-err 1>&2; exit 9"])) {
-      Ok(v) => v,
+      Ok(r) => r.exitCode,
       Err(_) => -1
     };
   println("marker-exit:${code}");

@@ -377,7 +377,7 @@ run()
     }
   });
 
-  it('await Process.runProcess(...) forwards combined output and returns Ok(exitCode)', () => {
+  it('await Process.runProcess(...) captures combined output and returns Ok(ProcessResult)', () => {
     const tmpRoot = mkdtempSync(join(tmpdir(), 'kestrel-runtime-stdlib-runprocess-'));
     const srcPath = join(tmpRoot, 'RuntimeStdlibRunProcess.ks');
 
@@ -386,13 +386,17 @@ run()
       `import * as Process from "kestrel:process"
 
 async fun run(): Task<Unit> = {
-  val code =
-    match (await Process.runProcess("sh", ["-c", "echo out-line; echo err-line 1>&2; exit 7"])) {
-      Ok(v) => v,
-      Err(_) => -1
-    };
-  println("exit:\${code}");
-  ()
+  match (await Process.runProcess("sh", ["-c", "echo out-line; echo err-line 1>&2; exit 7"])) {
+    Ok(r) => {
+      println("exit:\${r.exitCode}");
+      println("stdout:\${r.stdout}");
+      ()
+    },
+    Err(_) => {
+      println("error");
+      ()
+    }
+  }
 }
 
 run()
@@ -414,7 +418,7 @@ run()
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-      expect(stdout).toBe('out-line\nerr-line\nexit:7\n');
+      expect(stdout).toBe('exit:7\nstdout:out-line\nerr-line\n\n');
     } finally {
       rmSync(tmpRoot, { recursive: true, force: true });
     }

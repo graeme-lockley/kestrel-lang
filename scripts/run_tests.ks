@@ -48,7 +48,10 @@ async fun writeTextOrExit(path: String, content: String): Task<Unit> = {
 
 async fun runProcessOrExit(program: String, args: List<String>): Task<Int> = {
   match (await runProcess(program, args)) {
-    Ok(code) => code,
+    Ok(r) => {
+      print(r.stdout);
+      r.exitCode
+    },
     Err(ProcessSpawnError(_)) => {
       println("kestrel test: runProcess failed for ${program}: process error");
       exit(1);

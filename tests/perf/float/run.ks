@@ -7,7 +7,7 @@ import * as Str from "kestrel:string"
 
 async fun runProcessCode(kestrelBin: String, args: List<String>): Task<Int> = {
   match (await Process.runProcess(kestrelBin, args)) {
-    Ok(code) => code,
+    Ok(r) => r.exitCode,
     Err(ProcessSpawnError(_)) => {
       println("  process spawn failed");
       1

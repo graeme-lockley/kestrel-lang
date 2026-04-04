@@ -172,11 +172,12 @@ Process information and subprocess execution.
 | Type | Definition |
 |------|------------|
 | `ProcessError` | `ProcessSpawnError(String)` |
+| `ProcessResult` | `{ exitCode: Int, stdout: String }` |
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `getProcess` | `() -> { os: String, args: List<String>, env: List<(String, String)>, cwd: String }` | Returns process metadata for the current invocation. |
-| `runProcess` | `(String, List<String>) -> Task<Result<Int, ProcessError>>` | Spawn a subprocess, stream stdout/stderr to the current process output, and return `Ok(exitCode)` on completion. Returns `Err(ProcessSpawnError(message))` when process start/execution fails. |
+| `runProcess` | `(String, List<String>) -> Task<Result<ProcessResult, ProcessError>>` | Spawn a subprocess, capture combined stdout+stderr, and return `Ok(ProcessResult)` on completion where `exitCode` is the process exit code and `stdout` contains the captured output. Returns `Err(ProcessSpawnError(message))` when process start/execution fails. |
 
 ---
 

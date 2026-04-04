@@ -21,7 +21,7 @@ export async fun run(s: Suite): Task<Unit> = {
     }
   val processOk =
     match (await Process.runProcess("sh", ["-c", "exit 0"])) {
-      Ok(0) => 1,
+      Ok(r) => if (r.exitCode == 0) 1 else 0,
       _ => 0
     }
   val delayed = await delayedValue()

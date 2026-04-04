@@ -795,13 +795,19 @@ public final class KRuntime {
                     ProcessBuilder pb = new ProcessBuilder(cmd);
                     pb.redirectErrorStream(true);
                     Process p = pb.start();
+                    StringBuilder sb = new StringBuilder();
                     try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
                         String line;
                         while ((line = r.readLine()) != null) {
-                            System.out.println(line);
+                            sb.append(line).append('\n');
                         }
                     }
-                    future.complete(new KOk(Long.valueOf(p.waitFor())));
+                    int exitCode = p.waitFor();
+                    KRecord result = new KRecord(java.util.Map.of(
+                        "exitCode", Long.valueOf(exitCode),
+                        "stdout", sb.toString()
+                    ));
+                    future.complete(new KOk(result));
                 } catch (Throwable t) {
                     future.complete(new KErr("process_error:" + messageOrDefault(t, "process failed")));
                 } finally {

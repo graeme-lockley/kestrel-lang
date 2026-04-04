@@ -31,7 +31,7 @@ Async execution exploits **Project Loom virtual threads** (Java 21+) rather than
 15. [x] [S01-15-await-parser-dead-branch-cleanup.md](../../done/S01-15-await-parser-dead-branch-cleanup.md) — Remove dead `CallExpr` branch in the `await` / `parsePrimary` parser path.
 16. [x] [S01-16-await-type-error-message.md](../../done/S01-16-await-type-error-message.md) — Improve `await`-on-non-Task diagnostic to include the actual resolved type.
 17. [x] [S01-17-task-cancellation-api.md](../../done/S01-17-task-cancellation-api.md) — Expose task cancellation via `Task.cancel` backed by `CompletableFuture.cancel()`.
-18. [ ] [S01-18-run-process-stdout-capture.md](../../unplanned/S01-18-run-process-stdout-capture.md) — Return captured stdout string from `runProcess`; update result ADT and stdlib.
+18. [x] [S01-18-run-process-stdout-capture.md](../../done/S01-18-run-process-stdout-capture.md) — Return captured stdout string from `runProcess`; update result ADT and stdlib.
 19. [ ] [S01-19-listdir-direntry-adt.md](../../unplanned/S01-19-listdir-direntry-adt.md) — Replace raw tab-embedded strings from `listDir` with a typed `DirEntry` ADT.
 20. [ ] [S01-20-scc-trampoline-async-fix.md](../../unplanned/S01-20-scc-trampoline-async-fix.md) — Preserve trampoline optimization for sync members of SCCs that contain async functions.
 21. [ ] [S01-21-async-quiescence-counter-contention.md](../../unplanned/S01-21-async-quiescence-counter-contention.md) — Replace `asyncTasksInFlight` monitor with `LongAdder`/`Phaser` to reduce lock contention.

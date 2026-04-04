@@ -10,7 +10,7 @@ export async fun run(s: Suite): Task<Unit> = {
     group(s1, "runProcess success", (sg: Suite) => {
       val code =
         match (successResult) {
-          Ok(v) => v,
+          Ok(r) => r.exitCode,
           Err(_) => -1
         };
       eq(sg, "exit code", code, 7)

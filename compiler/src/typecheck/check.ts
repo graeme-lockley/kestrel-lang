@@ -418,13 +418,14 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     },
   }, new Set()));
 
+  const runProcessOkVar = freshVar();
   env.set('__run_process', generalize({
     kind: 'arrow',
     params: [tString, { kind: 'app', name: 'List', args: [tString] }],
     return: {
       kind: 'app',
       name: 'Task',
-      args: [{ kind: 'app', name: 'Result', args: [tInt, tString] }],
+      args: [{ kind: 'app', name: 'Result', args: [runProcessOkVar, tString] }],
     },
   }, new Set()));
 
