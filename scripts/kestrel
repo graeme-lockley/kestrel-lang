@@ -17,6 +17,28 @@ JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
 RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
 MAVEN_CLASSPATH_RESOLVER="$ROOT/scripts/resolve-maven-classpath.mjs"
 
+# Resolve a Java 21+ binary, honouring JAVA_HOME then well-known locations.
+_pick_java21() {
+  local bin="$1"  # "java" or "javac"
+  local candidates=(
+    "${JAVA_HOME:+$JAVA_HOME/bin/$bin}"
+    "/usr/lib/jvm/temurin-21-jdk-amd64/bin/$bin"
+    "/usr/lib/jvm/java-21-openjdk-amd64/bin/$bin"
+    "$bin"
+  )
+  for c in "${candidates[@]}"; do
+    [ -n "$c" ] || continue
+    [ -x "$c" ] || command -v "$c" &>/dev/null || continue
+    # javac -version → "javac 21.x"; java -version → 'openjdk version "21.x"' (on stderr)
+    if "$c" -version 2>&1 | grep -qE '(^javac 2[1-9]|version "2[1-9])'; then
+      echo "$c"; return
+    fi
+  done
+  echo "$bin"
+}
+JAVA="$(_pick_java21 java)"
+JAVAC="$(_pick_java21 javac)"
+
 usage() {
   echo "Usage: kestrel <command> [options]" >&2
   echo "  run   [--exit-wait|--exit-no-wait] <script[.ks]> [args...]  Compile if needed, then execute on JVM" >&2
@@ -37,11 +59,11 @@ ensure_tools() {
     echo "kestrel: node not found" >&2
     exit 1
   fi
-  if ! command -v java &>/dev/null; then
+  if ! command -v "$JAVA" &>/dev/null && ! [ -x "$JAVA" ]; then
     echo "kestrel: java not found" >&2
     exit 1
   fi
-  if ! command -v javac &>/dev/null; then
+  if ! command -v "$JAVAC" &>/dev/null && ! [ -x "$JAVAC" ]; then
     echo "kestrel: javac not found" >&2
     exit 1
   fi
@@ -185,7 +207,7 @@ _run_unit_tests() {
     node "$COMPILER_CLI" "$runner" --target jvm -o "$class_dir" || return 1
   fi
   main_class=$(main_class_for "$runner")
-  java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" "$@"
+"$JAVA" -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" "$@"
 }
 
 maven_classpath_for_entry() {
@@ -277,9 +299,9 @@ cmd_run() {
     java_cp="$java_cp:$maven_cp"
   fi
   if [ "$exit_mode" = "no-wait" ]; then
-    exec java -Dkestrel.exitWait=false -cp "$java_cp" "$main_class" "$@"
+    exec "$JAVA" -Dkestrel.exitWait=false -cp "$java_cp" "$main_class" "$@"
   else
-    exec java -cp "$java_cp" "$main_class" "$@"
+    exec "$JAVA" -cp "$java_cp" "$main_class" "$@"
   fi
 }
 

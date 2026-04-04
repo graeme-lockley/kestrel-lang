@@ -24,6 +24,7 @@ const K_LIST = 'kestrel/runtime/KList';
 const K_CONS = 'kestrel/runtime/KCons';
 const K_ERR = 'kestrel/runtime/KErr';
 const K_TASK = 'kestrel/runtime/KTask';
+const K_ARRAY = 'kestrel/runtime/KArray';
 
 /** Parser `char` token value is the decoded scalar (no quotes); astral scalars may span two UTF-16 units in JS. */
 function charLiteralCodePoint(value: string): number {
@@ -741,6 +742,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     }
     if (t.kind === 'AppType' && t.name === 'Task') return 'Lkestrel/runtime/KTask;';
     if (t.kind === 'AppType' && t.name === 'List') return 'Lkestrel/runtime/KList;';
+    if (t.kind === 'AppType' && t.name === 'Array') return `L${K_ARRAY};`;
     if (t.kind === 'IdentType') {
       const cls = externTypeClassByName.get(t.name);
       if (cls) return `L${cls};`;

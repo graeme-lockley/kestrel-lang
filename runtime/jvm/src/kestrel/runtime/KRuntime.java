@@ -192,6 +192,16 @@ public final class KRuntime {
             sb.append(" }");
             return sb.toString();
         }
+        if (v instanceof KArray) {
+            KArray arr = (KArray) v;
+            StringBuilder sb = new StringBuilder("Array[");
+            for (int i = 0; i < arr.length; i++) {
+                if (i > 0) sb.append(", ");
+                sb.append(formatOne(arr.elements[i]));
+            }
+            sb.append("]");
+            return sb.toString();
+        }
         if (v instanceof KList) {
             StringBuilder sb = new StringBuilder("[");
             KList xs = (KList) v;
@@ -881,5 +891,67 @@ public final class KRuntime {
             result = new KCons(v, result);
         }
         return result;
+    }
+
+    // ---- Array<T> runtime primitives ----
+
+    /** arrayNew(capacity) — create an empty KArray with given initial capacity. */
+    public static KArray arrayNew(Object capacityObj) {
+        int cap = ((Long) capacityObj).intValue();
+        return new KArray(cap);
+    }
+
+    /** arrayFrom(list) — convert a KList to a KArray. */
+    public static KArray arrayFrom(Object listObj) {
+        KList xs = (KList) listObj;
+        int len = 0;
+        KList tmp = xs;
+        while (tmp instanceof KCons) { len++; tmp = ((KCons) tmp).tail; }
+        KArray arr = new KArray(len == 0 ? 8 : len);
+        tmp = xs;
+        int i = 0;
+        while (tmp instanceof KCons) {
+            KCons c = (KCons) tmp;
+            arr.elements[i++] = c.head;
+            tmp = c.tail;
+        }
+        arr.length = len;
+        return arr;
+    }
+
+    /** arrayGet(arr, index) — O(1) element access; throws on out-of-bounds. */
+    public static Object arrayGet(Object arrObj, Object indexObj) {
+        KArray arr = (KArray) arrObj;
+        int idx = ((Long) indexObj).intValue();
+        if (idx < 0 || idx >= arr.length)
+            throw new RuntimeException("Array index out of bounds: " + idx + " (length " + arr.length + ")");
+        return arr.elements[idx];
+    }
+
+    /** arraySet(arr, index, value) — O(1) mutation; throws on out-of-bounds. Returns Unit. */
+    public static void arraySet(Object arrObj, Object indexObj, Object value) {
+        KArray arr = (KArray) arrObj;
+        int idx = ((Long) indexObj).intValue();
+        if (idx < 0 || idx >= arr.length)
+            throw new RuntimeException("Array index out of bounds: " + idx + " (length " + arr.length + ")");
+        arr.elements[idx] = value;
+    }
+
+    /** arrayLength(arr) — return current number of elements as Long. */
+    public static Long arrayLength(Object arrObj) {
+        return (long) ((KArray) arrObj).length;
+    }
+
+    /** arrayPush(arr, value) — append element, growing storage if needed. Returns Unit. */
+    public static void arrayPush(Object arrObj, Object value) {
+        KArray arr = (KArray) arrObj;
+        if (arr.length >= arr.capacity) {
+            int newCap = arr.capacity * 2;
+            Object[] newElems = new Object[newCap];
+            System.arraycopy(arr.elements, 0, newElems, 0, arr.length);
+            arr.elements = newElems;
+            arr.capacity = newCap;
+        }
+        arr.elements[arr.length++] = value;
     }
 }

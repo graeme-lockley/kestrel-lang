@@ -118,6 +118,21 @@ Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on 
 
 ---
 
+## kestrel:array
+
+Mutable `Array<T>` backed by `kestrel.runtime.KArray` (contiguous `Object[]` storage). All operations are O(1) except `arrayFrom` which is O(n). Out-of-bounds access throws a runtime exception.
+
+| Function | Signature | Semantics |
+|----------|-----------|-----------|
+| `arrayNew` | `(Int) -> Array<V>` | Create an empty array with the given initial capacity |
+| `arrayFrom` | `(List<V>) -> Array<V>` | Convert a list to an array (O(n)) |
+| `arrayGet` | `(Array<V>, Int) -> V` | Return element at index (0-based); throws on out-of-bounds |
+| `arraySet` | `(Array<V>, Int, V) -> Unit` | Overwrite element at index; throws on out-of-bounds |
+| `arrayLength` | `(Array<V>) -> Int` | Number of elements currently in the array |
+| `arrayPush` | `(Array<V>, V) -> Unit` | Append element, growing storage if needed |
+
+---
+
 ## kestrel:list
 
 | `map` | `(List<A>, (A) -> B) -> List<B>` | Element-wise map |
