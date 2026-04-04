@@ -32,11 +32,11 @@ Async execution exploits **Project Loom virtual threads** (Java 21+) rather than
 16. [x] [S01-16-await-type-error-message.md](../../done/S01-16-await-type-error-message.md) — Improve `await`-on-non-Task diagnostic to include the actual resolved type.
 17. [x] [S01-17-task-cancellation-api.md](../../done/S01-17-task-cancellation-api.md) — Expose task cancellation via `Task.cancel` backed by `CompletableFuture.cancel()`.
 18. [x] [S01-18-run-process-stdout-capture.md](../../done/S01-18-run-process-stdout-capture.md) — Return captured stdout string from `runProcess`; update result ADT and stdlib.
-19. [ ] [S01-19-listdir-direntry-adt.md](../../unplanned/S01-19-listdir-direntry-adt.md) — Replace raw tab-embedded strings from `listDir` with a typed `DirEntry` ADT.
-20. [ ] [S01-20-scc-trampoline-async-fix.md](../../unplanned/S01-20-scc-trampoline-async-fix.md) — Preserve trampoline optimization for sync members of SCCs that contain async functions.
-21. [ ] [S01-21-async-quiescence-counter-contention.md](../../unplanned/S01-21-async-quiescence-counter-contention.md) — Replace `asyncTasksInFlight` monitor with `LongAdder`/`Phaser` to reduce lock contention.
-22. [ ] [S01-22-await-behavior-validation-real-tests.md](../../unplanned/S01-22-await-behavior-validation-real-tests.md) — Replace placeholder `1 == 1` assertions in `await-behavior-validation.test.ks` with real behavioral tests.
-23. [ ] [S01-23-async-module-interface-docs.md](../../unplanned/S01-23-async-module-interface-docs.md) — Document async semantics and structural async typing in the module system spec.
+19. [x] [S01-19-listdir-direntry-adt.md](../../done/S01-19-listdir-direntry-adt.md) — Replace raw tab-embedded strings from `listDir` with a typed `DirEntry` ADT.
+20. [x] [S01-20-scc-trampoline-async-fix.md](../../done/S01-20-scc-trampoline-async-fix.md) — Preserve trampoline optimization for sync members of SCCs that contain async functions.
+21. [x] [S01-21-async-quiescence-counter-contention.md](../../done/S01-21-async-quiescence-counter-contention.md) — Replace `asyncTasksInFlight` monitor with `LongAdder`/`Phaser` to reduce lock contention.
+22. [x] [S01-22-await-behavior-validation-real-tests.md](../../done/S01-22-await-behavior-validation-real-tests.md) — Replace placeholder `1 == 1` assertions in `await-behavior-validation.test.ks` with real behavioral tests.
+23. [x] [S01-23-async-module-interface-docs.md](../../done/S01-23-async-module-interface-docs.md) — Document async semantics and structural async typing in the module system spec.
 
 Stories 4–6 (listDir, writeText, runProcess) can be implemented in any order relative to each other; they all depend on S01-03. S01-11 and S01-10 should follow those three. Stories S01-12–S01-23 address gaps identified in the post-delivery critical analysis and can be tackled in any order unless otherwise noted.
 
