@@ -100,10 +100,18 @@ fi
 
 # Positive tests: compile, run (exit 0), stdout must match .expected
 pos_count=0
+pos_skipped=0
 if [ -d "$POSITIVE" ]; then
   for f in "$POSITIVE"/*.ks; do
     [ -f "$f" ] || continue
     name=$(basename "$f" .ks)
+
+    # Skip network-dependent tests if KESTREL_MAVEN_OFFLINE=1
+    if [ "${KESTREL_MAVEN_OFFLINE:-}" = "1" ] && grep -q '// E2E_REQUIRE_NETWORK' "$f"; then
+      echo "  $name.ks SKIPPED (KESTREL_MAVEN_OFFLINE=1)"
+      pos_skipped=$((pos_skipped + 1))
+      continue
+    fi
     expected="$POSITIVE/$name.expected"
     if [ ! -f "$expected" ]; then
       echo "E2E positive: $name.ks has no $name.expected" >&2
@@ -129,6 +137,9 @@ if [ -d "$POSITIVE" ]; then
 fi
 if [ "$pos_count" -gt 0 ]; then
   echo "E2E positive: $pos_count scenario(s) passed."
+fi
+if [ "$pos_skipped" -gt 0 ]; then
+  echo "E2E positive: $pos_skipped scenario(s) skipped (KESTREL_MAVEN_OFFLINE=1)."
 fi
 
 # CLI flag smoke checks for S01-05 process exit modes.

@@ -67,9 +67,37 @@ No runtime or E2E tests are added in this story — only spec and stub work.
 - [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — Add §`HTTP server concurrency model`: one virtual thread per accepted request via Java 21 executor; handler lifecycle (exchange open for handler duration); no re-entrancy guarantee.
 - [ ] [docs/specs/07-modules.md](../../specs/07-modules.md) — Confirm `kestrel:http` is present in the stdlib specifier table; add a note that `Server`, `Request`, `Response` are opaque types backed by JDK classes.
 
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `docs/specs/02-stdlib.md` | Replace minimal §`kestrel:http` table with full normative section: type shapes, all seven function signatures, error semantics, TLS defaults, concurrency model, queryParam rule |
+| `docs/specs/05-runtime-model.md` | New file: create with §`HTTP server concurrency model` (one virtual thread per request, handler lifecycle, no re-entrancy guarantee) |
+| `docs/specs/07-modules.md` | Add note to `kestrel:http` entry that `Server`, `Request`, `Response` are opaque types backed by JDK classes |
+| `stdlib/kestrel/http.ks` | Add `extern type` stubs for `Server`, `Request`, `Response`; declare `export` stubs with `TODO` for functions landing in S03-05/S03-06; keep `nowMs` |
+| `tests/conformance/typecheck/http-types.ks` | New file: typecheck-conformance test verifying all seven function signatures and three opaque types typecheck |
+| `compiler/test/unit/http-types.test.ts` | New Vitest unit test: opaque type stubs resolve; `nowMs` signature unchanged |
+| `compiler/test/integration/http-module.test.ts` | New Vitest integration test: `import * as Http from "kestrel:http"` resolves; all exported names present |
+
+## Tasks
+
+- [ ] Update `docs/specs/02-stdlib.md` §`kestrel:http`: full normative section with all seven functions, `Server`/`Request`/`Response` type shapes, error semantics, TLS defaults, concurrency model, queryParam duplicate-key rule (last wins)
+- [ ] Create `docs/specs/05-runtime-model.md` with §`HTTP server concurrency model`
+- [ ] Update `docs/specs/07-modules.md`: add opaque type note for `kestrel:http` entry
+- [ ] Update `stdlib/kestrel/http.ks`: add `extern type` stubs for `Server`, `Request`, `Response`; add stub function export declarations with `TODO` comments
+- [ ] Add `tests/conformance/typecheck/http-types.ks` conformance typecheck test
+- [ ] Add `compiler/test/unit/http-types.test.ts` Vitest unit test
+- [ ] Add `compiler/test/integration/http-module.test.ts` Vitest integration test
+- [ ] Run `cd compiler && npm run build && npm test`
+- [ ] Run `./scripts/kestrel test`
+
 ## Risks / Notes
 
 - **Spec decisions are load-bearing:** S03-05 and S03-06 will implement against whatever this story decides without renegotiation. Make conservative, JDK-stable choices. Avoid exotic JDK preview APIs.
 - **`Request` dual role:** `com.sun.net.httpserver.HttpExchange` provides both the incoming request (method, path, headers, body) and the outgoing response channel (status, response headers, body output stream). The Kestrel `Request` type wraps the exchange as a whole; the handler writes back by calling `bodyText`, setting status, etc. Document this clearly.
 - **`Response` for client vs server:** The client `get` call returns a `Response` wrapping `HttpResponse<String>`. The server handler must also return a `Response`. These may be the same opaque type (with a factory function for server handlers to build one) or two separate types — decide and document. Prefer a single `Response` type with a `makeResponse(status, body)` constructor for server use.
 - **JDK-only constraint:** No `maven:` dependencies anywhere in E03. All JDK classes used here are available in Java 21 without additional modules beyond `jdk.httpserver` (already on the JVM classpath for the runtime).
+
+## Build notes
+
+- 2025-01-01: Started implementation. Decided on single `Response` type with `makeResponse(status, body)` for server use and `get(url)` for client use. `Request` wraps `HttpExchange` (server side only). `bodyText` for client reads from `Response`, for server reads from `Request`. Concurrency: virtual thread per request.

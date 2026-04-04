@@ -1004,6 +1004,10 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(BOOLEAN, 'valueOf', '(Z)Ljava/lang/Boolean;'));
         return;
       case 'I':
+        // int from JVM → Kestrel Int (Long). Widen to long first, then box as Long.
+        mb.emit1(JvmOp.I2L);
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(LONG, 'valueOf', '(J)Ljava/lang/Long;'));
+        return;
       case 'C':
         mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref('java/lang/Integer', 'valueOf', '(I)Ljava/lang/Integer;'));
         return;
@@ -1017,10 +1021,14 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref('java/lang/Float', 'valueOf', '(F)Ljava/lang/Float;'));
         return;
       case 'B':
-        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref('java/lang/Byte', 'valueOf', '(B)Ljava/lang/Byte;'));
+        // byte from JVM → Kestrel Int (Long). Widen to long first, then box as Long.
+        mb.emit1(JvmOp.I2L);
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(LONG, 'valueOf', '(J)Ljava/lang/Long;'));
         return;
       case 'S':
-        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref('java/lang/Short', 'valueOf', '(S)Ljava/lang/Short;'));
+        // short from JVM → Kestrel Int (Long). Widen to long first, then box as Long.
+        mb.emit1(JvmOp.I2L);
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(LONG, 'valueOf', '(J)Ljava/lang/Long;'));
         return;
       default:
         return;

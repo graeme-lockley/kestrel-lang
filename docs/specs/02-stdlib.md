@@ -286,17 +286,61 @@ Stack traces and basic I/O formatting. This module is for stack-trace and format
 
 ## kestrel:http
 
-HTTP server and client. Server-oriented API.
+HTTP server and client. Provides an HTTP GET client and an HTTP server that dispatches incoming requests to a Kestrel handler function.
+
+### Opaque types
+
+| Type | JDK backing class | Role |
+|------|-------------------|------|
+| `Server` | `com.sun.net.httpserver.HttpServer` | An HTTP server instance (not yet listening). Produced by `createServer`; passed to `listen`. |
+| `Request` | `com.sun.net.httpserver.HttpExchange` | An incoming server request. Wraps the `HttpExchange` for the duration of the handler call. Provides read access to the request (method, path, query string, body) and is the channel through which the handler response is written. |
+| `Response` | `com.sun.net.httpserver.HttpExchange` **or** a synthetic record `{ status: Int, body: String }` (implementation-defined) | Represents either a completed client `get` response (status + body) or a value to be sent back by the server handler. Use `makeResponse(status, body)` to create a `Response` for server handlers. |
+
+**Implementation note:** `Response` is a single unified opaque type. The client (`get`) wraps the JDK `HttpResponse<String>`; the server handler returns a `Response` created via `makeResponse`. The implementation is free to use separate backing JVM objects as long as `statusCode` and `bodyText` work on both.
+
+### Functions
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `createServer` | `((Request) -> Task<Response>) -> Server` | Create server with request handler |
-| `listen` | `(Server, { host: String, port: Int }) -> Task<Unit>` | Start listening |
-| `get` | `(String) -> Task<Response>` | HTTP GET request |
-| `bodyText` | `(Request) -> Task<String>` | Request body as text |
-| `queryParam` | `(Request, String) -> Option<String>` | Query parameter by name |
-| `requestId` | `(Request) -> String` | Request ID |
-| `nowMs` | `() -> Int` | Current time in milliseconds (forwards to `kestrel:basics` `nowMs`) |
+| `createServer` | `((Request) -> Task<Response>) -> Task<Server>` | Create an HTTP server with the given request handler. The handler is called once per incoming request on a fresh virtual thread. Returns a `Task<Server>` (the server is created asynchronously). |
+| `listen` | `(Server, { host: String, port: Int }) -> Task<Unit>` | Bind the server to the given host and port and start accepting connections. The task completes as soon as the server is listening; it does **not** await shutdown. |
+| `get` | `(String) -> Task<Response>` | Issue an HTTP GET request to the given URL. Supports `http://` and `https://` schemes. The task resolves with the server's response (including non-2xx responses). The task fails for network/TLS errors (e.g. unreachable host, certificate validation failure, unsupported scheme). |
+| `bodyText` | `(Response) -> String` | Extract the body of a `Response` (from `get`) as a UTF-8 string. The body is buffered in memory; there is no streaming. |
+| `requestBodyText` | `(Request) -> Task<String>` | Read the full body of an incoming server `Request` as a UTF-8 string. Returns a `Task` because the body read is I/O. |
+| `statusCode` | `(Response) -> Int` | Return the HTTP status code of a `Response` produced by `get`. |
+| `makeResponse` | `(Int, String) -> Response` | Construct a `Response` for use as the return value of a server handler. The first argument is the HTTP status code (e.g. `200`); the second is the response body text. |
+| `queryParam` | `(Request, String) -> Option<String>` | Extract a query parameter by name from an incoming `Request`. If the parameter appears multiple times, the **last** occurrence wins. Returns `None` if the parameter is absent. |
+| `requestId` | `(Request) -> String` | Return a stable unique identifier string for the request (implementation-defined format; suitable for logging). |
+| `nowMs` | `() -> Int` | Current time in milliseconds (forwards to `kestrel:basics` `nowMs`). |
+
+### Error semantics
+
+- **`get` task failure:** The task returned by `get` fails (becomes a failed `Task`) in the following cases: network connection failure, DNS resolution failure, TLS certificate validation failure, connection timeout, unsupported URL scheme (anything other than `http://` or `https://`).
+- **Non-2xx responses:** A response with a 4xx or 5xx status code is **not** a task failure. The task resolves successfully with the `Response`; the caller inspects `statusCode` to determine success or failure.
+- **`createServer` and `listen` failures:** Binding to an already-in-use port, or invalid host/port, surfaces as a task failure.
+- **Handler exceptions:** If the handler function throws an exception, the server sends a 500 response and logs the error; the handler exception does not propagate to the `listen` task.
+
+### TLS defaults for `get`
+
+- System trust store (JDK default `SSLContext`).
+- SNI enabled.
+- Minimum TLS version: TLS 1.2 (JDK default for Java 21).
+- No client certificate authentication.
+- No additional JVM system properties need to be set for standard public HTTPS.
+
+### Server concurrency model
+
+The HTTP server (`createServer` / `listen`) dispatches each incoming request to the handler on a **new virtual thread** (Java 21 virtual-thread executor). Specifically:
+
+- `com.sun.net.httpserver.HttpServer` is configured with `Executors.newVirtualThreadPerTaskExecutor()`.
+- Each call to the handler receives its own `Request` (backed by the `HttpExchange` for that request).
+- The handler runs for the lifetime of the exchange; the `HttpExchange` is closed when the handler's `Task<Response>` resolves.
+- Handlers are **not** re-entrant by the server; each request gets an independent handler invocation.
+- There is no built-in request rate limiting or connection limit beyond the JDK defaults.
+
+### `queryParam` duplicate-key rule
+
+If a URL query string contains the same key multiple times (e.g. `?a=1&a=2`), `queryParam` returns the **last** occurrence's value (`"2"` in the example). This matches the behaviour of most web frameworks. If the key is absent, `None` is returned.
 
 ---
 
@@ -391,7 +435,7 @@ Types referenced in the above signatures are part of the standard contract:
 - `Option<T>` – Optional value (e.g. from `queryParam`)
 - `Task<T>` – Async computation
 - `Value` – JSON value ADT exported from `kestrel:json` (see below)
-- `Server`, `Request`, `Response` – HTTP types
+- `Server`, `Request`, `Response` – HTTP opaque types from `kestrel:http`; backed by JDK classes (`com.sun.net.httpserver.HttpServer`, `com.sun.net.httpserver.HttpExchange`, and an implementation-defined response type respectively). See §`kestrel:http`.
 - `StackTrace<T>` – Stack trace for a thrown value of type `T` (see **kestrel:stack** above; reference stdlib uses the record shape `{ value, frames }`).
 
 Their concrete definitions are implementation-defined as long as the function signatures are satisfied; **`StackTrace<T>`** in the reference stdlib matches the record layout described under **kestrel:stack**.
