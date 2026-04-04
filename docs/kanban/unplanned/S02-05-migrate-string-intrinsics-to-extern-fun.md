@@ -1,0 +1,77 @@
+# Migrate `string.ks` Intrinsics to `extern fun`
+
+## Sequence: S02-05
+## Tier: 7
+## Former ID: (none)
+
+## Epic
+
+- Epic: [E02 JVM Interop — extern Bindings and Intrinsic Migration](../epics/unplanned/E02-jvm-reflection-interop-and-intrinsic-migration.md)
+- Companion stories: S02-01, S02-02, S02-03, S02-04, S02-06, S02-07, S02-08, S02-09, S02-10, S02-11, S02-12, S02-13
+
+## Summary
+
+Replace all ten `__string_*` compiler intrinsics used in `stdlib/kestrel/string.ks` with `extern fun` declarations bound to their underlying `KRuntime` Java static methods. Remove the corresponding hardcoded dispatch blocks from `codegen.ts` and environment bindings from `check.ts`. String operations are the highest-traffic compiler intrinsics and represent the most visible proof that the extern machinery works for production stdlib code.
+
+## Current State
+
+**Ten string intrinsics (all in `string.ks`):**
+- `__string_length(s)` → `KRuntime.stringLength(Object): Long`
+- `__string_slice(s, start, end)` → `KRuntime.stringSlice(Object,Object,Object): String`
+- `__string_index_of(s, sub)` → `KRuntime.stringIndexOf(Object,Object): Long`
+- `__string_equals(a, b)` → `KRuntime.stringEquals(Object,Object): Boolean`
+- `__string_concat(a, b)` → `KRuntime.stringConcat(Object,Object): String`
+- `__string_upper(s)` → `KRuntime.stringUpper(Object): String`
+- `__string_lower(s)` → implied `KRuntime.stringLower(Object): String`
+- `__string_trim(s)` → `KRuntime.stringTrim(Object): String`
+- `__string_code_point_at(s, i)` → `KRuntime.stringCodePointAt(Object,Object): Long`
+- `__string_char_at(s, i)` → `KRuntime.stringCharAt(Object,Object): Integer`
+
+**Additional**: `string.ks` also uses `__char_to_string` in the private `charStr` helper. After S02-04, this should be replaced by an import or a local extern fun.
+
+**`check.ts`**: ten `env.set('__string_*', ...)` bindings.
+**`codegen.ts`**: ten `if (name === '__string_*') { ... }` blocks (lines ~1621–1688).
+
+Note: `stack.test.ks` directly calls `__string_length` and `__string_index_of` in its test helpers. Those usages must also be replaced after this migration removes the intrinsics from the global environment.
+
+## Relationship to other stories
+
+- **Depends on S02-01, S02-02**: requires `extern fun` support.
+- **Soft dependency on S02-04**: `string.ks` uses `__char_to_string`. If S02-04 is landed first, this migration can import from `kestrel:char` instead. If done in parallel, add a local extern fun for `charToString` in `string.ks`.
+- **Independent of S02-06 through S02-10**.
+
+## Goals
+
+1. Replace all `__string_*` calls in `string.ks` with `extern fun` declarations. Example:
+   ```kestrel
+   extern fun length(s: String): Int =
+     jvm("kestrel.runtime.KRuntime#stringLength(java.lang.Object)")
+   extern fun slice(s: String, start: Int, end: Int): String =
+     jvm("kestrel.runtime.KRuntime#stringSlice(java.lang.Object,java.lang.Object,java.lang.Object)")
+   ```
+2. All ten intrinsics removed from `codegen.ts` and `check.ts`.
+3. Update `stack.test.ks`: replace `__string_length(...)` and `__string_index_of(...)` calls with `String.length(...)` and `String.indexOf(...)` module function calls.
+4. Grep the entire codebase for remaining `__string_*` uses outside of `string.ks` and `stack.test.ks`; update or error if any are found.
+
+## Acceptance Criteria
+
+- [ ] `stdlib/kestrel/string.ks` contains no `__string_*` calls.
+- [ ] All ten `extern fun` declarations for string operations exist in `string.ks`.
+- [ ] `codegen.ts` contains no `name === '__string_*'` blocks for these ten intrinsics.
+- [ ] `check.ts` contains no `env.set('__string_*', ...)` bindings for these ten intrinsics.
+- [ ] `stdlib/kestrel/stack.test.ks` does not call `__string_length` or `__string_index_of` directly.
+- [ ] `stdlib/kestrel/string.test.ks` passes.
+- [ ] `stdlib/kestrel/stack.test.ks` passes.
+- [ ] `cd compiler && npm test` passes.
+- [ ] `./scripts/kestrel test` passes.
+
+## Spec References
+
+- `docs/specs/02-stdlib.md` — `kestrel:string` module: API is unchanged from the user perspective.
+
+## Risks / Notes
+
+- **`stack.test.ks` uses intrinsics directly**: this test file (`stdlib/kestrel/stack.test.ks`) calls `__string_length` and `__string_index_of` on lines 11–35. After this migration removes those names from the global environment, the tests will fail to compile unless they are updated to use `String.length(...)` imports. The issue is minor but must not be overlooked.
+- **`__string_lower` method name**: verify `KRuntime.stringLower` is the actual method name (the intrinsic is `__string_lower`; the codegen maps it). Grepping `codegen.ts` around line 1656 will confirm. If the method name diverges from the pattern, note it.
+- **Correctness of `stringSlice` vs. `String.substring`**: `KRuntime.stringSlice` almost certainly implements UTF-16 code-unit slicing (not Unicode scalar value slicing). The string spec (`docs/specs/02-stdlib.md`) should clarify the behaviour. Migration does not change behaviour, but it makes the KRuntime dependency explicit.
+- **Ten removals from `codegen.ts`**: modifying codegen has a history of subtle breakage. Run the full conformance suite after each batch of removals.

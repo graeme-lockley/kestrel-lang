@@ -206,9 +206,30 @@ Key properties of this example:
 - Parametric `extern fun` (`jhmGet<V>`, `jhmKeySet<K>`, `jhmValues<V>`) absorb Java type erasure without any cast expression in caller code
 - The existing `dict.test.ks` test suite passes unchanged — the rewrite is a drop-in replacement
 
-## Stories
+## Stories (ordered — implement sequentially)
 
-(None yet — use plan-epic to decompose, or story-create to add individual stories.)
+1. [S02-01-extern-type-ast-parser-typecheck.md](../../unplanned/S02-01-extern-type-ast-parser-typecheck.md) — `extern type` AST node, parser grammar, typecheck registration
+2. [S02-02-extern-fun-non-parametric-ast-parser-typecheck-codegen.md](../../unplanned/S02-02-extern-fun-non-parametric-ast-parser-typecheck-codegen.md) — `extern fun` (non-parametric) full pipeline: AST, parser, typecheck, JVM codegen
+3. [S02-03-extern-fun-parametric-type-params-checkcast.md](../../unplanned/S02-03-extern-fun-parametric-type-params-checkcast.md) — `extern fun` (parametric) type params + `checkcast` emission
+4. [S02-04-migrate-char-intrinsics-to-extern-fun.md](../../unplanned/S02-04-migrate-char-intrinsics-to-extern-fun.md) — Migrate `char.ks` intrinsics (`__char_code_point`, `__char_from_code`, `__char_to_string`)
+5. [S02-05-migrate-string-intrinsics-to-extern-fun.md](../../unplanned/S02-05-migrate-string-intrinsics-to-extern-fun.md) — Migrate `string.ks` intrinsics (10 `__string_*`; fix `stack.test.ks` direct calls)
+6. [S02-06-migrate-basics-numeric-float-time-intrinsics.md](../../unplanned/S02-06-migrate-basics-numeric-float-time-intrinsics.md) — Migrate `basics.ks` intrinsics (9 float/numeric + `__now_ms`)
+7. [S02-07-migrate-stack-format-trace-intrinsics.md](../../unplanned/S02-07-migrate-stack-format-trace-intrinsics.md) — Migrate `stack.ks` intrinsics (`__format_one`, `__print_one`, `__capture_trace`)
+8. [S02-08-migrate-fs-async-io-intrinsics.md](../../unplanned/S02-08-migrate-fs-async-io-intrinsics.md) — Migrate `fs.ks` async I/O intrinsics (`__read_file_async`, `__list_dir`, `__write_text`)
+9. [S02-09-migrate-process-env-intrinsics.md](../../unplanned/S02-09-migrate-process-env-intrinsics.md) — Migrate `process.ks` intrinsics (`__get_os`, `__get_args`, `__get_cwd`, `__run_process`)
+10. [S02-10-migrate-task-combinator-intrinsics.md](../../unplanned/S02-10-migrate-task-combinator-intrinsics.md) — Migrate `task.ks` task combinator intrinsics (4 `__task_*`)
+11. [S02-11-dict-rewrite-over-hashmap.md](../../unplanned/S02-11-dict-rewrite-over-hashmap.md) — `kestrel:dict` rewrite over `java.util.HashMap` (integration test vehicle)
+12. [S02-12-maven-classpath-scheme-and-kdeps-sidecars.md](../../unplanned/S02-12-maven-classpath-scheme-and-kdeps-sidecars.md) — `maven:` classpath declaration scheme + `.kdeps` conflict detection
+13. [S02-13-extern-import-auto-binding-optional.md](../../unplanned/S02-13-extern-import-auto-binding-optional.md) — `extern import` auto-binding from class metadata **(Optional)**
+
+**Story dependencies:**
+- S02-01, S02-02, S02-03 are strictly sequential; each blocks the next.
+- S02-04 through S02-10 depend on S02-01 + S02-02 + S02-03 and are otherwise independent; can be implemented in any order.
+- S02-07 additionally depends on S02-03 (parametric `extern fun` required for `capture_trace<T>`).
+- S02-08, S02-09 (partial: `__run_process`), S02-10 require async `extern fun` support (Task<T> return) — a gap in S02-02's current scope that must be resolved before those stories are planned.
+- S02-11 depends on S02-01 + S02-02 + S02-03 and benefits from S02-04 being complete first (char type in dict keys).
+- S02-12 depends on S02-01 + S02-02 only; independent of all migration stories.
+- S02-13 is Optional and depends on S02-01 + S02-02 + S02-03.
 
 ## Dependencies
 
