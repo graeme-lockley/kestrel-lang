@@ -3,8 +3,25 @@ import { message as message2 } from "./m2.ks"
 
 import { hello } from "./m3.ks"
 
+import "maven:org.apache.commons:commons-lang3:3.17.0"
+
+extern fun reverse(str: String): String =
+  jvm("org.apache.commons.lang3.StringUtils#reverse(java.lang.String)")
+
+extern fun upperCase(str: String): String =
+  jvm("org.apache.commons.lang3.StringUtils#upperCase(java.lang.String)")
+  
+extern fun swapCase(str: String): String =
+  jvm("org.apache.commons.lang3.StringUtils#swapCase(java.lang.String)")
+
 println(message1())
 println(message2())
+
+// --- Apache Commons Lang3: StringUtils demo ---
+val word = "Kestrel"
+println(reverse(word))
+println(upperCase(word))
+println(swapCase(word))
 
 hello := "hello"
 

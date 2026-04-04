@@ -99,20 +99,20 @@ function fetchSha1(url: string): string {
 
 function renderStartDownload(coord: MavenCoordinate): void {
   if (!process.stderr.isTTY) {
-    process.stderr.write(`Downloading ${coord.coordinate}\n`);
+    process.stderr.write(`\x1b[90mDownloading ${coord.coordinate}\x1b[0m\n`);
     return;
   }
-  process.stderr.write(`  Downloading ${coord.coordinate} [>          ] 0%`);
+  process.stderr.write(`\x1b[90mDownloading ${coord.coordinate} [>          ] 0%`);
 }
 
 function renderDoneDownload(coord: MavenCoordinate, filePath: string): void {
   const kb = Math.max(1, Math.round(statSync(filePath).size / 1024));
   if (!process.stderr.isTTY) {
-    process.stderr.write(`Downloaded ${coord.coordinate} (${kb} KB)\n`);
+    process.stderr.write(`\x1b[90mDownloaded ${coord.coordinate} (${kb} KB)\x1b[0m\n`);
     return;
   }
-  process.stderr.write(`\r  Downloading ${coord.coordinate} [==========] 100%\n`);
-  process.stderr.write(`  Downloaded ${coord.coordinate} (${kb} KB)\n`);
+  process.stderr.write(`\rDownloading ${coord.coordinate} [==========] 100%\n\x1b[0m`);
+  process.stderr.write(`\x1b[90mDownloaded ${coord.coordinate} (${kb} KB)\x1b[0m\n`);
 }
 
 function ensureJar(coord: MavenCoordinate): { jarPath: string; sha1: string } {

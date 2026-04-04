@@ -32,7 +32,7 @@ export interface SideEffectImport extends NodeBase {
   spec: string;
 }
 
-export type TopLevelDecl = FunDecl | ExternFunDecl | TypeDecl | ExternTypeDecl | ExceptionDecl | ExportDecl | ValDecl | VarDecl;
+export type TopLevelDecl = FunDecl | ExternFunDecl | ExternImportDecl | TypeDecl | ExternTypeDecl | ExceptionDecl | ExportDecl | ValDecl | VarDecl;
 
 export interface ValDecl extends NodeBase {
   kind: 'ValDecl';
@@ -83,6 +83,23 @@ export interface ExternFunDecl extends NodeBase {
   params: Param[];
   returnType: Type;
   jvmDescriptor: string;
+}
+
+export interface ExternImportOverride extends NodeBase {
+  kind: 'ExternImportOverride';
+  name: string;
+  params: Param[];
+  returnType: Type;
+}
+
+export interface ExternImportDecl extends NodeBase {
+  kind: 'ExternImportDecl';
+  /** The target class URI, e.g. "java:java.util.HashMap" */
+  target: string;
+  /** The local alias name, e.g. "HashMap" */
+  alias: string;
+  /** Per-method type overrides that replace the auto-generated Any types */
+  overrides: ExternImportOverride[];
 }
 
 export interface Param extends NodeBase {

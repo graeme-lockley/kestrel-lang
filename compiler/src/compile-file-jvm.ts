@@ -12,7 +12,8 @@ import { jvmCodegen, type JvmCodegenResult } from './jvm-codegen/index.js';
 import { resolveSpecifier } from './resolve.js';
 import { isMavenSpecifier, resolveMavenSpecifiers, type MavenResolvedDependency } from './maven.js';
 import type { Program, ImportDecl, Expr, TopLevelStmt, TopLevelDecl, BlockExpr } from './ast/nodes.js';
-import type { FunDecl, ExternFunDecl, TypeDecl } from './ast/nodes.js';
+import type { FunDecl, ExternFunDecl, TypeDecl, ExternTypeDecl, ExternImportDecl, Param, Type } from './ast/nodes.js';
+import { readClassMetadata, generateStubs, renderExternKs } from './jvm-metadata/index.js';
 import { getInferredType } from './typecheck/check.js';
 import type { InternalType } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
@@ -44,6 +45,202 @@ function diag(file: string, code: string, message: string, span?: Span, source?:
     message,
     location: span ? locationFromSpan(file, span, source) : locationFileOnly(file),
   };
+}
+
+// ---------------------------------------------------------------------------
+// extern import expansion
+// ---------------------------------------------------------------------------
+
+function makeJavaTypeMapper(): { map: (javaType: string) => Type; typeParams: string[] } {
+  const typeParams: string[] = [];
+  let counter = 0;
+  const map = (javaType: string): Type => {
+    switch (javaType) {
+      case 'void': return { kind: 'PrimType', name: 'Unit' };
+      case 'int':
+      case 'long':
+      case 'short':
+      case 'byte':
+      case 'char': return { kind: 'PrimType', name: 'Int' };
+      case 'float':
+      case 'double': return { kind: 'PrimType', name: 'Float' };
+      case 'boolean': return { kind: 'PrimType', name: 'Bool' };
+      case 'java.lang.String': return { kind: 'PrimType', name: 'String' };
+      default: {
+        const name = `_T${counter++}`;
+        typeParams.push(name);
+        return { kind: 'IdentType', name };
+      }
+    }
+  };
+  return { map, typeParams };
+}
+
+/**
+ * Expand all ExternImportDecl nodes in the program body into concrete
+ * ExternTypeDecl + ExternFunDecl nodes.  Returns the updated body, a map of
+ * alias → sidecar content (for .extern.ks file emission), and any diagnostics.
+ */
+function expandExternImports(
+  program: Program,
+  filePath: string,
+  source: string,
+  mavenDeps: MavenResolvedDependency[]
+): { body: (TopLevelDecl | TopLevelStmt)[]; sidecars: Map<string, string>; diagnostics: Diagnostic[] } {
+  const sidecars = new Map<string, string>();
+  const diagnostics: Diagnostic[] = [];
+  const newBody: (TopLevelDecl | TopLevelStmt)[] = [];
+
+  for (const node of program.body) {
+    if (!node || node.kind !== 'ExternImportDecl') {
+      newBody.push(node as TopLevelDecl | TopLevelStmt);
+      continue;
+    }
+
+    const decl = node as ExternImportDecl;
+    const { target, alias, overrides, span } = decl;
+
+    // Parse scheme: currently supports 'java:' only; 'maven:' requires a jar
+    let className: string;
+    let jarPaths: string[] | undefined;
+
+    if (target.startsWith('java:')) {
+      className = target.slice('java:'.length).trim();
+    } else if (target.startsWith('maven:')) {
+      // Find the resolved jar path from mavenDeps matching this artifact
+      // 'maven:groupId:artifactId:version' — extract groupId:artifactId pattern without version
+      const parts = target.slice('maven:'.length).split(':');
+      const ga = parts.slice(0, 2).join(':');
+      const jarDep = mavenDeps.find((d) => d.ga === ga);
+      if (!jarDep) {
+        diagnostics.push(diag(filePath, CODES.resolve.module_not_found,
+          `extern import: maven artifact '${ga}' not found; add an import "${target}" side-effect import first`,
+          span, source));
+        continue;
+      }
+      // maven: extern import target must supply the class name after a '#' separator
+      // e.g. "maven:org.apache.commons:commons-lang3:3.20.0#org.apache.commons.lang3.StringUtils"
+      const hash = target.lastIndexOf('#');
+      if (hash < 0) {
+        diagnostics.push(diag(filePath, CODES.resolve.module_not_found,
+          `extern import: maven target must include class name after '#', e.g. "maven:groupId:artifactId:version#com.example.Class"`,
+          span, source));
+        continue;
+      }
+      className = target.slice(hash + 1).trim();
+      jarPaths = [jarDep.jarPath];
+    } else {
+      diagnostics.push(diag(filePath, CODES.resolve.module_not_found,
+        `extern import: unsupported scheme in '${target}'; expected 'java:' or 'maven:'`,
+        span, source));
+      continue;
+    }
+
+    // Read class metadata via javap
+    let meta;
+    try {
+      meta = readClassMetadata(className, jarPaths);
+    } catch (err) {
+      diagnostics.push(diag(filePath, CODES.resolve.module_not_found,
+        `extern import: ${err instanceof Error ? err.message : String(err)}`,
+        span, source));
+      continue;
+    }
+
+    // Build override map: kestrelName/methodName → { params, returnType }
+    // Overrides use the same form as hand-written extern fun (receiver is first param for instance methods).
+    const overrideMap = new Map<string, { params: Param[]; returnType: Type }>();
+    for (const ov of overrides) {
+      overrideMap.set(ov.name, { params: ov.params, returnType: ov.returnType });
+    }
+
+    // Generate stubs (string-based, for sidecar)
+    const stringOverrideMap = new Map<string, { params: Array<{ name: string; type: string }>; returnType: string }>();
+    // (sidecar always uses auto-generated types — no overrides shown)
+    const stubs = generateStubs(meta, alias, stringOverrideMap);
+    const sidecarContent = renderExternKs(meta, alias, stubs);
+    sidecars.set(alias, sidecarContent);
+
+    // Emit ExternTypeDecl for the alias
+    const externTypeDecl: ExternTypeDecl = {
+      kind: 'ExternTypeDecl',
+      visibility: 'local',
+      name: alias,
+      jvmClass: className,
+    };
+    newBody.push(externTypeDecl);
+
+    // Emit ExternFunDecl for each stub method
+    // Sort constructors by param count ascending so the no-arg constructor (or smallest) gets
+    // the base name `new${alias}` rather than a suffixed variant.
+    const sortedMethods = [...meta.methods].sort((a, b) => {
+      if (a.isConstructor && b.isConstructor) return a.javaParamTypes.length - b.javaParamTypes.length;
+      return 0;
+    });
+
+    // Track Kestrel-level name occurrences (constructors map to `new${alias}`, not `<init>`)
+    const occurrences = new Map<string, number>();
+
+    for (const m of sortedMethods) {
+      const baseKestrel = m.isConstructor ? `new${alias}` : m.jvmMethodName;
+      const idx = (occurrences.get(baseKestrel) ?? 0) + 1;
+      occurrences.set(baseKestrel, idx);
+      const kestrelName = idx > 1 ? `${baseKestrel}_${idx}` : baseKestrel;
+
+      // jvm("...") descriptor
+      const jvmDescriptor = `${className}#${m.jvmMethodName}(${m.javaParamTypes.join(',')})`;
+
+      let params: Param[];
+      let returnType: Type;
+      let typeParams: string[] | undefined;
+
+      // Check for override by kestrelName; fall back to raw JVM method name only for
+      // the first (non-suffixed) occurrence to avoid applying a single-overload override
+      // to all variants of an overloaded Java method.
+      const override = overrideMap.get(kestrelName) ?? (idx === 1 ? overrideMap.get(m.jvmMethodName) : undefined);
+      if (override) {
+        params = override.params;
+        returnType = override.returnType;
+      } else {
+        // Auto-generate: for instance methods, first param is the receiver
+        const mapper = makeJavaTypeMapper();
+        const generatedParams: Param[] = m.javaParamTypes.map((t, i) => ({
+          kind: 'Param' as const,
+          name: `p${i}`,
+          type: mapper.map(t),
+        }));
+
+        if (!m.isStatic && !m.isConstructor) {
+          const receiverParam: Param = {
+            kind: 'Param',
+            name: 'instance',
+            type: { kind: 'IdentType', name: alias },
+          };
+          params = [receiverParam, ...generatedParams];
+        } else {
+          params = generatedParams;
+        }
+
+        returnType = m.isConstructor
+          ? { kind: 'IdentType', name: alias }
+          : mapper.map(m.javaReturnType);
+        typeParams = mapper.typeParams.length > 0 ? mapper.typeParams : undefined;
+      }
+
+      const externFunDecl: ExternFunDecl = {
+        kind: 'ExternFunDecl',
+        exported: false,
+        name: kestrelName,
+        typeParams,
+        params,
+        returnType,
+        jvmDescriptor,
+      };
+      newBody.push(externFunDecl);
+    }
+  }
+
+  return { body: newBody, sidecars, diagnostics };
 }
 
 function collectJvmNamespaceConstructorDiags(
@@ -439,6 +636,19 @@ export function compileFileJvm(
       sourceContent: source,
       dependencyExportsBySpec,
     };
+
+    // Expand extern import declarations into concrete extern type + extern fun nodes
+    // before typecheck sees the program.
+    let externImportSidecars = new Map<string, string>();
+    {
+      const expansion = expandExternImports(program, filePath, source, mavenDeps);
+      if (expansion.diagnostics.length > 0) {
+        return { ok: false, diagnostics: expansion.diagnostics };
+      }
+      program = { ...program, body: expansion.body };
+      externImportSidecars = expansion.sidecars;
+    }
+
     const tc = typecheck(program, tcOpts);
     if (!tc.ok) return { ok: false, diagnostics: tc.diagnostics };
 
@@ -647,6 +857,12 @@ export function compileFileJvm(
         writeFileSync(kdepsPath, JSON.stringify(payload, null, 2) + '\n');
       } else if (existsSync(kdepsPath)) {
         unlinkSync(kdepsPath);
+      }
+
+      // Emit .extern.ks sidecar files for each extern import declaration
+      for (const [alias, content] of externImportSidecars) {
+        const sidecarPath = pathResolve(classDir, alias + '.extern.ks');
+        writeFileSync(sidecarPath, content);
       }
     }
 

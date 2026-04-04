@@ -518,6 +518,92 @@ The standard library ships as `kestrel:*` modules:
 
 ---
 
+## Java interop
+
+Kestrel programs run on the JVM and can call any Java class directly.
+
+### extern fun
+
+`extern fun` binds a Kestrel function name to a JVM static method, instance method, or constructor without writing a Java wrapper:
+
+```kestrel
+// Static method: String.valueOf(Object) -> String
+extern fun intToString(n: Int): String = jvm("java.lang.String#valueOf(java.lang.Object)")
+
+// Instance method: first param is the receiver, rest are arguments
+extern fun concatStrings(a: String, b: String): String = jvm("java.lang.String#concat(java.lang.String)")
+extern fun strToUpper(s: String): String = jvm("java.lang.String#toUpperCase()")
+```
+
+The JVM specifier format is `"ClassName#methodName(ArgType,…)"`. For constructors use `<init>` as the method name. When an `extern fun` is declared as an instance method, the **first parameter** is the receiver object; all remaining parameters are the Java arguments.
+
+> **Boxing note:** Kestrel `Int` maps to JVM `java.lang.Long`, `Float` to `java.lang.Double`, and `Bool` to `java.lang.Boolean`. JVM methods that return a primitive type (e.g. `int`, `double`) cannot be bound directly because the generated descriptor expects the boxed return type. Use methods that return reference types (`String`, or any `extern type`) or KRuntime wrapper methods that already return boxed values.
+
+### extern type
+
+`extern type` introduces a nominal Kestrel type that corresponds to a JVM class. This lets you write `extern fun` declarations that mention the class as a parameter or return type, and the compiler will generate the correct JVM descriptor:
+
+```kestrel
+extern type StringBuilder = jvm("java.lang.StringBuilder")
+
+extern fun newStringBuilder(): StringBuilder =
+  jvm("java.lang.StringBuilder#<init>()")
+
+extern fun sbAppend(sb: StringBuilder, s: String): StringBuilder =
+  jvm("java.lang.StringBuilder#append(java.lang.String)")
+
+extern fun sbToString(sb: StringBuilder): String =
+  jvm("java.lang.StringBuilder#toString()")
+
+val greeting =
+  newStringBuilder()
+  |> sbAppend("Hello")
+  |> sbAppend(", World")
+  |> sbToString
+// greeting is "Hello, World"
+```
+
+### extern import
+
+`extern import` reads a JVM class's public API via `javap` at compile time and auto-generates an `extern type` plus `extern fun` declarations for every public constructor and method:
+
+```kestrel
+extern import "java:java.lang.StringBuilder" as SB { }
+```
+
+After this declaration `newSB`, `append`, `toString`, etc. are all available in scope, generated automatically. The optional override block `{ fun … }` lets you correct specific method signatures — useful when the auto-generated return type is wrong:
+
+```kestrel
+extern import "java:java.lang.StringBuilder" as SB {
+  // Override the return type of append to SB so the JVM descriptor matches
+  fun append(instance: SB, p0: String): SB
+}
+
+val msg = newSB() |> append("Kestrel") |> append(" rocks") |> toString
+// msg is "Kestrel rocks"
+```
+
+Supported import schemes:
+
+| Scheme | Example | Description |
+|--------|---------|-------------|
+| `java:` | `"java:java.util.ArrayList"` | JDK or classpath class |
+| `maven:g:a:v#Class` | `"maven:com.google.guava:guava:33.3.1-jre#com.google.common.collect.ImmutableList"` | Class inside a Maven artifact |
+
+### Maven dependencies
+
+Pull in a Maven artifact as a compile-time and runtime classpath entry with the side-effect import form:
+
+```kestrel
+import "maven:com.google.guava:guava:33.3.1-jre"
+
+extern import "java:com.google.common.collect.ImmutableList" as ImmutableList { }
+```
+
+The compiler downloads the JAR to `~/.kestrel/maven/` on first use and records it in a `.kdeps` sidecar. `kestrel run` picks up `.kdeps` transitively so you never need to pass classpath flags manually.
+
+---
+
 ## Pipelines
 
 The pipeline operators thread values through functions, letting you write chains that read left-to-right:

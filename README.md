@@ -54,6 +54,17 @@ val result =
 
 More examples appear in [tests/unit/](tests/unit/) and [tests/e2e/scenarios/](tests/e2e/scenarios/).
 
+## Java interop
+
+Kestrel runs on the JVM and can call any Java class directly. Three mechanisms cover the common cases:
+
+- **`extern fun`** — bind a function name to a JVM static method, instance method, or constructor: `extern fun toUpper(s: String): String = jvm("java.lang.String#toUpperCase()")`
+- **`extern type`** — introduce a Kestrel type backed by a JVM class: `extern type StringBuilder = jvm("java.lang.StringBuilder")`
+- **`extern import`** — auto-generate bindings for an entire class by reading its public API at compile time: `extern import "java:java.lang.StringBuilder" as SB { }` (optional override block corrects specific signatures)
+- **Maven dependencies** — add a JAR to the classpath with a side-effect import: `import "maven:com.google.guava:guava:33.3.1-jre"` — the compiler downloads and caches the artifact; `kestrel run` picks it up automatically.
+
+See the [Java interop section of the guide](docs/guide.md#java-interop) for full examples.
+
 ## Command-line tool
 
 The `kestrel` script implements the CLI described in [docs/specs/09-tools.md](docs/specs/09-tools.md):

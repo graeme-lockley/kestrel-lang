@@ -245,7 +245,7 @@ Epics live in `docs/kanban/epics/` with folders: **unplanned** and **done**.
 2. **unplanned** — High-level feature stories on the ordered roadmap (summary, state, relationships, **goals**, acceptance, spec refs, **risks / notes**).
 3. **planned** — Scoped but not yet built: adds impact analysis, **Tasks**, tests to add, docs/specs to update, optional **Notes**. Use **`plan-story`** to produce this content.
 4. **doing** — Active implementation; tick tasks; add **Build notes** as needed. Use **`build-story`** to execute.
-5. **done** — All tasks ticked, acceptance satisfied, and **required tests passing**.
+5. **done** — All tasks ticked, acceptance satisfied, and **required tests passing**. Stories in `done/` retain their **Build notes** section, which records implementation decisions, surprises, and non-obvious design choices made during development. **When trying to understand how a feature works or why it was built a certain way, search the completed stories in `docs/kanban/done/` — their Build notes are a primary knowledge source.**
 6. **epics** — Each roadmap story links to one epic in `docs/kanban/epics/unplanned/`; move epic to `docs/kanban/epics/done/` when all member stories are done.
 
 ### When promoting a story

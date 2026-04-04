@@ -15,6 +15,7 @@ import type {
   BlockExpr,
   Param,
   TypeField,
+  ExternImportOverride,
 } from '../ast/nodes.js';
 import { tokenize } from '../lexer/tokenize.js';
 import { CODES } from '../diagnostics/types.js';
@@ -269,6 +270,41 @@ class Parser {
     // After parseExport() consumes 'export', we are at 'exception'
     if (this.at('keyword', 'extern')) {
       this.advance();
+      if (this.at('keyword', 'import')) {
+        if (exported) {
+          this.pushError(CODES.parse.unexpected_token, 'export extern import is not supported; extern import generates local declarations', this.current().span);
+        }
+        this.advance(); // consume 'import'
+        if (!this.at('string')) {
+          this.pushError(CODES.parse.unexpected_token, 'Expected string literal after extern import', this.current().span);
+          return { kind: 'ExternImportDecl', target: '', alias: '', overrides: [] };
+        }
+        const target = this.advance().value ?? '';
+        this.expect('keyword', 'as');
+        const alias = this.expect('ident').value!;
+        const overrides: ExternImportOverride[] = [];
+        if (this.at('lbrace')) {
+          this.advance();
+          while (!this.at('rbrace') && !this.at('eof')) {
+            // Skip optional semicolons between declarations
+            if (this.at('semicolon')) { this.advance(); continue; }
+            if (this.at('keyword', 'fun')) {
+              this.advance();
+              const name = this.expect('ident').value!;
+              this.expect('lparen');
+              const params = this.parseParamList();
+              this.expect('colon');
+              const returnType = this.parseType();
+              overrides.push({ kind: 'ExternImportOverride', name, params, returnType });
+            } else {
+              this.pushError(CODES.parse.unexpected_token, 'Expected fun declaration in extern import override block', this.current().span);
+              this.advance();
+            }
+          }
+          this.expect('rbrace');
+        }
+        return { kind: 'ExternImportDecl', target, alias, overrides };
+      }
       if (this.at('keyword', 'fun')) {
         this.advance();
         const name = this.expect('ident').value!;

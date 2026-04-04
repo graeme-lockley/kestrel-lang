@@ -208,6 +208,8 @@ Key properties of this example:
 
 ## Stories (ordered — implement sequentially)
 
+### Original stories (all done)
+
 1. [x] [S02-01-extern-type-ast-parser-typecheck.md](../../done/S02-01-extern-type-ast-parser-typecheck.md) — `extern type` AST node, parser grammar, typecheck registration
 2. [x] [S02-02-extern-fun-non-parametric-ast-parser-typecheck-codegen.md](../../done/S02-02-extern-fun-non-parametric-ast-parser-typecheck-codegen.md) — `extern fun` (non-parametric) full pipeline: AST, parser, typecheck, JVM codegen
 3. [x] [S02-03-extern-fun-parametric-type-params-checkcast.md](../../done/S02-03-extern-fun-parametric-type-params-checkcast.md) — `extern fun` (parametric) type params + `checkcast` emission
@@ -220,7 +222,15 @@ Key properties of this example:
 10. [x] [S02-10-migrate-task-combinator-intrinsics.md](../../done/S02-10-migrate-task-combinator-intrinsics.md) — Migrate `task.ks` task combinator intrinsics (4 `__task_*`)
 11. [x] [S02-11-dict-rewrite-over-hashmap.md](../../done/S02-11-dict-rewrite-over-hashmap.md) — `kestrel:dict` rewrite over `java.util.HashMap` (integration test vehicle)
 12. [x] [S02-12-maven-classpath-scheme-and-kdeps-sidecars.md](../../done/S02-12-maven-classpath-scheme-and-kdeps-sidecars.md) — `maven:` classpath declaration scheme + `.kdeps` conflict detection
-13. [S02-13-extern-import-auto-binding-optional.md](../../planned/S02-13-extern-import-auto-binding-optional.md) — `extern import` auto-binding from class metadata **(Optional)**
+13. [x] [S02-13-extern-import-auto-binding-optional.md](../../done/S02-13-extern-import-auto-binding-optional.md) — `extern import` auto-binding from class metadata **(Optional)**
+
+### Follow-up stories (identified post-delivery — in unplanned/)
+
+14. [ ] [S02-14-extern-fun-primitive-return-type-descriptor-fix.md](../../unplanned/S02-14-extern-fun-primitive-return-type-descriptor-fix.md) — Fix silent `NoSuchMethodError` for `extern fun` bindings to JVM primitive-returning methods **(Critical)**
+15. [ ] [S02-15-extern-import-sidecar-reflects-overrides.md](../../unplanned/S02-15-extern-import-sidecar-reflects-overrides.md) — `extern import` sidecar must reflect user override signatures
+16. [ ] [S02-16-maven-version-conflict-at-compile-time.md](../../unplanned/S02-16-maven-version-conflict-at-compile-time.md) — Move Maven version-conflict detection from runtime to compile time
+17. [ ] [S02-17-maven-resolver-hardening.md](../../unplanned/S02-17-maven-resolver-hardening.md) — Maven segment path-traversal validation and `javap` subprocess timeout
+18. [ ] [S02-18-extern-interop-missing-tests.md](../../unplanned/S02-18-extern-interop-missing-tests.md) — Add missing runtime regression tests and E2E Maven + `extern import` test
 
 **Story dependencies:**
 - S02-01, S02-02, S02-03 are strictly sequential; each blocks the next.

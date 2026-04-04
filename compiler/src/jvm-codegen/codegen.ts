@@ -965,6 +965,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         if (descriptorText.startsWith('L')) {
           const owner = descriptorText.slice(1, -1);
           if (owner !== 'java/lang/Object') mb.emit1s(JvmOp.CHECKCAST, cf.classRef(owner));
+        } else if (descriptorText.startsWith('[')) {
+          mb.emit1s(JvmOp.CHECKCAST, cf.classRef(descriptorText));
         }
     }
   }

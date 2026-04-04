@@ -164,7 +164,7 @@ Program        ::= [ Shebang ] { ImportDecl } { ModuleDecl | TopLevelStmt }
 
 Shebang        ::= "#!" { any character except newline } (NL | end of file)
 
-ModuleDecl     ::= ExportDecl | TopLevelDecl
+ModuleDecl     ::= ExportDecl | TopLevelDecl | ExternImportDecl
 
 TopLevelStmt   ::= Stmt [ ";" | NL ]
 
@@ -193,6 +193,7 @@ Param          ::= LOWER_IDENT [ ":" Type ]
 
 TypeDecl       ::= [ "opaque" ] "type" UPPER_IDENT [ "<" TypeParamList ">" ] "=" TypeBody
 ExternTypeDecl ::= "extern" [ "opaque" ] "type" UPPER_IDENT [ "<" TypeParamList ">" ] "=" "jvm" "(" STRING ")"
+ExternImportDecl ::= "extern" "import" STRING "as" UPPER_IDENT [ "{" { FunDecl } "}" ]
 TypeBody       ::= Type                                         /* type alias */
                  | Constructor { "|" Constructor }              /* ADT definition */
 Constructor    ::= UPPER_IDENT [ "(" TypeList ")" ]             /* 0 or more positional payload types */
@@ -212,6 +213,7 @@ VarDecl        ::= "var" LOWER_IDENT [ ":" Type ] "=" Expr
 - **Extern** (`extern type`): `extern type Foo = jvm("...")` binds a nominal type name to a JVM class descriptor for interop. Exported extern types (`export extern type Foo = jvm("...")`) are visible to importers as opaque type names only.
 - **Extern function** (`extern fun`): `extern fun f(...): T = jvm("Class#method(Args)")` binds a function name directly to a JVM static/instance/constructor target without a Kestrel body.
 - **Parametric extern function**: `extern fun get<V>(...): V = jvm("...")` allows erased Java return values to be re-typed by call-site instantiation; JVM codegen may emit `CHECKCAST` for concrete instantiations.
+- **Extern import** (`extern import`): `extern import "java:fully.qualified.ClassName" as Alias { ... }` auto-generates an `extern type` declaration and a set of `extern fun` declarations by reading the target class's public API via `javap` at compile time. The optional block `{ ... }` contains `fun` declarations that override the auto-generated signature for specific methods. The compiler also emits an `<Alias>.extern.ks` sidecar file alongside the compiled `.class` output for reference. Currently supported schemes: `java:` (JDK/classpath class) and `maven:groupId:artifactId:version#fully.qualified.ClassName` (class in a resolved Maven dependency). Overload naming: the first (fewest-parameter) constructor is named `new${Alias}`; subsequent overloads are `new${Alias}_2`, `new${Alias}_3`, etc. Non-constructor overloads follow the same pattern using the Java method name as base. Erased Java types (`java.lang.Object`, reference types) become independent type parameters in the generated `extern fun` signature (e.g., `_T0`, `_T1`).
 
 **ADT definitions:** A type body is an ADT definition when the right-hand side of `=` is one or more UPPER_IDENT constructors separated by `|`. Each constructor may take zero or more positional payload types in parentheses. Constructors are functions: a nullary constructor `Red` has type `Color`; a constructor `Some(T)` has type `(T) -> Option<T>`; a constructor `Node(Tree, Tree)` has type `(Tree, Tree) -> Tree`. Constructor application uses the standard call syntax: `Some(10)`, `Node(left, right)`. With **`import * as M from "…"`** (07 §2.3), **qualified** constructor use is **`M.C`** (nullary, a value of the ADT type) and **`M.C(e1,…,en)`** (n-ary), when `C` is an exported constructor of an exported non-opaque ADT in that module (06 §5.1). Pattern matching uses the same syntax: `Some(x) => ...`, `Node(l, r) => ...`. If named fields are desired, use a record type as the payload: `MkPerson({ name: String, age: Int })`.
 

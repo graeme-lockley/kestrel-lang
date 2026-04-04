@@ -343,4 +343,69 @@ describe('parse (integration)', () => {
       expect(fd.body.right.kind).toBe('IsExpr');
     }
   });
+
+  // extern import
+  it('parses extern import with empty override block', () => {
+    const ast = parse(tokenize('extern import "java:java.util.HashMap" as HashMap { }'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({
+      kind: 'ExternImportDecl',
+      target: 'java:java.util.HashMap',
+      alias: 'HashMap',
+      overrides: [],
+    });
+  });
+
+  it('parses extern import without braces', () => {
+    const ast = parse(tokenize('extern import "java:java.lang.String" as JString'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({
+      kind: 'ExternImportDecl',
+      target: 'java:java.lang.String',
+      alias: 'JString',
+      overrides: [],
+    });
+  });
+
+  it('parses extern import with method overrides', () => {
+    const ast = parse(tokenize(
+      'extern import "java:java.util.HashMap" as HashMap { fun size(m: HashMap): Int }'
+    ));
+    expect(ast.kind).toBe('Program');
+    const decl = ast.body[0];
+    expect(decl).toMatchObject({ kind: 'ExternImportDecl', alias: 'HashMap' });
+    if (decl.kind === 'ExternImportDecl') {
+      expect(decl.overrides.length).toBe(1);
+      expect(decl.overrides[0]).toMatchObject({ kind: 'ExternImportOverride', name: 'size' });
+    }
+  });
+
+  it('parses extern import with multiple overrides', () => {
+    const ast = parse(tokenize(
+      'extern import "java:java.util.HashMap" as HashMap { fun size(m: HashMap): Int; fun isEmpty(m: HashMap): Bool }'
+    ));
+    expect(ast.kind).toBe('Program');
+    const decl = ast.body[0];
+    if (decl.kind === 'ExternImportDecl') {
+      expect(decl.overrides.length).toBe(2);
+      expect(decl.overrides[0].name).toBe('size');
+      expect(decl.overrides[1].name).toBe('isEmpty');
+    }
+  });
+
+  it('errors on extern import missing string literal', () => {
+    const result = parse(tokenize('extern import HashMap'));
+    expect('ok' in result && !result.ok).toBe(true);
+    if ('ok' in result && !result.ok) {
+      expect(result.errors.some((e) => e.message.includes('Expected string literal after extern import'))).toBe(true);
+    }
+  });
+
+  it('errors on export extern import', () => {
+    const result = parse(tokenize('export extern import "java:java.util.HashMap" as HashMap { }'));
+    expect('ok' in result && !result.ok).toBe(true);
+    if ('ok' in result && !result.ok) {
+      expect(result.errors.some((e) => e.message.includes('export extern import is not supported'))).toBe(true);
+    }
+  });
 });

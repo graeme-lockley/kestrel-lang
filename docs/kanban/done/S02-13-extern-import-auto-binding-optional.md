@@ -78,18 +78,18 @@ Implement `extern import "java:pkg.Class" as Name { ... }` — a convenience for
 
 ## Tasks
 
-- [ ] Add `ExternImportDecl` to `compiler/src/ast/nodes.ts` and include it in top-level declarations.
-- [ ] Extend parser (`compiler/src/parser/parse.ts`) for `extern import "java:..." as Alias { ... }` syntax and override method parsing.
-- [ ] Implement JVM class metadata reader utility (`compiler/src/jvm-metadata/*` or equivalent) to enumerate public methods/constructors from a target class.
-- [ ] Generate synthetic `extern type` + `extern fun` declarations from class metadata with primitive mappings (`int/long -> Int`, `boolean -> Bool`, `double -> Float`, `void -> Unit`, object/generic -> Any`).
-- [ ] Merge override declarations from extern-import body over generated defaults and validate arity/signature consistency.
-- [ ] Integrate synthetic declarations into `compile-file-jvm` prior to typecheck/codegen and emit `<Alias>.extern.ks` sidecar stubs.
-- [ ] Add parser integration tests for syntax success/failure and override parsing.
-- [ ] Add typecheck/codegen integration tests proving generated stubs are usable as normal extern declarations.
-- [ ] Add sidecar emission test for `<Alias>.extern.ks` output contents.
-- [ ] Update specs (`docs/specs/01-language.md`, `docs/specs/09-tools.md` if sidecar behavior needs tooling note).
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./kestrel test --summary`.
+- [x] Add `ExternImportDecl` to `compiler/src/ast/nodes.ts` and include it in top-level declarations.
+- [x] Extend parser (`compiler/src/parser/parse.ts`) for `extern import "java:..." as Alias { ... }` syntax and override method parsing.
+- [x] Implement JVM class metadata reader utility (`compiler/src/jvm-metadata/*` or equivalent) to enumerate public methods/constructors from a target class.
+- [x] Generate synthetic `extern type` + `extern fun` declarations from class metadata with primitive mappings (`int/long -> Int`, `boolean -> Bool`, `double -> Float`, `void -> Unit`, object/generic -> Any`).
+- [x] Merge override declarations from extern-import body over generated defaults and validate arity/signature consistency.
+- [x] Integrate synthetic declarations into `compile-file-jvm` prior to typecheck/codegen and emit `<Alias>.extern.ks` sidecar stubs.
+- [x] Add parser integration tests for syntax success/failure and override parsing.
+- [x] Add typecheck/codegen integration tests proving generated stubs are usable as normal extern declarations.
+- [x] Add sidecar emission test for `<Alias>.extern.ks` output contents.
+- [x] Update specs (`docs/specs/01-language.md`, `docs/specs/09-tools.md` if sidecar behavior needs tooling note).
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./kestrel test --summary`.
 
 ## Tests to add
 
@@ -109,3 +109,9 @@ Implement `extern import "java:pkg.Class" as Name { ... }` — a convenience for
 
 - Prefer deterministic overload naming in generated stubs (`name`, `name_2`, `name_3`, ...) so outputs are stable across runs.
 - Keep this feature compile-time only; never execute imported classes during metadata extraction.
+
+## Build notes
+
+- 2026-04-04: Started implementation.
+- 2026-04-04: Implemented all compiler components: AST nodes (ExternImportDecl/ExternImportOverride), parser extension, jvm-metadata module (using javap subprocess), expandExternImports in compile-file-jvm.ts, and sidecar emission. All 300 compiler tests pass.
+- Key design decisions: (1) Erased Java types (`Object`, reference types) generate unique type parameters (`_T0`, `_T1`, etc.) per function rather than sharing a single `Any` var — each position is independently polymorphic. (2) Constructors are sorted by param count ascending before naming so the no-arg constructor gets the base `newAlias` name. (3) Kestrel-level names (not JVM method names) are used for overload tracking, which handles the edge case where a Java class has a static method with the same name as the alias-based constructor name.
