@@ -445,6 +445,9 @@ export function compileFileJvm(
         if (node.kind === 'FunDecl' && node.name === name) {
           return (node as { params: unknown[] }).params.length;
         }
+        if (node.kind === 'ExternFunDecl' && node.name === name) {
+          return (node as { params: unknown[] }).params.length;
+        }
       }
       return undefined;
     }
@@ -454,6 +457,10 @@ export function compileFileJvm(
         if (!node) continue;
         if (node.kind === 'FunDecl' && node.name === name) {
           return (node as FunDecl).async;
+        }
+        if (node.kind === 'ExternFunDecl' && node.name === name) {
+          const t = (node as { returnType?: { kind?: string; name?: string } }).returnType;
+          return t?.kind === 'AppType' && t?.name === 'Task';
         }
       }
       return false;

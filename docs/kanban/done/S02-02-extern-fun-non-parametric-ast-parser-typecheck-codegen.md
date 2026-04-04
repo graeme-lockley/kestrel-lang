@@ -51,18 +51,18 @@ Introduce `extern fun` as a new top-level declaration that binds a Kestrel funct
 
 ## Acceptance Criteria
 
-- [ ] `ExternFunDecl` is defined in `compiler/src/ast/nodes.ts` and included in `TopLevelDecl`.
-- [ ] Parser accepts `extern fun length(s: String): Int = jvm("java.lang.String#length()")` without error.
-- [ ] Parser accepts `export extern fun length(s: String): Int = jvm("java.lang.String#length()")`.
-- [ ] Parser rejects `extern fun foo(x: Int): Int` (no `= jvm(...)`) with a clear error.
-- [ ] Typecheck registers extern fun in the environment with the declared type.
-- [ ] Typecheck error when a parameter or return type references an unresolved name.
-- [ ] JVM codegen emits correct bytecode for a static extern fun (`jvm("Cls#staticMethod(ArgType)")`).
-- [ ] JVM codegen emits correct bytecode for an instance extern fun where first param is the receiver.
-- [ ] JVM codegen emits correct `NEW` + `INVOKESPECIAL` for constructor `jvm("Cls#<init>(ArgTypes)")`.
-- [ ] `Unit` return discards the JVM return value with `POP` if the JVM method returns a non-void type.
-- [ ] A runtime-conformance test exercises a non-parametric `extern fun` end-to-end.
-- [ ] `cd compiler && npm test` passes.
+- [x] `ExternFunDecl` is defined in `compiler/src/ast/nodes.ts` and included in `TopLevelDecl`.
+- [x] Parser accepts `extern fun length(s: String): Int = jvm("java.lang.String#length()")` without error.
+- [x] Parser accepts `export extern fun length(s: String): Int = jvm("java.lang.String#length()")`.
+- [x] Parser rejects `extern fun foo(x: Int): Int` (no `= jvm(...)`) with a clear error.
+- [x] Typecheck registers extern fun in the environment with the declared type.
+- [x] Typecheck error when a parameter or return type references an unresolved name.
+- [x] JVM codegen emits correct bytecode for a static extern fun (`jvm("Cls#staticMethod(ArgType)")`).
+- [x] JVM codegen emits correct bytecode for an instance extern fun where first param is the receiver.
+- [x] JVM codegen emits correct `NEW` + `INVOKESPECIAL` for constructor `jvm("Cls#<init>(ArgTypes)")`.
+- [x] `Unit` return discards the JVM return value with `POP` if the JVM method returns a non-void type.
+- [x] A runtime-conformance test exercises a non-parametric `extern fun` end-to-end.
+- [x] `cd compiler && npm test` passes.
 
 ## Spec References
 
@@ -92,19 +92,19 @@ Introduce `extern fun` as a new top-level declaration that binds a Kestrel funct
 
 ## Tasks
 
-- [ ] Add `ExternFunDecl` to `compiler/src/ast/nodes.ts` and include it in `TopLevelDecl`.
-- [ ] Extend parser logic in `compiler/src/parser/parse.ts` to parse `extern fun` and `export extern fun` signatures with `= jvm("...")` and emit clear errors for missing/invalid RHS.
-- [ ] Extend type registration and export collection in `compiler/src/typecheck/check.ts` so extern funs are typed from signatures and exported like ordinary functions.
-- [ ] Add JVM binding parser/helper(s) in `compiler/src/jvm-codegen/` for `jvm("Class#method(args)")` forms, class internal-name conversion, and call-kind classification.
-- [ ] Wire extern function metadata into codegen symbol tables in `compiler/src/jvm-codegen/codegen.ts` so call sites can distinguish extern/static/instance/constructor targets.
-- [ ] Implement extern call emission in `compiler/src/jvm-codegen/codegen.ts` for static, instance, and constructor invocations, including Unit return discard via `POP` when needed.
-- [ ] Ensure first-class references to extern fun names still lower to `KFunctionRef` with correct arity in `compiler/src/jvm-codegen/codegen.ts`.
-- [ ] Add parser/integration tests in `compiler/test/integration/parse.test.ts` for valid and invalid extern fun declarations.
-- [ ] Add codegen/runtime coverage in compiler integration tests for direct extern static/instance/constructor calls.
-- [ ] Add conformance fixture(s) under `tests/conformance/runtime/valid/` and/or typecheck conformance for extern fun non-parametric usage.
-- [ ] Update `docs/specs/01-language.md` and `docs/specs/06-typesystem.md` for extern fun syntax/typing semantics.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Add `ExternFunDecl` to `compiler/src/ast/nodes.ts` and include it in `TopLevelDecl`.
+- [x] Extend parser logic in `compiler/src/parser/parse.ts` to parse `extern fun` and `export extern fun` signatures with `= jvm("...")` and emit clear errors for missing/invalid RHS.
+- [x] Extend type registration and export collection in `compiler/src/typecheck/check.ts` so extern funs are typed from signatures and exported like ordinary functions.
+- [x] Add JVM binding parser/helper(s) in `compiler/src/jvm-codegen/` for `jvm("Class#method(args)")` forms, class internal-name conversion, and call-kind classification.
+- [x] Wire extern function metadata into codegen symbol tables in `compiler/src/jvm-codegen/codegen.ts` so call sites can distinguish extern/static/instance/constructor targets.
+- [x] Implement extern call emission in `compiler/src/jvm-codegen/codegen.ts` for static, instance, and constructor invocations, including Unit return discard via `POP` when needed.
+- [x] Ensure first-class references to extern fun names still lower to `KFunctionRef` with correct arity in `compiler/src/jvm-codegen/codegen.ts`.
+- [x] Add parser/integration tests in `compiler/test/integration/parse.test.ts` for valid and invalid extern fun declarations.
+- [x] Add codegen/runtime coverage in compiler integration tests for direct extern static/instance/constructor calls.
+- [x] Add conformance fixture(s) under `tests/conformance/runtime/valid/` and/or typecheck conformance for extern fun non-parametric usage.
+- [x] Update `docs/specs/01-language.md` and `docs/specs/06-typesystem.md` for extern fun syntax/typing semantics.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -117,5 +117,13 @@ Introduce `extern fun` as a new top-level declaration that binds a Kestrel funct
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — add `extern fun` declaration grammar and `jvm("...")` binding form semantics.
-- [ ] `docs/specs/06-typesystem.md` — specify that extern fun introduces a typed function binding from declaration signature without body inference.
+- [x] `docs/specs/01-language.md` — add `extern fun` declaration grammar and `jvm("...")` binding form semantics.
+- [x] `docs/specs/06-typesystem.md` — specify that extern fun introduces a typed function binding from declaration signature without body inference.
+
+## Build notes
+
+- 2026-04-04: Started implementation.
+- 2026-04-04: Implemented signature-driven extern fun typing and added unknown-type validation specifically for extern fun annotations.
+- 2026-04-04: Added JVM extern binding parser plus static/instance/constructor wrapper emission in codegen.
+- 2026-04-04: Added parse integration tests, typecheck conformance fixtures, and runtime conformance coverage for extern fun.
+- 2026-04-04: Verification passed with `cd compiler && npm run build && npm test` and `cd /Users/graemelockley/Projects/kestrel && ./scripts/kestrel test`.

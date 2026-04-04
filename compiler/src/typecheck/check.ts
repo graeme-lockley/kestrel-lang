@@ -167,6 +167,44 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     return undefined;
   };
 
+  const builtinTypeNames = new Set(['Int', 'Float', 'Bool', 'String', 'Unit', 'Char', 'Rune', 'Array', 'Task', 'Option', 'Result', 'List']);
+
+  function assertKnownTypeNames(ast: import('../ast/nodes.js').Type, blameNode: unknown): void {
+    switch (ast.kind) {
+      case 'PrimType':
+        return;
+      case 'IdentType':
+        if (builtinTypeNames.has(ast.name) || typeAliases.has(ast.name)) return;
+        throw new TypeCheckError(`Unknown type: ${ast.name}`, blameNode);
+      case 'QualifiedType':
+        if (resolveQualified(ast.namespace, ast.name) != null) return;
+        throw new TypeCheckError(`Unknown qualified type: ${ast.namespace}.${ast.name}`, blameNode);
+      case 'ArrowType':
+        for (const p of ast.params) assertKnownTypeNames(p, blameNode);
+        assertKnownTypeNames(ast.return, blameNode);
+        return;
+      case 'RecordType':
+        for (const f of ast.fields) assertKnownTypeNames(f.type, blameNode);
+        return;
+      case 'AppType':
+        if (!(builtinTypeNames.has(ast.name) || typeAliases.has(ast.name))) {
+          throw new TypeCheckError(`Unknown type: ${ast.name}`, blameNode);
+        }
+        for (const a of ast.args) assertKnownTypeNames(a, blameNode);
+        return;
+      case 'UnionType':
+      case 'InterType':
+        assertKnownTypeNames(ast.left, blameNode);
+        assertKnownTypeNames(ast.right, blameNode);
+        return;
+      case 'TupleType':
+        for (const e of ast.elements) assertKnownTypeNames(e, blameNode);
+        return;
+      case 'RowVarType':
+        return;
+    }
+  }
+
   // Add builtin primitives to environment (variadic: ≥1 arg, Unit)
   // print / println: typechecked at call site as (T1, T2, ...) -> Unit with args.length >= 1
   const printTypeVar = freshVar();
@@ -1465,6 +1503,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     for (const node of program.body) {
       if (!node) continue;
       if (node.kind === 'FunDecl') env.set(node.name, freshVar());
+      if (node.kind === 'ExternFunDecl') env.set(node.name, freshVar());
       if (node.kind === 'ExportDecl' && (node as { inner?: { kind?: string; name?: string } }).inner?.kind === 'FunDecl') {
         const inner = (node as { inner: { name: string } }).inner;
         env.set(inner.name, freshVar());
@@ -1570,6 +1609,21 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
           }
         }
         const scheme = generalize(appliedFnType, envForGen);
+        env.set(node.name, scheme);
+      } else if (node.kind === 'ExternFunDecl') {
+        for (const p of node.params) {
+          if (p.type) assertKnownTypeNames(p.type, node);
+        }
+        assertKnownTypeNames(node.returnType, node);
+        const paramTs = node.params.map((p) =>
+          p.type ? astTypeToInternal(p.type, typeAliases, resolveQualified) : freshVar()
+        );
+        const returnT = astTypeToInternal(node.returnType, typeAliases, resolveQualified);
+        const fnType = { kind: 'arrow' as const, params: paramTs, return: returnT };
+        const fnVar = env.get(node.name);
+        if (fnVar != null) unifyWithBlame(fnVar, fnType, node);
+        const appliedFnType = apply(fnType);
+        const scheme = generalize(appliedFnType, envFreeVars());
         env.set(node.name, scheme);
       } else if (node.kind === 'TypeDecl') {
         // Opaque types from the current module are fully accessible within that module
@@ -1873,6 +1927,10 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       }
 
       if (node.kind === 'FunDecl' && node.exported) {
+        if (!registerExportSource(node.name, 'local', node.span)) continue;
+        const t = env.get(node.name);
+        if (t != null) exports.set(node.name, apply(t));
+      } else if (node.kind === 'ExternFunDecl' && node.exported) {
         if (!registerExportSource(node.name, 'local', node.span)) continue;
         const t = env.get(node.name);
         if (t != null) exports.set(node.name, apply(t));

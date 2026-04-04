@@ -177,6 +177,26 @@ describe('parse (integration)', () => {
     }
   });
 
+  it('parses extern fun decl', () => {
+    const ast = parse(tokenize('extern fun length(s: String): Int = jvm("java.lang.String#length()")'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'ExternFunDecl', exported: false, name: 'length', jvmDescriptor: 'java.lang.String#length()' });
+  });
+
+  it('parses export extern fun decl', () => {
+    const ast = parse(tokenize('export extern fun length(s: String): Int = jvm("java.lang.String#length()")'));
+    expect(ast.kind).toBe('Program');
+    expect(ast.body[0]).toMatchObject({ kind: 'ExternFunDecl', exported: true, name: 'length' });
+  });
+
+  it('errors on extern fun missing = jvm(...)', () => {
+    const result = parse(tokenize('extern fun foo(x: Int): Int'));
+    expect('ok' in result && !result.ok).toBe(true);
+    if ('ok' in result && !result.ok) {
+      expect(result.errors.some((e) => e.message.includes('Expected = jvm("...") in extern fun declaration'))).toBe(true);
+    }
+  });
+
   it('errors on export opaque type (both cannot be used together)', () => {
     const result = parse(tokenize('export opaque type Foo = Int'));
     expect('ok' in result && !result.ok).toBe(true);

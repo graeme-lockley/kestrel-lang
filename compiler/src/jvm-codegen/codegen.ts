@@ -3,7 +3,7 @@
  * Uses same Program + getInferredType pipeline as the main compiler.
  */
 import type { Program, Expr, TopLevelStmt, TopLevelDecl, TuplePattern } from '../ast/nodes.js';
-import type { FunDecl, ValDecl, VarDecl, BlockExpr, LambdaExpr, FunStmt, TypeDecl } from '../ast/nodes.js';
+import type { FunDecl, ExternFunDecl, ValDecl, VarDecl, BlockExpr, LambdaExpr, FunStmt, TypeDecl, Type } from '../ast/nodes.js';
 import { getInferredType } from '../typecheck/check.js';
 import type { InternalType } from '../types/internal.js';
 import { ClassFileBuilder, type MethodBuilder, type StackMapFrameState, paramOnlyFrame } from './classfile.js';
@@ -486,6 +486,65 @@ function descriptorWithReturn(arity: number, returnDescriptor: string): string {
   return `(${params})${returnDescriptor}`;
 }
 
+type ExternCallKind = 'static' | 'instance' | 'constructor';
+
+interface ExternBinding {
+  name: string;
+  arity: number;
+  ownerInternal: string;
+  methodName: string;
+  argDescriptors: string[];
+  jvmReturnDescriptor: string;
+  kind: ExternCallKind;
+  returnsTask: boolean;
+  declaredReturnType: Type;
+}
+
+function javaTypeNameToDescriptor(typeName: string): string {
+  const t = typeName.trim();
+  switch (t) {
+    case 'boolean': return 'Z';
+    case 'byte': return 'B';
+    case 'char': return 'C';
+    case 'short': return 'S';
+    case 'int': return 'I';
+    case 'long': return 'J';
+    case 'float': return 'F';
+    case 'double': return 'D';
+    case 'void': return 'V';
+    default:
+      if (t.endsWith('[]')) {
+        const inner = javaTypeNameToDescriptor(t.slice(0, -2));
+        return '[' + inner;
+      }
+      return `L${t.replace(/\./g, '/')};`;
+  }
+}
+
+function isTaskTypeAst(t: Type): boolean {
+  return t.kind === 'AppType' && t.name === 'Task';
+}
+
+function isUnitTypeAst(t: Type): boolean {
+  return t.kind === 'PrimType' && t.name === 'Unit';
+}
+
+function parseExternJvmBinding(raw: string): { ownerInternal: string; methodName: string; argDescriptors: string[] } {
+  const hash = raw.indexOf('#');
+  const open = raw.indexOf('(');
+  const close = raw.lastIndexOf(')');
+  if (hash <= 0 || open <= hash + 1 || close !== raw.length - 1 || close < open) {
+    throw new Error(`Invalid extern JVM binding '${raw}'. Expected Class#method(Arg,Arg)`);
+  }
+  const owner = raw.slice(0, hash).trim();
+  const methodName = raw.slice(hash + 1, open).trim();
+  const argsRaw = raw.slice(open + 1, close).trim();
+  const argDescriptors = argsRaw.length === 0
+    ? []
+    : argsRaw.split(',').map((x) => javaTypeNameToDescriptor(x));
+  return { ownerInternal: owner.replace(/\./g, '/'), methodName, argDescriptors };
+}
+
 /** Build descriptor for (Object,Object,...) -> Object. */
 function descriptor(arity: number): string {
   return descriptorWithReturn(arity, 'Ljava/lang/Object;');
@@ -639,6 +698,40 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   const funArities = new Map<string, number>();
   const asyncFunNames = new Set<string>();
   const topLevelFunDecls: FunDecl[] = [];
+  const topLevelExternFunDecls: ExternFunDecl[] = [];
+  const externBindings = new Map<string, ExternBinding>();
+  const externTypeClassByName = new Map<string, string>();
+
+  for (const node of program.body) {
+    if (!node || node.kind !== 'ExternTypeDecl') continue;
+    externTypeClassByName.set(node.name, node.jvmClass.replace(/\./g, '/'));
+  }
+
+  function externReturnDescriptorForType(t: Type): string {
+    if (t.kind === 'PrimType') {
+      switch (t.name) {
+        case 'Int':
+          return 'Ljava/lang/Long;';
+        case 'Float':
+          return 'Ljava/lang/Double;';
+        case 'Bool':
+          return 'Ljava/lang/Boolean;';
+        case 'String':
+          return 'Ljava/lang/String;';
+        case 'Char':
+        case 'Rune':
+          return 'Ljava/lang/Integer;';
+        case 'Unit':
+          return 'V';
+      }
+    }
+    if (t.kind === 'AppType' && t.name === 'Task') return 'Lkestrel/runtime/KTask;';
+    if (t.kind === 'IdentType') {
+      const cls = externTypeClassByName.get(t.name);
+      if (cls) return `L${cls};`;
+    }
+    return 'Ljava/lang/Object;';
+  }
   const globalSlots = new Map<string, number>();
   const globalNames = new Set<string>();
   const globalVarNames = new Set<string>();
@@ -651,6 +744,37 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       funArities.set(fun.name, fun.params.length);
       if (fun.async) asyncFunNames.add(fun.name);
       topLevelFunDecls.push(fun);
+    } else if (node.kind === 'ExternFunDecl') {
+      const fun = node as ExternFunDecl;
+      const parsed = parseExternJvmBinding(fun.jvmDescriptor);
+      let kind: ExternCallKind;
+      if (parsed.methodName === '<init>') {
+        kind = 'constructor';
+      } else if (fun.params.length === parsed.argDescriptors.length) {
+        kind = 'static';
+      } else if (fun.params.length === parsed.argDescriptors.length + 1) {
+        kind = 'instance';
+      } else {
+        throw new Error(
+          `Extern fun ${fun.name} has ${fun.params.length} params but binding ${fun.jvmDescriptor} expects ${parsed.argDescriptors.length} (or +1 for receiver)`
+        );
+      }
+      const binding: ExternBinding = {
+        name: fun.name,
+        arity: fun.params.length,
+        ownerInternal: parsed.ownerInternal,
+        methodName: parsed.methodName,
+        argDescriptors: parsed.argDescriptors,
+        jvmReturnDescriptor: kind === 'constructor' ? 'V' : externReturnDescriptorForType(fun.returnType),
+        kind,
+        returnsTask: isTaskTypeAst(fun.returnType),
+        declaredReturnType: fun.returnType,
+      };
+      externBindings.set(fun.name, binding);
+      funNames.add(fun.name);
+      funArities.set(fun.name, fun.params.length);
+      if (binding.returnsTask) asyncFunNames.add(fun.name);
+      topLevelExternFunDecls.push(fun);
     }
     if (node.kind === 'ValDecl' || node.kind === 'VarDecl' || node.kind === 'ValStmt' || node.kind === 'VarStmt') {
       const name = node.kind === 'ValStmt' || node.kind === 'VarStmt' ? (node as { name: string }).name : (node as ValDecl).name;
@@ -795,6 +919,88 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   function methodDescriptorForDirectCall(name: string, arity: number, namespaceName?: string): string {
     if (namespaceName != null) return isNamespaceAsyncFunction(namespaceName, name) ? taskDescriptor(arity) : descriptor(arity);
     return asyncFunNames.has(name) || isImportedAsyncFunction(name) ? taskDescriptor(arity) : descriptor(arity);
+  }
+
+  function emitExternArgFromLocal(mb: MethodBuilder, slot: number, descriptorText: string): void {
+    mb.emit1b(JvmOp.ALOAD, slot);
+    switch (descriptorText) {
+      case 'Z':
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(BOOLEAN));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(BOOLEAN, 'booleanValue', '()Z'));
+        return;
+      case 'I':
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Integer'));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref('java/lang/Integer', 'intValue', '()I'));
+        return;
+      case 'J':
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(LONG));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(LONG, 'longValue', '()J'));
+        return;
+      case 'D':
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(DOUBLE));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(DOUBLE, 'doubleValue', '()D'));
+        return;
+      case 'F':
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Float'));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref('java/lang/Float', 'floatValue', '()F'));
+        return;
+      case 'B':
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Byte'));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref('java/lang/Byte', 'byteValue', '()B'));
+        return;
+      case 'S':
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Short'));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref('java/lang/Short', 'shortValue', '()S'));
+        return;
+      case 'C':
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Integer'));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref('java/lang/Integer', 'intValue', '()I'));
+        return;
+      default:
+        if (descriptorText.startsWith('L')) {
+          const owner = descriptorText.slice(1, -1);
+          if (owner !== 'java/lang/Object') mb.emit1s(JvmOp.CHECKCAST, cf.classRef(owner));
+        }
+    }
+  }
+
+  function emitExternReturnAsObject(mb: MethodBuilder, binding: ExternBinding): void {
+    const ret = binding.jvmReturnDescriptor;
+    if (isUnitTypeAst(binding.declaredReturnType)) {
+      if (ret === 'J' || ret === 'D') mb.emit1(JvmOp.POP2);
+      else if (ret !== 'V') mb.emit1(JvmOp.POP);
+      mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+      return;
+    }
+    switch (ret) {
+      case 'V':
+        mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+        return;
+      case 'Z':
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(BOOLEAN, 'valueOf', '(Z)Ljava/lang/Boolean;'));
+        return;
+      case 'I':
+      case 'C':
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref('java/lang/Integer', 'valueOf', '(I)Ljava/lang/Integer;'));
+        return;
+      case 'J':
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(LONG, 'valueOf', '(J)Ljava/lang/Long;'));
+        return;
+      case 'D':
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(DOUBLE, 'valueOf', '(D)Ljava/lang/Double;'));
+        return;
+      case 'F':
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref('java/lang/Float', 'valueOf', '(F)Ljava/lang/Float;'));
+        return;
+      case 'B':
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref('java/lang/Byte', 'valueOf', '(B)Ljava/lang/Byte;'));
+        return;
+      case 'S':
+        mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref('java/lang/Short', 'valueOf', '(S)Ljava/lang/Short;'));
+        return;
+      default:
+        return;
+    }
   }
 
   /** Nearest enclosing `while` for `break`/`continue` (JVM emitExpr closure). */
@@ -3138,6 +3344,47 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     for (const k of paramEnv.keys()) env.delete(k);
     for (const k of fixedParamKeys) env.delete(k);
     nextLocal = 0;
+  }
+
+  for (const fun of topLevelExternFunDecls) {
+    const binding = externBindings.get(fun.name);
+    if (!binding) continue;
+    const arity = fun.params.length;
+    const mb = cf.addMethod(jvmMangleName(fun.name), binding.returnsTask ? taskDescriptor(arity) : descriptor(arity), ACC_PUBLIC | ACC_STATIC);
+
+    if (binding.kind === 'constructor') {
+      mb.emit1s(JvmOp.NEW, cf.classRef(binding.ownerInternal));
+      mb.emit1(JvmOp.DUP);
+      for (let i = 0; i < binding.argDescriptors.length; i++) {
+        emitExternArgFromLocal(mb, i, binding.argDescriptors[i]!);
+      }
+      const ctorDesc = `(${binding.argDescriptors.join('')})V`;
+      mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(binding.ownerInternal, '<init>', ctorDesc));
+    } else if (binding.kind === 'instance') {
+      mb.emit1b(JvmOp.ALOAD, 0);
+      mb.emit1s(JvmOp.CHECKCAST, cf.classRef(binding.ownerInternal));
+      for (let i = 0; i < binding.argDescriptors.length; i++) {
+        emitExternArgFromLocal(mb, i + 1, binding.argDescriptors[i]!);
+      }
+      const methodDesc = `(${binding.argDescriptors.join('')})${binding.jvmReturnDescriptor}`;
+      mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(binding.ownerInternal, jvmMangleName(binding.methodName), methodDesc));
+      emitExternReturnAsObject(mb, binding);
+    } else {
+      for (let i = 0; i < binding.argDescriptors.length; i++) {
+        emitExternArgFromLocal(mb, i, binding.argDescriptors[i]!);
+      }
+      const methodDesc = `(${binding.argDescriptors.join('')})${binding.jvmReturnDescriptor}`;
+      mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(binding.ownerInternal, jvmMangleName(binding.methodName), methodDesc));
+      emitExternReturnAsObject(mb, binding);
+    }
+
+    if (binding.kind === 'constructor') {
+      emitExternReturnAsObject(mb, { ...binding, jvmReturnDescriptor: `L${binding.ownerInternal};` });
+    }
+
+    mb.emit1(JvmOp.ARETURN);
+    mb.setMaxs(32, Math.max(arity + 8, 16));
+    cf.flushLastMethod();
   }
 
   for (const fun of topLevelFunDecls) {

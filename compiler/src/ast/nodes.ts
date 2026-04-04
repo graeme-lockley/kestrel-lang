@@ -32,7 +32,7 @@ export interface SideEffectImport extends NodeBase {
   spec: string;
 }
 
-export type TopLevelDecl = FunDecl | TypeDecl | ExternTypeDecl | ExceptionDecl | ExportDecl | ValDecl | VarDecl;
+export type TopLevelDecl = FunDecl | ExternFunDecl | TypeDecl | ExternTypeDecl | ExceptionDecl | ExportDecl | ValDecl | VarDecl;
 
 export interface ValDecl extends NodeBase {
   kind: 'ValDecl';
@@ -73,6 +73,15 @@ export interface FunDecl extends NodeBase {
   params: Param[];
   returnType: Type;
   body: Expr;
+}
+
+export interface ExternFunDecl extends NodeBase {
+  kind: 'ExternFunDecl';
+  exported: boolean;
+  name: string;
+  params: Param[];
+  returnType: Type;
+  jvmDescriptor: string;
 }
 
 export interface Param extends NodeBase {

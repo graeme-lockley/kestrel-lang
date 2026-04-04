@@ -269,6 +269,36 @@ class Parser {
     // After parseExport() consumes 'export', we are at 'exception'
     if (this.at('keyword', 'extern')) {
       this.advance();
+      if (this.at('keyword', 'fun')) {
+        this.advance();
+        const name = this.expect('ident').value!;
+        this.expect('lparen');
+        const params = this.parseParamList();
+        this.expect('colon');
+        const returnType = this.parseType();
+        if (!this.at('op', '=')) {
+          const sp = this.current().span;
+          this.pushError(CODES.parse.unexpected_token, 'Expected = jvm("...") in extern fun declaration', sp);
+          return { kind: 'ExternFunDecl', exported, name, params, returnType, jvmDescriptor: '' };
+        }
+        this.advance();
+        if (!(this.at('ident') && this.current().value === 'jvm')) {
+          const sp = this.current().span;
+          this.pushError(CODES.parse.unexpected_token, 'Expected jvm("...") in extern fun declaration', sp);
+          return { kind: 'ExternFunDecl', exported, name, params, returnType, jvmDescriptor: '' };
+        }
+        this.advance();
+        this.expect('lparen');
+        if (!this.at('string')) {
+          const sp = this.current().span;
+          this.pushError(CODES.parse.unexpected_token, 'Expected string literal inside jvm("...")', sp);
+          return { kind: 'ExternFunDecl', exported, name, params, returnType, jvmDescriptor: '' };
+        }
+        const jvmDescriptor = this.advance().value ?? '';
+        this.expect('rparen');
+        return { kind: 'ExternFunDecl', exported, name, params, returnType, jvmDescriptor };
+      }
+
       let visibility: 'local' | 'opaque' | 'export' = exported ? 'export' : 'local';
       if (this.at('keyword', 'opaque')) {
         this.advance();

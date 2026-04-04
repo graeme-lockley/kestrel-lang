@@ -49,6 +49,12 @@ Type ::=
 - `export extern type T = ...` exports only the type name to importers; importers treat `T` as opaque and do not gain constructor or structural visibility from the JVM binding.
 - Type parameters on `extern type` are compile-time only and model erased JVM generics.
 
+### 1.3 Extern function declarations
+
+- `extern fun f(p1: T1, ..., pn: Tn): R = jvm("Class#method(...)")` introduces a function binding with type `(T1, ..., Tn) -> R`.
+- Extern function typing is signature-driven: there is no body inference step.
+- Parameter and return types in extern fun signatures must resolve like ordinary function annotations.
+
 ### 1.1 Structural types (summary)
 
 Kestrel supports the following **structural types** (in addition to built-in primitives and generics):

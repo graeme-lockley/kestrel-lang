@@ -181,9 +181,10 @@ ExportDecl     ::= "export" (TopLevelDecl
                  | "opaque" TypeDecl
 ExportSpec     ::= IDENT [ "as" IDENT ]
 
-TopLevelDecl   ::= FunDecl | TypeDecl | ExternTypeDecl | ExceptionDecl | ValDecl | VarDecl
+TopLevelDecl   ::= FunDecl | ExternFunDecl | TypeDecl | ExternTypeDecl | ExceptionDecl | ValDecl | VarDecl
 
 FunDecl        ::= [ "async" ] "fun" LOWER_IDENT [ "<" TypeParamList ">" ] "(" ParamList ")" ":" Type "=" Expr
+ExternFunDecl  ::= "extern" "fun" LOWER_IDENT "(" ParamList ")" ":" Type "=" "jvm" "(" STRING ")"
 ParamList      ::= [ Param { "," Param } ]
 Param          ::= LOWER_IDENT [ ":" Type ]
 
@@ -206,6 +207,7 @@ VarDecl        ::= "var" LOWER_IDENT [ ":" Type ] "=" Expr
 - **Opaque** (`opaque type`): `opaque type Foo = ...` — the type **name** is exported (importers can use `Foo` in type signatures and hold values), but the **structure** is hidden. Importers cannot construct values, destructure, or pattern-match on the type. The declaring module has full access.
 - **Exported** (`export type`): `export type Foo = ...` — both the type name and constructors/structure are fully exported. Importers can construct, destructure, and pattern-match.
 - **Extern** (`extern type`): `extern type Foo = jvm("...")` binds a nominal type name to a JVM class descriptor for interop. Exported extern types (`export extern type Foo = jvm("...")`) are visible to importers as opaque type names only.
+- **Extern function** (`extern fun`): `extern fun f(...): T = jvm("Class#method(Args)")` binds a function name directly to a JVM static/instance/constructor target without a Kestrel body.
 
 **ADT definitions:** A type body is an ADT definition when the right-hand side of `=` is one or more UPPER_IDENT constructors separated by `|`. Each constructor may take zero or more positional payload types in parentheses. Constructors are functions: a nullary constructor `Red` has type `Color`; a constructor `Some(T)` has type `(T) -> Option<T>`; a constructor `Node(Tree, Tree)` has type `(Tree, Tree) -> Tree`. Constructor application uses the standard call syntax: `Some(10)`, `Node(left, right)`. With **`import * as M from "…"`** (07 §2.3), **qualified** constructor use is **`M.C`** (nullary, a value of the ADT type) and **`M.C(e1,…,en)`** (n-ary), when `C` is an exported constructor of an exported non-opaque ADT in that module (06 §5.1). Pattern matching uses the same syntax: `Some(x) => ...`, `Node(l, r) => ...`. If named fields are desired, use a record type as the payload: `MkPerson({ name: String, age: Int })`.
 
