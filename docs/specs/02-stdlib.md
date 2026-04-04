@@ -40,9 +40,9 @@ Operations on `Char` / `Rune` (one Unicode code point; same type per language sp
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `codePoint` | `(Char) -> Int` | Scalar value as a non-negative integer (VM primitive `__char_code_point`) |
+| `codePoint` | `(Char) -> Int` | Scalar value as a non-negative integer |
 | `toCode` | `(Char) -> Int` | Alias for `codePoint` |
-| `fromCode` | `(Int) -> Char` | Valid Unicode scalar → `Char`; invalid code point or surrogate → `U+0000` (primitive `__char_from_code`) |
+| `fromCode` | `(Int) -> Char` | Valid Unicode scalar → `Char`; invalid code point or surrogate → `U+0000` |
 | `isDigit` | `(Char) -> Bool` | True for ASCII digits `0`–`9` (U+0030–U+0039) |
 | `isUpper` / `isLower` | `(Char) -> Bool` | ASCII A–Z / a–z |
 | `isAlpha` | `(Char) -> Bool` | `isUpper` ∨ `isLower` |

@@ -59,18 +59,59 @@ export fun charToString(c: Char): String = __char_to_string(c)
 
 ## Acceptance Criteria
 
-- [ ] `stdlib/kestrel/char.ks` contains no `__char_*` calls.
-- [ ] `char.ks` exports `codePoint`, `fromCode`, `charToString` as `extern fun` declarations.
-- [ ] `codegen.ts` contains no `name === '__char_*'` blocks for `charCodePoint`, `charFromCode`, `charToString`.
-- [ ] `check.ts` contains no `env.set('__char_code_point', ...)`, `env.set('__char_from_code', ...)`, `env.set('__char_to_string', ...)`.
-- [ ] `stdlib/kestrel/char.test.ks` passes.
-- [ ] `stdlib/kestrel/string.ks` no longer calls `__char_to_string` directly (updated to call `Char.charToString` or equivalent).
-- [ ] `cd compiler && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] `stdlib/kestrel/char.ks` contains no `__char_*` calls.
+- [x] `char.ks` exports `codePoint`, `fromCode`, `charToString` as `extern fun` declarations.
+- [x] `codegen.ts` contains no `name === '__char_*'` blocks for `charCodePoint`, `charFromCode`, `charToString`.
+- [x] `check.ts` contains no `env.set('__char_code_point', ...)`, `env.set('__char_from_code', ...)`, `env.set('__char_to_string', ...)`.
+- [x] `stdlib/kestrel/char.test.ks` passes.
+- [x] `stdlib/kestrel/string.ks` no longer calls `__char_to_string` directly (updated to call `Char.charToString` or equivalent).
+- [x] `cd compiler && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
 - `docs/specs/02-stdlib.md` — `kestrel:char` module: verify API documentation reflects the change from wrappers to extern funs (API is unchanged from the user perspective).
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `stdlib/kestrel/char.ks` | Replace three `export fun` wrappers with `export extern fun` declarations bound to `KRuntime#charCodePoint`, `#charFromCode`, `#charToString` |
+| `stdlib/kestrel/string.ks` | Replace private `fun charStr` (calls `__char_to_string` intrinsic) with a local `extern fun charStr` declaration |
+| `compiler/src/typecheck/check.ts` | Remove three `env.set('__char_code_point', ...)`, `env.set('__char_to_string', ...)`, `env.set('__char_from_code', ...)` builtin bindings |
+| `compiler/src/jvm-codegen/codegen.ts` | Remove three `if (name === '__char_*') { ... }` intrinsic dispatch blocks |
+| `docs/specs/02-stdlib.md` | Minor description update to remove "VM primitive `__char_*`" references in the `kestrel:char` table |
+
+## Tasks
+
+- [x] Update `stdlib/kestrel/char.ks`: replace `export fun codePoint`, `fromCode`, `charToString` with `export extern fun` declarations using `jvm("kestrel.runtime.KRuntime#...")` descriptors
+- [x] Update `stdlib/kestrel/string.ks`: change `fun charStr(c: Char): String = __char_to_string(c)` to `extern fun charStr(c: Char): String = jvm("kestrel.runtime.KRuntime#charToString(java.lang.Object)")`
+- [x] Remove `env.set('__char_code_point', ...)` from `compiler/src/typecheck/check.ts`
+- [x] Remove `env.set('__char_to_string', ...)` from `compiler/src/typecheck/check.ts`
+- [x] Remove `env.set('__char_from_code', ...)` from `compiler/src/typecheck/check.ts`
+- [x] Remove `if (name === '__char_code_point' && ...)` block from `compiler/src/jvm-codegen/codegen.ts`
+- [x] Remove `if (name === '__char_to_string' && ...)` block from `compiler/src/jvm-codegen/codegen.ts`
+- [x] Remove `if (name === '__char_from_code' && ...)` block from `compiler/src/jvm-codegen/codegen.ts`
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Conformance runtime | `tests/conformance/runtime/valid/char_extern_fun.ks` | Verify `codePoint`, `fromCode`, `charToString` all produce correct values via the extern fun pathway |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/02-stdlib.md`: remove `(VM primitive __char_code_point)` and `(primitive __char_from_code)` parenthetical notes from the `kestrel:char` API table
+
+## Build notes
+
+- 2026-04-04: Started implementation.
+- 2026-04-04: Replaced all three `__char_*` wrapper funs in `char.ks` with `export extern fun` declarations. `string.ks` `charStr` private helper replaced with a local `extern fun` pointing to the same `KRuntime#charToString` binding — avoids a new module import dependency.
+- 2026-04-04: First test run failed on conformance fixture — import syntax `import kestrel:char as Char` is not valid; correct form is `import { ... } from "kestrel:char"`.
+- 2026-04-04: Second test run failed — leading `//` comment was picked up as expected output by `extractExpectedStdoutLines`; prefixed with "Runtime conformance:" which matches the doc-only exclusion pattern.
+- 2026-04-04: All 255 compiler tests and 1014 Kestrel tests pass.
 
 ## Risks / Notes
 

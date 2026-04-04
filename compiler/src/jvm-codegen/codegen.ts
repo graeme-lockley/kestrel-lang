@@ -1897,11 +1897,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             );
             return false;
           }
-          if (name === '__char_code_point' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charCodePoint', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            return false;
-          }
           if (name === '__string_char_at' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
@@ -1909,11 +1904,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               JvmOp.INVOKESTATIC,
               cf.methodref(RUNTIME, 'stringCharAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Integer;')
             );
-            return false;
-          }
-          if (name === '__char_to_string' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charToString', '(Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
           if (name === '__int_to_float' && expr.args.length === 1) {
@@ -1959,11 +1949,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           if (name === '__float_abs' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'floatAbs', '(Ljava/lang/Object;)Ljava/lang/Double;'));
-            return false;
-          }
-          if (name === '__char_from_code' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'charFromCode', '(Ljava/lang/Object;)Ljava/lang/Integer;'));
             return false;
           }
           if (name === '__read_file_async' && expr.args.length === 1) {

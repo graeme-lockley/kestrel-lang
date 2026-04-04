@@ -1,7 +1,7 @@
 // kestrel:char — helpers for Char (single Unicode scalar).
 
 /** Unicode scalar value as `Int` (only primitive call Char → Int in this module). */
-export fun codePoint(c: Char): Int = __char_code_point(c)
+export extern fun codePoint(c: Char): Int = jvm("kestrel.runtime.KRuntime#charCodePoint(java.lang.Object)")
 
 /** Synonym for `codePoint` (common in FP stdlibs). */
 export fun toCode(c: Char): Int = codePoint(c)
@@ -9,13 +9,13 @@ export fun toCode(c: Char): Int = codePoint(c)
 /** Synonym for `codePoint` (pairs with `intToChar`). */
 export fun charToInt(c: Char): Int = toCode(c)
 
-export fun fromCode(n: Int): Char = __char_from_code(n)
+export extern fun fromCode(n: Int): Char = jvm("kestrel.runtime.KRuntime#charFromCode(java.lang.Object)")
 
 /** Synonym for `fromCode` (pairs with `charToInt`). */
 export fun intToChar(n: Int): Char = fromCode(n)
 
 /** Single-code-point UTF-8 string. */
-export fun charToString(c: Char): String = __char_to_string(c)
+export extern fun charToString(c: Char): String = jvm("kestrel.runtime.KRuntime#charToString(java.lang.Object)")
 
 export fun isDigit(c: Char): Bool = {
   val cp = codePoint(c)

@@ -34,7 +34,7 @@ export fun dropRight(s: String, n: Int): String =
   }
 
 fun charAt(s: String, i: Int): Char = __string_char_at(s, i)
-fun charStr(c: Char): String = __char_to_string(c)
+extern fun charStr(c: Char): String = jvm("kestrel.runtime.KRuntime#charToString(java.lang.Object)")
 
 export fun indexOf(s: String, sub: String): Int = __string_index_of(s, sub)
 export fun equals(a: String, b: String): Bool = __string_equals(a, b)

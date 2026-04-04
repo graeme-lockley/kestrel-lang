@@ -309,20 +309,10 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     params: [tString, tInt],
     return: tInt,
   }, new Set()));
-  env.set('__char_code_point', generalize({
-    kind: 'arrow',
-    params: [{ kind: 'prim', name: 'Char' }],
-    return: tInt,
-  }, new Set()));
   env.set('__string_char_at', generalize({
     kind: 'arrow',
     params: [tString, tInt],
     return: { kind: 'prim', name: 'Char' },
-  }, new Set()));
-  env.set('__char_to_string', generalize({
-    kind: 'arrow',
-    params: [{ kind: 'prim', name: 'Char' }],
-    return: tString,
   }, new Set()));
   env.set('__int_to_float', generalize({
     kind: 'arrow',
@@ -368,11 +358,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     kind: 'arrow',
     params: [tFloat],
     return: tFloat,
-  }, new Set()));
-  env.set('__char_from_code', generalize({
-    kind: 'arrow',
-    params: [tInt],
-    return: { kind: 'prim', name: 'Char' },
   }, new Set()));
   // Stack primitives (kestrel:stack): format one value to string, print one value
   const formatArgT = freshVar();
