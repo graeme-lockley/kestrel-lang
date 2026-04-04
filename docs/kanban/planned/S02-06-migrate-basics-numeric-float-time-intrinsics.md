@@ -73,6 +73,35 @@ export fun nowMs(): Int                = __now_ms()
 - [ ] `./scripts/kestrel test` passes.
 - [ ] `cd compiler && npm test` passes.
 
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `stdlib/kestrel/basics.ks` | Replace 10 wrapper `fun` bodies with `export extern fun` declarations binding `KRuntime` static methods |
+| `compiler/src/typecheck/check.ts` | Remove 10 `env.set('__int_to_float'…)` / `env.set('__float_*'…)` / `env.set('__now_ms'…)` entries |
+| `compiler/src/jvm-codegen/codegen.ts` | Remove 10 `if (name === '__*')` dispatch blocks for these intrinsics |
+| Tests | No new tests — existing `stdlib/kestrel/basics.test.ks` exercises all 10 exported functions |
+| Specs | `docs/specs/02-stdlib.md` — implementation note only; public API unchanged |
+
+## Tasks
+
+- [ ] Replace 10 functions in `stdlib/kestrel/basics.ks` with `export extern fun` declarations
+- [ ] Remove 10 `env.set` intrinsic entries from `compiler/src/typecheck/check.ts` (lines ~261–310)
+- [ ] Remove 10 `if (name === '__*')` dispatch blocks from `compiler/src/jvm-codegen/codegen.ts` (lines ~1846–1891, 1907–1911)
+- [ ] Check for stray `__int_to_float`, `__float_*`, `__now_ms` references anywhere else in compiler or stdlib; remove any found
+- [ ] Run `cd compiler && npm run build && npm test`
+- [ ] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/basics.test.ks` (existing) | Already covers all 10 exported functions — no new tests required; verify suite still passes |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/02-stdlib.md` — confirm `kestrel:basics` section is accurate (no API change; implementation note not required)
+
 ## Spec References
 
 - `docs/specs/02-stdlib.md` — `kestrel:basics` module: no API change.
