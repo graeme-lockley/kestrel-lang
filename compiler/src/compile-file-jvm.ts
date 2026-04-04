@@ -2,7 +2,7 @@
  * Multi-module JVM compilation: resolve imports, emit .class files per module.
  * Uses jvmCodegen and writes .class + inner classes.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, utimesSync } from 'fs';
 import { resolve as pathResolve, dirname } from 'path';
 import { tokenize } from './lexer/index.js';
 import { parse } from './parser/index.js';
@@ -245,6 +245,19 @@ export function compileFileJvm(
     if (existsSync(path)) {
       const existing = readFileSync(path);
       if (existing.length === bytes.length && existing.every((b, i) => b === bytes[i])) return;
+    }
+    writeFileSync(path, bytes);
+  }
+
+  /** Write the main class file, always touching its mtime so staleness checks reset after recompile. */
+  function writeMainClass(path: string, bytes: Uint8Array): void {
+    if (existsSync(path)) {
+      const existing = readFileSync(path);
+      if (existing.length === bytes.length && existing.every((b, i) => b === bytes[i])) {
+        const now = new Date();
+        utimesSync(path, now, now);
+        return;
+      }
     }
     writeFileSync(path, bytes);
   }
@@ -590,7 +603,7 @@ export function compileFileJvm(
       mkdirSync(classDir, { recursive: true });
       const mainClassPath = pathResolve(classDir, jvmResult.className + '.class');
       mkdirSync(dirname(mainClassPath), { recursive: true });
-      writeClassIfChanged(mainClassPath, jvmResult.classBytes);
+      writeMainClass(mainClassPath, jvmResult.classBytes);
       for (const [innerName, bytes] of jvmResult.innerClasses) {
         const innerPath = pathResolve(classDir, innerName + '.class');
         mkdirSync(dirname(innerPath), { recursive: true });
