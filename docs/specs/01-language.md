@@ -515,10 +515,13 @@ Runtime behaviour:
 - Runtime stdlib I/O/process tasks use `Result` payloads for expected operational failures. For example, `await Fs.readText(path)` produces `Result<String, FsError>`, `await Fs.listDir(path)` produces `Result<List<String>, FsError>`, and `await Process.runProcess(program, args)` produces `Result<Int, ProcessError>`; callers pattern-match on `Ok` / `Err`.
 - Process lifetime at top-level return is controlled by the CLI run mode (09 §2.1): default `kestrel run` / `--exit-wait` waits for pending async tasks to quiesce before exit; `--exit-no-wait` exits when `main` returns and may interrupt in-flight virtual-thread work.
 
-**Task combinators (`kestrel:task`):** The stdlib module `kestrel:task` provides three combinators:
+**Task combinators (`kestrel:task`):** The stdlib module `kestrel:task` provides combinators:
 - `Task.map(task, f)` — transform the result of a `Task<A>` with `f: A -> B`, returning a new `Task<B>` without blocking.
 - `Task.all(tasks)` — wait for all tasks in a `List<Task<T>>` to complete and collect results into `Task<List<T>>`; fails fast if any task fails.
-- `Task.race(tasks)` — return the result of the first `Task<T>` in a `List<Task<T>>` to complete; remaining tasks continue running. Calling `race` with an empty list produces a failed task. Cancellation of losing tasks is not yet supported.
+- `Task.race(tasks)` — return the result of the first `Task<T>` in a `List<Task<T>>` to complete. Losing tasks are cancelled after the winner completes. Calling `race` with an empty list produces a failed task.
+- `Task.cancel(t)` — request cancellation of `t`. Calls `CompletableFuture.cancel(true)` — best-effort I/O interruption on blocked virtual threads. Cancelling an already-completed task is a no-op.
+
+**Cancellation:** Awaiting a cancelled task raises `Cancelled` from `kestrel:task`, which can be caught with `try { await t } catch { Cancelled => ... }`. Cancellation is best-effort: the JVM sets the interrupt flag on blocked threads but cannot guarantee I/O interruption on every platform.
 
 ---
 

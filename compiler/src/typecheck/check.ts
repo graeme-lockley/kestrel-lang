@@ -454,6 +454,13 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     return: { kind: 'app', name: 'Task', args: [taskRaceT] },
   }, new Set()));
 
+  const taskCancelT = freshVar();
+  env.set('__task_cancel', generalize({
+    kind: 'arrow',
+    params: [{ kind: 'app', name: 'Task', args: [taskCancelT] }],
+    return: tUnit,
+  }, new Set()));
+
   function apply(t: InternalType): InternalType {
     return applySubst(t, subst);
   }

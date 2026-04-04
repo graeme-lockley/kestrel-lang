@@ -3,6 +3,7 @@ package kestrel.runtime;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -47,6 +48,8 @@ public final class KTask {
     public Object get() {
         try {
             return future.get();
+        } catch (CancellationException e) {
+            throw e;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Interrupted while awaiting task", e);
@@ -60,6 +63,16 @@ public final class KTask {
             }
             throw new KException(failure);
         }
+    }
+
+    /**
+     * Task.cancel: request cancellation of the underlying future.
+     * Calls CompletableFuture.cancel(true) — best-effort I/O interruption.
+     * Cancelling an already-completed task is a no-op.
+     */
+    public static void cancel(Object taskObj) {
+        KTask task = (KTask) taskObj;
+        task.future.cancel(true);
     }
 
     /**
@@ -108,7 +121,7 @@ public final class KTask {
 
     /**
      * Task.race: return the result of the first task in a List&lt;Task&lt;T&gt;&gt; to complete.
-     * Remaining tasks continue running (cancellation deferred to S01-17).
+     * Losing tasks are cancelled after the winner completes.
      */
     @SuppressWarnings("unchecked")
     public static KTask taskRace(Object listObj) {
@@ -127,6 +140,13 @@ public final class KTask {
         CompletableFuture<Object>[] futures = tasks.stream()
             .map(t -> t.future)
             .toArray(CompletableFuture[]::new);
-        return new KTask(CompletableFuture.anyOf(futures));
+        final List<KTask> tasksCopy = tasks;
+        CompletableFuture<Object> winner = CompletableFuture.anyOf(futures);
+        winner.thenRun(() -> {
+            for (KTask t : tasksCopy) {
+                t.future.cancel(true);
+            }
+        });
+        return new KTask(winner);
     }
 }

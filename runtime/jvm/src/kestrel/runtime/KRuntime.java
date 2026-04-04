@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -306,9 +307,10 @@ public final class KRuntime {
      * Normalize a caught JVM throwable into a Kestrel payload object.
      * - KException => payload
      * - ArithmeticException => DivideByZero/ArithmeticOverflow singleton when class names are provided
+     * - CancellationException => Cancelled singleton when cancelledClass is provided
      * - otherwise rethrow
      */
-    public static Object normalizeCaught(Throwable t, String arithmeticOverflowClass, String divideByZeroClass) throws Throwable {
+    public static Object normalizeCaught(Throwable t, String arithmeticOverflowClass, String divideByZeroClass, String cancelledClass) throws Throwable {
         if (t instanceof KException) {
             return ((KException) t).getPayload();
         }
@@ -317,6 +319,14 @@ public final class KRuntime {
             String className = "division by zero".equals(msg) ? divideByZeroClass : arithmeticOverflowClass;
             try {
                 Class<?> cls = Class.forName(className.replace('/', '.'));
+                return cls.getField("INSTANCE").get(null);
+            } catch (ReflectiveOperationException ex) {
+                throw t;
+            }
+        }
+        if (t instanceof CancellationException && cancelledClass != null) {
+            try {
+                Class<?> cls = Class.forName(cancelledClass.replace('/', '.'));
                 return cls.getField("INSTANCE").get(null);
             } catch (ReflectiveOperationException ex) {
                 throw t;

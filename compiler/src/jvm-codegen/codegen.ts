@@ -1787,6 +1787,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(K_TASK, 'taskRace', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
             return false;
           }
+          if (name === '__task_cancel' && expr.args.length === 1) {
+            emitExpr(expr.args[0], mb, tcN, stackDepth);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(K_TASK, 'cancel', '(Ljava/lang/Object;)V'));
+            mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
+            return false;
+          }
           const ns = options.namespaceClasses?.get(name);
           const importedClass = options.importedNameToClass?.get(name);
           if (funNames.has(name) || ns || importedClass) {
@@ -2637,6 +2643,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         const PAYLOAD_SLOT = 56;
         const arithOverflowClass = adtClassByConstructor.get('ArithmeticOverflow');
         const divideByZeroClass = adtClassByConstructor.get('DivideByZero');
+        const cancelledClass = adtClassByConstructor.get('Cancelled');
         mb.emit1b(JvmOp.ASTORE, EXN_SLOT);
         mb.emit1b(JvmOp.ALOAD, EXN_SLOT);
         mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Throwable'));
@@ -2644,9 +2651,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         else mb.emit1(JvmOp.ACONST_NULL);
         if (divideByZeroClass != null) mb.emit1s(JvmOp.LDC_W, cf.string(divideByZeroClass));
         else mb.emit1(JvmOp.ACONST_NULL);
+        if (cancelledClass != null) mb.emit1s(JvmOp.LDC_W, cf.string(cancelledClass));
+        else mb.emit1(JvmOp.ACONST_NULL);
         mb.emit1s(
           JvmOp.INVOKESTATIC,
-          cf.methodref(RUNTIME, 'normalizeCaught', '(Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;')
+          cf.methodref(RUNTIME, 'normalizeCaught', '(Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;')
         );
         mb.emit1b(JvmOp.ASTORE, PAYLOAD_SLOT);
         const prevCatchVar = expr.catchVar != null ? env.get(expr.catchVar) : undefined;

@@ -184,11 +184,20 @@ Process information and subprocess execution.
 
 Task combinator utilities for composing `Task<T>` values.
 
+### Exceptions
+
+| Exception | Description |
+|-----------|-------------|
+| `Cancelled` | Thrown when `await` is applied to a cancelled task. |
+
+### Functions
+
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `map` | `(Task<A>, A -> B) -> Task<B>` | Transform the result of a task without blocking. |
 | `all` | `(List<Task<T>>) -> Task<List<T>>` | Wait for all tasks to complete and collect results; fails fast if any task fails. |
-| `race` | `(List<Task<T>>) -> Task<T>` | Return the result of the first task to complete. Remaining tasks continue running. Fails if the list is empty. |
+| `race` | `(List<Task<T>>) -> Task<T>` | Return the result of the first task to complete. Losing tasks are cancelled. Fails if the list is empty. |
+| `cancel` | `(Task<T>) -> Unit` | Request cancellation of a task. Calls `CompletableFuture.cancel(true)` — best-effort I/O interruption. Cancelling an already-completed task is a no-op. |
 
 ---
 
