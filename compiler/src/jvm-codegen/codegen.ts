@@ -1827,22 +1827,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
-          if (name === '__read_file_async' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'readFileAsync', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
-            return false;
-          }
-          if (name === '__list_dir' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'listDirAsync', '(Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
-            return false;
-          }
-          if (name === '__write_text' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'writeTextAsync', '(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
-            return false;
-          }
           if (name === '__get_os' && expr.args.length === 0) {
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'getOs', '()Ljava/lang/String;'));
             return false;

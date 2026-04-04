@@ -249,15 +249,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     params: [resE],
     return: { kind: 'app', name: 'Result', args: [resT, resE] },
   }, new Set()));
-  env.set('__read_file_async', generalize({
-    kind: 'arrow',
-    params: [tString],
-    return: {
-      kind: 'app',
-      name: 'Task',
-      args: [{ kind: 'app', name: 'Result', args: [tString, tString] }],
-    },
-  }, new Set()));
   const processRetT = freshVar();
   env.set('__get_process', generalize({
     kind: 'arrow',
@@ -281,26 +272,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     kind: 'arrow',
     params: [],
     return: tString,
-  }, new Set()));
-
-  env.set('__list_dir', generalize({
-    kind: 'arrow',
-    params: [tString],
-    return: {
-      kind: 'app',
-      name: 'Task',
-      args: [{ kind: 'app', name: 'Result', args: [{ kind: 'app', name: 'List', args: [tString] }, tString] }],
-    },
-  }, new Set()));
-
-  env.set('__write_text', generalize({
-    kind: 'arrow',
-    params: [tString, tString],
-    return: {
-      kind: 'app',
-      name: 'Task',
-      args: [{ kind: 'app', name: 'Result', args: [tUnit, tString] }],
-    },
   }, new Set()));
 
   const runProcessOkVar = freshVar();

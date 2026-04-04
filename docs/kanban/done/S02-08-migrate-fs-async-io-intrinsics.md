@@ -57,21 +57,49 @@ val result = await __write_text(path, content)
 
 ## Acceptance Criteria
 
-- [ ] `stdlib/kestrel/fs.ks` contains no `__read_file_async`, `__list_dir`, or `__write_text` calls.
-- [ ] Three `extern fun` declarations for async I/O exist in `fs.ks`.
-- [ ] `extern fun` emits `invokestatic` with `KTask`-returning descriptor (not `Object`-returning) for `Task<T>` return types.
-- [ ] `await` on the result of an async extern fun works correctly (the `KTask` is properly unwrapped).
-- [ ] `codegen.ts` has no `name === '__read_file_async'`, `name === '__list_dir'`, or `name === '__write_text'` blocks.
-- [ ] `check.ts` has no `env.set` bindings for these three intrinsics.
-- [ ] `stdlib/kestrel/fs.test.ks` passes.
-- [ ] `cd compiler && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] `stdlib/kestrel/fs.ks` contains no `__read_file_async`, `__list_dir`, or `__write_text` calls.
+- [x] Three `extern fun` declarations for async I/O exist in `fs.ks`.
+- [x] `extern fun` emits `invokestatic` with `KTask`-returning descriptor (not `Object`-returning) for `Task<T>` return types.
+- [x] `await` on the result of an async extern fun works correctly (the `KTask` is properly unwrapped).
+- [x] `codegen.ts` has no `name === '__read_file_async'`, `name === '__list_dir'`, or `name === '__write_text'` blocks.
+- [x] `check.ts` has no `env.set` bindings for these three intrinsics.
+- [x] `stdlib/kestrel/fs.test.ks` passes.
+- [x] `cd compiler && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
-## Spec References
+## Impact analysis
 
-- `docs/specs/02-stdlib.md` — `kestrel:fs` module: no API change.
+| Area | Change |
+|------|--------|
+| `stdlib/kestrel/fs.ks` | Add 3 `extern fun` declarations; update 3 async fun bodies to use new names instead of `__*` intrinsics |
+| `compiler/src/typecheck/check.ts` | Remove `env.set('__read_file_async', ...)`, `env.set('__list_dir', ...)`, `env.set('__write_text', ...)` |
+| `compiler/src/jvm-codegen/codegen.ts` | Remove 3 `if (name === '__read_file_async'|'__list_dir'|'__write_text'...)` dispatch blocks |
+| Tests | No new tests — existing `stdlib/kestrel/fs.test.ks` covers all three paths |
+| Specs | `docs/specs/02-stdlib.md` — implementation note only; public API unchanged |
 
-## Risks / Notes
+## Tasks
+
+- [x] Add 3 `extern fun` declarations to `stdlib/kestrel/fs.ks` and update async fun bodies
+- [x] Remove 3 `env.set` intrinsic entries from `compiler/src/typecheck/check.ts`
+- [x] Remove 3 dispatch blocks from `compiler/src/jvm-codegen/codegen.ts`
+- [x] Verify no stray `__read_file_async`, `__list_dir`, `__write_text` references remain
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/fs.test.ks` (existing) | Already covers readText/listDir/writeText; no new tests required |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/02-stdlib.md` — update `kestrel:fs` section (no intrinsic references existed)
+
+## Build notes
+
+- 2025-06-11: Implemented. Async extern funs work without any codegen changes — `externReturnDescriptorForType` already handles `Task<T>` → `KTask`, and `asyncFunNames` propagation is already in place. All 257 compiler tests and 1014 Kestrel tests pass.
+
 
 - **Async `extern fun` is the key technical challenge**: the existing codegen distinguishes sync (`descriptor`/`Ljava/lang/Object;`) from async (`taskDescriptor`/`Lkestrel/runtime/KTask;`) calls. `ExternFunDecl` must propagate this distinction. The simplest approach: if the Kestrel return type of an `extern fun` is `Task<X>`, codegen uses `taskDescriptor`. This mirrors how `async FunDecl` functions already work.
 - **No `async extern fun` keyword needed**: unlike regular Kestrel `async fun`, the distinction for extern funs is entirely in the return type annotation (`Task<T>` vs. `T`). The `extern` keyword does not need an `async` modifier. This is cleaner than adding `async extern fun` syntax.
