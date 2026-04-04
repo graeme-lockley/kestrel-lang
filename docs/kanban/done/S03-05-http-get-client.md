@@ -35,15 +35,15 @@ Implement `get(url)` and `bodyText(response)` in `stdlib/kestrel/http.ks` using 
 
 ## Acceptance Criteria
 
-- [ ] `get(url: String): Task<Response>` calls `HttpClient.newHttpClient().sendAsync(...)` via `extern fun` and returns a `Task<Response>` consistent with the spec.
-- [ ] Both `http://` and `https://` URLs work; other schemes produce a documented error.
-- [ ] `bodyText(response: Response): Task<String>` returns the response body as UTF-8 text.
-- [ ] Non-2xx responses are accessible (status code readable from `Response`) — they are not `Task` failures.
-- [ ] Network/TLS errors surface as `Task` failures using E01's error model.
-- [ ] No `maven:` imports in `http.ks`.
-- [ ] E2E test: `get("http://...")` against a locally started server (can use S03-06's server once landed; alternatively a minimal Java `HttpServer` fixture in the test harness).
-- [ ] HTTPS test: `get("https://...")` against a localhost TLS fixture or documented `SKIP_HTTPS_E2E` skip with CI policy.
-- [ ] `cd compiler && npm run build && npm test` passes; `./scripts/kestrel test` passes; `./scripts/run-e2e.sh` passes.
+- [x] `get(url: String): Task<Response>` calls `HttpClient.newHttpClient().sendAsync(...)` via `extern fun` and returns a `Task<Response>` consistent with the spec.
+- [x] Both `http://` and `https://` URLs work; other schemes produce a documented error.
+- [x] `bodyText(response: Response): Task<String>` returns the response body as UTF-8 text.
+- [x] Non-2xx responses are accessible (status code readable from `Response`) — they are not `Task` failures.
+- [x] Network/TLS errors surface as `Task` failures using E01's error model.
+- [x] No `maven:` imports in `http.ks`.
+- [x] E2E test: `get("http://...")` against a locally started server (can use S03-06's server once landed; alternatively a minimal Java `HttpServer` fixture in the test harness).
+- [x] HTTPS test: `get("https://...")` against a localhost TLS fixture or documented `SKIP_HTTPS_E2E` skip with CI policy.
+- [x] `cd compiler && npm run build && npm test` passes; `./scripts/kestrel test` passes; `./scripts/run-e2e.sh` passes.
 
 ## Spec References
 
@@ -105,6 +105,6 @@ Implement `get(url)` and `bodyText(response)` in `stdlib/kestrel/http.ks` using 
 
 ## Documentation and specs to update
 
-- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — §`kestrel:http`: confirm `get(url: String): Task<Response>` and `bodyText(response: Response): Task<String>` match implementation; document: http + https supported; other schemes produce `Task` failure; non-2xx is a successful `Task`; TLS defaults (system trust store, SNI on, TLS 1.2 min); body buffered in memory (size limit implementation-defined).
-- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — Document `Response` fields accessible after `get`: status code accessor; body via `bodyText`.
-- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — Note that `get` bridges `CompletableFuture` → `Task` via the virtual-thread executor; document the chosen approach (blocking `cf.get()` on a virtual thread vs callback).
+- [x] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — §`kestrel:http`: confirm `get(url: String): Task<Response>` and `bodyText(response: Response): Task<String>` match implementation; document: http + https supported; other schemes produce `Task` failure; non-2xx is a successful `Task`; TLS defaults (system trust store, SNI on, TLS 1.2 min); body buffered in memory (size limit implementation-defined).
+- [x] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — Document `Response` fields accessible after `get`: status code accessor; body via `bodyText`.
+- [x] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — Note that `get` bridges `CompletableFuture` → `Task` via the virtual-thread executor; document the chosen approach (blocking `cf.get()` on a virtual thread vs callback).

@@ -89,10 +89,10 @@ Normative updates required for a consistent end state (this story is not complet
 
 ## Documentation and specs to update
 
-- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — New §`kestrel:socket`: types (`Socket`, `ServerSocket`, `TlsSocket`), functions (connect, listen/bind, accept, send, receive, close), `Task` semantics, error/closure behaviour, TLS defaults (system trust store, no hostname override without explicit opt-in), implementation-defined corners.
-- [ ] [docs/specs/07-modules.md](../../specs/07-modules.md) — §4.2: add `kestrel:socket` to the stdlib specifier list with cross-reference to §`kestrel:socket` in **02**.
-- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — §Socket I/O: owned handles, virtual-thread blocking semantics, resource lifetime and close semantics.
-- [ ] [docs/specs/08-tests.md](../../specs/08-tests.md) — Extend stdlib coverage rules to include `kestrel:socket`.
+- [x] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — New §`kestrel:socket`: types (`Socket`, `ServerSocket`, `TlsSocket`), functions (connect, listen/bind, accept, send, receive, close), `Task` semantics, error/closure behaviour, TLS defaults (system trust store, no hostname override without explicit opt-in), implementation-defined corners.
+- [x] [docs/specs/07-modules.md](../../specs/07-modules.md) — §4.2: add `kestrel:socket` to the stdlib specifier list with cross-reference to §`kestrel:socket` in **02**.
+- [x] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — §Socket I/O: owned handles, virtual-thread blocking semantics, resource lifetime and close semantics.
+- [x] [docs/specs/08-tests.md](../../specs/08-tests.md) — Extend stdlib coverage rules to include `kestrel:socket`.
 
 ## Tasks
 

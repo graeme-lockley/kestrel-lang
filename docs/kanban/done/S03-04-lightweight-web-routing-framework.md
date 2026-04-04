@@ -89,9 +89,9 @@ Normative and supporting docs for a consistent solution:
 
 ## Documentation and specs to update
 
-- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — New §`kestrel:web` (or chosen name): types (`Router`, `Route`, etc.); registration functions (`get`, `post`, etc.); path parameter syntax; default 404/405 behaviour; interaction with `kestrel:http` `Request`/`Response`; scope limitations (no templates, sessions, WebSockets).
-- [ ] [docs/specs/07-modules.md](../../specs/07-modules.md) — §4.2: add `kestrel:web` to the stdlib specifier list with cross-reference to **02**.
-- [ ] [docs/specs/08-tests.md](../../specs/08-tests.md) — Extend stdlib coverage rules to include `kestrel:web` where harness tests are expected.
+- [x] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — New §`kestrel:web` (or chosen name): types (`Router`, `Route`, etc.); registration functions (`get`, `post`, etc.); path parameter syntax; default 404/405 behaviour; interaction with `kestrel:http` `Request`/`Response`; scope limitations (no templates, sessions, WebSockets).
+- [x] [docs/specs/07-modules.md](../../specs/07-modules.md) — §4.2: add `kestrel:web` to the stdlib specifier list with cross-reference to **02**.
+- [x] [docs/specs/08-tests.md](../../specs/08-tests.md) — Extend stdlib coverage rules to include `kestrel:web` where harness tests are expected.
 
 ## Tasks
 

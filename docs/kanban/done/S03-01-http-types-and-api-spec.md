@@ -39,11 +39,11 @@ Design and document the complete `kestrel:http` public API in `docs/specs/02-std
 
 ## Acceptance Criteria
 
-- [ ] `docs/specs/02-stdlib.md` §`kestrel:http` is fully written: all seven functions with signatures, `Server`/`Request`/`Response` shapes, concurrency model, TLS defaults, and queryParam duplicate-key rule.
-- [ ] JDK class mapping for each opaque type is recorded in the spec (or in a build note) and matches what S03-05 and S03-06 will use.
-- [ ] `stdlib/kestrel/http.ks` is updated to declare the opaque type stubs (`Server`, `Request`, `Response`) and export them alongside `nowMs()`, with `TODO` comments for the implementations landing in S03-05/S03-06.
-- [ ] `docs/specs/05-runtime-model.md` has a short section (or cross-reference) for HTTP server concurrency model.
-- [ ] No implementation tasks remain: this story is complete when specs are written and stubs are in place.
+- [x] `docs/specs/02-stdlib.md` §`kestrel:http` is fully written: all seven functions with signatures, `Server`/`Request`/`Response` shapes, concurrency model, TLS defaults, and queryParam duplicate-key rule.
+- [x] JDK class mapping for each opaque type is recorded in the spec (or in a build note) and matches what S03-05 and S03-06 will use.
+- [x] `stdlib/kestrel/http.ks` is updated to declare the opaque type stubs (`Server`, `Request`, `Response`) and export them alongside `nowMs()`, with `TODO` comments for the implementations landing in S03-05/S03-06.
+- [x] `docs/specs/05-runtime-model.md` has a short section (or cross-reference) for HTTP server concurrency model.
+- [x] No implementation tasks remain: this story is complete when specs are written and stubs are in place.
 
 ## Spec References
 
@@ -63,9 +63,9 @@ No runtime or E2E tests are added in this story — only spec and stub work.
 
 ## Documentation and specs to update
 
-- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — §`kestrel:http`: write full normative text for all seven functions (`createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, `nowMs`); document `Server`, `Request`, `Response` type shapes; queryParam duplicate-key rule (last wins); server HTTP-only; `get` http+https; TLS defaults (system trust store, SNI on, TLS 1.2 minimum); error semantics (network failure = `Task` failure; non-2xx = successful `Task`).
-- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — Add §`HTTP server concurrency model`: one virtual thread per accepted request via Java 21 executor; handler lifecycle (exchange open for handler duration); no re-entrancy guarantee.
-- [ ] [docs/specs/07-modules.md](../../specs/07-modules.md) — Confirm `kestrel:http` is present in the stdlib specifier table; add a note that `Server`, `Request`, `Response` are opaque types backed by JDK classes.
+- [x] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — §`kestrel:http`: write full normative text for all seven functions (`createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, `nowMs`); document `Server`, `Request`, `Response` type shapes; queryParam duplicate-key rule (last wins); server HTTP-only; `get` http+https; TLS defaults (system trust store, SNI on, TLS 1.2 minimum); error semantics (network failure = `Task` failure; non-2xx = successful `Task`).
+- [x] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — Add §`HTTP server concurrency model`: one virtual thread per accepted request via Java 21 executor; handler lifecycle (exchange open for handler duration); no re-entrancy guarantee.
+- [x] [docs/specs/07-modules.md](../../specs/07-modules.md) — Confirm `kestrel:http` is present in the stdlib specifier table; add a note that `Server`, `Request`, `Response` are opaque types backed by JDK classes.
 
 ## Impact analysis
 
