@@ -212,7 +212,7 @@ Key properties of this example:
 2. [x] [S02-02-extern-fun-non-parametric-ast-parser-typecheck-codegen.md](../../done/S02-02-extern-fun-non-parametric-ast-parser-typecheck-codegen.md) — `extern fun` (non-parametric) full pipeline: AST, parser, typecheck, JVM codegen
 3. [x] [S02-03-extern-fun-parametric-type-params-checkcast.md](../../done/S02-03-extern-fun-parametric-type-params-checkcast.md) — `extern fun` (parametric) type params + `checkcast` emission
 4. [x] [S02-04-migrate-char-intrinsics-to-extern-fun.md](../../done/S02-04-migrate-char-intrinsics-to-extern-fun.md) — Migrate `char.ks` intrinsics (`__char_code_point`, `__char_from_code`, `__char_to_string`)
-5. [S02-05-migrate-string-intrinsics-to-extern-fun.md](../../unplanned/S02-05-migrate-string-intrinsics-to-extern-fun.md) — Migrate `string.ks` intrinsics (10 `__string_*`; fix `stack.test.ks` direct calls)
+5. [x] [S02-05-migrate-string-intrinsics-to-extern-fun.md](../../done/S02-05-migrate-string-intrinsics-to-extern-fun.md) — Migrate `string.ks` intrinsics (10 `__string_*`; fix `stack.test.ks` direct calls)
 6. [S02-06-migrate-basics-numeric-float-time-intrinsics.md](../../unplanned/S02-06-migrate-basics-numeric-float-time-intrinsics.md) — Migrate `basics.ks` intrinsics (9 float/numeric + `__now_ms`)
 7. [S02-07-migrate-stack-format-trace-intrinsics.md](../../unplanned/S02-07-migrate-stack-format-trace-intrinsics.md) — Migrate `stack.ks` intrinsics (`__format_one`, `__print_one`, `__capture_trace`)
 8. [S02-08-migrate-fs-async-io-intrinsics.md](../../unplanned/S02-08-migrate-fs-async-io-intrinsics.md) — Migrate `fs.ks` async I/O intrinsics (`__read_file_async`, `__list_dir`, `__write_text`)

@@ -55,19 +55,56 @@ Note: `stack.test.ks` directly calls `__string_length` and `__string_index_of` i
 
 ## Acceptance Criteria
 
-- [ ] `stdlib/kestrel/string.ks` contains no `__string_*` calls.
-- [ ] All ten `extern fun` declarations for string operations exist in `string.ks`.
-- [ ] `codegen.ts` contains no `name === '__string_*'` blocks for these ten intrinsics.
-- [ ] `check.ts` contains no `env.set('__string_*', ...)` bindings for these ten intrinsics.
-- [ ] `stdlib/kestrel/stack.test.ks` does not call `__string_length` or `__string_index_of` directly.
-- [ ] `stdlib/kestrel/string.test.ks` passes.
-- [ ] `stdlib/kestrel/stack.test.ks` passes.
-- [ ] `cd compiler && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] `stdlib/kestrel/string.ks` contains no `__string_*` calls.
+- [x] All ten `extern fun` declarations for string operations exist in `string.ks`.
+- [x] `codegen.ts` contains no `name === '__string_*'` blocks for these ten intrinsics.
+- [x] `check.ts` contains no `env.set('__string_*', ...)` bindings for these ten intrinsics.
+- [x] `stdlib/kestrel/stack.test.ks` does not call `__string_length` or `__string_index_of` directly.
+- [x] `stdlib/kestrel/string.test.ks` passes.
+- [x] `stdlib/kestrel/stack.test.ks` passes.
+- [x] `cd compiler && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
 - `docs/specs/02-stdlib.md` — `kestrel:string` module: API is unchanged from the user perspective.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `stdlib/kestrel/string.ks` | Replace 10 `__string_*` intrinsic call sites with `extern fun` declarations (or change the wrapper `fun` to `extern fun`); `charAt` and `charStr` (charStr already migrated in S02-04) private helpers converted similarly |
+| `stdlib/kestrel/stack.test.ks` | Replace 7 direct `__string_length` / `__string_index_of` calls with `length(...)` / `indexOf(...)` from `kestrel:string` import |
+| `compiler/src/typecheck/check.ts` | Remove 10 `env.set('__string_*', ...)` builtin bindings |
+| `compiler/src/jvm-codegen/codegen.ts` | Remove 10 `if (name === '__string_*') { ... }` intrinsic dispatch blocks |
+
+## Tasks
+
+- [x] Convert `string.ks` top-level functions to extern fun: `length`, `slice`, `charAt`, `indexOf`, `equals`, `toUpperCase`, `trim`, `codePointAt`, `append` (→ `KRuntime#concat`), `toLowerCase`
+- [x] Update `stdlib/kestrel/stack.test.ks`: add `import { length, indexOf } from "kestrel:string"` and replace 7 `__string_length`/`__string_index_of` calls  
+- [x] Remove 10 `env.set('__string_*', ...)` blocks from `compiler/src/typecheck/check.ts` (and the `// String primitives` comment header)
+- [x] Remove 10 `if (name === '__string_*' && ...)` dispatch blocks from `compiler/src/jvm-codegen/codegen.ts`
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Conformance runtime | `tests/conformance/runtime/valid/string_extern_fun.ks` | Verify `length`, `slice`, `indexOf`, `equals`, `toUpperCase`, `toLowerCase`, `trim` via extern fun pathway |
+
+## Documentation and specs to update
+
+- [x] No spec change required — API is unchanged from user perspective. Verify `docs/specs/02-stdlib.md` kestrel:string section has no `__string_*` internal references to remove.
+
+## Build notes
+
+- 2026-04-04: Started implementation.
+- 2026-04-04: Migrated all 10 `__string_*` intrinsic call sites in `string.ks` to `extern fun` declarations. Note: `__string_concat` maps to `KRuntime#concat` (method name without `string` prefix). `__string_char_at` maps to `KRuntime#stringCharAt`.
+- 2026-04-04: Updated `stack.test.ks` to import `{ length, indexOf }` from `kestrel:string` and replaced 7 direct intrinsic calls.
+- 2026-04-04: Removed 10 `env.set('__string_*', ...)` blocks from `check.ts` (including comment header).
+- 2026-04-04: Removed 10 dispatch blocks from `codegen.ts`.
+- 2026-04-04: All 256 compiler tests pass. `./scripts/kestrel test` exits 0.
 
 ## Risks / Notes
 

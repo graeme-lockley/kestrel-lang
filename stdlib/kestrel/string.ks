@@ -1,7 +1,7 @@
 // kestrel:string — spec 02 primitives plus additional string helpers.
 
-export fun length(s: String): Int = __string_length(s)
-export fun slice(s: String, start: Int, end: Int): String = __string_slice(s, start, end)
+export extern fun length(s: String): Int = jvm("kestrel.runtime.KRuntime#stringLength(java.lang.Object)")
+export extern fun slice(s: String, start: Int, end: Int): String = jvm("kestrel.runtime.KRuntime#stringSlice(java.lang.Object,java.lang.Object,java.lang.Object)")
 
 export fun left(s: String, n: Int): String =
   if (n <= 0) ""
@@ -33,19 +33,19 @@ export fun dropRight(s: String, n: Int): String =
     if (n >= len) "" else slice(s, 0, len - n)
   }
 
-fun charAt(s: String, i: Int): Char = __string_char_at(s, i)
+extern fun charAt(s: String, i: Int): Char = jvm("kestrel.runtime.KRuntime#stringCharAt(java.lang.Object,java.lang.Object)")
 extern fun charStr(c: Char): String = jvm("kestrel.runtime.KRuntime#charToString(java.lang.Object)")
 
-export fun indexOf(s: String, sub: String): Int = __string_index_of(s, sub)
-export fun equals(a: String, b: String): Bool = __string_equals(a, b)
-export fun toUpperCase(s: String): String = __string_upper(s)
+export extern fun indexOf(s: String, sub: String): Int = jvm("kestrel.runtime.KRuntime#stringIndexOf(java.lang.Object,java.lang.Object)")
+export extern fun equals(a: String, b: String): Bool = jvm("kestrel.runtime.KRuntime#stringEquals(java.lang.Object,java.lang.Object)")
+export extern fun toUpperCase(s: String): String = jvm("kestrel.runtime.KRuntime#stringUpper(java.lang.Object)")
 export fun toUpper(s: String): String = toUpperCase(s)
 
-export fun trim(s: String): String = __string_trim(s)
+export extern fun trim(s: String): String = jvm("kestrel.runtime.KRuntime#stringTrim(java.lang.Object)")
 
 export fun isEmpty(s: String): Bool = length(s) == 0
 
-export fun codePointAt(s: String, i: Int): Int = __string_code_point_at(s, i)
+export extern fun codePointAt(s: String, i: Int): Int = jvm("kestrel.runtime.KRuntime#stringCodePointAt(java.lang.Object,java.lang.Object)")
 
 fun normIdx(i: Int, len: Int): Int = if (i < 0) len + i else i
 fun clampIdx(a: Int, lo: Int, hi: Int): Int =
@@ -134,7 +134,7 @@ export fun join(sep: String, parts: List<String>): String = match (parts) {
     }
 }
 
-export fun append(a: String, b: String): String = __string_concat(a, b)
+export extern fun append(a: String, b: String): String = jvm("kestrel.runtime.KRuntime#concat(java.lang.Object,java.lang.Object)")
 export fun concat(parts: List<String>): String = join("", parts)
 
 export fun reverse(s: String): String = revStr(s, length(s), "")
@@ -205,7 +205,7 @@ fun filterCharLoop(s: String, i: Int, n: Int, acc: String, pred: (Char) -> Bool)
     filterCharLoop(s, i + 1, n, if (pred(c)) append(acc, charStr(c)) else acc, pred)
   }
 
-export fun toLowerCase(s: String): String = __string_lower(s)
+export extern fun toLowerCase(s: String): String = jvm("kestrel.runtime.KRuntime#stringLower(java.lang.Object)")
 export fun toLower(s: String): String = toLowerCase(s)
 
 export fun padLeft(targetLen: Int, unit: String, s: String): String = {

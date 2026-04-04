@@ -263,57 +263,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     params: [],
     return: tInt,
   }, new Set()));
-  // String primitives (kestrel:string)
-  env.set('__string_length', generalize({
-    kind: 'arrow',
-    params: [tString],
-    return: tInt,
-  }, new Set()));
-  env.set('__string_slice', generalize({
-    kind: 'arrow',
-    params: [tString, tInt, tInt],
-    return: tString,
-  }, new Set()));
-  env.set('__string_index_of', generalize({
-    kind: 'arrow',
-    params: [tString, tString],
-    return: tInt,
-  }, new Set()));
-  env.set('__string_equals', generalize({
-    kind: 'arrow',
-    params: [tString, tString],
-    return: tBool,
-  }, new Set()));
-  env.set('__string_concat', generalize({
-    kind: 'arrow',
-    params: [tString, tString],
-    return: tString,
-  }, new Set()));
-  env.set('__string_upper', generalize({
-    kind: 'arrow',
-    params: [tString],
-    return: tString,
-  }, new Set()));
-  env.set('__string_lower', generalize({
-    kind: 'arrow',
-    params: [tString],
-    return: tString,
-  }, new Set()));
-  env.set('__string_trim', generalize({
-    kind: 'arrow',
-    params: [tString],
-    return: tString,
-  }, new Set()));
-  env.set('__string_code_point_at', generalize({
-    kind: 'arrow',
-    params: [tString, tInt],
-    return: tInt,
-  }, new Set()));
-  env.set('__string_char_at', generalize({
-    kind: 'arrow',
-    params: [tString, tInt],
-    return: { kind: 'prim', name: 'Char' },
-  }, new Set()));
   env.set('__int_to_float', generalize({
     kind: 'arrow',
     params: [tInt],

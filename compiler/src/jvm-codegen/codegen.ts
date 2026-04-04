@@ -1843,69 +1843,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
             return false;
           }
-          if (name === '__string_length' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringLength', '(Ljava/lang/Object;)Ljava/lang/Long;'));
-            return false;
-          }
-          if (name === '__string_slice' && expr.args.length === 3) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            emitExpr(expr.args[2], mb, tcN, stackDepth + 2);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringSlice', '(Ljava/lang/Object;Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
-            return false;
-          }
-          if (name === '__string_index_of' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringIndexOf', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;'));
-            return false;
-          }
-          if (name === '__string_equals' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringEquals', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;'));
-            return false;
-          }
-          if (name === '__string_concat' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
-            return false;
-          }
-          if (name === '__string_upper' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringUpper', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            return false;
-          }
-          if (name === '__string_lower' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringLower', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            return false;
-          }
-          if (name === '__string_trim' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'stringTrim', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            return false;
-          }
-          if (name === '__string_code_point_at' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(
-              JvmOp.INVOKESTATIC,
-              cf.methodref(RUNTIME, 'stringCodePointAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Long;')
-            );
-            return false;
-          }
-          if (name === '__string_char_at' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(
-              JvmOp.INVOKESTATIC,
-              cf.methodref(RUNTIME, 'stringCharAt', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Integer;')
-            );
-            return false;
-          }
           if (name === '__int_to_float' && expr.args.length === 1) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'intToFloat', '(Ljava/lang/Object;)Ljava/lang/Double;'));
