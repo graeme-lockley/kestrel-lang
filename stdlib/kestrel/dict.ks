@@ -1,12 +1,40 @@
-// kestrel:dict — association-list dictionaries with embedded hash + equality (pipe-friendly).
+// kestrel:dict — HashMap-backed dictionaries (pipe-friendly).
+// Uses java.util.HashMap via KRuntime static helpers.
+// Keys use Java .equals()/.hashCode() — primitives (Int, String, Bool) work correctly.
 
-import * as Str from "kestrel:string"
 import * as List from "kestrel:list"
+import * as Str from "kestrel:string"
 
-opaque type Dict<K, V> = { hash: (K) -> Int, eq: (K, K) -> Bool, entries: List<(K, V)> }
+extern type JHashMap = jvm("java.util.HashMap")
 
-fun mkDict<K, V>(hf: (K) -> Int, eqf: (K, K) -> Bool, entries: List<(K, V)>): Dict<K, V> =
-  { hash = hf, eq = eqf, entries = entries }
+extern fun jhmNew(): JHashMap =
+  jvm("kestrel.runtime.KRuntime#hashMapNew()")
+
+extern fun jhmCopy(m: JHashMap): JHashMap =
+  jvm("kestrel.runtime.KRuntime#hashMapCopy(java.lang.Object)")
+
+extern fun jhmPut<K, V>(m: JHashMap, k: K, v: V): Unit =
+  jvm("kestrel.runtime.KRuntime#hashMapPut(java.lang.Object,java.lang.Object,java.lang.Object)")
+
+extern fun jhmRemove<K>(m: JHashMap, k: K): Unit =
+  jvm("kestrel.runtime.KRuntime#hashMapRemove(java.lang.Object,java.lang.Object)")
+
+extern fun jhmGet<K, V>(m: JHashMap, k: K): V =
+  jvm("kestrel.runtime.KRuntime#hashMapGet(java.lang.Object,java.lang.Object)")
+
+extern fun jhmContains<K>(m: JHashMap, k: K): Bool =
+  jvm("kestrel.runtime.KRuntime#hashMapContainsKey(java.lang.Object,java.lang.Object)")
+
+extern fun jhmSize(m: JHashMap): Int =
+  jvm("kestrel.runtime.KRuntime#hashMapSize(java.lang.Object)")
+
+extern fun jhmKeys<K>(m: JHashMap): List<K> =
+  jvm("kestrel.runtime.KRuntime#hashMapKeys(java.lang.Object)")
+
+extern fun jhmValues<V>(m: JHashMap): List<V> =
+  jvm("kestrel.runtime.KRuntime#hashMapValues(java.lang.Object)")
+
+opaque type Dict<K, V> = JHashMap
 
 export fun hashInt(n: Int): Int = n
 
@@ -20,149 +48,182 @@ fun djb2Step(s: String, i: Int, h: Int): Int =
 
 export fun hashString(s: String): Int = djb2Step(s, 0, 5381)
 
-export fun empty<K, V>(hf: (K) -> Int, eqf: (K, K) -> Bool): Dict<K, V> =
-  mkDict(hf, eqf, [])
+export fun empty<K, V>(): Dict<K, V> = jhmNew()
 
-export fun singleton<K, V>(hf: (K) -> Int, eqf: (K, K) -> Bool, k: K, v: V): Dict<K, V> =
-  mkDict(hf, eqf, [(k, v)])
+export fun singleton<K, V>(_hf: (K) -> Int, _eqf: (K, K) -> Bool, k: K, v: V): Dict<K, V> = {
+  val m: JHashMap = jhmNew();
+  jhmPut(m, k, v);
+  m
+}
 
-fun withoutKey<K, V>(entries: List<(K, V)>, eqf: (K, K) -> Bool, k: K): List<(K, V)> =
-  List.filter(entries, (e: (K, V)) => !eqf(k, e.0))
+export fun insert<K, V>(d: Dict<K, V>, k: K, v: V): Dict<K, V> = {
+  val m: JHashMap = jhmCopy(d);
+  jhmPut(m, k, v);
+  m
+}
 
-export fun insert<K, V>(d: Dict<K, V>, k: K, v: V): Dict<K, V> =
-  mkDict(d.hash, d.eq, (k, v) :: withoutKey(d.entries, d.eq, k))
-
-export fun remove<K, V>(d: Dict<K, V>, k: K): Dict<K, V> =
-  mkDict(d.hash, d.eq, withoutKey(d.entries, d.eq, k))
-
-fun getLoop<K, V>(entries: List<(K, V)>, eqf: (K, K) -> Bool, k: K): Option<V> =
-  match (entries) {
-    [] => None
-    h :: t =>
-      if (eqf(k, h.0)) Some(h.1) else getLoop(t, eqf, k)
-  }
+export fun remove<K, V>(d: Dict<K, V>, k: K): Dict<K, V> = {
+  val m: JHashMap = jhmCopy(d);
+  jhmRemove(m, k);
+  m
+}
 
 export fun get<K, V>(d: Dict<K, V>, k: K): Option<V> =
-  getLoop(d.entries, d.eq, k)
+  if (jhmContains(d, k)) Some(jhmGet(d, k)) else None
 
 export fun member<K, V>(d: Dict<K, V>, k: K): Bool =
-  match (get(d, k)) {
-    None => False
-    Some(_) => True
-  }
+  jhmContains(d, k)
 
 export fun isEmpty<K, V>(d: Dict<K, V>): Bool =
-  match (d.entries) {
-    [] => True
-    _ => False
-  }
+  jhmSize(d) == 0
 
 export fun size<K, V>(d: Dict<K, V>): Int =
-  List.length(d.entries)
+  jhmSize(d)
 
 export fun update<K, V>(d: Dict<K, V>, k: K, f: (Option<V>) -> Option<V>): Dict<K, V> =
   match (f(get(d, k))) {
-    None => mkDict(d.hash, d.eq, withoutKey(d.entries, d.eq, k))
-    Some(v) => mkDict(d.hash, d.eq, (k, v) :: withoutKey(d.entries, d.eq, k))
+    None => remove(d, k)
+    Some(v) => insert(d, k, v)
   }
 
 export fun keys<K, V>(d: Dict<K, V>): List<K> =
-  List.map(d.entries, (e: (K, V)) => e.0)
+  jhmKeys(d)
 
 export fun values<K, V>(d: Dict<K, V>): List<V> =
-  List.map(d.entries, (e: (K, V)) => e.1)
+  jhmValues(d)
 
 export fun toList<K, V>(d: Dict<K, V>): List<(K, V)> =
-  d.entries
+  List.map(jhmKeys(d), (k: K) => (k, jhmGet(d, k)))
 
-fun fromListLoop<K, V>(entries: List<(K, V)>, acc: Dict<K, V>): Dict<K, V> =
+fun fromListLoop<K, V>(entries: List<(K, V)>, m: JHashMap): JHashMap =
   match (entries) {
-    [] => acc
-    h :: t => fromListLoop(t, insert(acc, h.0, h.1))
+    [] => m
+    h :: t => {
+      jhmPut(m, h.0, h.1);
+      fromListLoop(t, m)
+    }
   }
 
-export fun fromList<K, V>(hf: (K) -> Int, eqf: (K, K) -> Bool, entries: List<(K, V)>): Dict<K, V> =
-  fromListLoop(entries, empty(hf, eqf))
+export fun fromList<K, V>(_hf: (K) -> Int, _eqf: (K, K) -> Bool, entries: List<(K, V)>): Dict<K, V> =
+  fromListLoop(entries, jhmNew())
+
+fun mapLoop<K, V, W>(ks: List<K>, d: JHashMap, m: JHashMap, f: (K, V) -> W): JHashMap =
+  match (ks) {
+    [] => m
+    k :: t => {
+      jhmPut(m, k, f(k, jhmGet(d, k)));
+      mapLoop(t, d, m, f)
+    }
+  }
 
 export fun map<K, V, W>(d: Dict<K, V>, f: (K, V) -> W): Dict<K, W> =
-  mkDict(d.hash, d.eq, List.map(d.entries, (e: (K, V)) => (e.0, f(e.0, e.1))))
+  mapLoop(jhmKeys(d), d, jhmNew(), f)
+
+fun foldlLoop<K, V, B>(ks: List<K>, d: JHashMap, z: B, f: (K, V, B) -> B): B =
+  match (ks) {
+    [] => z
+    k :: t => foldlLoop(t, d, f(k, jhmGet(d, k), z), f)
+  }
 
 export fun foldl<K, V, B>(d: Dict<K, V>, z: B, f: (K, V, B) -> B): B =
-  List.foldl(d.entries, z, (acc: B, e: (K, V)) => f(e.0, e.1, acc))
+  foldlLoop(jhmKeys(d), d, z, f)
+
+fun foldrLoop<K, V, B>(ks: List<K>, d: JHashMap, z: B, f: (K, V, B) -> B): B =
+  match (ks) {
+    [] => z
+    k :: t => f(k, jhmGet(d, k), foldrLoop(t, d, z, f))
+  }
 
 export fun foldr<K, V, B>(d: Dict<K, V>, z: B, f: (K, V, B) -> B): B =
-  List.foldr(d.entries, z, (e: (K, V), acc: B) => f(e.0, e.1, acc))
+  foldrLoop(jhmKeys(d), d, z, f)
+
+fun filterLoop<K, V>(ks: List<K>, d: JHashMap, m: JHashMap, pred: (K, V) -> Bool): JHashMap =
+  match (ks) {
+    [] => m
+    k :: t => {
+      val v: V = jhmGet(d, k);
+      if (pred(k, v)) jhmPut(m, k, v) else ();
+      filterLoop(t, d, m, pred)
+    }
+  }
 
 export fun filter<K, V>(d: Dict<K, V>, pred: (K, V) -> Bool): Dict<K, V> =
-  mkDict(d.hash, d.eq, List.filter(d.entries, (e: (K, V)) => pred(e.0, e.1)))
+  filterLoop(jhmKeys(d), d, jhmNew(), pred)
 
-fun partitionLoop<K, V>(entries: List<(K, V)>, pred: (K, V) -> Bool, t: List<(K, V)>, f: List<(K, V)>): (List<(K, V)>, List<(K, V)>) =
-  match (entries) {
-    [] => (t, f)
-    h :: rest =>
-      if (pred(h.0, h.1)) partitionLoop(rest, pred, h :: t, f)
-      else partitionLoop(rest, pred, t, h :: f)
+fun partitionLoop<K, V>(ks: List<K>, d: JHashMap, yes: JHashMap, no: JHashMap, pred: (K, V) -> Bool): (JHashMap, JHashMap) =
+  match (ks) {
+    [] => (yes, no)
+    k :: t => {
+      val v: V = jhmGet(d, k);
+      if (pred(k, v)) jhmPut(yes, k, v) else jhmPut(no, k, v);
+      partitionLoop(t, d, yes, no, pred)
+    }
   }
 
 export fun partition<K, V>(d: Dict<K, V>, pred: (K, V) -> Bool): (Dict<K, V>, Dict<K, V>) = {
-  val parts = partitionLoop(d.entries, pred, [], []);
-  (mkDict(d.hash, d.eq, List.reverse(parts.0)), mkDict(d.hash, d.eq, List.reverse(parts.1)))
+  val yes: JHashMap = jhmNew();
+  val no: JHashMap = jhmNew();
+  partitionLoop(jhmKeys(d), d, yes, no, pred)
 }
 
-fun unionLoop<K, V>(acc: Dict<K, V>, entries: List<(K, V)>): Dict<K, V> =
-  match (entries) {
-    [] => acc
-    h :: t =>
-      if (member(acc, h.0)) 
-        unionLoop(acc, t)
-      else 
-        unionLoop(insert(acc, h.0, h.1), t)
+fun unionLoop<K, V>(ks: List<K>, d1: JHashMap, m: JHashMap): JHashMap =
+  match (ks) {
+    [] => m
+    k :: t => {
+      jhmPut(m, k, jhmGet(d1, k));
+      unionLoop(t, d1, m)
+    }
   }
 
 export fun union<K, V>(d1: Dict<K, V>, d2: Dict<K, V>): Dict<K, V> =
-  unionLoop(d1, d2.entries)
+  unionLoop(jhmKeys(d1), d1, jhmCopy(d2))
 
-fun intersectLoop<K, V>(d2: Dict<K, V>, entries: List<(K, V)>, acc: Dict<K, V>): Dict<K, V> =
-  match (entries) {
-    [] => acc
-    h :: t =>
-      if (member(d2, h.0)) {
-        val v2 = match (get(d2, h.0)) {
-          None => h.1
-          Some(x) => x
-        }
-        intersectLoop(d2, t, insert(acc, h.0, v2))
-      } else intersectLoop(d2, t, acc)
+fun intersectLoop<K, V>(ks: List<K>, d2: JHashMap, m: JHashMap): JHashMap =
+  match (ks) {
+    [] => m
+    k :: t =>
+      if (jhmContains(d2, k)) {
+        jhmPut(m, k, jhmGet(d2, k));
+        intersectLoop(t, d2, m)
+      } else
+        intersectLoop(t, d2, m)
   }
 
 export fun intersect<K, V>(d1: Dict<K, V>, d2: Dict<K, V>): Dict<K, V> =
-  intersectLoop(d2, d1.entries, empty(d1.hash, d1.eq))
+  intersectLoop(jhmKeys(d1), d2, jhmNew())
 
-fun diffLoop<K, V, B>(d2: Dict<K, B>, entries: List<(K, V)>, acc: Dict<K, V>): Dict<K, V> =
-  match (entries) {
-    [] => acc
-    h :: t =>
-      if (member(d2, h.0)) diffLoop(d2, t, acc)
-      else diffLoop(d2, t, insert(acc, h.0, h.1))
+fun diffLoop<K, V, B>(ks: List<K>, d1: JHashMap, d2: JHashMap, m: JHashMap): JHashMap =
+  match (ks) {
+    [] => m
+    k :: t =>
+      if (!jhmContains(d2, k)) {
+        jhmPut(m, k, jhmGet(d1, k));
+        diffLoop(t, d1, d2, m)
+      } else
+        diffLoop(t, d1, d2, m)
   }
 
 export fun diff<K, V, B>(d1: Dict<K, V>, d2: Dict<K, B>): Dict<K, V> =
-  diffLoop(d2, d1.entries, empty(d1.hash, d1.eq))
+  diffLoop(jhmKeys(d1), d1, d2, jhmNew())
 
-export fun emptyStringDict<V>(): Dict<String, V> =
-  empty(hashString, eqString)
+export fun emptyStringDict<V>(): Dict<String, V> = empty()
 
-export fun emptyIntDict<V>(): Dict<Int, V> =
-  empty(hashInt, eqInt)
+export fun emptyIntDict<V>(): Dict<Int, V> = empty()
 
-export fun singletonIntDict<V>(k: Int, v: V): Dict<Int, V> =
-  singleton(hashInt, eqInt, k, v)
+export fun singletonIntDict<V>(k: Int, v: V): Dict<Int, V> = {
+  val m: JHashMap = jhmNew();
+  jhmPut(m, k, v);
+  m
+}
 
-export fun singletonStringDict<V>(k: String, v: V): Dict<String, V> =
-  singleton(hashString, eqString, k, v)
+export fun singletonStringDict<V>(k: String, v: V): Dict<String, V> = {
+  val m: JHashMap = jhmNew();
+  jhmPut(m, k, v);
+  m
+}
 
 export fun fromIntList<V>(entries: List<(Int, V)>): Dict<Int, V> =
-  fromList(hashInt, eqInt, entries)
+  fromListLoop(entries, jhmNew())
 
 export fun fromStringList<V>(entries: List<(String, V)>): Dict<String, V> =
-  fromList(hashString, eqString, entries)
+  fromListLoop(entries, jhmNew())

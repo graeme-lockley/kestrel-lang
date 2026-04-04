@@ -18,6 +18,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
+import java.util.HashMap;
 import java.util.stream.Stream;
 /**
  * Kestrel runtime primitives — equivalent to VM built-in CALL 0xFFFFFFxx.
@@ -825,5 +826,62 @@ public final class KRuntime {
         String msg = t.getMessage();
         if (msg == null || msg.isBlank()) return fallback;
         return msg;
+    }
+
+    // ── HashMap helpers for kestrel:dict ─────────────────────────────────────
+
+    @SuppressWarnings("unchecked")
+    public static HashMap<Object, Object> hashMapNew() {
+        return new HashMap<>();
+    }
+
+    @SuppressWarnings("unchecked")
+    public static HashMap<Object, Object> hashMapCopy(Object mapObj) {
+        return new HashMap<>((HashMap<Object, Object>) mapObj);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Object hashMapPut(Object mapObj, Object key, Object value) {
+        ((HashMap<Object, Object>) mapObj).put(key, value);
+        return KUnit.INSTANCE;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Object hashMapRemove(Object mapObj, Object key) {
+        ((HashMap<Object, Object>) mapObj).remove(key);
+        return KUnit.INSTANCE;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Object hashMapGet(Object mapObj, Object key) {
+        return ((HashMap<Object, Object>) mapObj).get(key);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Boolean hashMapContainsKey(Object mapObj, Object key) {
+        return ((HashMap<Object, Object>) mapObj).containsKey(key);
+    }
+
+    @SuppressWarnings("unchecked")
+    public static Long hashMapSize(Object mapObj) {
+        return (long) ((HashMap<Object, Object>) mapObj).size();
+    }
+
+    @SuppressWarnings("unchecked")
+    public static KList hashMapKeys(Object mapObj) {
+        KList result = KNil.INSTANCE;
+        for (Object k : ((HashMap<Object, Object>) mapObj).keySet()) {
+            result = new KCons(k, result);
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    public static KList hashMapValues(Object mapObj) {
+        KList result = KNil.INSTANCE;
+        for (Object v : ((HashMap<Object, Object>) mapObj).values()) {
+            result = new KCons(v, result);
+        }
+        return result;
     }
 }

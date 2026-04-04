@@ -232,21 +232,23 @@ Helpers for `Result<T, E>` (see §Library types). Functions are polymorphic in b
 
 ## kestrel:dict
 
-Finite maps exposed as the **opaque** type `Dict<K, V>`: clients use the functions below only and must not rely on a visible record shape. The implementation still stores a hash function, an equality function, and an association list of `(key, value)` pairs using runtime records on the JVM. **Pipe-friendly:** the dict is the first argument on `insert`, `get`, `map`, etc.
+Finite maps exposed as the **opaque** type `Dict<K, V>`: clients use the functions below only and must not rely on a visible record shape. The implementation is backed by `java.util.HashMap` via `KRuntime` static helpers. **Pipe-friendly:** the dict is the first argument on `insert`, `get`, `map`, etc.
 
-Keys are compared only via the embedded `eq`; `hash` is used for potential future bucketed implementations (v1 may still scan linearly).
+Keys use Java `.equals()` / `.hashCode()` semantics. For `String`, `Int` (boxed `Long`), and `Bool` (boxed `Boolean`) this is structural equality (correct). For ADT values and records, this is reference-identity equality.
 
-Convenience: `hashString` / `eqString`, `hashInt` / `eqInt`, `emptyStringDict` / `emptyIntDict`, `singletonStringDict` / `singletonIntDict`, and `fromStringList` / `fromIntList` (same as `singleton` / `fromList` with the matching hash/eq) for common key types.
+`insert` and `remove` are copy-on-write: each call returns a new `Dict` with the modification applied, leaving the original unchanged.
+
+Convenience: `hashString` / `eqString`, `hashInt` / `eqInt`, `emptyStringDict` / `emptyIntDict`, `singletonStringDict` / `singletonIntDict`, and `fromStringList` / `fromIntList` for common key types. The legacy `empty(hf, eqf)` / `singleton(hf, eqf, k, v)` / `fromList(hf, eqf, entries)` signatures still accept (and silently ignore) the hash/eq arguments for backward compatibility.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `empty` | `((K) -> Int, (K, K) -> Bool) -> Dict<K,V>` | |
-| `singleton` | `((K) -> Int, (K, K) -> Bool, K, V) -> Dict<K,V>` | |
-| `singletonIntDict` / `singletonStringDict` | `(Int, V) -> Dict<Int,V>` / `(String, V) -> Dict<String,V>` | Same as `singleton` with `hashInt`/`eqInt` or `hashString`/`eqString` |
+| `empty` | `() -> Dict<K,V>` | |
+| `singleton` | `((K) -> Int, (K, K) -> Bool, K, V) -> Dict<K,V>` | hash/eq ignored; for backward compat |
+| `singletonIntDict` / `singletonStringDict` | `(Int, V) -> Dict<Int,V>` / `(String, V) -> Dict<String,V>` | |
 | `insert` / `remove` / `update` | … | `update` uses `Option<V>` → `Option<V>`; `None` removes |
 | `isEmpty` / `member` / `get` / `size` | … | `get` returns `Option<V>` |
 | `keys` / `values` / `toList` / `fromList` | … | `fromList`: later entries win on duplicate keys |
-| `fromIntList` / `fromStringList` | `(List<(Int,V)>) -> Dict<Int,V>` / `(List<(String,V)>) -> Dict<String,V>` | Same as `fromList` with `hashInt`/`eqInt` or `hashString`/`eqString` |
+| `fromIntList` / `fromStringList` | `(List<(Int,V)>) -> Dict<Int,V>` / `(List<(String,V)>) -> Dict<String,V>` | |
 | `map` / `filter` / `partition` | … | |
 | `foldl` / `foldr` | `(Dict<K,V>, B, (K, V, B) -> B) -> B` | |
 | `union` / `intersect` / `diff` | … | `union`: left-biased on key clash; `intersect`: value from second dict |

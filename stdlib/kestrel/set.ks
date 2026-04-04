@@ -7,7 +7,7 @@ import { Dict } from "kestrel:dict"
 // Parens: parser otherwise treats `= Dict<...>` as starting an ADT body (uppercase ident + `<`).
 opaque type Set<E> = (Dict<E, Unit>)
 
-export fun empty<K>(hf: (K) -> Int, eqf: (K, K) -> Bool): Set<K> = D.empty(hf, eqf)
+export fun empty<K>(_hf: (K) -> Int, _eqf: (K, K) -> Bool): Set<K> = D.empty()
 
 export fun singleton<K>(hf: (K) -> Int, eqf: (K, K) -> Bool, k: K): Set<K> = {
   val u: Unit = ()
