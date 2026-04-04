@@ -14,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -46,7 +47,7 @@ public final class KRuntime {
                 c = sharedHttpClient;
                 if (c == null) {
                     c = java.net.http.HttpClient.newBuilder()
-                            .connectTimeout(Duration.ofSeconds(15))
+                            .connectTimeout(Duration.ofSeconds(5))
                             .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
                             .build();
                     sharedHttpClient = c;
@@ -907,6 +908,40 @@ public final class KRuntime {
 
     // ── HTTP client helpers for kestrel:http (S03-05) ────────────────────────
 
+    /** Maximum number of times to retry an HTTP request when a connect timeout occurs. */
+    private static final int HTTP_CONNECT_RETRIES = 2;
+
+    /**
+     * Send an HTTP request with automatic retry on connect timeout.
+     * Java's HttpClient does not implement Happy Eyeballs (RFC 8305), so when
+     * DNS returns multiple addresses and one is unreachable the first attempt
+     * may hit a bad IP and wait the full connect timeout.  Retrying with a
+     * fresh client forces a new DNS resolution and address selection.
+     */
+    private static CompletableFuture<java.net.http.HttpResponse<String>> sendWithRetry(
+            java.net.http.HttpClient client,
+            java.net.http.HttpRequest request,
+            int retriesLeft) {
+        return client.sendAsync(request, java.net.http.HttpResponse.BodyHandlers.ofString())
+                .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .thenApply(resp -> (java.net.http.HttpResponse<String>) resp)
+                .exceptionallyCompose(error -> {
+                    Throwable cause = error;
+                    while (cause instanceof CompletionException && cause.getCause() != null) {
+                        cause = cause.getCause();
+                    }
+                    if (retriesLeft > 0 && cause instanceof java.net.http.HttpConnectTimeoutException) {
+                        // Build a fresh client so DNS is re-resolved and a different address may be tried.
+                        java.net.http.HttpClient freshClient = java.net.http.HttpClient.newBuilder()
+                                .connectTimeout(Duration.ofSeconds(5))
+                                .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+                                .build();
+                        return sendWithRetry(freshClient, request, retriesLeft - 1);
+                    }
+                    return CompletableFuture.failedFuture(error);
+                });
+    }
+
     /**
      * Perform an HTTP GET request asynchronously and return a KTask&lt;Response&gt;.
      * The completed value is a {@code java.net.http.HttpResponse&lt;String&gt;} object,
@@ -930,8 +965,7 @@ public final class KRuntime {
                     .uri(java.net.URI.create(urlStr))
                     .GET()
                     .build();
-            client.sendAsync(request, java.net.http.HttpResponse.BodyHandlers.ofString())
-                    .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            sendWithRetry(client, request, HTTP_CONNECT_RETRIES)
                     .whenComplete((response, error) -> {
                         try {
                             if (error != null) {
@@ -994,8 +1028,7 @@ public final class KRuntime {
             }
 
             builder.method(methodStr, bodyPublisher);
-            client.sendAsync(builder.build(), java.net.http.HttpResponse.BodyHandlers.ofString())
-                    .orTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            sendWithRetry(client, builder.build(), HTTP_CONNECT_RETRIES)
                     .whenComplete((response, error) -> {
                         try {
                             if (error != null) {
