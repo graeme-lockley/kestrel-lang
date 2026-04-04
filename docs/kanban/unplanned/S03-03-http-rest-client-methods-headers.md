@@ -21,16 +21,17 @@ Extend the standard library **beyond** the current **`kestrel:http`** contract i
 
 ## Relationship to other stories
 
-- **Depends on** sequence **59** for real **`Task` completion** on network I/O (same dependency as **60**).
-- **Depends on** sequence **60** for **`Request` / `Response` / `Server`** types and the first working HTTP stack; **69** layers **client** ergonomics and **method/header/body** support on those types or on **new** client-specific types that **02** defines.
-- **Optional coordination** with sequence **68** if low-level TLS is exposed via `kestrel:socket`; HTTPS client may remain **implementation-internal** via native HTTP clients.
+- **E01 — Async runtime foundation:** **Done.** Real `Task` completion on network I/O is available.
+- **E02 — JVM interop (`extern` bindings):** **Done.** `extern type` / `extern fun` / `maven:` are the implementation mechanism. The REST client surface in S03-03 must be implemented via `extern fun` bindings to `java.net.http.HttpClient` (and builder/response types) — no `__http_*` builtins or `KRuntime.java` changes.
+- **Depends on** S03-01 for **`Request` / `Response` / `Server`** types and the first working HTTP stack; S03-03 layers **client** ergonomics and **method/header/body** support on those types or on **new** client-specific types that **02** defines.
+- **Optional coordination** with S03-02 if low-level TLS is exposed via `kestrel:socket`; HTTPS client may remain **implementation-internal** via native HTTP clients.
 - **Distinct from** sequence **62** (compile-time URL imports).
 
 ## Goals
 
 1. Callers can implement **REST** clients (JSON APIs, CRUD) **in Kestrel** without resorting to undefined behaviour or only GET.
-2. **`kestrel:http`** (or a **clearly named** submodule pattern documented in **02**) stays a **single** import path so **07**'s stdlib list does not sprawl unnecessarily-prefer **extending** `kestrel:http` unless size forces a split (e.g. `kestrel:http-client`); the **planned** phase must choose and **update specs once**.
-3. The **JVM** exposes the defined function signatures and observable **`Task`** behaviour for the documented API.
+2. **`kestrel:http`** (or a **clearly named** submodule pattern documented in **02**) stays a **single** import path so **07**'s stdlib list does not sprawl unnecessarily — prefer **extending** `kestrel:http` unless size forces a split (e.g. `kestrel:http-client`); the **planned** phase must choose and **update specs once**.
+3. The **JVM** exposes the defined function signatures and observable **`Task`** behaviour for the documented API, entirely via `extern type` / `extern fun` bindings to `java.net.http.HttpClient` and builder types — no `maven:` dependencies, no new builtins.
 4. Specs state how **errors** are surfaced (e.g. failed connect, non-2xx status, truncated body) so tests and users are not surprised.
 
 ## Acceptance Criteria

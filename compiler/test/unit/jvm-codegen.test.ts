@@ -55,4 +55,41 @@ describe('JVM codegen', () => {
     const jvm = emitJvm(result.ast);
     expect(jvm.classBytes.length).toBeGreaterThan(0);
   });
+
+  it('compiles extern fun with :ReturnType suffix (primitive long)', () => {
+    const src = 'extern fun mathAbs(x: Int): Int = jvm("java.lang.Math#abs(long):long")\nval r = mathAbs(3)';
+    const result = compile(src);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const jvm = emitJvm(result.ast);
+    expect(jvm.classBytes.length).toBeGreaterThan(0);
+  });
+
+  it('compiles extern fun with :ReturnType suffix (primitive boolean)', () => {
+    const src = 'extern fun strEmpty(s: String): Bool = jvm("java.lang.String#isEmpty():boolean")\nval r = strEmpty("x")';
+    const result = compile(src);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const jvm = emitJvm(result.ast);
+    expect(jvm.classBytes.length).toBeGreaterThan(0);
+  });
+
+  it('compiles extern fun with :ReturnType suffix (primitive int)', () => {
+    const src = 'extern fun strLen(s: String): Int = jvm("java.lang.String#length():int")\nval r = strLen("hi")';
+    const result = compile(src);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const jvm = emitJvm(result.ast);
+    expect(jvm.classBytes.length).toBeGreaterThan(0);
+  });
+
+  it('extern fun without :ReturnType suffix remains backwards compatible (reference return)', () => {
+    // String#valueOf(Object) is static, 1-arg, returns reference — no :ReturnType suffix needed
+    const src = 'extern fun strVal(x: String): String = jvm("java.lang.String#valueOf(java.lang.Object)")\nval r = strVal("hi")';
+    const result = compile(src);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const jvm = emitJvm(result.ast);
+    expect(jvm.classBytes.length).toBeGreaterThan(0);
+  });
 });

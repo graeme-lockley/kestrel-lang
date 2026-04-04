@@ -530,12 +530,25 @@ function isUnitTypeAst(t: Type): boolean {
   return t.kind === 'PrimType' && t.name === 'Unit';
 }
 
-function parseExternJvmBinding(raw: string): { ownerInternal: string; methodName: string; argDescriptors: string[] } {
+function parseExternJvmBinding(raw: string): { ownerInternal: string; methodName: string; argDescriptors: string[]; jvmReturnDescriptor?: string } {
   const hash = raw.indexOf('#');
   const open = raw.indexOf('(');
   const close = raw.lastIndexOf(')');
-  if (hash <= 0 || open <= hash + 1 || close !== raw.length - 1 || close < open) {
-    throw new Error(`Invalid extern JVM binding '${raw}'. Expected Class#method(Arg,Arg)`);
+  if (hash <= 0 || open <= hash + 1 || close < open) {
+    throw new Error(`Invalid extern JVM binding '${raw}'. Expected Class#method(Arg,Arg) or Class#method(Arg,Arg):ReturnType`);
+  }
+  // Optional ':ReturnType' suffix after the closing ')'
+  const afterClose = raw.slice(close + 1);
+  let jvmReturnDescriptor: string | undefined;
+  if (afterClose.length > 0) {
+    if (!afterClose.startsWith(':')) {
+      throw new Error(`Invalid extern JVM binding '${raw}'. Expected Class#method(Arg,Arg) or Class#method(Arg,Arg):ReturnType`);
+    }
+    const retTypeName = afterClose.slice(1).trim();
+    if (retTypeName.length === 0) {
+      throw new Error(`Invalid extern JVM binding '${raw}'. Empty return type after ':'`);
+    }
+    jvmReturnDescriptor = javaTypeNameToDescriptor(retTypeName);
   }
   const owner = raw.slice(0, hash).trim();
   const methodName = raw.slice(hash + 1, open).trim();
@@ -543,7 +556,7 @@ function parseExternJvmBinding(raw: string): { ownerInternal: string; methodName
   const argDescriptors = argsRaw.length === 0
     ? []
     : argsRaw.split(',').map((x) => javaTypeNameToDescriptor(x));
-  return { ownerInternal: owner.replace(/\./g, '/'), methodName, argDescriptors };
+  return { ownerInternal: owner.replace(/\./g, '/'), methodName, argDescriptors, jvmReturnDescriptor };
 }
 
 /** Build descriptor for (Object,Object,...) -> Object. */
@@ -767,7 +780,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         ownerInternal: parsed.ownerInternal,
         methodName: parsed.methodName,
         argDescriptors: parsed.argDescriptors,
-        jvmReturnDescriptor: kind === 'constructor' ? 'V' : externReturnDescriptorForType(fun.returnType),
+        jvmReturnDescriptor: kind === 'constructor' ? 'V' : (parsed.jvmReturnDescriptor ?? externReturnDescriptorForType(fun.returnType)),
         kind,
         returnsTask: isTaskTypeAst(fun.returnType),
         declaredReturnType: fun.returnType,
@@ -950,12 +963,16 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref('java/lang/Float', 'floatValue', '()F'));
         return;
       case 'B':
-        mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Byte'));
-        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref('java/lang/Byte', 'byteValue', '()B'));
+        // Kestrel Int is java.lang.Long; narrow to byte (int on JVM stack)
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(LONG));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(LONG, 'longValue', '()J'));
+        mb.emit1(JvmOp.L2I);
         return;
       case 'S':
-        mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Short'));
-        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref('java/lang/Short', 'shortValue', '()S'));
+        // Kestrel Int is java.lang.Long; narrow to short (int on JVM stack)
+        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(LONG));
+        mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(LONG, 'longValue', '()J'));
+        mb.emit1(JvmOp.L2I);
         return;
       case 'C':
         mb.emit1s(JvmOp.CHECKCAST, cf.classRef('java/lang/Integer'));

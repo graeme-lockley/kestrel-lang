@@ -187,8 +187,10 @@ function expandExternImports(
       occurrences.set(baseKestrel, idx);
       const kestrelName = idx > 1 ? `${baseKestrel}_${idx}` : baseKestrel;
 
-      // jvm("...") descriptor
-      const jvmDescriptor = `${className}#${m.jvmMethodName}(${m.javaParamTypes.join(',')})`;
+      // jvm("...") descriptor — include ':ReturnType' suffix for primitive-returning methods
+      const primitiveReturnTypes = new Set(['boolean', 'byte', 'char', 'short', 'int', 'long', 'float', 'double']);
+      const retSuffix = (!m.isConstructor && primitiveReturnTypes.has(m.javaReturnType)) ? `:${m.javaReturnType}` : '';
+      const jvmDescriptor = `${className}#${m.jvmMethodName}(${m.javaParamTypes.join(',')})${retSuffix}`;
 
       let params: Param[];
       let returnType: Type;

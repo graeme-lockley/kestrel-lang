@@ -48,6 +48,50 @@ The root cause is a mismatch between `externReturnDescriptorForType` — which m
 - [ ] `cd compiler && npm test` passes.
 - [ ] `./scripts/kestrel test` passes.
 
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `compiler/src/jvm-codegen/codegen.ts` | Update `parseExternJvmBinding` to accept optional `:ReturnType` suffix and return it; use parsed descriptor when present to set `ExternBinding.jvmReturnDescriptor`; fix `emitExternArgFromLocal` for `B`/`S` to unbox from `Long` |
+| `compiler/src/jvm-metadata/index.ts` | Update `generateStubs` and `StubMethod.jvmDescriptor` to include `:ReturnType` suffix for primitive-returning methods |
+| `compiler/src/compile-file-jvm.ts` | Update `expandExternImports` to include `:ReturnType` suffix in the `jvmDescriptor` for primitive-returning methods |
+| `tests/conformance/runtime/valid/` | Add `extern_fun_primitive_return.ks` conformance test (added in S02-18) |
+| `compiler/test/unit/` | Add unit tests for `parseExternJvmBinding` with `:ReturnType` suffix (parsing, descriptor extraction) |
+| `compiler/test/integration/extern-import.test.ts` | Update pattern check to allow `):ReturnSuffix` in `jvm("...")` strings |
+| `docs/specs/01-language.md` | Update `extern fun` description to show optional `:ReturnType` suffix |
+
+## Tasks
+
+- [x] Update `parseExternJvmBinding` in `compiler/src/jvm-codegen/codegen.ts` to accept optional `:ReturnType` suffix after `)` and return `jvmReturnDescriptor?: string`
+- [x] In the `ExternFunDecl` processing block, use parsed `jvmReturnDescriptor` from `parseExternJvmBinding` when present, falling back to `externReturnDescriptorForType(fun.returnType)` only when absent
+- [x] Fix `emitExternArgFromLocal` for `B`: unbox from `java.lang.Long` via `longValue()` + L2I (long-to-int, JVM accepts int for byte params)
+- [x] Fix `emitExternArgFromLocal` for `S`: unbox from `java.lang.Long` via `longValue()` + L2I (long-to-int, JVM accepts int for short params)
+- [x] Update `generateStubs` in `compiler/src/jvm-metadata/index.ts` to append `:ReturnType` in `StubMethod.jvmDescriptor` when the method returns a primitive Java type
+- [x] Update `expandExternImports` in `compiler/src/compile-file-jvm.ts` to include `:ReturnType` in the generated `jvmDescriptor` when `m.javaReturnType` is a primitive
+- [x] Update `extern-import.test.ts` regex to allow new `:ReturnType` suffix in `jvm("...")` string
+- [x] Update `docs/specs/01-language.md` to document the optional `:ReturnType` suffix in the `jvm("...")` descriptor
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `compiler/test/unit/jvm-codegen.test.ts` (new) | `parseExternJvmBinding` parses `:ReturnType` suffix for `long`, `int`, `boolean`, `double`, `void` |
+| Conformance runtime | `tests/conformance/runtime/valid/extern_fun_primitive_return.ks` | Added in S02-18 after fix lands |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/01-language.md` — update `extern fun` description to show `jvm("Class#method(Args):ReturnType")` optional `:ReturnType` suffix
+
+## Build notes
+
+- 2026-04-04: `parseExternJvmBinding` updated to accept optional `:ReturnType` suffix by checking `afterClose` string after `)`. Backwards-compatible: existing `jvm(...)` strings without suffix continue to work unchanged, as `externReturnDescriptorForType` is used as fallback.
+- 2026-04-04: `emitExternArgFromLocal` for `B`/`S` fixed to unbox from `java.lang.Long` via `longValue()` + `L2I`. The JVM accepts `int` (32-bit) on the stack for both `byte` and `short` parameters — no additional narrowing instruction is needed. The `long → int` conversion is sufficient.
+- 2026-04-04: `generateStubs` and `expandExternImports` both updated to append `:ReturnType` for primitive-returning methods. The `primitiveReturnTypes` set is defined locally in each function; this avoids exporting an intermediate constant.
+- 2026-04-04: Updated `jvm-metadata.test.ts` expectations for `size()` descriptor to `java.util.HashMap#size():int`. Updated `extern-import.test.ts` sidecar line regex to allow complex return type patterns.
+- 2026-04-04: All 313 compiler tests pass; 1020 kestrel tests pass.
+
 ## Spec References
 
 - `docs/specs/01-language.md` — update `ExternFunDecl` grammar to show optional `:ReturnType` suffix in the `jvm("...")` string.

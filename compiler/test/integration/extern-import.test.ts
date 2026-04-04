@@ -169,7 +169,8 @@ fun main(): Unit = println("ok")
       const externFunLines = content.split('\n').filter((l) => l.startsWith('extern fun'));
       expect(externFunLines.length).toBeGreaterThan(0);
       for (const line of externFunLines) {
-        expect(line).toMatch(/^extern fun \w+\(.*\): \w+ = jvm\(".*"\)$/);
+        // Allow optional ':ReturnType' suffix inside the jvm("...") string for primitive-returning methods
+        expect(line).toMatch(/^extern fun \w+\(.*\): [\w<>,\s]+ = jvm\(".*"\)$/);
       }
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });

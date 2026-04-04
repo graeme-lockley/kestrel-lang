@@ -1,0 +1,59 @@
+# HTTP Types and API Spec
+
+## Sequence: S03-01
+## Tier: 7 - Deferred (large / dependency-heavy)
+## Former ID: (was part of old S03-01 monolith)
+
+## Epic
+
+- Epic: [E03 HTTP and Networking Platform](../epics/unplanned/E03-http-and-networking-platform.md)
+- Companion stories: S03-05, S03-06, S03-02, S03-03, S03-04
+
+## Summary
+
+Design and document the complete `kestrel:http` public API in `docs/specs/02-stdlib.md` before any implementation begins. Define the opaque types `Server`, `Request`, and `Response` (backed by JDK classes — concrete JDK mapping chosen in this story and fixed for S03-05 and S03-06), document the concurrency model, TLS defaults, error semantics, and all function signatures. This story produces no runnable code — only spec, type shape decisions, and a stub `http.ks` that declares the type names. S03-05 (HTTP client) and S03-06 (HTTP server) both depend on this story's decisions.
+
+## Current State
+
+- `stdlib/kestrel/http.ks` exports only `nowMs()`.
+- `docs/specs/02-stdlib.md` lists the `kestrel:http` surface at a high level but leaves type shapes implementation-defined.
+- No JDK class mapping, concurrency model, or error-surfacing convention is documented for `kestrel:http`.
+
+## Relationship to other stories
+
+- **E01 — Async runtime foundation:** Done. `Task` semantics and error model are established; this story must align HTTP error surfacing with them.
+- **E02 — JVM interop:** Done. `extern type` / `extern fun` are the binding mechanism. This story decides which JDK classes back each opaque type.
+- **Blocks S03-05** (HTTP GET client) and **S03-06** (HTTP server) — both must wait for the type shapes and concurrency model agreed here.
+- **S03-02 / S03-03 / S03-04:** Informed by the `Request` / `Response` contract fixed here.
+
+## Goals
+
+1. Produce a complete, normative `kestrel:http` section in `02-stdlib.md`: all function signatures, `Server` / `Request` / `Response` field contracts (as much as is implementation-stable), error semantics, concurrency model, and TLS defaults.
+2. Choose the JDK backing class for each opaque type and record the choice as a fixed decision so S03-05 and S03-06 don't drift:
+   - `Response` ← `java.net.http.HttpResponse<String>` (client response)
+   - `Request` ← `com.sun.net.httpserver.HttpExchange` (server request/response handle)
+   - `Server` ← `com.sun.net.httpserver.HttpServer`
+3. Document the server concurrency model: one virtual thread per accepted request (Java 21 virtual-thread executor on `HttpServer`).
+4. Document TLS defaults for `get`: system trust store, SNI enabled, TLS 1.2 minimum; server (`listen`) is HTTP-only.
+5. Document `queryParam` duplicate-key rule: last occurrence wins.
+
+## Acceptance Criteria
+
+- [ ] `docs/specs/02-stdlib.md` §`kestrel:http` is fully written: all seven functions with signatures, `Server`/`Request`/`Response` shapes, concurrency model, TLS defaults, and queryParam duplicate-key rule.
+- [ ] JDK class mapping for each opaque type is recorded in the spec (or in a build note) and matches what S03-05 and S03-06 will use.
+- [ ] `stdlib/kestrel/http.ks` is updated to declare the opaque type stubs (`Server`, `Request`, `Response`) and export them alongside `nowMs()`, with `TODO` comments for the implementations landing in S03-05/S03-06.
+- [ ] `docs/specs/05-runtime-model.md` has a short section (or cross-reference) for HTTP server concurrency model.
+- [ ] No implementation tasks remain: this story is complete when specs are written and stubs are in place.
+
+## Spec References
+
+- [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — §`kestrel:http` (primary target of this story).
+- [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — concurrency model for HTTP server.
+- [docs/specs/07-modules.md](../../specs/07-modules.md) — confirm `kestrel:http` is listed in the stdlib specifier table.
+
+## Risks / Notes
+
+- **Spec decisions are load-bearing:** S03-05 and S03-06 will implement against whatever this story decides without renegotiation. Make conservative, JDK-stable choices. Avoid exotic JDK preview APIs.
+- **`Request` dual role:** `com.sun.net.httpserver.HttpExchange` provides both the incoming request (method, path, headers, body) and the outgoing response channel (status, response headers, body output stream). The Kestrel `Request` type wraps the exchange as a whole; the handler writes back by calling `bodyText`, setting status, etc. Document this clearly.
+- **`Response` for client vs server:** The client `get` call returns a `Response` wrapping `HttpResponse<String>`. The server handler must also return a `Response`. These may be the same opaque type (with a factory function for server handlers to build one) or two separate types — decide and document. Prefer a single `Response` type with a `makeResponse(status, body)` constructor for server use.
+- **JDK-only constraint:** No `maven:` dependencies anywhere in E03. All JDK classes used here are available in Java 21 without additional modules beyond `jdk.httpserver` (already on the JVM classpath for the runtime).

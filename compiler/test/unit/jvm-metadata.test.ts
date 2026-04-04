@@ -160,7 +160,7 @@ describe('generateStubs (java.util.HashMap)', () => {
     const meta = readClassMetadata('java.util.HashMap');
     const stubs = generateStubs(meta, 'HashMap', new Map());
     const sizeStub = stubs.find((s) => s.kestrelName === 'size');
-    expect(sizeStub!.jvmDescriptor).toBe('java.util.HashMap#size()');
+    expect(sizeStub!.jvmDescriptor).toBe('java.util.HashMap#size():int');
   });
 
   it('generates correct jvm descriptor for get()', () => {
@@ -203,6 +203,6 @@ describe('renderExternKs', () => {
     const meta = readClassMetadata('java.util.HashMap');
     const stubs = generateStubs(meta, 'HashMap', new Map());
     const rendered = renderExternKs(meta, 'HashMap', stubs);
-    expect(rendered).toContain('extern fun size(instance: HashMap): Int = jvm("java.util.HashMap#size()")');
+    expect(rendered).toContain('extern fun size(instance: HashMap): Int = jvm("java.util.HashMap#size():int")');
   });
 });

@@ -343,9 +343,11 @@ export function generateStubs(
 
     const kestrelName = idx > 1 ? `${baseKestrelName}_${idx}` : baseKestrelName;
 
-    // Build jvm("...") descriptor string
+    // Build jvm("...") descriptor string, with ':ReturnType' suffix for primitive-returning methods
     const paramDescStr = m.javaParamTypes.join(',');
-    const jvmDescriptor = `${meta.className}#${m.jvmMethodName}(${paramDescStr})`;
+    const primitiveReturnTypes = new Set(['boolean', 'byte', 'char', 'short', 'int', 'long', 'float', 'double']);
+    const retSuffix = (!m.isConstructor && primitiveReturnTypes.has(m.javaReturnType)) ? `:${m.javaReturnType}` : '';
+    const jvmDescriptor = `${meta.className}#${m.jvmMethodName}(${paramDescStr})${retSuffix}`;
 
     // Check for an override for this kestrelName
     const override = overrides.get(kestrelName) ?? overrides.get(m.jvmMethodName);

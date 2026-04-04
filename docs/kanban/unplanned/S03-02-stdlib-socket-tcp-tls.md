@@ -21,17 +21,19 @@ Introduce a **user-facing** standard library module for **TCP** sockets (connect
 
 ## Relationship to other stories
 
-- **Depends on** sequence **59** (async/event loop) for non-blocking read/write and accept patterns consistent with `Task` and `await`, unless the first slice is **strictly blocking** with documented limitations (prefer aligning with **59** before closing **68**).
-- **Builds on / coordinates with** sequence **60** (`kestrel:http` full implementation): shared low-level code or primitives should be **factored** so HTTP and sockets do not fork incompatible TLS or TCP behaviour.
+- **E01 — Async runtime foundation:** **Done.** Virtual-thread executor and `Task`-based I/O are in place. The async prerequisite for non-blocking socket read/write/accept is cleared.
+- **E02 — JVM interop (`extern` bindings):** **Done.** `extern type` / `extern fun` / `maven:` are the required implementation mechanism for S03-02. Socket types (`java.net.Socket`, `java.net.ServerSocket`, `javax.net.ssl.SSLSocket`, etc.) and their methods must be bound via `extern type`/`extern fun`. No new `__socket_*` builtins or `KRuntime.java` additions are wanted.
+- **Depends on** sequence **60** (S03-01, `kestrel:http` full implementation): shared low-level code or primitives should be **factored** so HTTP and sockets do not fork incompatible TLS or TCP behaviour.
 - **Related (not duplicate):** sequence **62** (URL import resolution) is **compile-time** fetch; **68** is **runtime** I/O.
 - **Optional later:** WebSockets or other framed protocols may be separate stories on top of **68**.
 
 ## Goals
 
-1. Kestrel programs can open **TCP** connections and accept **TCP** connections with predictable error and closure semantics on the **JVM**.
-2. **TLS** (HTTPS-style handshakes on streams) is available where the reference implementation can rely on **Java** platform TLS without mandating a specific certificate verification policy beyond what is documented and tested.
+1. Kestrel programs can open **TCP** connections and accept **TCP** connections with predictable error and closure semantics on the **JVM**, using `java.net.Socket` / `java.net.ServerSocket` via `extern type` / `extern fun`.
+2. **TLS** (HTTPS-style handshakes on streams) is available via `javax.net.ssl.SSLSocket` / `javax.net.ssl.SSLServerSocket` — no third-party TLS library; JDK-only.
 3. The **specs** name the module, types, and functions so compiler resolution, typechecking, and conformance tests can treat `kestrel:socket` like other stdlib modules.
-4. Security-sensitive defaults (e.g. verification mode, allowed ciphers) are **specified or explicitly implementation-defined** so the two runtimes do not silently diverge in ways that confuse users.
+4. Security-sensitive defaults (e.g. verification mode, allowed ciphers) are **specified or explicitly implementation-defined** so implementations do not silently diverge in ways that confuse users.
+5. **JDK-only:** No `maven:` dependencies. All socket and TLS classes are in the JDK standard library.
 
 ## Acceptance Criteria
 
