@@ -10,7 +10,14 @@ Delivers the HTTP baseline and higher-level networking capabilities (socket, RES
 
 ## Design Constraint: JDK-Only
 
-All E03 implementations **must** use built-in JDK classes only — no `maven:` external dependencies. The HTTP client uses `java.net.http.HttpClient` (JDK 11+); the HTTP server uses `com.sun.net.httpserver.HttpServer` (available via `jdk.httpserver`); sockets use `java.net.Socket` / `javax.net.ssl.SSLSocket`. Every binding is expressed via `extern type` / `extern fun` from E02 — no `__*` builtins, no `KRuntime.java` changes.
+All E03 implementations **must** use built-in JDK classes only — no `maven:` external dependencies. The HTTP client uses `java.net.http.HttpClient` (JDK 11+); the HTTP server uses `com.sun.net.httpserver.HttpServer` (available via `jdk.httpserver`); sockets use `java.net.Socket` / `javax.net.ssl.SSLSocket`.
+
+Every Kestrel binding uses `extern type` / `extern fun` from E02 (no `__*` builtins; no `codegen.ts` changes). However, following the established pattern for dict, fs, process, and task modules, **KRuntime.java static helpers are added** for:
+- Async operations (HTTP GET, server accept) — must return `KTask` and integrate with the virtual-thread executor.
+- Primitive-returning JDK methods (e.g., `statusCode()` returns `int`) — must be boxed to `Long` for Kestrel's `Int`.
+- Callback-bridging (HTTP server handler must wrap a `KFunction` into a Java `HttpHandler` interface).
+
+Simple Object-returning JDK methods may be called directly via `extern fun` instance dispatch without KRuntime wrappers.
 
 ## Stories
 
