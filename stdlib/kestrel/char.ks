@@ -1,21 +1,26 @@
 // kestrel:char — helpers for Char (single Unicode scalar).
 
 /** Unicode scalar value as `Int` (only primitive call Char → Int in this module). */
-export extern fun codePoint(c: Char): Int = jvm("kestrel.runtime.KRuntime#charCodePoint(java.lang.Object)")
+export extern fun codePoint(c: Char): Int = 
+  jvm("kestrel.runtime.KRuntime#charCodePoint(java.lang.Object)")
 
 /** Synonym for `codePoint` (common in FP stdlibs). */
-export fun toCode(c: Char): Int = codePoint(c)
+export fun toCode(c: Char): Int = 
+  codePoint(c)
 
 /** Synonym for `codePoint` (pairs with `intToChar`). */
 export fun charToInt(c: Char): Int = toCode(c)
 
-export extern fun fromCode(n: Int): Char = jvm("kestrel.runtime.KRuntime#charFromCode(java.lang.Object)")
+export extern fun fromCode(n: Int): Char = 
+  jvm("kestrel.runtime.KRuntime#charFromCode(java.lang.Object)")
 
 /** Synonym for `fromCode` (pairs with `charToInt`). */
-export fun intToChar(n: Int): Char = fromCode(n)
+export fun intToChar(n: Int): Char = 
+  fromCode(n)
 
 /** Single-code-point UTF-8 string. */
-export extern fun charToString(c: Char): String = jvm("kestrel.runtime.KRuntime#charToString(java.lang.Object)")
+export extern fun charToString(c: Char): String = 
+  jvm("kestrel.runtime.KRuntime#charToString(java.lang.Object)")
 
 export fun isDigit(c: Char): Bool = {
   val cp = codePoint(c)
@@ -32,9 +37,11 @@ export fun isLower(c: Char): Bool = {
   cp >= 97 & cp <= 122
 }
 
-export fun isAlpha(c: Char): Bool = isUpper(c) | isLower(c)
+export fun isAlpha(c: Char): Bool = 
+  isUpper(c) | isLower(c)
 
-export fun isAlphaNum(c: Char): Bool = isAlpha(c) | isDigit(c)
+export fun isAlphaNum(c: Char): Bool = 
+  isAlpha(c) | isDigit(c)
 
 export fun isOctDigit(c: Char): Bool = {
   val cp = codePoint(c)
