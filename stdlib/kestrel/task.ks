@@ -3,10 +3,14 @@
 
 export exception Cancelled
 
-export fun map<A, B>(task: Task<A>, f: A -> B): Task<B> = __task_map(task, f)
+export extern fun map<A, B>(task: Task<A>, f: A -> B): Task<B> =
+  jvm("kestrel.runtime.KTask#taskMap(java.lang.Object,java.lang.Object)")
 
-export fun all<T>(tasks: List<Task<T>>): Task<List<T>> = __task_all(tasks)
+export extern fun all<T>(tasks: List<Task<T>>): Task<List<T>> =
+  jvm("kestrel.runtime.KTask#taskAll(java.lang.Object)")
 
-export fun race<T>(tasks: List<Task<T>>): Task<T> = __task_race(tasks)
+export extern fun race<T>(tasks: List<Task<T>>): Task<T> =
+  jvm("kestrel.runtime.KTask#taskRace(java.lang.Object)")
 
-export fun cancel<T>(t: Task<T>): Unit = __task_cancel(t)
+export extern fun cancel<T>(t: Task<T>): Unit =
+  jvm("kestrel.runtime.KTask#cancel(java.lang.Object)")

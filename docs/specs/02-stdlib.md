@@ -205,6 +205,10 @@ Task combinator utilities for composing `Task<T>` values.
 | `race` | `(List<Task<T>>) -> Task<T>` | Return the result of the first task to complete. Losing tasks are cancelled. Fails if the list is empty. |
 | `cancel` | `(Task<T>) -> Unit` | Request cancellation of a task. Calls `CompletableFuture.cancel(true)` — best-effort I/O interruption. Cancelling an already-completed task is a no-op. |
 
+### Implementation notes
+
+`map`, `all`, `race`, and `cancel` are `extern fun` declarations backed by `KTask.taskMap`, `KTask.taskAll`, `KTask.taskRace`, and `KTask.cancel` static methods. All four are parametric; `cancel` returns `Unit` (JVM `void` → `KUnit.INSTANCE`).
+
 ---
 
 ## kestrel:result

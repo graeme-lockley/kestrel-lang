@@ -63,13 +63,13 @@ export fun cancel<T>(t: Task<T>): Unit                     = __task_cancel(t)
 
 ## Acceptance Criteria
 
-- [ ] `stdlib/kestrel/task.ks` contains no `__task_map`, `__task_all`, `__task_race`, or `__task_cancel` calls.
-- [ ] Four `extern fun` declarations exist in `task.ks`.
-- [ ] `codegen.ts` has no dispatch blocks for these four intrinsics.
-- [ ] `check.ts` has no `env.set` bindings for these four intrinsics.
-- [ ] `stdlib/kestrel/task.test.ks` passes.
-- [ ] `cd compiler && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] `stdlib/kestrel/task.ks` contains no `__task_map`, `__task_all`, `__task_race`, or `__task_cancel` calls.
+- [x] Four `extern fun` declarations exist in `task.ks`.
+- [x] `codegen.ts` has no dispatch blocks for these four intrinsics.
+- [x] `check.ts` has no `env.set` bindings for these four intrinsics.
+- [x] `stdlib/kestrel/task.test.ks` passes.
+- [x] `cd compiler && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
@@ -81,3 +81,29 @@ export fun cancel<T>(t: Task<T>): Unit                     = __task_cancel(t)
 - **Type parameter variance**: `task_all` has a tricky type: `List<Task<T>> → Task<List<T>>`. The parametric extern fun must declare `<T>` and use it in both the parameter and return types. The typecheck should unify correctly, but the JVM codegen just calls the method — the type parameter is purely for Kestrel-side type safety, invisible at runtime.
 - **`cancel` type parameter `T` is unused in the body**: `cancel<T>(t: Task<T>): Unit` — the type parameter `T` appears only to satisfy the call site type. Parametric extern funs with unconstrained type parameters that are only used in input positions (not output) should be fine with HM inference. But confirm that the typecheck does not generalize `cancel` in a way that prevents correct call-site type checking.
 - **KTask vs. KRuntime**: task combinators are on `KTask`, not `KRuntime`. The existing codegen already uses `K_TASK` constant for this. The extern fun `jvm("...")` descriptor must reference `kestrel.runtime.KTask`, not `kestrel.runtime.KRuntime`.
+
+## Impact Analysis
+
+- `stdlib/kestrel/task.ks`: replace 4 wrapper funs with `export extern fun` declarations.
+- `compiler/src/typecheck/check.ts`: remove 4 `env.set` blocks (and associated fresh vars).
+- `compiler/src/jvm-codegen/codegen.ts`: remove 4 intrinsic dispatch blocks.
+
+## Tasks
+
+- [x] Replace 4 intrinsic wrapper funs with `extern fun` declarations in `task.ks`
+- [x] Remove 4 `env.set` bindings from `check.ts` (and 4 associated `freshVar()` calls)
+- [x] Remove 4 intrinsic dispatch blocks from `codegen.ts`
+- [x] Verify `emitExternReturnAsObject` handles `Unit`/void return for `cancel`
+- [x] Verify no remaining `__task_*` intrinsic refs in compiler/stdlib
+
+## Tests to add
+
+- No new test files needed — `task.test.ks` exercises the API; existing tests cover behaviour.
+
+## Documentation and specs to update
+
+- [x] `docs/specs/02-stdlib.md`: update `kestrel:task` implementation notes to reference new `extern fun` names.
+
+## Build notes
+
+- 2025-07-14: All four task intrinsics replaced cleanly. `emitExternReturnAsObject` already handles `Unit` return for `cancel` (void JVM method → push `KUnit.INSTANCE`). `all` and `race` return `Task<T>` so `externReturnDescriptorForType` returns `KTask` correctly. 257 compiler tests and 1014 Kestrel tests pass.
