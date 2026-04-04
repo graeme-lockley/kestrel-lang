@@ -2,7 +2,7 @@
 
 ## Status
 
-Unplanned
+Done
 
 ## Summary
 
@@ -25,8 +25,8 @@ Simple Object-returning JDK methods may be called directly via `extern fun` inst
 - [S03-05-http-get-client.md](../../done/S03-05-http-get-client.md) ✓
 - [S03-06-http-server.md](../../done/S03-06-http-server.md) ✓
 - [S03-03-http-rest-client-methods-headers.md](../../done/S03-03-http-rest-client-methods-headers.md) ✓
-- [S03-02-stdlib-socket-tcp-tls.md](../../unplanned/S03-02-stdlib-socket-tcp-tls.md)
-- [S03-04-lightweight-web-routing-framework.md](../../unplanned/S03-04-lightweight-web-routing-framework.md)
+- [S03-02-stdlib-socket-tcp-tls.md](../../done/S03-02-stdlib-socket-tcp-tls.md) ✓
+- [S03-04-lightweight-web-routing-framework.md](../../done/S03-04-lightweight-web-routing-framework.md) ✓
 
 **Story ordering:** S03-01 → (S03-05, S03-06 in parallel) → S03-03 → S03-04. S03-02 depends on S03-01 and can proceed after S03-05/S03-06.
 
