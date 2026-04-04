@@ -1,12 +1,12 @@
 # HTTP client: methods, headers, bodies, and REST-oriented API
 
-## Sequence: S02-03
+## Sequence: S03-03
 ## Tier: 8 - Networking expansion (post-HTTP baseline)
 ## Former ID: (none)
 
 ## Epic
 
-- Epic: [E02 HTTP and Networking Platform](../epics/unplanned/E02-http-and-networking-platform.md)
+- Epic: [E03 HTTP and Networking Platform](../epics/unplanned/E03-http-and-networking-platform.md)
 - Companion stories: 60, 68, 70
 
 ## Summary

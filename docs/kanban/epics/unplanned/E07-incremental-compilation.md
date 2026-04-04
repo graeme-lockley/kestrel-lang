@@ -14,7 +14,7 @@ Currently Kestrel recompiles every imported package on every invocation, regardl
 
 ## Dependencies
 
-- E03 (module resolution and reproducibility) — the module resolver must produce stable, canonical package identities before per-package metadata can be keyed and invalidated correctly.
+- E04 (module resolution and reproducibility) — the module resolver must produce stable, canonical package identities before per-package metadata can be keyed and invalidated correctly.
 
 ## Epic Completion Criteria
 

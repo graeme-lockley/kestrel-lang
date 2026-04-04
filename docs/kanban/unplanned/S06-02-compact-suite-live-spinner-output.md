@@ -1,12 +1,12 @@
 # Test output: suite-first live spinner and duration updates across all modes
 
-## Sequence: S05-02
+## Sequence: S06-02
 ## Tier: Optional / verification — Test harness UX
 ## Former ID: (none)
 
 ## Epic
 
-- Epic: [E05 Runtime Modernization and DX](../epics/unplanned/E05-runtime-modernization-and-dx.md)
+- Epic: [E06 Runtime Modernization and DX](../epics/unplanned/E06-runtime-modernization-and-dx.md)
 - Companion stories: 67, 72
 
 ## Summary

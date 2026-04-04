@@ -23,7 +23,7 @@
 
 - Depends on S01-01 (KTask runtime class).
 - S01-13 (Task combinators) — `Task.race` should cancel losing tasks; this story must be done first or concurrently for full `race` semantics.
-- E02 (HTTP) will need request cancellation.
+- E03 (HTTP) will need request cancellation.
 
 ## Goals
 

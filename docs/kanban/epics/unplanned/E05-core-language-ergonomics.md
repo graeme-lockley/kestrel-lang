@@ -1,4 +1,4 @@
-# Epic E04: Core Language Ergonomics
+# Epic E05: Core Language Ergonomics
 
 ## Status
 
@@ -10,8 +10,8 @@ Improves day-to-day language ergonomics with explicit discard semantics and a bu
 
 ## Stories
 
-- [S04-01-array-builtin-type.md](../../unplanned/S04-01-array-builtin-type.md)
-- [S04-02-ignore-keyword-for-discarding-values.md](../../unplanned/S04-02-ignore-keyword-for-discarding-values.md)
+- [S05-01-array-builtin-type.md](../../unplanned/S05-01-array-builtin-type.md)
+- [S05-02-ignore-keyword-for-discarding-values.md](../../unplanned/S05-02-ignore-keyword-for-discarding-values.md)
 
 ## Dependencies
 

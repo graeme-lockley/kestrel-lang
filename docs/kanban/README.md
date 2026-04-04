@@ -36,7 +36,7 @@ Epics are cross-story containers that let related work move together at the plan
 
 - Active epic files live in `docs/kanban/epics/unplanned/`.
 - Completed epic files live in `docs/kanban/epics/done/`.
-- Epic filename format: `EXX-slug.md` (for example `E02-http-and-networking-platform.md`).
+- Epic filename format: `EXX-slug.md` (for example `E03-http-and-networking-platform.md`).
 - Each epic file should include: title, status, summary, story list with links, dependency notes, and epic completion criteria.
 
 ### Epic completion rule

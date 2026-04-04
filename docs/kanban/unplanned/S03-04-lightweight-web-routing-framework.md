@@ -1,12 +1,12 @@
 # Lightweight web routing framework (Sinatra-style)
 
-## Sequence: S02-04
+## Sequence: S03-04
 ## Tier: 8 — Networking expansion (post–HTTP baseline)
 ## Former ID: (none)
 
 ## Epic
 
-- Epic: [E02 HTTP and Networking Platform](../epics/unplanned/E02-http-and-networking-platform.md)
+- Epic: [E03 HTTP and Networking Platform](../epics/unplanned/E03-http-and-networking-platform.md)
 - Companion stories: 60, 68, 69
 
 ## Summary

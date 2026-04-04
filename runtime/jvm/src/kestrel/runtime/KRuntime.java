@@ -770,18 +770,30 @@ public final class KRuntime {
 
         try {
             executor.submit(() -> {
+                Process proc = null;
                 try {
+                    if (future.isCancelled()) return;
                     ProcessBuilder pb = new ProcessBuilder(cmd);
                     pb.redirectErrorStream(true);
-                    Process p = pb.start();
+                    proc = pb.start();
+                    final Process finalProc = proc;
+                    // Destroy the OS process if the future is cancelled after start.
+                    future.whenComplete((v, ex) -> {
+                        if (future.isCancelled()) finalProc.destroyForcibly();
+                    });
+                    // Re-check after registering the callback to close the race window.
+                    if (future.isCancelled()) {
+                        proc.destroyForcibly();
+                        return;
+                    }
                     StringBuilder sb = new StringBuilder();
-                    try (BufferedReader r = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                    try (BufferedReader r = new BufferedReader(new InputStreamReader(finalProc.getInputStream(), StandardCharsets.UTF_8))) {
                         String line;
                         while ((line = r.readLine()) != null) {
                             sb.append(line).append('\n');
                         }
                     }
-                    int exitCode = p.waitFor();
+                    int exitCode = finalProc.waitFor();
                     KRecord result = new KRecord(java.util.Map.of(
                         "exitCode", Long.valueOf(exitCode),
                         "stdout", sb.toString()
@@ -790,6 +802,7 @@ public final class KRuntime {
                 } catch (Throwable t) {
                     future.complete(new KErr("process_error:" + messageOrDefault(t, "process failed")));
                 } finally {
+                    if (proc != null) proc.destroyForcibly();
                     decrementAndSignal();
                 }
             });

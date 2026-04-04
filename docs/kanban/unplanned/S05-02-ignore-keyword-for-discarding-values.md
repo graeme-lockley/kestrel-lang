@@ -1,12 +1,12 @@
 # `ignore` keyword for discarding non-Unit values
 
-## Sequence: S04-02
+## Sequence: S05-02
 ## Tier: Optional language sugar (after core tiers 1–6)
 ## Former ID: 27
 
 ## Epic
 
-- Epic: [E04 Core Language Ergonomics](../epics/unplanned/E04-core-language-ergonomics.md)
+- Epic: [E05 Core Language Ergonomics](../epics/unplanned/E05-core-language-ergonomics.md)
 - Companion stories: 61
 
 ## Summary

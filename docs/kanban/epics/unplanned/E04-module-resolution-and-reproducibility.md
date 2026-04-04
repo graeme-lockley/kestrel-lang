@@ -1,4 +1,4 @@
-# Epic E03: Module Resolution and Reproducibility
+# Epic E04: Module Resolution and Reproducibility
 
 ## Status
 
@@ -10,8 +10,8 @@ Adds deterministic dependency management for remote modules by pairing lockfile 
 
 ## Stories
 
-- [S03-01-url-import-resolution.md](../../unplanned/S03-01-url-import-resolution.md)
-- [S03-02-lockfile-kestrel-lock.md](../../unplanned/S03-02-lockfile-kestrel-lock.md)
+- [S04-01-url-import-resolution.md](../../unplanned/S04-01-url-import-resolution.md)
+- [S04-02-lockfile-kestrel-lock.md](../../unplanned/S04-02-lockfile-kestrel-lock.md)
 
 ## Dependencies
 

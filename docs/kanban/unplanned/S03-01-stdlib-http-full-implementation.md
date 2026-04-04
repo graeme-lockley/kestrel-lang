@@ -1,12 +1,12 @@
 # Stdlib kestrel:http Full Implementation
 
-## Sequence: S02-01
+## Sequence: S03-01
 ## Tier: 7 - Deferred (large / dependency-heavy)
 ## Former ID: 23
 
 ## Epic
 
-- Epic: [E02 HTTP and Networking Platform](../epics/unplanned/E02-http-and-networking-platform.md)
+- Epic: [E03 HTTP and Networking Platform](../epics/unplanned/E03-http-and-networking-platform.md)
 - Companion stories: 68, 69, 70
 
 ## Summary
@@ -75,7 +75,7 @@ Incorporates **Risks / notes** above (55 ordering, TLS, concurrency, security, U
 
 | Area | Files / subsystems (indicative) | Change | Risk |
 |------|----------------------------------|--------|------|
-| **Prerequisite** | [Epic E01 — Async Runtime Foundation](../epics/unplanned/E01-async-runtime-foundation.md) (stories S01-01 through S01-06) | **S02-01 starts only after Epic E01** delivers real `Task` runtime, virtual thread executor, non-blocking I/O, and typed Result errors | **Blocker** if ignored |
+| **Prerequisite** | [Epic E01 — Async Runtime Foundation](../epics/unplanned/E01-async-runtime-foundation.md) (stories S01-01 through S01-06) | **S03-01 starts only after Epic E01** delivers real `Task` runtime, virtual thread executor, non-blocking I/O, and typed Result errors | **Blocker** if ignored |
 | **Bytecode / ISA** | `docs/specs/04-bytecode-isa.md` | Document any new calls or TASK-related behaviour for HTTP primitives | Low-medium |
 | **Compiler (TS)** | `compiler/src/typecheck/check.ts` (new `__*` bindings, `Task<Result<...>>` if used), `compiler/src/codegen/codegen.ts`, `compiler/src/jvm-codegen/codegen.ts` | Wire builtins used from `stdlib/kestrel/http.ks`; align JVM primitive indices / KRuntime entry points | Medium |
 | **JVM runtime** | `runtime/jvm/src/kestrel/runtime/KRuntime.java` (and related classes) | `HttpServer`/`HttpClient` (names TBD), non-blocking or loop-driven completion consistent with **59**, `HttpsURLConnection` or equivalent for `get` TLS | **High**: platform TLS |

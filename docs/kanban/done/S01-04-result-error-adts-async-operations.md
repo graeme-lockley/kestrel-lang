@@ -27,7 +27,7 @@ After S01-03:
 - **Depends on S01-01 and S01-02**: Runtime and executor must be in place.
 - **Independent of S01-05**: CLI flags are orthogonal.
 - **Enables S01-06**: Conformance tests validate the Result-typed async surface.
-- **Informs Epic E02**: HTTP and networking stories will follow the same `Task<Result<T, E>>` pattern established here.
+- **Informs Epic E03**: HTTP and networking stories will follow the same `Task<Result<T, E>>` pattern established here.
 
 ## Goals
 

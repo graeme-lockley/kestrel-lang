@@ -33,7 +33,7 @@ The Kestrel return type is `Task<Result<Int, ProcessError>>` — only the exit c
 
 - Depends on S01-04 (Result/ProcessError ADTs) and S01-09 (runProcess cascade).
 - This is a breaking change to the `runProcess` API; all callers must be updated.
-- E02 (HTTP) test helpers may use `runProcess` for curl/wget scripting — they will benefit.
+- E03 (HTTP) test helpers may use `runProcess` for curl/wget scripting — they will benefit.
 
 ## Goals
 

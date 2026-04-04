@@ -27,7 +27,7 @@ After S01-01 through S01-05:
 
 - **Depends on S01-01 through S01-05**: All implementation stories must be complete.
 - **Final story in Epic E01**: Completing this story means the epic can move to done.
-- **Foundation for Epic E02**: HTTP/networking stories assume specs and async behavior are documented.
+- **Foundation for Epic E03**: HTTP/networking stories assume specs and async behavior are documented.
 
 ## Goals
 

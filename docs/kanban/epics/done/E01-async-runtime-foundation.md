@@ -6,7 +6,7 @@ Unplanned
 
 ## Summary
 
-Foundation epic for real async behavior on the JVM backend using **Java Project Loom** (virtual threads). Delivers a concrete `KTask` runtime type, a virtual-thread executor for genuine async function dispatch, non-blocking I/O, typed error handling via `Result<T, E>` ADTs, CLI process-lifetime flags, and comprehensive specs and tests. Unblocks Epic E02 (HTTP / networking).
+Foundation epic for real async behavior on the JVM backend using **Java Project Loom** (virtual threads). Delivers a concrete `KTask` runtime type, a virtual-thread executor for genuine async function dispatch, non-blocking I/O, typed error handling via `Result<T, E>` ADTs, CLI process-lifetime flags, and comprehensive specs and tests. Unblocks Epic E03 (HTTP / networking).
 
 ## Implementation Approach
 
@@ -46,7 +46,7 @@ Each story may stub dependencies on later stories with TODO errors (e.g. S01-01 
 
 ## Dependencies
 
-- Unblocks Epic E02 for robust async networking behavior.
+- Unblocks Epic E03 for robust async networking behavior.
 - Requires **Java 21+** for Project Loom virtual threads (documented from S01-02 onward).
 
 ## Epic Completion Criteria

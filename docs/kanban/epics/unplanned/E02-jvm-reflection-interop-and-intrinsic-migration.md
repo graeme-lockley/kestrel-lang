@@ -1,4 +1,4 @@
-# Epic E06: JVM Reflection Interop and Intrinsic Migration
+# Epic E02: JVM Reflection Interop and Intrinsic Migration
 
 ## Status
 

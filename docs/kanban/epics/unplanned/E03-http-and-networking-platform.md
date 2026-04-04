@@ -1,4 +1,4 @@
-# Epic E02: HTTP and Networking Platform
+# Epic E03: HTTP and Networking Platform
 
 ## Status
 
@@ -10,10 +10,10 @@ Delivers the HTTP baseline and higher-level networking capabilities (socket, RES
 
 ## Stories
 
-- [S02-01-stdlib-http-full-implementation.md](../../unplanned/S02-01-stdlib-http-full-implementation.md)
-- [S02-02-stdlib-socket-tcp-tls.md](../../unplanned/S02-02-stdlib-socket-tcp-tls.md)
-- [S02-03-http-rest-client-methods-headers.md](../../unplanned/S02-03-http-rest-client-methods-headers.md)
-- [S02-04-lightweight-web-routing-framework.md](../../unplanned/S02-04-lightweight-web-routing-framework.md)
+- [S03-01-stdlib-http-full-implementation.md](../../unplanned/S03-01-stdlib-http-full-implementation.md)
+- [S03-02-stdlib-socket-tcp-tls.md](../../unplanned/S03-02-stdlib-socket-tcp-tls.md)
+- [S03-03-http-rest-client-methods-headers.md](../../unplanned/S03-03-http-rest-client-methods-headers.md)
+- [S03-04-lightweight-web-routing-framework.md](../../unplanned/S03-04-lightweight-web-routing-framework.md)
 
 ## Dependencies
 

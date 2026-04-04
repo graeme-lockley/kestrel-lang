@@ -1,12 +1,12 @@
 # Stdlib: TCP/TLS sockets (`kestrel:socket`)
 
-## Sequence: S02-02
+## Sequence: S03-02
 ## Tier: 8 — Networking expansion (post–HTTP baseline)
 ## Former ID: (none)
 
 ## Epic
 
-- Epic: [E02 HTTP and Networking Platform](../epics/unplanned/E02-http-and-networking-platform.md)
+- Epic: [E03 HTTP and Networking Platform](../epics/unplanned/E03-http-and-networking-platform.md)
 - Companion stories: 60, 69, 70
 
 ## Summary

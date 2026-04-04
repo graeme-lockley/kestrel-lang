@@ -23,7 +23,7 @@ The only concurrency pattern currently available in Kestrel is "start tasks befo
 
 - Depends on S01-01 (KTask runtime class).
 - S01-17 (cancellation) is a natural follow-on — `race` should cancel the losers.
-- E02 (HTTP/networking) will benefit directly from `Task.all` for parallel HTTP requests.
+- E03 (HTTP/networking) will benefit directly from `Task.all` for parallel HTTP requests.
 
 ## Goals
 
