@@ -11,7 +11,7 @@ import { distinctSpecifiersInSourceOrder, spanForSpecifier } from './module-spec
 import { jvmCodegen, type JvmCodegenResult } from './jvm-codegen/index.js';
 import { resolveSpecifier } from './resolve.js';
 import type { Program, ImportDecl, Expr, TopLevelStmt, TopLevelDecl, BlockExpr } from './ast/nodes.js';
-import type { FunDecl, TypeDecl } from './ast/nodes.js';
+import type { FunDecl, ExternFunDecl, TypeDecl } from './ast/nodes.js';
 import { getInferredType } from './typecheck/check.js';
 import type { InternalType } from './types/internal.js';
 import type { Diagnostic } from './diagnostics/types.js';
@@ -517,6 +517,11 @@ export function compileFileJvm(
                   const fun = node as FunDecl;
                   funArities.set(fun.name, fun.params.length);
                   if (fun.async) asyncFunNames.add(fun.name);
+                } else if (node.kind === 'ExternFunDecl') {
+                  const efun = node as ExternFunDecl;
+                  funArities.set(efun.name, efun.params.length);
+                  const rt = efun.returnType as { kind?: string; name?: string } | undefined;
+                  if (rt?.kind === 'AppType' && rt?.name === 'Task') asyncFunNames.add(efun.name);
                 } else if (node.kind === 'TypeDecl') {
                   const t = node as TypeDecl;
                   if (t.body?.kind !== 'ADTBody') continue;
