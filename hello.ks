@@ -33,7 +33,7 @@ println(Some("hello"))
 
 async fun fetchNews(): Task<Unit> = {
   try {
-    val resp = await Http.get("https://www.news24.com");
+    val resp = await Http.get("https://www.google.com");
     println(Http.statusCode(resp));
     println(Str.left(Http.bodyText(resp), 200))
   } catch {
