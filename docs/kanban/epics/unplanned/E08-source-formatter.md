@@ -22,6 +22,7 @@ Because the formatter is the first major developer tool, this epic begins with e
 
 - Existing flat stdlib modules are moved to `kestrel:data/*`, `kestrel:io/*`, and `kestrel:sys/*`; all import sites in `stdlib/`, `tests/`, and example programs are updated.
 - The `kestrel:dev/*` and `kestrel:tools/*` sub-namespaces are defined in specs and the resolver supports all sub-paths via file-existence fallback (no hardcoded whitelist for sub-paths).
+- `kestrel:tools/cli` is implemented with `CliSpec`, `parse`, `run`, `help`, and `version`; `--help` and `--version` work automatically for any tool built on it.
 - `./kestrel run kestrel:tools/test` runs the test tool directly; `kestrel test` is a thin alias for it.
 - `kestrel fmt <file.ks>` reformats a Kestrel source file in-place according to the opinionated rules.
 - `kestrel fmt --check <file.ks>` exits non-zero when the file is not already canonical; used in CI without modifying files.
@@ -60,6 +61,7 @@ Because the formatter is the first major developer tool, this epic begins with e
 | `kestrel:dev/stack` | Stack trace (debug) | `stdlib/kestrel/dev/stack.ks` | `kestrel:stack` |
 | `kestrel:dev/parser` | Lexer + AST + parser (single module) | `stdlib/kestrel/dev/parser.ks` | *(new)* |
 | `kestrel:dev/doc` | Wadler–Lindig Doc IR | `stdlib/kestrel/dev/doc.ks` | *(new)* |
+| `kestrel:tools/cli` | CLI argument parser and self-description library | `stdlib/kestrel/tools/cli.ks` | *(new)* |
 | `kestrel:tools/test` | Test framework + runner | `stdlib/kestrel/tools/test.ks` | `kestrel:test` |
 | `kestrel:tools/format` | Source formatter | `stdlib/kestrel/tools/format.ks` | *(new)* |
 
@@ -69,7 +71,7 @@ Because the formatter is the first major developer tool, this epic begins with e
 - **`kestrel:io/*`** — effectful modules that communicate with the outside world: console, filesystem, network.
 - **`kestrel:sys/*`** — system-level concerns: processes, concurrency, runtime error types.
 - **`kestrel:dev/*`** — infrastructure for working with Kestrel source code; not end-user-visible, consumed by tools. `kestrel:dev/parser` is a single flat module (no sub-modules) that exports everything needed to lex and parse Kestrel: `Token`, `TokenKind`, all AST ADTs (`Expr`, `Pattern`, `Type`, `TopLevelDecl`, …), `lex : String -> Result<List<Token>, LexError>`, and `parse : List<Token> -> Result<Program, ParseError>`.
-- **`kestrel:tools/*`** — user-facing tools. Each tool module exports `main : List<String> -> Task<Int>` and is directly runnable.
+- **`kestrel:tools/*`** — user-facing tools. Each tool module has a `cli.ks` that declares its `CliSpec` and exports `main : List<String> -> Task<Int>`. The `kestrel:tools/cli` library provides argument parsing and automatic `--help`/`--version` rendering from the spec.
 
 #### Resolver change
 
@@ -81,34 +83,129 @@ specifier = "kestrel:data/string"
 // candidate = stdlib/kestrel/data/string.ks  ← exists → resolved
 ```
 
-### Tools as first-class runnable modules
+### Tool infrastructure
 
-Each `kestrel:tools/X` module exports a `main` function:
+#### `kestrel:tools/cli` — CLI argument parser and self-description
+
+Every tool uses `kestrel:tools/cli` to declare what arguments it accepts. The library provides:
+
+- Declarative `CliSpec`, `CliOption`, and `CliArg` ADTs
+- `parse : CliSpec -> List<String> -> Result<ParsedArgs, CliError>` — parses raw argv
+- `run : CliSpec -> (ParsedArgs -> Task<Int>) -> List<String> -> Task<Int>` — parses argv, handles `--help` and `--version` automatically, then calls the handler
+- `help : CliSpec -> String` — renders a formatted help string from the spec
+- `version : CliSpec -> String` — renders `name vX.Y.Z`
 
 ```
-main : List<String> -> Task<Int>
+type CliSpec = {
+  name:        String,
+  version:     String,
+  description: String,
+  usage:       String,
+  options:     List<CliOption>,
+  args:        List<CliArg>
+}
+
+type CliOption = {
+  long:        String,
+  short:       Option<String>,
+  description: String,
+  kind:        CliOptionKind
+}
+
+type CliOptionKind = Flag | Value(String)   // Flag = boolean switch; Value = takes an argument
+
+type CliArg = {
+  name:        String,
+  description: String,
+  variadic:    Bool
+}
+
+type ParsedArgs = {
+  options:    Dict<String, String>,   // long name → value; Flag → "true"
+  positional: List<String>
+}
 ```
+
+`--help` and `--version` are built-in — they do not need to be listed in the spec; `run` intercepts them automatically.
+
+#### Convention: `cli.ks` per tool
+
+Each `kestrel:tools/X` module contains (or is structured around) a `cli.ks` that:
+
+1. Defines the `spec : CliSpec` — the single source of truth for the tool's interface.
+2. Exports `main : List<String> -> Task<Int>` — the entry point called by `kestrel run`.
+3. Uses `Cli.run spec args handler` so `--help` and `--version` are handled for free.
+
+Example — the formatter's `cli.ks` sketch:
+
+```
+import { CliSpec, CliOption, CliArg, Flag, run } from "kestrel:tools/cli"
+
+let spec : CliSpec =
+  { name        = "format"
+  , version     = "0.1.0"
+  , description = "Opinionated Kestrel source code formatter"
+  , usage       = "kestrel fmt [options] [files...]"
+  , options     =
+      [ { long = "check", short = None
+        , description = "Exit non-zero if any file is not formatted; do not modify files"
+        , kind = Flag }
+      , { long = "stdin", short = None
+        , description = "Read from stdin, write to stdout"
+        , kind = Flag }
+      ]
+  , args        =
+      [ { name = "files", description = "Kestrel source files to format", variadic = True } ]
+  }
+
+fun main(args: List<String>) : Task<Int> =
+  Cli.run spec args formatFiles
+```
+
+Running `./kestrel run kestrel:tools/format --help` produces:
+
+```
+format 0.1.0 — Opinionated Kestrel source code formatter
+
+Usage:
+  kestrel fmt [options] [files...]
+
+Options:
+  -h, --help     Show this help message and exit
+  -V, --version  Show version and exit
+      --check    Exit non-zero if any file is not formatted; do not modify files
+      --stdin    Read from stdin, write to stdout
+
+Arguments:
+  files...  Kestrel source files to format
+```
+
+This output is generated entirely from `spec` by `Cli.help` — no manual string formatting in the tool.
+
+#### Invocation
 
 `./kestrel run` is extended to accept module specifiers in addition to file paths:
 
 ```bash
-./kestrel run kestrel:tools/test          # run the test tool
-./kestrel run kestrel:tools/format src/   # run the formatter on a directory
+./kestrel run kestrel:tools/test              # run the test tool
+./kestrel run kestrel:tools/format --check .  # check formatting
+./kestrel run kestrel:tools/format --help     # auto-generated help
 ```
 
-The CLI convenience commands are thin aliases over this mechanism:
+CLI convenience commands are thin aliases:
 
 | CLI command | Equivalent |
 |-------------|-----------|
 | `kestrel test [args]` | `kestrel run kestrel:tools/test [args]` |
 | `kestrel fmt [args]` | `kestrel run kestrel:tools/format [args]` |
 
-This means tools are self-contained Kestrel programs, testable and runnable without special CLI knowledge, and new tools are added by creating a new `kestrel:tools/X` module — no CLI changes required.
+New tools are added by creating a `kestrel:tools/X` module with a `cli.ks` — no CLI source changes required.
 
 ### Formatter architecture
 
 ```
 kestrel:tools/format
+  ├── import kestrel:tools/cli     → CliSpec, run (cli.ks convention)
   ├── import kestrel:dev/parser    → Token, AST types, lex, parse
   ├── import kestrel:dev/doc       → Doc IR, pretty
   └── import kestrel:io/fs / kestrel:io/console  → I/O
