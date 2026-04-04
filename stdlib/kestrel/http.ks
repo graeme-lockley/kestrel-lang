@@ -2,6 +2,7 @@
 // S03-05: get, bodyText, statusCode, makeResponse implemented.
 // S03-06: createServer, listen, queryParam, requestId, requestBodyText,
 //         serverPort, serverStop implemented.
+// S03-03: request (any method/headers/body), responseHeaders, responseHeader implemented.
 import * as Basics from "kestrel:basics"
 
 // ---------------------------------------------------------------------------
@@ -103,3 +104,27 @@ export fun requestId(request: Request): String = httpRequestId_(request)
 
 export async fun requestBodyText(request: Request): Task<String> =
   await httpRequestBodyText_(request)
+
+// ---------------------------------------------------------------------------
+// KRuntime extern bindings (S03-03: full HTTP client — method/headers/body)
+// ---------------------------------------------------------------------------
+
+extern fun httpRequestAsync_(method: String, url: String, headers: List<(String, String)>, body: Option<String>): Task<Response> =
+  jvm("kestrel.runtime.KRuntime#httpRequestAsync(java.lang.Object,java.lang.Object,java.lang.Object,java.lang.Object)")
+
+extern fun httpResponseHeaders_(resp: Response): List<(String, String)> =
+  jvm("kestrel.runtime.KRuntime#httpResponseHeaders(java.lang.Object)")
+
+extern fun httpResponseHeader_(resp: Response, name: String): Option<String> =
+  jvm("kestrel.runtime.KRuntime#httpResponseHeader(java.lang.Object,java.lang.Object)")
+
+// ---------------------------------------------------------------------------
+// Public HTTP client API (S03-03)
+// ---------------------------------------------------------------------------
+
+export async fun request(opts: { method: String, url: String, headers: List<(String, String)>, body: Option<String> }): Task<Response> =
+  await httpRequestAsync_(opts.method, opts.url, opts.headers, opts.body)
+
+export fun responseHeaders(resp: Response): List<(String, String)> = httpResponseHeaders_(resp)
+
+export fun responseHeader(resp: Response, name: String): Option<String> = httpResponseHeader_(resp, name)

@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.HashMap;
 import java.util.stream.Stream;
+import java.time.Duration;
 /**
  * Kestrel runtime primitives — equivalent to VM built-in CALL 0xFFFFFFxx.
  * Generated code sets mainArgs via setMainArgs() before running.
@@ -909,9 +910,12 @@ public final class KRuntime {
         try {
             executor.submit(() -> {
                 try {
-                    java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
+                    java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                            .connectTimeout(Duration.ofSeconds(15))
+                            .build();
                     java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
                             .uri(java.net.URI.create(urlStr))
+                            .timeout(Duration.ofSeconds(30))
                             .GET()
                             .build();
                     java.net.http.HttpResponse<String> response =
@@ -929,6 +933,120 @@ public final class KRuntime {
         }
 
         return KTask.fromFuture(future);
+    }
+
+    /**
+     * General HTTP request: method, URL, headers (KList of (String,String) tuples), body (KSome(String) or KNone).
+     * Returns a {@code Task<Response>}.
+     * Non-2xx responses are not errors; network/TLS failures are.
+     */
+    public static KTask httpRequestAsync(Object method, Object url, Object headers, Object body) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(method instanceof String) || !(url instanceof String)) {
+            future.completeExceptionally(new IllegalArgumentException("Http.request expects String method and url"));
+            return KTask.fromFuture(future);
+        }
+
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+        asyncTasksInFlight.increment();
+
+        final String methodStr = ((String) method).toUpperCase(java.util.Locale.ROOT);
+        final String urlStr = (String) url;
+
+        try {
+            executor.submit(() -> {
+                try {
+                    java.net.http.HttpClient client = java.net.http.HttpClient.newBuilder()
+                            .connectTimeout(Duration.ofSeconds(15))
+                            .build();
+                    java.net.http.HttpRequest.Builder builder = java.net.http.HttpRequest.newBuilder()
+                            .uri(java.net.URI.create(urlStr))
+                            .timeout(Duration.ofSeconds(30));
+
+                    // Apply headers from List<(String,String)> — tuples are KRecord{0→k, 1→v}
+                    KList xs = (KList) headers;
+                    while (xs instanceof KCons) {
+                        KRecord pair = (KRecord) ((KCons) xs).head;
+                        String k = (String) pair.get("0");
+                        String v = (String) pair.get("1");
+                        builder.header(k, v);
+                        xs = ((KCons) xs).tail;
+                    }
+
+                    // Body
+                    java.net.http.HttpRequest.BodyPublisher bodyPublisher;
+                    if (body instanceof KSome) {
+                        String bodyStr = (String) ((KSome) body).value;
+                        bodyPublisher = java.net.http.HttpRequest.BodyPublishers.ofString(bodyStr, StandardCharsets.UTF_8);
+                    } else {
+                        bodyPublisher = java.net.http.HttpRequest.BodyPublishers.noBody();
+                    }
+
+                    builder.method(methodStr, bodyPublisher);
+                    java.net.http.HttpResponse<String> response =
+                            client.send(builder.build(), java.net.http.HttpResponse.BodyHandlers.ofString());
+                    future.complete(response);
+                } catch (Throwable t) {
+                    future.completeExceptionally(KTask.unwrapFailure(t));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+
+        return KTask.fromFuture(future);
+    }
+
+    /**
+     * Extract response headers from a {@code Response} as a list of (String, String) tuples.
+     * Works for client responses ({@code HttpResponse&lt;String&gt;}). Returns empty list for server-side responses.
+     * Each tuple is a KRecord with fields "0" (header name) and "1" (first value for that name).
+     */
+    @SuppressWarnings("unchecked")
+    public static Object httpResponseHeaders(Object response) {
+        if (response instanceof java.net.http.HttpResponse) {
+            java.net.http.HttpResponse<String> resp = (java.net.http.HttpResponse<String>) response;
+            KList result = KNil.INSTANCE;
+            // Build list in reverse to maintain insertion order after reverse
+            List<KRecord> pairs = new ArrayList<>();
+            for (Map.Entry<String, List<String>> entry : resp.headers().map().entrySet()) {
+                if (!entry.getValue().isEmpty()) {
+                    KRecord pair = new KRecord(java.util.Map.of(
+                        "0", entry.getKey(),
+                        "1", entry.getValue().get(0)
+                    ));
+                    pairs.add(pair);
+                }
+            }
+            // Build KList from pairs (append to front, so reversed)
+            for (int i = pairs.size() - 1; i >= 0; i--) {
+                result = new KCons(pairs.get(i), result);
+            }
+            return result;
+        }
+        return KNil.INSTANCE;
+    }
+
+    /**
+     * Extract a single named response header value from a {@code Response}.
+     * Returns {@code KSome(value)} for the first matching header (case-insensitive), or {@code KNone}.
+     */
+    @SuppressWarnings("unchecked")
+    public static Object httpResponseHeader(Object response, Object name) {
+        if (!(response instanceof java.net.http.HttpResponse) || !(name instanceof String)) {
+            return KNone.INSTANCE;
+        }
+        java.net.http.HttpResponse<String> resp = (java.net.http.HttpResponse<String>) response;
+        String headerName = (String) name;
+        java.util.Optional<String> val = resp.headers().firstValue(headerName);
+        return val.isPresent() ? new KSome(val.get()) : KNone.INSTANCE;
     }
 
     /**
