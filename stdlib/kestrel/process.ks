@@ -1,5 +1,6 @@
 import * as Res from "kestrel:result"
 import * as Str from "kestrel:string"
+import { map } from "kestrel:task"
 
 export type ProcessError = ProcessSpawnError(String)
 
@@ -16,7 +17,5 @@ fun mapProcessError(code: String): ProcessError =
   if (Str.startsWith("process_error:", code)) ProcessSpawnError(Str.dropLeft(code, 14))
   else ProcessSpawnError(code)
 
-export async fun runProcess(program: String, args: List<String>): Task<Result<ProcessResult, ProcessError>> = {
-  val result = await __run_process(program, args)
-  Res.mapError(result, mapProcessError)
-}
+export fun runProcess(program: String, args: List<String>): Task<Result<ProcessResult, ProcessError>> =
+  map(__run_process(program, args), (result: Result<ProcessResult, String>) => Res.mapError(result, mapProcessError))

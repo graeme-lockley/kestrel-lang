@@ -78,14 +78,32 @@ public final class KTask {
     /**
      * Task.map: transform the result of a task without blocking.
      * Returns a new Task&lt;B&gt; that applies f when the source task completes.
+     * Cancelling the returned task also cancels the source task, so that
+     * any underlying resource (e.g. an OS process) is released promptly.
      */
     public static KTask taskMap(Object taskObj, Object fn) {
-        KTask task = (KTask) taskObj;
+        KTask source = (KTask) taskObj;
         KFunction f = (KFunction) fn;
-        CompletableFuture<Object> result = task.future.thenApply(
-            value -> f.apply(new Object[]{value})
-        );
-        return new KTask(result);
+        // Subclass to propagate cancel() back to the source future.
+        CompletableFuture<Object> mapped = new CompletableFuture<>() {
+            @Override
+            public boolean cancel(boolean mayInterruptIfRunning) {
+                source.future.cancel(mayInterruptIfRunning);
+                return super.cancel(mayInterruptIfRunning);
+            }
+        };
+        source.future.whenComplete((v, ex) -> {
+            if (ex != null) {
+                mapped.completeExceptionally(ex);
+            } else {
+                try {
+                    mapped.complete(f.apply(new Object[]{v}));
+                } catch (Throwable t) {
+                    mapped.completeExceptionally(t);
+                }
+            }
+        });
+        return new KTask(mapped);
     }
 
     /**
