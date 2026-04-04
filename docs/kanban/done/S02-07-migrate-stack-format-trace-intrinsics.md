@@ -94,13 +94,13 @@ if (name === '__capture_trace' && expr.args.length === 1) {
 
 ## Acceptance Criteria
 
-- [ ] `stdlib/kestrel/stack.ks` contains no `__format_one`, `__print_one`, or `__capture_trace` calls.
-- [ ] `format`, `print`, and `trace` are declared as `extern fun` in `stack.ks`.
-- [ ] `codegen.ts` has no `name === '__format_one'`, `name === '__print_one'`, or `name === '__capture_trace'` blocks.
-- [ ] `check.ts` has no `env.set('__format_one', ...)`, `env.set('__print_one', ...)`, or `env.set('__capture_trace', ...)`.
-- [ ] `stdlib/kestrel/stack.test.ks` passes (verifies format output, trace frames structure).
-- [ ] `cd compiler && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] `stdlib/kestrel/stack.ks` contains no `__format_one`, `__print_one`, or `__capture_trace` calls.
+- [x] `format`, `print`, and `trace` are declared as `extern fun` in `stack.ks`.
+- [x] `codegen.ts` has no `name === '__format_one'`, `name === '__print_one'`, or `name === '__capture_trace'` blocks.
+- [x] `check.ts` has no `env.set('__format_one', ...)`, `env.set('__print_one', ...)`, or `env.set('__capture_trace', ...)`.
+- [x] `stdlib/kestrel/stack.test.ks` passes (verifies format output, trace frames structure).
+- [x] `cd compiler && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
@@ -108,6 +108,39 @@ if (name === '__capture_trace' && expr.args.length === 1) {
 
 ## Risks / Notes
 
-- **`KRuntime.printFormat` returns `void`**: the current codegen explicitly pops the result and pushes `KUnit`. The `extern fun` for `print` must declare `Unit` as the return type, and codegen must handle void-returning methods → push `KUnit`. This is a case of the `POP + push KUnit` pattern from S02-02.
-- **`trace` return type is not a Java type**: `StackTrace<T>` is `{ value: T, frames: List<StackFrame> }` — a pure Kestrel record type alias. The `captureTrace(Object)` method returns a raw `KRecord` (the Java runtime representation of a Kestrel record). The extern fun type annotation says the value conforms to `StackTrace<T>`. No JVM `checkcast` is needed because `KRecord` is the base type for all record values. This is a subtle difference from parametric extern funs returning named extern types where checkcast is needed.
-- **`__format_one` and `__print_one` are already used everywhere** (via `println`/`print` built-ins which delegate to `KRuntime.println`/`KRuntime.print`). The `__format_one` and `__print_one` intrinsics are only the single-value low-level variants exposed in `stack.ks`. The variadic builtins `println(...)` are handled separately by the `println` built-in path in codegen and are NOT in scope here.
+- **`KRuntime.printOne` returns `void`**: the `extern fun` for `print` declares `Unit` return type. The `externReturnDescriptorForType` maps `Unit` → `V`, and `emitExternReturnAsObject` handles void by pushing `KUnit.INSTANCE`. No manual POP needed — the framework handles it correctly.
+- **`trace` return type is not a Java type**: `StackTrace<T>` is `{ value: T, frames: List<StackFrame> }` — a pure Kestrel record type alias. The `captureTrace(Object)` method returns a raw `KRecord`. `externReturnDescriptorForType` returns `Ljava/lang/Object;` for `AppType(StackTrace, ...)` since it's not a Task or known extern type. No `checkcast` needed.
+- **`__format_one` and `__print_one` are already used everywhere** via `println`/`print` builtins which delegate to `KRuntime.println`/`KRuntime.print`. The intrinsics are only the single-value low-level variants in `stack.ks`. The variadic builtins are NOT in scope here.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `stdlib/kestrel/stack.ks` | Replace 3 wrapper `fun` bodies with `export extern fun` declarations binding `KRuntime` static methods |
+| `compiler/src/typecheck/check.ts` | Remove 3 `env.set('__format_one', ...)`, `env.set('__print_one', ...)`, `env.set('__capture_trace', ...)` entries |
+| `compiler/src/jvm-codegen/codegen.ts` | Remove 3 `if (name === '__format_one'|'__print_one'|'__capture_trace'...)` dispatch blocks |
+| Tests | No new tests — existing `stdlib/kestrel/stack.test.ks` covers format/print/trace |
+| Specs | `docs/specs/02-stdlib.md` — implementation note only; public API unchanged |
+
+## Tasks
+
+- [x] Replace 3 functions in `stdlib/kestrel/stack.ks` with `export extern fun` declarations
+- [x] Remove 3 `env.set` intrinsic entries from `compiler/src/typecheck/check.ts`
+- [x] Remove 3 `if (name === '__format_one'|'__print_one'|'__capture_trace'...)` dispatch blocks from `compiler/src/jvm-codegen/codegen.ts`
+- [x] Grep for any remaining `__format_one`, `__print_one`, `__capture_trace` references; fix any found
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/stack.test.ks` (existing) | Already covers format/print/trace — no new tests required; verify suite still passes |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/02-stdlib.md` — update `kestrel:stack` section (no public API change)
+
+## Build notes
+
+- 2025-06-11: Started implementation. Discovered that `ExternFunDecl` type-checking in `check.ts` was not calling `env.delete(node.name)` before `envFreeVars()` nor removing explicit type param vars from the generalization set. This caused parametric extern funs (like `format<A>` and `print<A>`) to be typed as monomorphic — their type variable leaked into the environment before generalization. Fixed in `check.ts` by mirroring the `FunDecl` pre-generalization steps. Added regression test `tests/conformance/typecheck/valid/extern_fun_parametric_polymorphism.ks`. All 256 compiler tests and 1014 Kestrel tests pass.

@@ -1,10 +1,13 @@
-// kestrel:stack — format, print (VM primitives); trace via __capture_trace (spec 02).
+// kestrel:stack — format, print (VM primitives); trace via captureTrace (spec 02).
 import * as List from "kestrel:list"
 
 export type StackFrame = { file: String, line: Int, function: String }
 
 export type StackTrace<T> = { value: T, frames: List<StackFrame> }
 
-export fun format(x): String = __format_one(x)
-export fun print(x): Unit = __print_one(x)
-export fun trace<T>(value: T): StackTrace<T> = __capture_trace(value)
+export extern fun format<A>(x: A): String =
+  jvm("kestrel.runtime.KRuntime#formatOne(java.lang.Object)")
+export extern fun print<A>(x: A): Unit =
+  jvm("kestrel.runtime.KRuntime#printOne(java.lang.Object)")
+export extern fun trace<T>(value: T): StackTrace<T> =
+  jvm("kestrel.runtime.KRuntime#captureTrace(java.lang.Object)")

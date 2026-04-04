@@ -1821,22 +1821,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
             return false;
           }
-          if (name === '__format_one' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'formatOne', '(Ljava/lang/Object;)Ljava/lang/String;'));
-            return false;
-          }
-          if (name === '__print_one' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'printOne', '(Ljava/lang/Object;)V'));
-            mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
-            return false;
-          }
-          if (name === '__capture_trace' && expr.args.length === 1) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'captureTrace', '(Ljava/lang/Object;)Ljava/lang/Object;'));
-            return false;
-          }
           if (name === 'concat' && expr.args.length === 2) {
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             emitExpr(expr.args[1], mb, tcN, stackDepth + 1);

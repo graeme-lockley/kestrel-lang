@@ -259,8 +259,8 @@ Stack traces and basic I/O formatting. This module is for stack-trace and format
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `trace` | `(T) -> StackTrace<T>` | Captures the **current** call stack at the call site, paired with the given value (typically the caught exception). Implemented via host primitive `__capture_trace` (04 §7). |
-| `print` | `(T) -> Unit` | Print value (e.g. to stdout); polymorphic in argument type (stdlib wrapper; distinct from built-in `print`) |
+| `trace` | `(T) -> StackTrace<T>` | Captures the **current** call stack at the call site, paired with the given value (typically the caught exception). Implemented via `KRuntime#captureTrace`. |
+| `print` | `(T) -> Unit` | Print value (e.g. to stdout); polymorphic in argument type (declared as `extern fun`; distinct from built-in `print`) |
 | `format` | `(T) -> String` | Format value as string (used implicitly in template interpolation); polymorphic in argument type |
 
 **Types (exported from this module):**
@@ -270,7 +270,7 @@ Stack traces and basic I/O formatting. This module is for stack-trace and format
 | `StackFrame` | Record `{ file: String, line: Int, function: String }`. **`file`** / **`line`** come from the debug section (03 §8) when available; otherwise **`file`** may be `"?"` and **`line`** `0`. **`function`** is a placeholder (`"<unknown>"` in the reference VM) until symbol information exists. |
 | `StackTrace<T>` | Record `{ value: T, frames: List<StackFrame> }`. **`frames`** order is **innermost-first** (same order as uncaught-exception stderr lines in 05 §5). |
 
-**Formatting `StackTrace<T>`:** `format` (via `__format_one`) produces a multi-line string: one line for `format(value)`, then one line per frame, each `  at file:line\n` (two leading spaces, same shape as stderr traces). Other values use the usual polymorphic formatting rules.
+**Formatting `StackTrace<T>`:** `format` (via `KRuntime#formatOne`) produces a multi-line string: one line for `format(value)`, then one line per frame, each `  at file:line\n` (two leading spaces, same shape as stderr traces). Other values use the usual polymorphic formatting rules.
 
 ---
 

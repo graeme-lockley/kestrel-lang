@@ -258,47 +258,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
       args: [{ kind: 'app', name: 'Result', args: [tString, tString] }],
     },
   }, new Set()));
-  // Stack primitives (kestrel:stack): format one value to string, print one value
-  const formatArgT = freshVar();
-  env.set('__format_one', generalize({
-    kind: 'arrow',
-    params: [formatArgT],
-    return: tString,
-  }, new Set()));
-  const printArgT = freshVar();
-  env.set('__print_one', generalize({
-    kind: 'arrow',
-    params: [printArgT],
-    return: { kind: 'prim', name: 'Unit' },
-  }, new Set()));
-
-  const captureArgT = freshVar();
-  const stackFrameRow: InternalType = {
-    kind: 'record',
-    fields: [
-      { name: 'file', mut: false, type: tString },
-      { name: 'line', mut: false, type: tInt },
-      { name: 'function', mut: false, type: tString },
-    ],
-  };
-  env.set(
-    '__capture_trace',
-    generalize(
-      {
-        kind: 'arrow',
-        params: [captureArgT],
-        return: {
-          kind: 'record',
-          fields: [
-            { name: 'value', mut: false, type: captureArgT },
-            { name: 'frames', mut: false, type: { kind: 'app', name: 'List', args: [stackFrameRow] } },
-          ],
-        },
-      },
-      new Set()
-    )
-  );
-
   const processRetT = freshVar();
   env.set('__get_process', generalize({
     kind: 'arrow',
@@ -1519,7 +1478,19 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         const fnVar = env.get(node.name);
         if (fnVar != null) unifyWithBlame(fnVar, fnType, node);
         const appliedFnType = apply(fnType);
-        const scheme = generalize(appliedFnType, envFreeVars());
+        // Remove self from env before computing envFreeVars so that this function's type
+        // variable does not prevent its own type params from being generalized (mirrors FunDecl).
+        env.delete(node.name);
+        const envForGen = envFreeVars();
+        // Explicit type params must always be quantified even if their vars appear elsewhere
+        // in the environment (mirrors the FunDecl treatment of typeParams).
+        if (node.typeParams) {
+          for (const tp of node.typeParams) {
+            const tv = sigScope.get(tp);
+            if (tv?.kind === 'var') envForGen.delete(tv.id);
+          }
+        }
+        const scheme = generalize(appliedFnType, envForGen);
         env.set(node.name, scheme);
       } else if (node.kind === 'TypeDecl') {
         // Opaque types from the current module are fully accessible within that module
