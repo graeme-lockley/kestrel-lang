@@ -1,53 +1,58 @@
-// Comprehensive test validating await behavior across all contexts
-// This test validates the user's three questions:
-// 1. Do tests exist for await errors in non-async functions?
-// 2. Can top-level await work?
-// 3. All documentation updated correctly?
+// Runtime behavioral tests for await semantics.
+// Compile-time rejection tests (await in non-async contexts) live in
+// tests/conformance/typecheck/invalid/.
 
 import { Suite, group, eq, isTrue } from "kestrel:test"
 
-// Helper: async function that returns a value
+// --- Helpers ---
+
 async fun asyncAdd(a: Int, b: Int): Task<Int> = a + b
 
-// Test 2: Non-async lambda cannot use await (answers user question #1 - error case)
-// This should fail to compile:
-// val badLambda = (x: Int) => await asyncAdd(x, 10);
-// ✓ Correctly rejected by type checker per updated specs
+async fun asyncMul(a: Int, b: Int): Task<Int> = a * b
 
-// Test 3: Async helper function can use await
-async fun goodAsyncHelper(x: Int): Task<Int> = await asyncAdd(x, 10)
+// Async helper that itself uses await
+async fun asyncAddTen(x: Int): Task<Int> = await asyncAdd(x, 10)
+
+// Chained: awaits two tasks and combines
+async fun asyncSumPair(a: Int, b: Int): Task<Int> = {
+  val x = await asyncAdd(a, 1);
+  val y = await asyncAdd(b, 2);
+  x + y
+}
+
+// Exception in async context
+export exception AsyncTestError
+
+async fun asyncFail(msg: String): Task<Int> = throw AsyncTestError
+
+// Try/catch over an awaited failing task
+async fun asyncCatch(): Task<Int> =
+  try { await asyncFail("boom") }
+  catch { AsyncTestError => -1 }
 
 export async fun run(s: Suite): Task<Unit> = {
-  val asyncAddResult = await asyncAdd(5, 3);
-  val helperResult = await goodAsyncHelper(10);
+  val addResult        = await asyncAdd(5, 3)
+  val mulResult        = await asyncMul(4, 6)
+  val helperResult     = await asyncAddTen(10)
+  val chainResult      = await asyncSumPair(5, 7)
+  val caughtResult     = await asyncCatch()
 
   group(s, "await behavior validation", (sg: Suite) => {
-    // Question 1: Error tests exist for non-async await
-    group(sg, "Question 1: Non-async await rejected", (s1: Suite) => {
-      // The compiler rejects (x) => await asyncFun(x)
-      // Proof: tests/conformance/typecheck/invalid/await_in_non_async_lambda.ks exists
-      isTrue(s1, "non-async lambda await is type error (conformance test exists)", 1 == 1);
+    group(sg, "basic await results", (s1: Suite) => {
+      eq(s1, "asyncAdd 5+3", addResult, 8);
+      eq(s1, "asyncMul 4*6", mulResult, 24)
     });
 
-    // Question 2: Top-level await is rejected
-    group(sg, "Question 2: Top-level await rejected", (s2: Suite) => {
-      eq(s2, "await works inside async run", asyncAddResult, 8);
-      isTrue(s2, "conformance invalid case exists for await outside async", 1 == 1);
+    group(sg, "async helper using await", (s2: Suite) => {
+      eq(s2, "asyncAddTen(10)", helperResult, 20)
     });
 
-    // Question 3: Documentation updated correctly
-    group(sg, "Question 3: Documentation accuracy", (s3: Suite) => {
-      isTrue(s3, "specs document await at top-level", 1 == 1);
-      isTrue(s3, "specs document await in async fun", 1 == 1);
-      isTrue(s3, "specs document await in async contexts", 1 == 1);
-      isTrue(s3, "specs document await rejected in non-async lambda", 1 == 1);
-      isTrue(s3, "all 5 doc locations updated (01-language, 06-typesystem x2, 08-tests, guide)", 1 == 1);
+    group(sg, "chained await in async body", (s3: Suite) => {
+      eq(s3, "asyncSumPair(5,7) = (5+1)+(7+2)", chainResult, 15)
     });
 
-    // Feature: Async helpers work
-    group(sg, "Feature: Async helpers", (s4: Suite) => {
-      eq(s4, "async helper with await", helperResult, 20);
-      isTrue(s4, "10 + 10 = 20", helperResult == 20);
+    group(sg, "try/catch over awaited failing task", (s4: Suite) => {
+      eq(s4, "caught async exception returns -1", caughtResult, -1)
     });
   });
   ()
