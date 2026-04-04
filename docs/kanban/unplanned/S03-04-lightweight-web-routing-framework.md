@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E03 HTTP and Networking Platform](../epics/unplanned/E03-http-and-networking-platform.md)
-- Companion stories: 60, 68, 69
+- Companion stories: S03-01, S03-05, S03-06, S03-03
 
 ## Summary
 
@@ -21,10 +21,10 @@ Add a **small, opinionated** standard library module (working name **`kestrel:we
 
 ## Relationship to other stories
 
-- **Depends on** sequence **60** (`kestrel:http` server path: `createServer`, `listen`, `Request`/`Response`).
-- **Soft dependency** on sequence **69** if handlers need rich **response** helpers (status, JSON body) that align with client types—**planned** should order **70** after **60** minimum, and after **69** if shared **Response** builders are required.
-- **Depends on** sequence **59** indirectly through **60** (async server).
-- **Independent of** sequence **68** (`kestrel:socket`) unless the framework later supports **WebSockets** (out of scope unless added as a follow-up).
+- **Depends on S03-06** (`kestrel:http` server path: `createServer`, `listen`, `Request`/`Response`).
+- **Soft dependency on S03-03** if handlers need rich response helpers (status, JSON body) that align with client types.
+- **Independent of S03-02** (`kestrel:socket`) unless WebSockets are added (out of scope).
+- **S03-05** is indirectly useful for writing E2E tests (use `get` to hit the routing server).
 
 ## Goals
 
@@ -53,8 +53,42 @@ Normative and supporting docs for a consistent solution:
 
 ## Risks / Notes
 
-- **Scope creep:** Sinatra has many features (templates, sessions, middleware stacks). **70** should stay **lightweight**; defer templates/sessions to future stories and say so in **02**.
+- **Scope creep:** Sinatra has many features (templates, sessions, middleware stacks). S03-04 must stay **lightweight**; defer templates/sessions to future stories and say so in **02**.
 - **Type system:** Path params may require **string** extraction only in v1; typed path segments are a possible follow-up.
 - **Performance:** Pure-Kestrel routing is fine for small services; document **O(n)** vs trie trade-offs if relevant.
-- **Name collision:** If **`kestrel:web`** is reserved before implementation, document in **07** as **future stdlib** or implement immediately—avoid half-reserved names.
-- Detailed **Tasks**, **Tests to add**, and **Documentation and specs to update** belong in **`planned/`** when promoted.
+- **Name collision:** If **`kestrel:web`** is reserved before implementation, document in **07** as **future stdlib** or implement immediately — avoid half-reserved names.
+
+## Tests to add
+
+### Kestrel unit tests (`tests/unit/web-routing.test.ks` or `stdlib/kestrel/web.test.ks`)
+
+| Test name | What it does |
+|-----------|---------------|
+| `GET route matches exact path` | Registers `GET /hello`; fires a synthetic request; asserts handler called and response status 200 |
+| `POST route matches exact path` | Registers `POST /submit`; fires POST; asserts correct handler called |
+| `Method mismatch returns 405` | Registers only `GET /foo`; fires `POST /foo`; asserts status 405 (or documented default) |
+| `Unmatched path returns 404` | No route for `/missing`; asserts status 404 |
+| `Path parameter extracted correctly` | Registers `GET /user/:id`; fires `GET /user/42`; asserts handler receives `id = "42"` |
+| `Trailing slash treated per spec` | Registers `/foo`; fires `/foo/`; asserts documented match or 404 behaviour |
+| `Before-filter runs before handler` | Registers a before-filter that appends to a mutable list; asserts filter ran before handler |
+
+### E2E scenarios
+
+| File | What it tests | How |
+|------|---------------|-----|
+| `tests/e2e/scenarios/positive/web-router-basic.ks` | Multi-route server with GET and POST | Starts a router on `127.0.0.1:0`; uses `kestrel:http`'s `get` to hit `GET /hello` (asserts `"Hello"`) and a `POST /echo` route (asserts echoed body); shuts down cleanly |
+| `tests/e2e/scenarios/positive/web-router-path-param.ks` | Path parameter extraction | Registers `GET /greet/:name`; calls `http://127.0.0.1:<port>/greet/World`; asserts response is `"Hello World"` |
+| `tests/e2e/scenarios/positive/web-router-404.ks` | Default 404 behaviour | Calls an unregistered path; asserts status is 404 |
+
+### Vitest (`compiler/test/`)
+
+| File | Intent |
+|------|--------|
+| `compiler/test/unit/web-router.test.ts` | `kestrel:web` module resolves; `Router`, `Route` types and registration functions typecheck |
+| `compiler/test/integration/web-router.test.ts` | Pure-Kestrel router implementation compiles with no new primitives; no `extern fun` additions expected |
+
+## Documentation and specs to update
+
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — New §`kestrel:web` (or chosen name): types (`Router`, `Route`, etc.); registration functions (`get`, `post`, etc.); path parameter syntax; default 404/405 behaviour; interaction with `kestrel:http` `Request`/`Response`; scope limitations (no templates, sessions, WebSockets).
+- [ ] [docs/specs/07-modules.md](../../specs/07-modules.md) — §4.2: add `kestrel:web` to the stdlib specifier list with cross-reference to **02**.
+- [ ] [docs/specs/08-tests.md](../../specs/08-tests.md) — Extend stdlib coverage rules to include `kestrel:web` where harness tests are expected.

@@ -44,6 +44,39 @@ The AST-level overrides (`overrideMap`) are applied correctly when generating `E
 - [ ] `cd compiler && npm test` passes.
 - [ ] `./scripts/kestrel test` passes.
 
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `compiler/src/compile-file-jvm.ts` | `expandExternImports`: add `typeToString` helper; build `stringOverrideMap` from `overrideMap` by looking up each override's method in `meta` to determine if receiver should be stripped from params |
+| `compiler/test/integration/extern-import.test.ts` | Add test confirming override appears in sidecar with correct signature |
+| `docs/specs/01-language.md` | Note that sidecar reflects effective (overridden) signatures |
+
+## Tasks
+
+- [x] Add `typeToString(t: Type): string` helper in `compile-file-jvm.ts` to convert AST Type → Kestrel source string
+- [x] Populate `stringOverrideMap` from `overrideMap` before calling `generateStubs`: for each override, look up the method in `meta.methods` to determine if it's an instance method; if so, skip the first param (receiver) when building `kestrelParams`; convert all types with `typeToString`
+- [x] Add integration test: `extern import "java:java.lang.StringBuilder" as SB { fun append(instance: SB, p0: String): SB }` → sidecar shows `extern fun append(instance: SB, p0: String): SB`, not auto-generated form
+- [x] Update `docs/specs/01-language.md` — note sidecar reflects overridden signatures
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest integration | `compiler/test/integration/extern-import.test.ts` | Sidecar for `extern import` with override block shows the override signature for overridden methods and auto-generated for others |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/01-language.md` — `extern import` description: add note that sidecar reflects effective (overridden) signatures
+
+## Build notes
+
+- 2026-04-04: Added `typeToString` helper in `compile-file-jvm.ts` to convert AST `Type` nodes to Kestrel source strings. Handles `PrimType`, `IdentType`, `QualifiedType`, `AppType`, `ArrowType`, `TupleType`, `UnionType`; falls back to `'Any'` for complex/unsupported types.
+- 2026-04-04: Populated `stringOverrideMap` from `overrideMap` before `generateStubs` call. Instance methods: drop first param (receiver) since `generateStubs` adds it via `receiverType`. Method lookup uses `jvmMethodName` or `new${alias}` for constructors to determine isInstance.
+- 2026-04-04: All 314 compiler tests pass.
+
 ## Spec References
 
 - `docs/specs/01-language.md` — `extern import` description; note that the sidecar reflects effective (overridden) signatures.

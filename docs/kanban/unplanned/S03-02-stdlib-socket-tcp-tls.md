@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E03 HTTP and Networking Platform](../epics/unplanned/E03-http-and-networking-platform.md)
-- Companion stories: 60, 69, 70
+- Companion stories: S03-01, S03-05, S03-06, S03-03
 
 ## Summary
 
@@ -55,8 +55,40 @@ Normative updates required for a consistent end state (this story is not complet
 
 ## Risks / Notes
 
-- **Ordering:** Implementing **68** before **59** risks duplicating TLS/TCP work; prefer **shared internal layer** or implement **68** after the first **60** vertical slice that already owns sockets.
-- **TLS in tests:** Certificate fixtures, trust stores, and CI headless environments differ between macOS/Linux and JVM; plan deterministic local certs or mock server in **planned** phase.
+- **Ordering:** S03-02 depends on S03-01 (type shapes and concurrency model established); implementation can proceed in parallel with S03-05/S03-06 but shares no internal code with them.
+- **TLS in tests:** Integration tests connect to real public endpoints (`example.com:443`) to exercise the JDK TLS stack; do not rely solely on self-signed certs for the HTTPS path.
 - **Semantics:** JVM implementation edge cases (half-close, timeout granularity, DNS); **02** should mark behaviour **implementation-defined** where needed.
 - **Security:** Raw sockets increase attack surface for user code; document that servers must not run with elevated trust without host hardening.
-- Detailed **Tasks**, **Tests to add**, and **Documentation and specs to update** checklists belong in **`planned/`** when this story is promoted.
+
+## Tests to add
+
+### Kestrel unit tests (`stdlib/kestrel/socket.test.ks`)
+
+| Test name | What it does |
+|-----------|---------------|
+| `TCP connect to example.com:80 succeeds` | Opens a plain TCP socket to `example.com:80`, sends a minimal HTTP/1.0 GET, reads at least one byte, closes — asserts no Task failure |
+| `TCP connect to closed port fails` | Connects to `127.0.0.1:1` (expected closed), asserts Task failure with connection-refused error |
+| `TLS connect to example.com:443 succeeds` | Opens a TLS socket to `example.com:443`, sends a minimal request, reads a response, closes — asserts no Task failure and that the TLS handshake succeeded (no exception) |
+| `socket write and read round-trip` | Starts a local `ServerSocket` listener, connects from a client socket, writes bytes, reads them back, asserts round-trip equality |
+| `socket close releases resource` | Connects, closes, confirms further reads return a documented error / empty |
+
+### E2E scenarios
+
+| File | Endpoint | Assertion |
+|------|----------|-----------|
+| `tests/e2e/scenarios/positive/socket-tcp-connect.ks` | `example.com:80` | Plain TCP connect, send HTTP/1.0 GET /, receive status line starting with `HTTP/` |
+| `tests/e2e/scenarios/positive/socket-tls-connect.ks` | `example.com:443` | TLS connect, send HTTP/1.1 GET /, receive response containing `200` or `301` |
+
+### Vitest (`compiler/test/`)
+
+| File | Intent |
+|------|--------|
+| `compiler/test/unit/socket.test.ts` | `kestrel:socket` module resolves; public types and functions typecheck |
+| `compiler/test/integration/socket.test.ts` | `extern type`/`extern fun` bindings for `java.net.Socket`/`ServerSocket`/`SSLSocket` compile; no `__socket_*` dispatch |
+
+## Documentation and specs to update
+
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — New §`kestrel:socket`: types (`Socket`, `ServerSocket`, `TlsSocket`), functions (connect, listen/bind, accept, send, receive, close), `Task` semantics, error/closure behaviour, TLS defaults (system trust store, no hostname override without explicit opt-in), implementation-defined corners.
+- [ ] [docs/specs/07-modules.md](../../specs/07-modules.md) — §4.2: add `kestrel:socket` to the stdlib specifier list with cross-reference to §`kestrel:socket` in **02**.
+- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — §Socket I/O: owned handles, virtual-thread blocking semantics, resource lifetime and close semantics.
+- [ ] [docs/specs/08-tests.md](../../specs/08-tests.md) — Extend stdlib coverage rules to include `kestrel:socket`.

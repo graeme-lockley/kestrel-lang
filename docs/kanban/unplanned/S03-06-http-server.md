@@ -73,14 +73,37 @@ Implement `createServer`, `listen`, `queryParam`, and `requestId` in `stdlib/kes
 
 ## Tests to add
 
-| Layer | Path / mechanism | Intent |
-|-------|------------------|--------|
-| **Kestrel unit** | `stdlib/kestrel/http.test.ks` | `queryParam` last-wins; missing key → `None`; `requestId` uniqueness |
-| **E2E** | `tests/e2e/scenarios/positive/` | Server start → request → response; clean shutdown |
-| **Vitest** | `compiler/test/unit/` | `createServer`/`listen`/`queryParam`/`requestId` typecheck correctly |
+### Kestrel unit tests (`stdlib/kestrel/http.test.ks`)
+
+| Test name | What it does |
+|-----------|--------------|
+| `queryParam returns Some for present key` | Parses `?foo=bar` from a mocked URI string, asserts `Some("bar")` |
+| `queryParam returns None for absent key` | Parses `?foo=bar`, queries `"baz"`, asserts `None` |
+| `queryParam last-wins for duplicate keys` | Parses `?k=first&k=second`, asserts `Some("second")` |
+| `queryParam handles empty query string` | Parses `/path` (no `?`), asserts `None` |
+| `queryParam decodes percent-encoded values` | Parses `?q=hello%20world`, asserts `Some("hello world")` |
+| `requestId is unique across two requests` | Starts a server, fires two requests, asserts the two IDs differ |
+
+### E2E scenarios
+
+| File | What it tests | How |
+|------|---------------|-----|
+| `tests/e2e/scenarios/positive/http-server-hello.ks` | `createServer` + `listen` + plain text response | Starts server on `127.0.0.1:0` (OS-assigned port), uses `kestrel:http`'s `get` to call `http://127.0.0.1:<port>/hello`, asserts response body is `"hello"` and status is 200 |
+| `tests/e2e/scenarios/positive/http-server-query.ks` | `queryParam` end-to-end | Server handler reads `queryParam(req, "name")`, responds `"hello <name>"`; client calls `http://127.0.0.1:<port>/?name=world`; asserts body is `"hello world"` |
+| `tests/e2e/scenarios/positive/http-server-not-found.ks` | Unregistered path returns 404 | Server registers only `/ok`; client calls `/missing`; asserts status 404 |
+
+> **Note:** These E2E tests exercise the full round-trip locally. The `get` client from S03-05 is used as the in-test client; if S03-05 is not yet done, use a Java `HttpURLConnection` fixture in the test harness.
+
+### Vitest (`compiler/test/`)
+
+| File | Intent |
+|------|--------|
+| `compiler/test/unit/http-server.test.ts` | `createServer`, `listen`, `queryParam`, `requestId` resolve and typecheck; `createServer` parameter type is `(Request) -> Task<Response>` |
+| `compiler/test/integration/http-server.test.ts` | `extern type`/`extern fun` bindings for `JHttpServer`/`JHttpExchange` in `http.ks` compile; codegen emits correct JVM instructions |
 
 ## Documentation and specs to update
 
-- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — Confirm `createServer`, `listen`, `queryParam`, `requestId` sections match implementation.
-- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — Server concurrency model (virtual thread per request); handler lifecycle and exchange close semantics.
-- [ ] [docs/specs/09-tools.md](../../specs/09-tools.md) — Document `--add-modules jdk.httpserver` JVM flag if added to `scripts/kestrel`.
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — §`kestrel:http`: confirm `createServer`, `listen`, `queryParam`, `requestId` match implementation; document: server is HTTP-only (no TLS); handler receives `Request` wrapping `HttpExchange`; handler must return a `Response`; `listen` `Task<Unit>` resolves when server stops; default `host` should be `127.0.0.1` in examples.
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — Document `queryParam` duplicate-key rule (last occurrence wins) and percent-decoding behaviour.
+- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — §`HTTP server concurrency model`: one virtual thread per request via Java 21 executor; `HttpExchange` lifecycle (open for handler duration; closed by framework after handler returns); no re-entrancy guarantee.
+- [ ] [docs/specs/09-tools.md](../../specs/09-tools.md) — If `--add-modules jdk.httpserver` is added to `scripts/kestrel`, document the flag and the reason.

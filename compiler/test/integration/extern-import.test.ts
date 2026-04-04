@@ -221,3 +221,41 @@ describe('extern import: unsupported scheme error', () => {
     }
   });
 });
+
+describe('extern import: sidecar reflects user overrides', () => {
+  it('sidecar shows overridden signature for overridden method and auto-generated for others', () => {
+    const tmpDir = join(compilerRoot, 'test', 'integration', '_tmp_extern_import_override_sidecar');
+    mkdirSync(tmpDir, { recursive: true });
+    const srcPath = join(tmpDir, 'TestOverrideSidecar.ks');
+
+    // Override 'append' to use a concrete SB type instead of auto-generated _T0
+    writeFileSync(srcPath, `
+extern import "java:java.lang.StringBuilder" as SB {
+  fun append(instance: SB, p0: String): SB
+}
+fun main(): Unit = println("override sidecar test")
+`);
+    try {
+      const result = compileFileJvm(srcPath, {
+        projectRoot: kestrelRoot,
+        stdlibDir,
+        getClassOutputDir: () => tmpDir,
+      });
+      if (!result.ok) {
+        console.error('Compile errors:', result.diagnostics.map((d) => d.message).join('\n'));
+      }
+      expect(result.ok).toBe(true);
+
+      const sidecarPath = join(tmpDir, 'SB.extern.ks');
+      expect(existsSync(sidecarPath)).toBe(true);
+      const content = readFileSync(sidecarPath, 'utf-8');
+
+      // The overridden 'append' should show the user-provided signature
+      expect(content).toContain('extern fun append(instance: SB, p0: String): SB');
+      // The non-overridden 'toString' should still be auto-generated (returns String)
+      expect(content).toContain('extern fun toString(instance: SB): String');
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+});

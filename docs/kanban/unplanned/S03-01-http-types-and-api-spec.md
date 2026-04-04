@@ -51,6 +51,22 @@ Design and document the complete `kestrel:http` public API in `docs/specs/02-std
 - [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — concurrency model for HTTP server.
 - [docs/specs/07-modules.md](../../specs/07-modules.md) — confirm `kestrel:http` is listed in the stdlib specifier table.
 
+## Tests to add
+
+| Layer | Path / mechanism | Intent |
+|-------|------------------|--------|
+| **Vitest** | `compiler/test/unit/http-types.test.ts` | `Server`, `Request`, `Response` opaque type stubs in `http.ks` resolve and typecheck; `nowMs` signature unchanged |
+| **Vitest** | `compiler/test/integration/http-module.test.ts` | `import * as Http from "kestrel:http"` resolves without error; all exported names are present |
+| **Conformance typecheck** | `tests/conformance/typecheck/http-types.ks` | `createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, `nowMs` all typecheck against the declared signatures |
+
+No runtime or E2E tests are added in this story — only spec and stub work.
+
+## Documentation and specs to update
+
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — §`kestrel:http`: write full normative text for all seven functions (`createServer`, `listen`, `get`, `bodyText`, `queryParam`, `requestId`, `nowMs`); document `Server`, `Request`, `Response` type shapes; queryParam duplicate-key rule (last wins); server HTTP-only; `get` http+https; TLS defaults (system trust store, SNI on, TLS 1.2 minimum); error semantics (network failure = `Task` failure; non-2xx = successful `Task`).
+- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — Add §`HTTP server concurrency model`: one virtual thread per accepted request via Java 21 executor; handler lifecycle (exchange open for handler duration); no re-entrancy guarantee.
+- [ ] [docs/specs/07-modules.md](../../specs/07-modules.md) — Confirm `kestrel:http` is present in the stdlib specifier table; add a note that `Server`, `Request`, `Response` are opaque types backed by JDK classes.
+
 ## Risks / Notes
 
 - **Spec decisions are load-bearing:** S03-05 and S03-06 will implement against whatever this story decides without renegotiation. Make conservative, JDK-stable choices. Avoid exotic JDK preview APIs.

@@ -77,7 +77,23 @@ function makeJavaTypeMapper(): { map: (javaType: string) => Type; typeParams: st
 }
 
 /**
- * Expand all ExternImportDecl nodes in the program body into concrete
+ * Convert an AST Type node to a Kestrel source-level type string.
+ * Used for rendering override signatures in sidecar files.
+ */
+function typeToString(t: Type): string {
+  switch (t.kind) {
+    case 'PrimType': return t.name;
+    case 'IdentType': return t.name;
+    case 'QualifiedType': return `${t.namespace}.${t.name}`;
+    case 'AppType': return `${t.name}<${t.args.map(typeToString).join(', ')}>`;
+    case 'ArrowType': return `(${t.params.map(typeToString).join(', ')}) -> ${typeToString(t.return)}`;
+    case 'TupleType': return `(${t.elements.map(typeToString).join(', ')})`;
+    case 'UnionType': return `${typeToString(t.left)} | ${typeToString(t.right)}`;
+    default: return 'Any';
+  }
+}
+
+/**
  * ExternTypeDecl + ExternFunDecl nodes.  Returns the updated body, a map of
  * alias → sidecar content (for .extern.ks file emission), and any diagnostics.
  */
@@ -155,8 +171,23 @@ function expandExternImports(
     }
 
     // Generate stubs (string-based, for sidecar)
+    // Build stringOverrideMap by converting AST overrides to the string form expected by generateStubs.
+    // For instance methods, drop the first param (the receiver) since generateStubs adds it automatically.
     const stringOverrideMap = new Map<string, { params: Array<{ name: string; type: string }>; returnType: string }>();
-    // (sidecar always uses auto-generated types — no overrides shown)
+    for (const [overrideName, ov] of overrideMap.entries()) {
+      // Look up the method in meta to determine if it's an instance method
+      const method = meta.methods.find(
+        (m) => m.jvmMethodName === overrideName ||
+          (m.isConstructor && `new${alias}` === overrideName)
+      );
+      const isInstance = method ? (!method.isStatic && !method.isConstructor) : false;
+      // Drop the receiver (first param) for instance methods — generateStubs adds it automatically
+      const paramsForSidecar = isInstance ? ov.params.slice(1) : ov.params;
+      stringOverrideMap.set(overrideName, {
+        params: paramsForSidecar.map((p) => ({ name: p.name, type: p.type ? typeToString(p.type) : 'Any' })),
+        returnType: typeToString(ov.returnType),
+      });
+    }
     const stubs = generateStubs(meta, alias, stringOverrideMap);
     const sidecarContent = renderExternKs(meta, alias, stubs);
     sidecars.set(alias, sidecarContent);

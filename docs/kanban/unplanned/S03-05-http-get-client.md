@@ -69,12 +69,34 @@ Implement `get(url)` and `bodyText(response)` in `stdlib/kestrel/http.ks` using 
 
 ## Tests to add
 
-| Layer | Path / mechanism | Intent |
-|-------|------------------|--------|
-| **Kestrel unit** | `stdlib/kestrel/http.test.ks` | Body extraction, status code readable |
-| **E2E** | `tests/e2e/scenarios/positive/` | `get` over HTTP; `get` over HTTPS (or documented skip) |
-| **Vitest** | `compiler/test/unit/` | `http.ks` resolves; `get`/`bodyText` typecheck |
+### Kestrel unit tests (`stdlib/kestrel/http.test.ks`)
+
+| Test name | What it does |
+|-----------|--------------|
+| `get returns 200 status for http://httpbin.org/status/200` | Calls `get("http://httpbin.org/status/200")`, asserts status code is 200 |
+| `get returns 404 status for http://httpbin.org/status/404` | Calls `get("http://httpbin.org/status/404")`, asserts status code is 404 — non-2xx is **not** a Task failure |
+| `bodyText returns JSON body from http://httpbin.org/json` | Calls `get("http://httpbin.org/json")` then `bodyText`, asserts body contains `"slideshow"` |
+| `get returns 200 for https://httpbin.org/get` | Same over HTTPS — verifies TLS stack (system trust store, SNI) |
+| `get over HTTPS returns response headers` | Calls `get("https://httpbin.org/get")`, reads status code, asserts ≥ 0 |
+| `get fails for unsupported scheme` | Calls `get("ftp://example.com")`, asserts Task failure |
+
+### E2E scenarios
+
+| File | Endpoint | Assertion |
+|------|----------|-----------|
+| `tests/e2e/scenarios/positive/http-get-plain.ks` | `http://httpbin.org/status/200` | Output contains status code `200` |
+| `tests/e2e/scenarios/positive/http-get-body.ks` | `http://httpbin.org/json` | Output contains `"slideshow"` (substring match) |
+| `tests/e2e/scenarios/positive/https-get.ks` | `https://httpbin.org/get` | Output contains `"url"` (httpbin echoes the URL in JSON) |
+
+### Vitest (`compiler/test/`)
+
+| File | Intent |
+|------|--------|
+| `compiler/test/unit/http-get.test.ts` | `get` and `bodyText` resolve and typecheck; return type is `Task<Response>` / `Task<String>` |
+| `compiler/test/integration/http-get.test.ts` | `extern type`/`extern fun` bindings in `http.ks` for `JHttpClient`/`JHttpResponse` compile and codegen emits `INVOKEVIRTUAL`/`INVOKESTATIC` (no `__` dispatch) |
 
 ## Documentation and specs to update
 
-- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — Confirm `get` and `bodyText` sections match implementation; add any clarifications on error semantics.
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — §`kestrel:http`: confirm `get(url: String): Task<Response>` and `bodyText(response: Response): Task<String>` match implementation; document: http + https supported; other schemes produce `Task` failure; non-2xx is a successful `Task`; TLS defaults (system trust store, SNI on, TLS 1.2 min); body buffered in memory (size limit implementation-defined).
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — Document `Response` fields accessible after `get`: status code accessor; body via `bodyText`.
+- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — Note that `get` bridges `CompletableFuture` → `Task` via the virtual-thread executor; document the chosen approach (blocking `cf.get()` on a virtual thread vs callback).

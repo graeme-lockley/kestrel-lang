@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E03 HTTP and Networking Platform](../epics/unplanned/E03-http-and-networking-platform.md)
-- Companion stories: 60, 68, 70
+- Companion stories: S03-01, S03-05, S03-06, S03-02, S03-04
 
 ## Summary
 
@@ -41,7 +41,6 @@ Extend the standard library **beyond** the current **`kestrel:http`** contract i
 - [ ] At least **POST** with JSON body and **DELETE** documented and tested (REST-shaped E2E against a tiny local test server or harness).
 - [ ] **HTTPS** to a known endpoint or local TLS test server (aligned with **60**/TLS capabilities); behaviour documented when TLS fails.
 - [ ] The **JVM** backend implements the new surface; tests run on the JVM target.
-- [ ] **`docs/specs/04-bytecode-isa.md`** updated if new **primitive** `CALL` ids are introduced.
 
 ## Spec References
 
@@ -49,7 +48,6 @@ Normative updates for consistency when this story closes:
 
 - **`docs/specs/02-stdlib.md`** - §`kestrel:http` (and **Request/Response** shapes): add client request/response fields, method/header/body functions, and error/result semantics.
 - **`docs/specs/05-runtime-model.md`** - If response bodies are streamed or size-limited, document **resource** lifetime and cancellation (if any).
-- **`docs/specs/04-bytecode-isa.md`** - §7 primitive table for any new **`__http_*`** (or similar) ids and JVM mapping.
 - **`docs/specs/07-modules.md`** - Only if a **new** stdlib specifier is introduced instead of extending `kestrel:http`.
 - **`docs/specs/08-tests.md`** - Extend stdlib/http test expectations if the harness must cover new entry points.
 
@@ -58,5 +56,39 @@ Normative updates for consistency when this story closes:
 - **API shape:** Avoid duplicating Python `requests` complexity in v1; a small **record** for options (method, headers, body) may suffice.
 - **Large bodies:** Document max buffering or streaming stance.
 - **Redirects, cookies, HTTP/2:** Mark **out of scope** in **02** unless explicitly implemented and tested in this story.
-- **60 vs 69:** If **60** lands with only GET, **69** should not rewrite **60**'s tasks; add acceptance rows that reference both sequences during transition.
-- Detailed **Tasks**, **Tests to add**, and **Documentation and specs to update** belong in **`planned/`** when promoted.
+- **S03-05 vs S03-03:** S03-05 delivers `get` only; S03-03 extends that surface. Do not rewrite S03-05's tasks; add acceptance rows referencing both stories.
+
+## Tests to add
+
+### Kestrel unit tests (`stdlib/kestrel/http.test.ks`)
+
+| Test name | What it does |
+|-----------|---------------|
+| `POST with JSON body to https://httpbin.org/post succeeds` | Calls `request(method: "POST", url: "https://httpbin.org/post", headers: [{"Content-Type", "application/json"}], body: "{\"x\":1}")`, asserts status is 200 and response body contains `"x"` |
+| `DELETE to https://httpbin.org/delete succeeds` | Calls `request(method: "DELETE", url: "https://httpbin.org/delete")`, asserts status is 200 |
+| `PUT to https://httpbin.org/put echoes body` | Sends a JSON body, asserts the echoed `data` field matches |
+| `request headers are sent` | Calls `https://httpbin.org/headers` with a custom header `X-Kestrel-Test: hello`, asserts response body contains `"X-Kestrel-Test"` and `"hello"` |
+| `response headers are readable` | Calls `https://httpbin.org/response-headers?Content-Type=text/plain`, asserts `Content-Type` header on response is `text/plain` |
+| `non-2xx status is not a Task failure` | Calls `https://httpbin.org/status/422`, asserts status is 422 and task succeeds |
+
+### E2E scenarios
+
+| File | Endpoint | Assertion |
+|------|----------|-----------|
+| `tests/e2e/scenarios/positive/http-post.ks` | `https://httpbin.org/post` | POST with JSON body; output contains status `200` and the echoed JSON field |
+| `tests/e2e/scenarios/positive/http-delete.ks` | `https://httpbin.org/delete` | DELETE; output contains status `200` |
+| `tests/e2e/scenarios/positive/http-request-headers.ks` | `https://httpbin.org/headers` | Custom request header echoed in response body |
+
+### Vitest (`compiler/test/`)
+
+| File | Intent |
+|------|--------|
+| `compiler/test/unit/http-request.test.ts` | New `request` function (or equivalent) resolves and typechecks; request-options record type is correct |
+| `compiler/test/integration/http-request.test.ts` | `extern fun` bindings for `HttpRequest.Builder` methods (`method`, `POST`, `PUT`, `DELETE`, `header`) compile and emit correct JVM instructions |
+
+## Documentation and specs to update
+
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — §`kestrel:http`: add `request` function (or equivalent name) with method, URL, headers, optional body, returning `Task<Response>`; document response header access; confirm `get` remains valid and coexists.
+- [ ] [docs/specs/02-stdlib.md](../../specs/02-stdlib.md) — Document `Response` header-access API and note that redirects, cookies, and HTTP/2 are out of scope.
+- [ ] [docs/specs/05-runtime-model.md](../../specs/05-runtime-model.md) — Any resource-lifetime or cancellation notes for response bodies if not already covered by S03-05.
+- [ ] [docs/specs/07-modules.md](../../specs/07-modules.md) — Only if a new stdlib specifier is introduced; otherwise confirm `kestrel:http` is the single import path.
