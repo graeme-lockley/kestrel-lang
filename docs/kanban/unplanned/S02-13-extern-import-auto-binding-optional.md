@@ -40,6 +40,7 @@ Implement `extern import "java:pkg.Class" as Name { ... }` — a convenience for
    }
    ```
 5. Register the resulting `extern type` and `extern fun` stubs in the typecheck environment exactly as hand-written declarations.
+6. **Stub output file**: alongside the compiled `.class` output for the module containing the `extern import` declaration, emit `<ClassName>.extern.ks` — a generated Kestrel file that contains the full set of auto-generated stubs in valid Kestrel syntax (one file per `extern import` declaration). This file is for **inspection only**: it shows exactly what the auto-binder produced, in a form that can be copy-pasted into the override block to refine types. It is a generated artifact (never hand-edited, gitignore-able) and follows the `.kdeps` sidecar convention from S02-12.
 
 ## Acceptance Criteria
 
@@ -48,6 +49,7 @@ Implement `extern import "java:pkg.Class" as Name { ... }` — a convenience for
 - [ ] Stubs for methods using erased generic return types use `Any`.
 - [ ] The generated stubs are indistinguishable in the type environment from hand-written `extern fun` declarations.
 - [ ] A test module using `extern import` from a JDK class compiles and runs correctly.
+- [ ] `extern import "java:java.util.HashMap" as HashMap { }` emits `HashMap.extern.ks` alongside the compiled output; the file contains valid Kestrel `extern type` and `extern fun` stubs for all public methods.
 - [ ] `cd compiler && npm test` passes.
 
 ## Spec References
@@ -58,5 +60,6 @@ Implement `extern import "java:pkg.Class" as Name { ... }` — a convenience for
 
 - **Complexity**: reading `.class` files requires parsing the JVM class file format or depending on a library (ASM, etc.). Adding a library dependency to the TypeScript compiler is a significant architectural decision.
 - **Generic erasure loss**: Java generics are erased in `.class` files. Auto-generated stubs cannot recover the original generic type parameters. Every erased return type becomes `Any` unless overridden. This limits the value of the auto-generation for heavily generic APIs (e.g. `Collections`, streams).
+- **Stub output file location**: emitted alongside the `.class` output for the containing module (same directory, named `<ClassName>.extern.ks`). This parallels the `.kdeps` sidecar from S02-12. The file should be added to `.gitignore` (or the build system should treat the output directory as generated). If a module has multiple `extern import` declarations, each produces its own sidecar file.
 - **Auto-generated overloads**: Java allows method overloading; Kestrel does not. If a Java class has multiple `put(K, V)` overloads, the auto-generator must either pick one, rename them, or emit `put_1`, `put_2`, etc. None of these options is clean. The override block allows the user to provide explicit bindings and rename as needed.
-- **This feature is genuinely Optional**: the only concrete value over hand-written `extern fun` declarations is reducing boilerplate when wrapping many methods. For the stdlib migrations (S02-04 through S02-10), hand-written declarations are used and are already minimal enough. Implement this story only if there is a demonstrated use case that requires it. Do not implement speculatively.
+- **This feature is genuinely Optional — but has a concrete future trigger**: the only concrete value over hand-written `extern fun` declarations is reducing boilerplate when wrapping many methods. For the stdlib migrations (S02-04 through S02-10), hand-written declarations are used and are already minimal enough. **However**, an LLVM backend investigation is the anticipated trigger that makes this story non-optional. LLVM Java bindings (e.g. Bytedeco JavaCPP LLVM, LLVM4J) expose hundreds of functions; hand-writing `extern fun` stubs for exploratory API sketching would be prohibitively tedious. `extern import` would allow rapid stub generation during exploration, with precise type overrides added progressively as the needed API surface converges. Implement this story before or alongside any LLVM backend story — not after. **Note on JavaCPP-style bindings**: Bytedeco's LLVM bindings use a pointer-wrapper model (`LLVMContextRef`, `LLVMModuleRef`, etc.). Auto-generated stubs will treat these as `Any`; explicit `extern type` declarations and inline overrides will still be needed for each pointer type of interest, but this is far less work than starting from scratch.

@@ -31,8 +31,9 @@ Implement the `maven:` import scheme: `import "maven:groupId:artifactId:version"
 
 1. **Parser/resolver**: recognise `import "maven:groupId:artifactId:version"` as a new import kind. Define `MavenImport` AST node (or extend `SideEffectImport` with a `maven` subtype). No names are brought into scope — the import is purely a classpath declaration.
 2. **Artifact resolution**: at compile time, resolve the Maven coordinates:
-   - Check a local cache directory (e.g. `~/.kestrel/maven/groupId/artifactId/version/artifact.jar`).
+   - Check a local cache directory at `~/.kestrel/maven/<groupId>/<artifactId>/<version>/<artifactId>-<version>.jar`.
    - On cache miss: download from Maven Central (`https://repo1.maven.org/maven2/...`) or a configurable repository.
+   - **Download progress**: while downloading, render an inline progress bar to stderr. Format: `  Downloading org.apache.commons:commons-lang3:3.20.0 [=====>     ] 47%`. Update in-place using ANSI cursor-up/carriage-return so multiple concurrent downloads compose cleanly. On completion replace the bar with a single-line summary: `  Downloaded org.apache.commons:commons-lang3:3.20.0 (542 KB)`. Suppress progress when stderr is not a TTY (pipes, CI with no TTY) — emit a plain single-line `Downloading ...` instead.
    - Add the resolved jar to the compiler's classpath for JVM descriptor resolution in the current file.
 3. **`.kdeps` sidecar emission**: after compiling a file that contains `maven:` imports, write a `<outputFile>.kdeps` JSON file:
    ```json
@@ -54,7 +55,9 @@ Implement the `maven:` import scheme: `import "maven:groupId:artifactId:version"
 ## Acceptance Criteria
 
 - [ ] `import "maven:org.apache.commons:commons-lang3:3.20.0"` parses without error.
-- [ ] The compiler downloads and caches the jar locally on first use.
+- [ ] The compiler downloads and caches the jar to `~/.kestrel/maven/` on first use.
+- [ ] A download in progress renders an inline progress bar to stderr (percentage + bar); on completion it collapses to a single summary line.
+- [ ] When stderr is not a TTY, a plain `Downloading ...` line is emitted instead.
 - [ ] An `extern fun` descriptor in the same file can reference classes from the downloaded jar.
 - [ ] Compiling a file with `maven:` imports produces a `.kdeps` sidecar alongside the `.class` output.
 - [ ] `kestrel run` with a two-module program whose `.kdeps` files conflict reports the conflict clearly and exits with a non-zero code before running the program.
@@ -77,5 +80,5 @@ Implement the `maven:` import scheme: `import "maven:groupId:artifactId:version"
 - **Maven Central availability**: if Maven Central is unreachable, the build must fail with a clear error, not a cryptic connection timeout. Provide a `--offline` flag to skip download and fail fast on cache miss.
 - **Version resolution is NOT performed**: this story implements *conflict detection* (two modules disagreeing on the version of the same artifact), not *version resolution* (picking the higher version automatically). Automatic resolution is out of scope — the fix is always "edit the source file."
 - **Transitive Maven dependencies**: the `maven:` import specifies a single artifact. That artifact may itself have Maven transitive dependencies. Resolving transitive deps requires a POM parser and conflict graph, which is far more complex. For the initial implementation: resolve only the directly-specified artifact and its direct compile-scope deps listed in its POM, or simply require the user to list all required jars explicitly if transitive deps are needed.
-- **Cache location**: `~/.kestrel/maven/` is a natural default. This should be configurable via an environment variable (`KESTREL_MAVEN_CACHE`) for CI and hermetic build environments.
+- **Cache location**: `~/.kestrel/maven/<groupId>/<artifactId>/<version>/` mirrors the standard Maven local repository layout, making it familiar and easy to inspect manually. Configurable via `KESTREL_MAVEN_CACHE` environment variable for CI and hermetic build environments. The full path matches `~/.kestrel/maven/org/apache/commons/commons-lang3/3.20.0/commons-lang3-3.20.0.jar`.
 - **`.kdeps` is generated, not committed**: add `*.kdeps` to `.gitignore` recommendations. These files are build artifacts.
