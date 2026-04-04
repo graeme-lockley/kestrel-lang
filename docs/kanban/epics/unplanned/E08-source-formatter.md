@@ -61,7 +61,7 @@ Because the formatter is the first major developer tool, this epic begins with e
 | `kestrel:dev/stack` | Stack trace (debug) | `stdlib/kestrel/dev/stack.ks` | `kestrel:stack` |
 | `kestrel:dev/cli` | CLI argument parser and self-description library | `stdlib/kestrel/dev/cli.ks` | *(new)* |
 | `kestrel:dev/parser` | Lexer + AST + parser (single module) | `stdlib/kestrel/dev/parser.ks` | *(new)* |
-| `kestrel:dev/doc` | Wadler–Lindig Doc IR | `stdlib/kestrel/dev/doc.ks` | *(new)* |
+| `kestrel:dev/text/prettyprinter` | Wadler–Lindig Doc IR | `stdlib/kestrel/dev/text/prettyprinter.ks` | *(new)* |
 | `kestrel:tools/test` | Test framework + runner | `stdlib/kestrel/tools/test.ks` | `kestrel:test` |
 | `kestrel:tools/format` | Source formatter | `stdlib/kestrel/tools/format.ks` | *(new)* |
 
@@ -70,7 +70,7 @@ Because the formatter is the first major developer tool, this epic begins with e
 - **`kestrel:data/*`** — pure, stateless modules: data structures, algorithms, type utilities. No I/O.
 - **`kestrel:io/*`** — effectful modules that communicate with the outside world: console, filesystem, network.
 - **`kestrel:sys/*`** — system-level concerns: processes, concurrency, runtime error types.
-- **`kestrel:dev/*`** — infrastructure for working with Kestrel source code; not end-user-visible, consumed by tools. Includes `kestrel:dev/cli` (CLI argument parsing and self-description), `kestrel:dev/parser` (single flat module exporting everything needed to lex and parse Kestrel), `kestrel:dev/doc` (Wadler–Lindig Doc IR), and `kestrel:dev/stack` (debug stack traces).
+- **`kestrel:dev/*`** — infrastructure for working with Kestrel source code; not end-user-visible, consumed by tools. Includes `kestrel:dev/cli` (CLI argument parsing and self-description), `kestrel:dev/parser` (single flat module exporting everything needed to lex and parse Kestrel), `kestrel:dev/text/prettyprinter` (Wadler–Lindig Doc IR), and `kestrel:dev/stack` (debug stack traces).
 - **`kestrel:tools/*`** — user-facing tools. Each tool module has a `cli.ks` that declares its `CliSpec` and exports `main : List<String> -> Task<Int>`. The `kestrel:dev/cli` library provides argument parsing and automatic `--help`/`--version` rendering from the spec.
 
 #### Resolver change
@@ -142,20 +142,21 @@ Example — the formatter's `cli.ks` sketch:
 import { CliSpec, CliOption, CliArg, Flag, run } from "kestrel:dev/cli"
 
 let spec : CliSpec =
-  { name        = "format"
-  , version     = "0.1.0"
-  , description = "Opinionated Kestrel source code formatter"
-  , usage       = "kestrel fmt [options] [files...]"
-  , options     =
-      [ { long = "check", short = None
-        , description = "Exit non-zero if any file is not formatted; do not modify files"
-        , kind = Flag }
-      , { long = "stdin", short = None
-        , description = "Read from stdin, write to stdout"
-        , kind = Flag }
-      ]
-  , args        =
-      [ { name = "files", description = "Kestrel source files to format", variadic = True } ]
+  { name        = "format",
+    version     = "0.1.0",
+    description = "Opinionated Kestrel source code formatter",
+    usage       = "kestrel fmt [options] [files...]",
+    options     =
+      [ { long = "check", short = None,
+          description = "Exit non-zero if any file is not formatted; do not modify files",
+          kind = Flag },
+        { long = "stdin", short = None,
+          description = "Read from stdin, write to stdout",
+          kind = Flag },
+      ],
+    args =
+      [ { name = "files", description = "Kestrel source files to format", variadic = True },
+      ],
   }
 
 fun main(args: List<String>) : Task<Int> =
@@ -207,7 +208,7 @@ New tools are added by creating a `kestrel:tools/X` module with a `cli.ks` — n
 kestrel:tools/format
   ├── import kestrel:dev/cli     → CliSpec, run (cli.ks convention)
   ├── import kestrel:dev/parser    → Token, AST types, lex, parse
-  ├── import kestrel:dev/doc       → Doc IR, pretty
+  ├── import kestrel:dev/text/prettyprinter       → Doc IR, pretty
   └── import kestrel:io/fs / kestrel:io/console  → I/O
 ```
 
@@ -215,7 +216,7 @@ kestrel:tools/format
 2. Lex → `List<Token>` via `kestrel:dev/parser` `lex`.
 3. Parse → `Program` AST via `kestrel:dev/parser` `parse`.
 4. Translate AST → `Doc` (declaration and expression formatters).
-5. Render `Doc` at 120 columns via `kestrel:dev/doc` `pretty`.
+5. Render `Doc` at 120 columns via `kestrel:dev/text/prettyprinter` `pretty`.
 6. Write result back to file (or stdout).
 
 ### Formatting rules (opinionated)
