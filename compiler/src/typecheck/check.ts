@@ -256,35 +256,6 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
     return: processRetT,
   }, new Set()));
 
-  env.set('__get_os', generalize({
-    kind: 'arrow',
-    params: [],
-    return: tString,
-  }, new Set()));
-
-  env.set('__get_args', generalize({
-    kind: 'arrow',
-    params: [],
-    return: { kind: 'app', name: 'List', args: [tString] },
-  }, new Set()));
-
-  env.set('__get_cwd', generalize({
-    kind: 'arrow',
-    params: [],
-    return: tString,
-  }, new Set()));
-
-  const runProcessOkVar = freshVar();
-  env.set('__run_process', generalize({
-    kind: 'arrow',
-    params: [tString, { kind: 'app', name: 'List', args: [tString] }],
-    return: {
-      kind: 'app',
-      name: 'Task',
-      args: [{ kind: 'app', name: 'Result', args: [runProcessOkVar, tString] }],
-    },
-  }, new Set()));
-
   // Task combinators (kestrel:task)
   const taskMapA = freshVar();
   const taskMapB = freshVar();

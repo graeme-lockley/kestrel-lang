@@ -180,6 +180,10 @@ Process information and subprocess execution.
 | `getProcess` | `() -> { os: String, args: List<String>, env: List<(String, String)>, cwd: String }` | Returns process metadata for the current invocation. |
 | `runProcess` | `(String, List<String>) -> Task<Result<ProcessResult, ProcessError>>` | Spawn a subprocess, capture combined stdout+stderr, and return `Ok(ProcessResult)` on completion where `exitCode` is the process exit code and `stdout` contains the captured output. Returns `Err(ProcessSpawnError(message))` when process start/execution fails. |
 
+### Implementation notes
+
+`getOs`, `getArgs`, `getCwd`, and `runProcessAsync` are `extern fun` declarations backed by `KRuntime.getOs()`, `KRuntime.getArgs()`, `KRuntime.getCwd()`, and `KRuntime.runProcessAsync(Object, Object)` static methods in the JVM runtime. `getProcess` and `runProcess` are thin wrappers over these extern funs.
+
 ---
 
 ## kestrel:task

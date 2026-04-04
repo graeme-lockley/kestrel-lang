@@ -6,10 +6,22 @@ export type ProcessError = ProcessSpawnError(String)
 
 export type ProcessResult = { exitCode: Int, stdout: String }
 
+extern fun getOs(): String =
+  jvm("kestrel.runtime.KRuntime#getOs()")
+
+extern fun getArgs(): List<String> =
+  jvm("kestrel.runtime.KRuntime#getArgs()")
+
+extern fun getCwd(): String =
+  jvm("kestrel.runtime.KRuntime#getCwd()")
+
+extern fun runProcessAsync(program: String, args: List<String>): Task<Result<ProcessResult, String>> =
+  jvm("kestrel.runtime.KRuntime#runProcessAsync(java.lang.Object,java.lang.Object)")
+
 export fun getProcess(): P = {
-  val os = __get_os();
-  val a = __get_args();
-  val c = __get_cwd();
+  val os = getOs();
+  val a = getArgs();
+  val c = getCwd();
   { os = os, args = a, env = [], cwd = c }
 }
 
@@ -18,4 +30,4 @@ fun mapProcessError(code: String): ProcessError =
   else ProcessSpawnError(code)
 
 export fun runProcess(program: String, args: List<String>): Task<Result<ProcessResult, ProcessError>> =
-  map(__run_process(program, args), (result: Result<ProcessResult, String>) => Res.mapError(result, mapProcessError))
+  map(runProcessAsync(program, args), (result: Result<ProcessResult, String>) => Res.mapError(result, mapProcessError))

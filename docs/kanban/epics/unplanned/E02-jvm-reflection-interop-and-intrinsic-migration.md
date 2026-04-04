@@ -216,7 +216,7 @@ Key properties of this example:
 6. [x] [S02-06-migrate-basics-numeric-float-time-intrinsics.md](../../done/S02-06-migrate-basics-numeric-float-time-intrinsics.md) — Migrate `basics.ks` intrinsics (9 float/numeric + `__now_ms`)
 7. [x] [S02-07-migrate-stack-format-trace-intrinsics.md](../../done/S02-07-migrate-stack-format-trace-intrinsics.md) — Migrate `stack.ks` intrinsics (`__format_one`, `__print_one`, `__capture_trace`)
 8. [x] [S02-08-migrate-fs-async-io-intrinsics.md](../../done/S02-08-migrate-fs-async-io-intrinsics.md) — Migrate `fs.ks` async I/O intrinsics (`__read_file_async`, `__list_dir`, `__write_text`)
-9. [S02-09-migrate-process-env-intrinsics.md](../../unplanned/S02-09-migrate-process-env-intrinsics.md) — Migrate `process.ks` intrinsics (`__get_os`, `__get_args`, `__get_cwd`, `__run_process`)
+9. [x] [S02-09-migrate-process-env-intrinsics.md](../../done/S02-09-migrate-process-env-intrinsics.md) — Migrate `process.ks` intrinsics (`__get_os`, `__get_args`, `__get_cwd`, `__run_process`)
 10. [S02-10-migrate-task-combinator-intrinsics.md](../../unplanned/S02-10-migrate-task-combinator-intrinsics.md) — Migrate `task.ks` task combinator intrinsics (4 `__task_*`)
 11. [S02-11-dict-rewrite-over-hashmap.md](../../unplanned/S02-11-dict-rewrite-over-hashmap.md) — `kestrel:dict` rewrite over `java.util.HashMap` (integration test vehicle)
 12. [S02-12-maven-classpath-scheme-and-kdeps-sidecars.md](../../unplanned/S02-12-maven-classpath-scheme-and-kdeps-sidecars.md) — `maven:` classpath declaration scheme + `.kdeps` conflict detection

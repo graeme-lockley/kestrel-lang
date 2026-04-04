@@ -80,3 +80,34 @@ map(__run_process(program, args), ...)
 - **`__get_args()` return type**: `KRuntime.getArgs()` returns a `KList` (which is Kestrel `List<String>`). The `extern fun` declares `List<String>` as the return type. No checkcast is needed — `KList` IS the runtime representation of `List<T>`. The codegen emits `invokestatic KRuntime.getArgs()Lkestrel/runtime/KList;`... but wait, the current codegen uses `()Lkestrel/runtime/KList;` — we need to verify whether `extern fun` codegen emits the correct descriptor when return type is `List<String>` (a Kestrel generic, not a Java class). This is a codegen detail: Kestrel collections are represented as `KList` objects at runtime, so the JVM descriptor is `()Ljava/lang/Object;` (since `KList` is already Object-compatible). Clarify this during implementation.
 - **`ProcessResult`**: `process.ks` returns a `Task<Result<ProcessResult, String>>`. `ProcessResult` is a Kestrel ADT defined in `process.ks` itself. The `extern fun` for `runProcessAsync` must ensure the return type matches: the actual KRuntime method returns a `KTask` whose payload is a `KRecord` representing `ProcessResult` or a `String` error. The Kestrel type annotation in the extern binding expresses this but the runtime guarantee is not statically verified.
 - **`--run_process` async blocker**: same as S02-08 — async extern fun must be supported in S02-02 or a follow-up.
+
+## Impact Analysis
+
+- `stdlib/kestrel/process.ks`: add 4 `extern fun` declarations; update `getProcess()` and `runProcess()` bodies.
+- `compiler/src/typecheck/check.ts`: remove `env.set` for `__get_os`, `__get_args`, `__get_cwd`, `__run_process`.
+- `compiler/src/jvm-codegen/codegen.ts`: remove 4 dispatch blocks; add `List<T>` → `KList` case to `externReturnDescriptorForType`.
+
+## Tasks
+
+- [x] Add 4 `extern fun` declarations to `process.ks`
+- [x] Update `getProcess()` body to call `getOs()`, `getArgs()`, `getCwd()`
+- [x] Update `runProcess()` body to call `runProcessAsync()` instead of `__run_process()`
+- [x] Remove `env.set('__get_os', ...)` from `check.ts`
+- [x] Remove `env.set('__get_args', ...)` from `check.ts`
+- [x] Remove `env.set('__get_cwd', ...)` from `check.ts`
+- [x] Remove `env.set('__run_process', ...)` (and `runProcessOkVar`) from `check.ts`
+- [x] Remove 4 intrinsic dispatch blocks from `codegen.ts`
+- [x] Add `List<T>` → `Lkestrel/runtime/KList;` to `externReturnDescriptorForType` in `codegen.ts`
+- [x] Verify no remaining `__get_os`, `__get_args`, `__get_cwd`, `__run_process` in compiler/stdlib
+
+## Tests to add
+
+- No new test files needed — `process.test.ks` exercises the API; existing tests cover behaviour.
+
+## Documentation and specs to update
+
+- [x] `docs/specs/02-stdlib.md`: update `kestrel:process` implementation notes to reference new `extern fun` names.
+
+## Build notes
+
+- 2025-07-14: Started implementation. `externReturnDescriptorForType` lacks a `List<T>` case — must add `AppType 'List'` → `Lkestrel/runtime/KList;` to emit correct INVOKESTATIC descriptor for `KRuntime.getArgs()` which returns `KList`. Fixed by adding `if (t.kind === 'AppType' && t.name === 'List') return 'Lkestrel/runtime/KList;'` to `externReturnDescriptorForType`. All 257 compiler tests and 1014 Kestrel tests pass.

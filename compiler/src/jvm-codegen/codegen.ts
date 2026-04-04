@@ -727,6 +727,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       }
     }
     if (t.kind === 'AppType' && t.name === 'Task') return 'Lkestrel/runtime/KTask;';
+    if (t.kind === 'AppType' && t.name === 'List') return 'Lkestrel/runtime/KList;';
     if (t.kind === 'IdentType') {
       const cls = externTypeClassByName.get(t.name);
       if (cls) return `L${cls};`;
@@ -1825,24 +1826,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             emitExpr(expr.args[0], mb, tcN, stackDepth);
             emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'concat', '(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;'));
-            return false;
-          }
-          if (name === '__get_os' && expr.args.length === 0) {
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'getOs', '()Ljava/lang/String;'));
-            return false;
-          }
-          if (name === '__get_args' && expr.args.length === 0) {
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'getArgs', '()Lkestrel/runtime/KList;'));
-            return false;
-          }
-          if (name === '__get_cwd' && expr.args.length === 0) {
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'getCwd', '()Ljava/lang/String;'));
-            return false;
-          }
-          if (name === '__run_process' && expr.args.length === 2) {
-            emitExpr(expr.args[0], mb, tcN, stackDepth);
-            emitExpr(expr.args[1], mb, tcN, stackDepth + 1);
-            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'runProcessAsync', '(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KTask;'));
             return false;
           }
           if (name === '__task_map' && expr.args.length === 2) {
