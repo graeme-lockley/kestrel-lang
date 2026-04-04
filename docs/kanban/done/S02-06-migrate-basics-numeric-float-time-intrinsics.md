@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E02 JVM Interop — extern Bindings and Intrinsic Migration](../epics/unplanned/E02-jvm-reflection-interop-and-intrinsic-migration.md)
+- Epic: [E02 JVM Interop — extern Bindings and Intrinsic Migration](../epics/done/E02-jvm-reflection-interop-and-intrinsic-migration.md)
 - Companion stories: S02-01, S02-02, S02-03, S02-04, S02-05, S02-07, S02-08, S02-09, S02-10, S02-11, S02-12, S02-13
 
 ## Summary

@@ -2,7 +2,7 @@
 
 ## Status
 
-Unplanned
+Done
 
 ## Summary
 
@@ -226,11 +226,11 @@ Key properties of this example:
 
 ### Follow-up stories (identified post-delivery — in unplanned/)
 
-14. [ ] [S02-14-extern-fun-primitive-return-type-descriptor-fix.md](../../unplanned/S02-14-extern-fun-primitive-return-type-descriptor-fix.md) — Fix silent `NoSuchMethodError` for `extern fun` bindings to JVM primitive-returning methods **(Critical)**
-15. [ ] [S02-15-extern-import-sidecar-reflects-overrides.md](../../unplanned/S02-15-extern-import-sidecar-reflects-overrides.md) — `extern import` sidecar must reflect user override signatures
-16. [ ] [S02-16-maven-version-conflict-at-compile-time.md](../../unplanned/S02-16-maven-version-conflict-at-compile-time.md) — Move Maven version-conflict detection from runtime to compile time
-17. [ ] [S02-17-maven-resolver-hardening.md](../../unplanned/S02-17-maven-resolver-hardening.md) — Maven segment path-traversal validation and `javap` subprocess timeout
-18. [ ] [S02-18-extern-interop-missing-tests.md](../../unplanned/S02-18-extern-interop-missing-tests.md) — Add missing runtime regression tests and E2E Maven + `extern import` test
+14. [x] [S02-14-extern-fun-primitive-return-type-descriptor-fix.md](../../done/S02-14-extern-fun-primitive-return-type-descriptor-fix.md) — Fix silent `NoSuchMethodError` for `extern fun` bindings to JVM primitive-returning methods **(Critical)**
+15. [x] [S02-15-extern-import-sidecar-reflects-overrides.md](../../done/S02-15-extern-import-sidecar-reflects-overrides.md) — `extern import` sidecar must reflect user override signatures
+16. [x] [S02-16-maven-version-conflict-at-compile-time.md](../../done/S02-16-maven-version-conflict-at-compile-time.md) — Move Maven version-conflict detection from runtime to compile time
+17. [x] [S02-17-maven-resolver-hardening.md](../../done/S02-17-maven-resolver-hardening.md) — Maven segment path-traversal validation and `javap` subprocess timeout
+18. [x] [S02-18-extern-interop-missing-tests.md](../../done/S02-18-extern-interop-missing-tests.md) — Add missing runtime regression tests and E2E Maven + `extern import` test
 
 **Story dependencies:**
 - S02-01, S02-02, S02-03 are strictly sequential; each blocks the next.
