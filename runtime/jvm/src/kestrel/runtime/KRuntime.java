@@ -1585,4 +1585,50 @@ public final class KRuntime {
         });
         return KTask.fromFuture(future);
     }
+
+    // ── ArrayList helpers for kestrel:array ──────────────────────────────────
+
+    public static ArrayList<Object> arrayListNew() {
+        return new ArrayList<>();
+    }
+
+    public static ArrayList<Object> arrayListCopy(Object arrObj) {
+        return new ArrayList<>((ArrayList<Object>) arrObj);
+    }
+
+    public static Object arrayListGet(Object arrObj, Object indexObj) {
+        return ((ArrayList<Object>) arrObj).get(((Long) indexObj).intValue());
+    }
+
+    public static void arrayListSet(Object arrObj, Object indexObj, Object value) {
+        ((ArrayList<Object>) arrObj).set(((Long) indexObj).intValue(), value);
+    }
+
+    public static void arrayListAdd(Object arrObj, Object value) {
+        ((ArrayList<Object>) arrObj).add(value);
+    }
+
+    public static Long arrayListSize(Object arrObj) {
+        return (long) ((ArrayList<Object>) arrObj).size();
+    }
+
+    public static ArrayList<Object> arrayListFromList(Object listObj) {
+        ArrayList<Object> result = new ArrayList<>();
+        Object node = listObj;
+        while (node instanceof KCons) {
+            result.add(((KCons) node).head);
+            node = ((KCons) node).tail;
+        }
+        return result;
+    }
+
+    public static KList arrayListToList(Object arrObj) {
+        ArrayList<Object> arr = (ArrayList<Object>) arrObj;
+        KList result = KNil.INSTANCE;
+        for (int i = arr.size() - 1; i >= 0; i--) {
+            result = new KCons(arr.get(i), result);
+        }
+        return result;
+    }
 }
+

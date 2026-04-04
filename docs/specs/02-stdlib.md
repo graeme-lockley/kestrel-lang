@@ -261,6 +261,24 @@ Sets as the **opaque** type `Set<E>` (defined in the module as an alias of `Dict
 
 ---
 
+## kestrel:array
+
+Mutable, O(1)-indexed sequences exposed as the **opaque** type `Array<T>`. Backed by `java.util.ArrayList<Object>` via `KRuntime` static helpers. `Array<T>` is **mutable in place**: `set` and `push` mutate the same array object; there is no copy-on-write. Use `fromList` / `toList` to bridge between `Array<T>` and the immutable `List<T>`.
+
+Index bounds are enforced by the Java runtime (`IndexOutOfBoundsException` on out-of-range access).
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `new` | `() -> Array<T>` | Create an empty array |
+| `get` | `(Array<T>, Int) -> T` | O(1) index access; throws on out-of-bounds |
+| `set` | `(Array<T>, Int, T) -> Unit` | O(1) in-place mutation; throws on out-of-bounds |
+| `push` | `(Array<T>, T) -> Unit` | Append element; grows internally |
+| `length` | `(Array<T>) -> Int` | Current number of elements |
+| `fromList` | `(List<T>) -> Array<T>` | Convert immutable list to array (preserving order) |
+| `toList` | `(Array<T>) -> List<T>` | Convert array to immutable list (preserving order) |
+
+---
+
 **Built-in primitives (language):** The language provides built-in `print` and `println` (variadic, space-separated output; see language spec). These are distinct from the stdlib module below.
 
 ## kestrel:stack
