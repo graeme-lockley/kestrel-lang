@@ -1,5 +1,5 @@
 import { getProcess, runProcess, ProcessSpawnError } from "kestrel:process"
-import { listDir, writeText, NotFound, PermissionDenied, IoError } from "kestrel:fs"
+import { listDir, writeText, NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:fs"
 import * as Lst from "kestrel:list"
 import * as Opt from "kestrel:option"
 import * as Str from "kestrel:string"
@@ -14,7 +14,7 @@ val rootDir = getRootDir(proc.args, cwd)
 
 fun hasSuffix(s: String, suffix: String): Bool = Str.endsWith(suffix, s)
 
-async fun listDirOrExit(path: String): Task<List<String>> =
+async fun listDirOrExit(path: String): Task<List<DirEntry>> =
   match (await listDir(path)) {
     Ok(entries) => entries,
     Err(err) => {
@@ -60,20 +60,16 @@ async fun runProcessOrExit(program: String, args: List<String>): Task<Int> = {
   }
 }
 
-fun collectTests(entries: List<String>, acc: List<String>): List<String> =
+fun collectTests(entries: List<DirEntry>, acc: List<String>): List<String> =
   match (entries) {
     [] => acc,
-    hd :: tl => {
-      val tabIdx = Str.indexOf(hd, "\t");
-      val path = if (tabIdx >= 0) Str.slice(hd, 0, tabIdx) else hd;
-      val kind =
-        if (tabIdx >= 0) Str.slice(hd, tabIdx + 1, Str.length(hd)) else "file";
-      if (Str.equals(kind, "dir")) {
-        collectTests(tl, acc)
+    hd :: tl =>
+      match (hd) {
+        Dir(_) => collectTests(tl, acc),
+        File(p) =>
+          if (hasSuffix(p, ".test.ks")) collectTests(tl, p :: acc)
+          else collectTests(tl, acc)
       }
-      else if (hasSuffix(path, ".test.ks")) collectTests(tl, path :: acc)
-      else collectTests(tl, acc)
-    }
   }
 
 fun hasFlag(args: List<String>, flag: String): Bool =

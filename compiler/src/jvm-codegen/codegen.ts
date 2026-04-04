@@ -366,6 +366,12 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
       case 'ListExpr':
         for (const el of e.elements) walk(el as Expr);
         return;
+      case 'ThrowExpr':
+        walk(e.value);
+        return;
+      case 'AwaitExpr':
+        walk(e.value);
+        return;
       case 'TryExpr':
         walk(e.body);
         for (const c of e.cases) walk(c.body);
@@ -418,8 +424,8 @@ export interface JvmCodegenOptions {
   namespaceAdtConstructors?: Map<string, Map<string, string>>;
   /** Namespace -> set of var field names (for KRecord-based read/write). */
   namespaceVarFields?: Map<string, Set<string>>;
-  /** Local import name -> inner class name for imported nullary ADT constructors and exceptions. */
-  importedAdtClasses?: Map<string, string>;
+  /** Local import name -> { className, arity } for imported ADT constructors and exceptions. */
+  importedAdtClasses?: Map<string, { className: string; arity: number }>;
   /** Local name -> target class for named imports (direct calls: invokestatic targetClass.name). */
   importedNameToClass?: Map<string, string>;
   /** Local name -> target class for imported val/var (IdentExpr: getstatic targetClass.name). */
@@ -624,9 +630,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
 
     // Seed adtClassByConstructor from imported ADT/exception names (for catch patterns + IdentExpr)
     if (options.importedAdtClasses) {
-      for (const [localName, innerClass] of options.importedAdtClasses) {
+      for (const [localName, { className: innerClass, arity }] of options.importedAdtClasses) {
         adtClassByConstructor.set(localName, innerClass);
-        adtConstructorArity.set(localName, 0);
+        adtConstructorArity.set(localName, arity);
       }
     }
   const funNames = new Set<string>();

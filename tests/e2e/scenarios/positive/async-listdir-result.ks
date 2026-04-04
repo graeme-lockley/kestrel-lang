@@ -1,10 +1,13 @@
 import * as Fs from "kestrel:fs"
 import * as Lst from "kestrel:list"
 import * as Str from "kestrel:string"
-import { NotFound } from "kestrel:fs"
+import { NotFound, DirEntry, File, Dir } from "kestrel:fs"
 
-fun entryContains(entries: List<String>, needle: String): Bool =
-  Lst.any(entries, (entry: String) => Str.contains(needle, entry))
+fun hasFile(entries: List<DirEntry>, name: String): Bool =
+  Lst.any(entries, (e: DirEntry) => match (e) {
+    File(p) => Str.contains(name, p),
+    Dir(_) => False
+  })
 
 async fun run(): Task<Unit> = {
   val listed = await Fs.listDir("tests/fixtures/fs/list_sample");
@@ -16,8 +19,8 @@ async fun run(): Task<Unit> = {
   val matched =
     match (listed) {
       Ok(entries) => {
-        val a = if (entryContains(entries, "a.txt\tfile")) 1 else 0;
-        val b = if (entryContains(entries, "b.txt\tfile")) 1 else 0;
+        val a = if (hasFile(entries, "a.txt")) 1 else 0;
+        val b = if (hasFile(entries, "b.txt")) 1 else 0;
         a + b
       }
       Err(_) => 0

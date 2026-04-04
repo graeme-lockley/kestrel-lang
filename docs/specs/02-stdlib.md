@@ -156,12 +156,13 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 | Type | Definition |
 |------|------------|
 | `FsError` | `NotFound | PermissionDenied | IoError(String)` |
+| `DirEntry` | `File(String) | Dir(String)` — typed directory entry where the `String` payload is the full path |
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `readText` | `(String) -> Task<Result<String, FsError>>` | Read file contents as UTF-8 text. Returns `Ok(contents)` on success. |
 | `writeText` | `(String, String) -> Task<Result<Unit, FsError>>` | Write UTF-8 text to a path (creates or truncates the file per host semantics). Returns `Ok(())` on success. |
-| `listDir` | `(String) -> Task<Result<List<String>, FsError>>` | Non-recursive directory listing. `Ok(entries)` on success where each entry is `"<fullPath>\tfile"` or `"<fullPath>\tdir"`; missing paths return `Err(NotFound)` and permission failures return `Err(PermissionDenied)`. |
+| `listDir` | `(String) -> Task<Result<List<DirEntry>, FsError>>` | Non-recursive directory listing. `Ok(entries)` on success where each entry is `File(fullPath)` or `Dir(fullPath)`; missing paths return `Err(NotFound)` and permission failures return `Err(PermissionDenied)`. Symlinks are resolved: if the target is a directory, `Dir` is returned, otherwise `File`. |
 
 ---
 

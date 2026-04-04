@@ -1235,6 +1235,26 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
                       }
                     }
                   }
+                } else {
+                  // Imported ADT — look up constructor type from env to derive payload types
+                  const ctorScheme = env.get(pattern.name);
+                  if (ctorScheme != null) {
+                    const ctorType = instantiate(ctorScheme);
+                    if (ctorType.kind === 'arrow' && ctorType.params.length > 0) {
+                      const fields = pattern.fields || [];
+                      for (let fi = 0; fi < fields.length; fi++) {
+                        const field = fields[fi]!;
+                        if (field.pattern && field.pattern.kind === 'VarPattern') {
+                          const payloadT = ctorType.params[fi] ?? freshVar();
+                          env.set(field.pattern.name, payloadT);
+                          bound.push(field.pattern.name);
+                        } else if (field.pattern) {
+                          const payloadT = ctorType.params[fi] ?? freshVar();
+                          bound.push(...bindPattern(field.pattern, payloadT));
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }

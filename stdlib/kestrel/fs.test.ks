@@ -1,12 +1,15 @@
 import { Suite, group, eq, isTrue } from "kestrel:test"
-import { NotFound, PermissionDenied, IoError } from "kestrel:fs"
+import { NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:fs"
 import * as Fs from "kestrel:fs"
 import * as Lst from "kestrel:list"
 import * as Process from "kestrel:process"
 import * as Str from "kestrel:string"
 
-fun entryContains(entries: List<String>, needle: String): Bool =
-  Lst.any(entries, (e: String) => Str.contains(needle, e))
+fun entryHasName(entries: List<DirEntry>, name: String): Bool =
+  Lst.any(entries, (e: DirEntry) => match (e) {
+    File(p) => Str.contains(name, p),
+    Dir(p) => Str.contains(name, p)
+  })
 
 async fun readViaAwait(path: String): Task<Result<String, Fs.FsError>> = {
   val t = await Fs.readText(path);
@@ -95,9 +98,9 @@ export async fun run(s: Suite): Task<Unit> = {
           Err(_) => []
         };
       eq(sg, "entry count", Lst.length(entries), 2);
-      isTrue(sg, "has a.txt", entryContains(entries, "a.txt"));
-      isTrue(sg, "has b.txt", entryContains(entries, "b.txt"));
-      isTrue(sg, "tab file suffix", entryContains(entries, "\tfile"));
+      isTrue(sg, "has a.txt", entryHasName(entries, "a.txt"));
+      isTrue(sg, "has b.txt", entryHasName(entries, "b.txt"));
+      isTrue(sg, "entries are File", Lst.all(entries, (e: DirEntry) => match (e) { File(_) => True, Dir(_) => False }));
     });
 
     group(s1, "listDir missing", (sg: Suite) => {

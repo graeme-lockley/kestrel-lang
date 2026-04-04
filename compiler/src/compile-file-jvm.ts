@@ -409,7 +409,7 @@ export function compileFileJvm(
     const importedVarNames = new Set<string>();
     const namespaceAdtConstructors = new Map<string, Map<string, string>>();
     const namespaceVarFields = new Map<string, Set<string>>();
-    const importedAdtClasses = new Map<string, string>();
+    const importedAdtClasses = new Map<string, { className: string; arity: number }>();
 
     function isValOrVar(prog: Program, name: string): boolean {
       for (const node of prog.body) {
@@ -463,18 +463,19 @@ export function compileFileJvm(
               }
               if (depProg && isValOrVar(depProg, s.external)) importedValVarToClass.set(s.local, dep.className);
               if (depProg && isVar(depProg, s.external)) importedVarNames.add(s.local);
-                // Check if it's an imported exception or nullary ADT constructor
+                // Check if it's an imported exception or ADT constructor (nullary or parametric)
                 if (depProg) {
                   for (const node of depProg.body) {
                     if (!node) continue;
-                    if (node.kind === 'ExceptionDecl' && node.name === s.external && !(node.fields?.length)) {
-                      importedAdtClasses.set(s.local, dep.className + '$' + s.external);
+                    if (node.kind === 'ExceptionDecl' && node.name === s.external) {
+                      const excArity = (node.fields?.length) ?? 0;
+                      importedAdtClasses.set(s.local, { className: dep.className + '$' + s.external, arity: excArity });
                     } else if (node.kind === 'TypeDecl') {
                       const t = node as TypeDecl;
                       if (t.body?.kind !== 'ADTBody') continue;
                       for (const c of (t.body as { constructors: Array<{ name: string; params: unknown[] }> }).constructors) {
-                        if (c.name === s.external && c.params.length === 0) {
-                          importedAdtClasses.set(s.local, dep.className + '$' + t.name + '$' + c.name);
+                        if (c.name === s.external) {
+                          importedAdtClasses.set(s.local, { className: dep.className + '$' + t.name + '$' + c.name, arity: c.params.length });
                         }
                       }
                     }
