@@ -179,7 +179,9 @@ The types file is **JSON**. Implementations must produce and consume this format
 - **Cache root:** `~/.kestrel/cache/` by default; overridable via the `KESTREL_CACHE` environment variable. Created on first use.
 - **Cache layout:** Each URL specifier is stored under `<cacheRoot>/<sha256-of-url>/source.ks`, where the directory name is the lowercase hex SHA-256 of the URL string. This makes the layout stable and human-inspectable.
 - **On cache miss (first use):** The implementation fetches the URL source over HTTPS (`http://` requires `--allow-http`), writes the source to the cache path above, and continues compilation. No user action is required — resolution is seamless.
-- **On cache hit:** The cached file is used directly; no network request is made.
+- **Atomic write:** The source is first downloaded into a temp file `source.ks.tmp` in the same cache directory, then renamed to `source.ks`. Because `rename()` is atomic on POSIX filesystems, a concurrent or interrupted run can never leave a partially-written file that appears valid.
+- **Partial-failure recovery:** If `source.ks.tmp` exists in a cache directory but `source.ks` does not, a previous download was interrupted (e.g. process killed). The implementation must treat this as a cache miss: delete the stale `.tmp` file and re-fetch the URL.
+- **On cache hit:** The cached `source.ks` file is used directly; no network request is made.
 - **`--refresh` flag:** When `kestrel run --refresh` or `kestrel build --refresh` is invoked, all URL dependencies in the transitive dependency graph are re-fetched unconditionally and the cache is updated, even if a cached copy already exists.
 - **Staleness:** A cached entry is considered stale when it was downloaded more than `KESTREL_CACHE_TTL` seconds ago (default: 604800 = 7 days). Stale entries are used for compilation unless `--refresh` is supplied; `kestrel build --status` flags stale entries.
 - **`--status` flag:** `kestrel build --status <entry.ks>` resolves the full transitive dependency graph without compiling or running. It prints a pretty-printed dependency report to stdout and exits 0. Each URL dependency appears as one line:

@@ -62,6 +62,17 @@ tree of any remote module is therefore automatically downloaded into the cache o
   (directory name is the hex SHA-256 of the URL string, lowercase). This makes the cache layout
   stable and human-inspectable.
 
+- **Atomic cache writes:** The compiler must never leave a partially-written cache entry that could
+  later be mistaken for a valid cached file. Protocol: download the source into a temp file
+  (`source.ks.tmp`) in the same cache directory, then use an atomic `rename()` to move it to
+  `source.ks`. Because rename is atomic on POSIX filesystems, a reader either sees the complete
+  file or nothing at all.
+
+- **Partial-failure recovery (crash during download):** If a previous compiler invocation was
+  killed mid-download, a `source.ks.tmp` file may be left in the cache directory without a
+  corresponding `source.ks`. On the next run the cache lookup must treat this as a cache miss:
+  delete the stale `.tmp` file and re-fetch the URL.
+
 - **"Stale" definition:** A cached entry is considered stale when it was downloaded more than
   `KESTREL_CACHE_TTL` seconds ago (default: 7 days). `--status` surfaces stale entries; `--refresh`
   re-downloads them regardless of TTL.
@@ -77,6 +88,11 @@ tree of any remote module is therefore automatically downloaded into the cache o
       on the `run`/`build` command; otherwise a compile error with the import span is reported.
 - [ ] On first use (cache miss), the compiler transparently fetches the URL, writes the source to
       `~/.kestrel/cache/<sha256-of-url>/source.ks`, and proceeds with compilation. No user action needed.
+- [ ] The cache entry is written atomically: the source is downloaded to a temp file (`source.ks.tmp`)
+      in the same directory, then renamed to `source.ks`. A partial download is therefore never used
+      as a valid cache entry.
+- [ ] If a `source.ks.tmp` file exists without a corresponding `source.ks` (leftover from a
+      previously interrupted download), it is deleted and the URL is re-fetched on next run.
 - [ ] On subsequent uses (cache hit), the cached file is used directly with no network request.
 - [ ] No redirects to a different host are followed.
 - [ ] **Transitive base-URL resolution:** Relative imports inside a URL-fetched module are resolved
