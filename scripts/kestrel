@@ -22,7 +22,7 @@ usage() {
   echo "  run   [--exit-wait|--exit-no-wait] <script[.ks]> [args...]  Compile if needed, then execute on JVM" >&2
   echo "  dis   [--verbose|--code-only] <script[.ks]>  Compile if needed, then disassemble JVM bytecode" >&2
   echo "  build [script.ks]  Build compiler and JVM runtime; optionally compile script" >&2
-  echo "  test  [--verbose|--summary] [files...]   Run unit tests on JVM (default: compact output)" >&2
+  echo "  test  [--summary] [files...]              Run unit tests on JVM (use --summary for one line per suite)" >&2
   exit 1
 }
 

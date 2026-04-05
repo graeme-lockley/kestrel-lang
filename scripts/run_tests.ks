@@ -81,15 +81,7 @@ fun excludeTestFlags(args: List<String>): List<String> =
     (hd: String) => !(Str.equals(hd, "--summary") | Str.equals(hd, "--verbose"))
   )
 
-fun checkTestOutputFlags(args: List<String>): Unit = {
-  val sum = hasFlag(args, "--summary");
-  val verb = hasFlag(args, "--verbose");
-
-  if (sum & verb) {
-    println("kestrel test: use either --verbose or --summary, not both");
-    exit(1)
-  }
-}
+fun checkTestOutputFlags(args: List<String>): Unit = ()
 
 // argv layout is [exe, script, project root, ...paths]. JVM entry pads with "" "".
 fun getPathArgs(allArgs: List<String>): List<String> = excludeTestFlags(Lst.drop(allArgs, 3))
@@ -128,8 +120,7 @@ async fun main(): Task<Unit> = {
   val pathArgs = getPathArgs(proc.args)
   val outputModeStr =
     if (hasFlag(proc.args, "--summary")) "outputSummary"
-    else if (hasFlag(proc.args, "--verbose")) "outputVerbose" 
-    else "outputCompact"
+    else "outputVerbose"
 
   val tests =
     if (Lst.length(pathArgs) == 0) {
