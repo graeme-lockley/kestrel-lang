@@ -50,7 +50,7 @@ A conforming implementation must:
 ### 2.5 Runtime Model
 
 - **Values:** Primitive and heap values behave consistently with language semantics on the JVM runtime. Closure values preserve lexical capture semantics for both capturing and non-capturing functions.
-- **Integer overflow and division by zero:** `tests/unit/overflow_divzero.test.ks` asserts that 61-bit `Int` overflow on `+`, `-`, `*` and divide/mod by zero throw catchable exceptions (`ArithmeticOverflow`, `DivideByZero`) defined in the same module, including when tests run as an imported module.
+- **Integer overflow and division by zero:** `tests/unit/overflow_divzero.test.ks` asserts that 64-bit `Int` overflow on `+`, `-`, `*` and divide/mod by zero throw catchable exceptions (`ArithmeticOverflow`, `DivideByZero`) defined in the same module, including when tests run as an imported module.
 - **GC:** Programs that allocate many short-lived objects complete without leaks; no use-after-free when the GC is enabled.
 
 ### 2.6 Modules

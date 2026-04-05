@@ -98,7 +98,7 @@ Canonical **exception ADTs** used by the VM for arithmetic traps (see language s
 
 | Name | Role |
 |------|------|
-| `ArithmeticOverflow` | Thrown when a fixed-width `Int` operation overflows (VM-defined width). |
+| `ArithmeticOverflow` | Thrown when a 64-bit signed `Int` operation overflows (exceeds Long.MIN_VALUE or Long.MAX_VALUE). |
 | `DivideByZero` | Thrown for `Int` division or remainder when the divisor is zero. |
 
 ---

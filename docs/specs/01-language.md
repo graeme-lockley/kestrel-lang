@@ -93,7 +93,7 @@ BINARY        ::= "0" [bB] [01] ([01]_*)* [01]?
 OCTAL         ::= "0" [oO] [0-7] ([0-7]_*)* [0-7]?
 ```
 
-Underscores may appear only **between** digits; leading/trailing underscores are not allowed. Value must fit in a **61-bit signed integer** at runtime (overflow throws). The JVM runtime preserves this 61-bit Int bound for language-level compatibility.
+Underscores may appear only **between** digits; leading/trailing underscores are not allowed. Value must fit in a **signed 64-bit integer** (Long.MIN_VALUE −9223372036854775808 to Long.MAX_VALUE 9223372036854775807) at runtime; operations that exceed this range throw `ArithmeticOverflow`.
 
 ### 2.7 Float Literals
 

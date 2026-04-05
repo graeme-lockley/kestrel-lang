@@ -3,8 +3,8 @@
 import { Suite, group, eq } from "kestrel:test"
 import { ArithmeticOverflow, DivideByZero } from "kestrel:runtime"
 
-// 2^59; two of these sum to 2^60 which exceeds 61-bit signed max (2^60 - 1)
-val halfMax = 576460752303423488
+// 2^62; two of these sum to 2^63 which exceeds 64-bit signed max (2^63 - 1)
+val halfMax = 4611686018427387904
 
 export async fun run(s: Suite): Task<Unit> =
   group(s, "overflow and divzero", (s1: Suite) => {

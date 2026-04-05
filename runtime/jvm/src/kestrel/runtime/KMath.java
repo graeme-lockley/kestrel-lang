@@ -1,55 +1,38 @@
 package kestrel.runtime;
 
 /**
- * Kestrel integer arithmetic with 61-bit signed semantics.
- * Throws ArithmeticException on overflow (matching Zig VM behavior).
+ * Kestrel integer arithmetic with signed 64-bit (Long) semantics.
+ * Throws ArithmeticException on overflow.
  */
 public final class KMath {
-    private static final long MAX_61 = (1L << 60) - 1;
-    private static final long MIN_61 = -(1L << 60);
 
     private KMath() {}
 
-    private static void check61(long v) {
-        if (v > MAX_61 || v < MIN_61) {
-            throw new ArithmeticException("61-bit integer overflow");
-        }
-    }
-
     public static Long add(Long a, Long b) {
         if (a == null || b == null) throw new NullPointerException();
-        long x = a.longValue();
-        long y = b.longValue();
-        long r = x + y;
-        if (((x ^ r) & (y ^ r)) < 0) {
-            throw new ArithmeticException("61-bit integer overflow");
+        try {
+            return Math.addExact(a.longValue(), b.longValue());
+        } catch (ArithmeticException e) {
+            throw new ArithmeticException("integer overflow");
         }
-        check61(r);
-        return Long.valueOf(r);
     }
 
     public static Long sub(Long a, Long b) {
         if (a == null || b == null) throw new NullPointerException();
-        long x = a.longValue();
-        long y = b.longValue();
-        long r = x - y;
-        if (((x ^ y) & (x ^ r)) < 0) {
-            throw new ArithmeticException("61-bit integer overflow");
+        try {
+            return Math.subtractExact(a.longValue(), b.longValue());
+        } catch (ArithmeticException e) {
+            throw new ArithmeticException("integer overflow");
         }
-        check61(r);
-        return Long.valueOf(r);
     }
 
     public static Long mul(Long a, Long b) {
         if (a == null || b == null) throw new NullPointerException();
-        long x = a.longValue();
-        long y = b.longValue();
-        long r = x * y;
-        if (y != 0 && r / y != x) {
-            throw new ArithmeticException("61-bit integer overflow");
+        try {
+            return Math.multiplyExact(a.longValue(), b.longValue());
+        } catch (ArithmeticException e) {
+            throw new ArithmeticException("integer overflow");
         }
-        check61(r);
-        return Long.valueOf(r);
     }
 
     public static Long div(Long a, Long b) {
@@ -80,16 +63,18 @@ public final class KMath {
             throw new ArithmeticException("negative exponent");
         }
         long r = 1;
-        while (n > 0) {
-            if ((n & 1) != 0) {
-                r = r * x;
-                check61(r);
+        try {
+            while (n > 0) {
+                if ((n & 1) != 0) {
+                    r = Math.multiplyExact(r, x);
+                }
+                n >>= 1;
+                if (n > 0) {
+                    x = Math.multiplyExact(x, x);
+                }
             }
-            n >>= 1;
-            if (n > 0) {
-                x = x * x;
-                check61(x);
-            }
+        } catch (ArithmeticException e) {
+            throw new ArithmeticException("integer overflow");
         }
         return Long.valueOf(r);
     }
