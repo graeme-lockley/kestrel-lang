@@ -78,7 +78,7 @@ fun hasFlag(args: List<String>, flag: String): Bool =
 fun excludeTestFlags(args: List<String>): List<String> =
   Lst.filter(
     args,
-    (hd: String) => !(Str.equals(hd, "--summary") | Str.equals(hd, "--verbose"))
+    (hd: String) => !(Str.equals(hd, "--summary") | Str.equals(hd, "--verbose") | Str.equals(hd, "--generate"))
   )
 
 fun checkTestOutputFlags(args: List<String>): Unit = ()
@@ -153,6 +153,11 @@ async fun main(): Task<Unit> = {
   val tmpPath = "${generatedPath}.new"
   await writeTextOrExit(tmpPath, generatedSource)
   val _cmp = await runProcessOrExit("sh", ["-c", "cmp -s '${tmpPath}' '${generatedPath}' 2>/dev/null && rm '${tmpPath}' || mv '${tmpPath}' '${generatedPath}'"])
+
+  if (hasFlag(proc.args, "--generate")) {
+    // --generate: just write the file and exit; caller runs it directly
+    exit(0)
+  }
 
   val exitCode = await runProcessOrExit("./scripts/kestrel", ["run", generatedPath])
   exit(exitCode)
