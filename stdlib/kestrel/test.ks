@@ -84,19 +84,13 @@ fun onAssertionFailure(s: Suite): Unit = {
   ()
 }
 
-export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
-  val start = Basics.nowMs();
-  val passedStart = s.counts.passed;
-  val failedStart = s.counts.failed;
-  val prevExpanded = s.counts.compactExpanded;
-  s.counts.compactExpanded := False;
-  val child = { depth = s.depth + 1, output = s.output, counts = s.counts };
-
+fun groupPrologue(s: Suite, name: String): Suite = {
   if (s.output == outputVerbose | (s.output == outputCompact & s.depth == 0))
     println(groupTitleLine(s, name));
+  { depth = s.depth + 1, output = s.output, counts = s.counts }
+}
 
-  body(child);
-
+fun groupEpilogue(s: Suite, name: String, passedStart: Int, failedStart: Int, prevExpanded: Bool, start: Int): Unit = {
   s.counts.compactExpanded := prevExpanded;
   val elapsed = Basics.nowMs() - start;
   val p = s.counts.passed - passedStart;
@@ -129,6 +123,34 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
       println(summaryLine)
     }
   }
+}
+
+export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
+  val start = Basics.nowMs();
+  val passedStart = s.counts.passed;
+  val failedStart = s.counts.failed;
+  val prevExpanded = s.counts.compactExpanded;
+  s.counts.compactExpanded := False;
+  val child = groupPrologue(s, name);
+
+  body(child);
+
+  groupEpilogue(s, name, passedStart, failedStart, prevExpanded, start)
+}
+
+/** Async variant of `group`. Accepts a callback returning `Task<Unit>` so that
+ *  `await` expressions can appear naturally inside group bodies. */
+export async fun asyncGroup(s: Suite, name: String, body: (Suite) -> Task<Unit>): Task<Unit> = {
+  val start = Basics.nowMs();
+  val passedStart = s.counts.passed;
+  val failedStart = s.counts.failed;
+  val prevExpanded = s.counts.compactExpanded;
+  s.counts.compactExpanded := False;
+  val child = groupPrologue(s, name);
+
+  await body(child);
+
+  groupEpilogue(s, name, passedStart, failedStart, prevExpanded, start)
 }
 
 /** Equality assertion using `==` (semantic / deep equality; same notion as the VM comparison for structured values). On failure, prints labelled lines so boolean, Int, Unit, String, etc. stay distinguishable via the runtime value printer. */

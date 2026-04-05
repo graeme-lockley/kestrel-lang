@@ -27,9 +27,10 @@ usage() {
 }
 
 run_usage() {
-  echo "Usage: kestrel run [--exit-wait|--exit-no-wait] <script[.ks]> [args...]"
+  echo "Usage: kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] [--clean] <script[.ks]> [args...]"
   echo "  --exit-wait     Wait for pending async work before process exit (default)."
   echo "  --exit-no-wait  Exit when main returns and abandon pending async work."
+  echo "  --clean         Delete all .kti incremental-cache files before compilation."
 }
 
 ensure_tools() {
@@ -223,13 +224,14 @@ cmd_build() {
   build_compiler_jvm
   if [ -n "${1:-}" ]; then
     local resolved class_dir
-    local refresh_flag="" allow_http_flag="" status_flag=""
+    local refresh_flag="" allow_http_flag="" status_flag="" clean_flag=""
     # Parse optional flags before the script path
     while [ $# -gt 0 ]; do
       case "${1:-}" in
         --refresh) refresh_flag="--refresh"; shift ;;
         --allow-http) allow_http_flag="--allow-http"; shift ;;
         --status) status_flag="--status"; shift ;;
+        --clean) clean_flag="--clean"; shift ;;
         *) break ;;
       esac
     done
@@ -245,7 +247,7 @@ cmd_build() {
     class_dir=$(jvm_class_dir_for "$resolved")
     mkdir -p "$class_dir"
     # shellcheck disable=SC2086
-    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $status_flag; then
+    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $status_flag $clean_flag; then
       echo "kestrel: JVM compile failed" >&2
       exit 1
     fi
@@ -256,7 +258,7 @@ cmd_build() {
 }
 
 cmd_run() {
-  local exit_mode="" refresh_flag="" allow_http_flag=""
+  local exit_mode="" refresh_flag="" allow_http_flag="" clean_flag=""
   while [ $# -gt 0 ]; do
     case "${1:-}" in
       --help|-h)
@@ -287,6 +289,10 @@ cmd_run() {
         allow_http_flag="--allow-http"
         shift
         ;;
+      --clean)
+        clean_flag="--clean"
+        shift
+        ;;
       *)
         break
         ;;
@@ -307,10 +313,10 @@ cmd_run() {
   fi
   shift
   class_dir=$(jvm_class_dir_for "$resolved")
-  if needs_compile_jvm "$resolved" "$class_dir"; then
+  if [ -n "$clean_flag" ] || needs_compile_jvm "$resolved" "$class_dir"; then
     mkdir -p "$class_dir"
     # shellcheck disable=SC2086
-    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag; then
+    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $clean_flag; then
       echo "kestrel: JVM compile failed for $resolved" >&2
       exit 1
     fi

@@ -21,13 +21,14 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.1 run
 
-**Usage:** `kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] <script[.ks]> [args...]`
+**Usage:** `kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] [--clean] <script[.ks]> [args...]`
 
 - **Effect:** Compiles the named Kestrel script (and its constituent packages) if the target binary is stale or missing, then executes it via the JVM runtime.
 - **Target:** JVM is the only execution target; compiled `.class` files are generated for the Java Virtual Machine.
 - **Freshness:** The script is compiled when (a) the generated `.class` files do not exist, or (b) the entry `.ks` is newer than the main generated class, or (c) a `.class.deps` file exists beside that class and any listed dependency path is newer.
 - **URL dependencies:** If any module in the dependency graph contains URL specifiers (`https://`), they are resolved using the URL import cache (see §2.9). On cache miss the source is fetched transparently before compilation proceeds. `--refresh` forces all URL dependencies to be re-fetched even if already cached.
 - **`--allow-http`:** Accept `http://` URL specifiers in addition to `https://`. Without this flag, `http://` imports are a compile error.
+- **`--clean`:** Delete all `.kti` incremental-compilation cache files from the output directory (recursively) before compiling. Forces a full recompile from source for all packages in the dependency graph. If no output directory is configured, silently ignored. `--clean --refresh` combines both: deletes `.kti` files and re-fetches URL dependencies.
 - **Cache:**
   - Compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/jvm/Users/me/proj/foo.class`. This avoids cluttering the project directory. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run foo.ks`).
 - **Execution:** `kestrel` runs `java` with a classpath containing `kestrel-runtime.jar` and the JVM cache root, and uses a main class derived from the entry source file path (strip leading `/`, remove `.ks`, capitalize the last path segment; convert `/` to `.` for the Java binary name). Entry-point discovery is implementation-defined, but the derived class name is stable for a given absolute source path.
@@ -54,11 +55,12 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.3 build
 
-**Usage:** `kestrel build [--refresh] [--allow-http] [--status] [script[.ks]]`
+**Usage:** `kestrel build [--refresh] [--allow-http] [--status] [--clean] [script[.ks]]`
 
 - **Effect:** Builds the compiler so that it is up-to-date. If a script path is provided, also compiles that script to a `.class` file using the same cache and freshness rules as `run`.
 - **Build steps:** `cd compiler && npm run build`. Compiler output is `compiler/dist/`.
 - **URL dependencies:** Same on-demand fetch behaviour as `run` (see §2.9). `--refresh` and `--allow-http` have the same meaning as for `run`.
+- **`--clean`:** Same as for `run`: delete all `.kti` incremental-cache files from the output directory before compiling. If no output directory is configured, silently ignored.
 - **`--status`:** When `--status` is provided, the compiler is built (if needed) but the script is **not** compiled or run. Instead, the full transitive dependency graph is resolved and a pretty-printed report is printed to stdout showing the cache state of every URL dependency. Exit 0 on success.
 
   Report format example:

@@ -74,12 +74,12 @@ Users need an explicit escape hatch to discard all incremental `.kti` cache file
 
 ## Tasks
 
-- [ ] 1. `compiler/cli.ts`: parse `--clean`; add recursive `deleteKtiFiles` helper; call it before `compileFileJvm` when set; update usage comment.
-- [ ] 2. `scripts/kestrel` `cmd_build`: add `--clean` case; set `clean_flag`; pass to compiler CLI.
-- [ ] 3. `scripts/kestrel` `cmd_run`: add `--clean` case; set `clean_flag`; bypass `needs_compile_jvm` when `--clean`; pass to compiler CLI.
-- [ ] 4. `scripts/kestrel` `run_usage`: document `--clean`.
-- [ ] 5. `docs/specs/09-tools.md`: document `--clean` in §2.1 run and §2.3 build.
-- [ ] 6. Add integration test in `compiler/test/integration/` confirming that `--clean` deletes existing `.kti` files from the output dir.
+- [x] 1. `compiler/cli.ts`: parse `--clean`; add recursive `deleteKtiFiles` helper; call it before `compileFileJvm` when set; update usage comment.
+- [x] 2. `scripts/kestrel` `cmd_build`: add `--clean` case; set `clean_flag`; pass to compiler CLI.
+- [x] 3. `scripts/kestrel` `cmd_run`: add `--clean` case; set `clean_flag`; bypass `needs_compile_jvm` when `--clean`; pass to compiler CLI.
+- [x] 4. `scripts/kestrel` `run_usage`: document `--clean`.
+- [x] 5. `docs/specs/09-tools.md`: document `--clean` in §2.1 run and §2.3 build.
+- [x] 6. Add integration test in `compiler/test/integration/` confirming that `--clean` deletes existing `.kti` files from the output dir.
 
 ## Tests to Add
 
@@ -93,3 +93,9 @@ Users need an explicit escape hatch to discard all incremental `.kti` cache file
 - `docs/specs/09-tools.md` §2.1 (run) — add `--clean` to usage + bullet
 - `docs/specs/09-tools.md` §2.3 (build) — add `--clean` to usage + bullet
 - `docs/specs/kti-format.md` — no changes needed (clean is a CLI concern)
+
+## Build notes
+
+- 2025-07-16: Implemented. `deleteKtiFiles` is a recursive helper in `cli.ts` (uses `readdirSync`/`statSync`/`unlinkSync`); it is called before `compileFileJvm` when `--clean` is set. Deletion is recursive because `.kti` files live in path-mirrored subdirectories of the class output dir (e.g. `~/.kestrel/jvm/Users/.../Foo.kti`); the story note saying "not recursively" was written before the full path structure was understood.
+- `scripts/kestrel` `cmd_run` bypass: the shell-level `needs_compile_jvm` mtime check is bypassed by replacing `if needs_compile_jvm ...` with `if [ -n "$clean_flag" ] || needs_compile_jvm ...`, so `--clean` always forces the compiler to run.
+- 419 tests pass (30 files).

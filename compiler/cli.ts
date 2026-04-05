@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * CLI: kestrel-compiler <input.ks> [-o outputDir] [--target jvm] [--stale-file path] [--format=json]
- *      [--refresh] [--allow-http] [--status]
+ *      [--refresh] [--allow-http] [--status] [--clean]
  * Parse input, resolve imports, emit JVM .class files.
  * When -o is omitted, output goes under KESTREL_JVM_CACHE (~/.kestrel/jvm/ by default).
  * If --stale-file is given, only print "Compiling X" for paths listed in that file (one path per line).
@@ -9,9 +9,10 @@
  * If --refresh, force re-download of all URL dependencies.
  * If --allow-http, allow http:// (non-TLS) URL imports.
  * If --status, print URL dependency cache status report and exit 0 (no compilation).
+ * If --clean, delete all *.kti files in the output directory before compilation.
  */
 import { resolve, basename, join } from 'path';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync, unlinkSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { compileFileJvm } from './src/compile-file-jvm.js';
 import { report } from './src/diagnostics/index.js';
@@ -45,6 +46,7 @@ import { CODES, locationFileOnly } from './src/diagnostics/types.js';
   const refresh = args.includes('--refresh');
   const allowHttp = args.includes('--allow-http');
   const statusMode = args.includes('--status');
+  const clean = args.includes('--clean');
 
   const urlCacheRoot = defaultCacheRoot();
   const jvmCacheRoot = process.env.KESTREL_JVM_CACHE || join(homedir(), '.kestrel', 'jvm');
@@ -66,6 +68,11 @@ import { CODES, locationFileOnly } from './src/diagnostics/types.js';
     const entries = await buildStatusEntries(resolve(inputPath), urlCacheRoot, defaultTtlSecs());
     process.stdout.write(formatStatusReport(entries) + '\n');
     process.exit(0);
+  }
+
+  // --clean: recursively delete all *.kti files in the output directory
+  if (clean) {
+    deleteKtiFiles(outputPath);
   }
 
   // Pre-fetch phase: fetch all URL dependencies into cache
@@ -136,4 +143,26 @@ import { CODES, locationFileOnly } from './src/diagnostics/types.js';
   process.stderr.write(`kestrel-compiler: unexpected error: ${err instanceof Error ? err.message : String(err)}\n`);
   process.exit(1);
 });
+
+function deleteKtiFiles(dir: string): void {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry);
+    try {
+      const st = statSync(full);
+      if (st.isDirectory()) {
+        deleteKtiFiles(full);
+      } else if (entry.endsWith('.kti')) {
+        unlinkSync(full);
+      }
+    } catch {
+      // ignore individual deletion errors
+    }
+  }
+}
 

@@ -1,5 +1,5 @@
 // Tests for kestrel:socket TCP and TLS socket library (S03-02).
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
+import { Suite, group, asyncGroup, eq, isTrue, isFalse } from "kestrel:test"
 import * as Socket from "kestrel:socket"
 import * as Str from "kestrel:string"
 
@@ -47,18 +47,17 @@ async fun loopbackRoundTrip(): Task<String> = {
 // ---------------------------------------------------------------------------
 
 export async fun run(s: Suite): Task<Unit> = {
-  val tcpOk = await tcpGetExample();
-  val tlsOk = await tlsGetExample();
-  val roundTripMsg = await loopbackRoundTrip();
-
-  group(s, "kestrel:socket", (s1: Suite) => {
-    group(s1, "TCP connect to example.com:80", (sg: Suite) => {
+  await asyncGroup(s, "kestrel:socket", async (s1: Suite) => {
+    await asyncGroup(s1, "TCP connect to example.com:80", async (sg: Suite) => {
+      val tcpOk = await tcpGetExample();
       isTrue(sg, "response starts with HTTP/", Str.startsWith("HTTP/", tcpOk))
     });
-    group(s1, "TLS connect to example.com:443", (sg: Suite) => {
+    await asyncGroup(s1, "TLS connect to example.com:443", async (sg: Suite) => {
+      val tlsOk = await tlsGetExample();
       isTrue(sg, "TLS response starts with HTTP/", Str.startsWith("HTTP/", tlsOk))
     });
-    group(s1, "TCP loopback round-trip", (sg: Suite) => {
+    await asyncGroup(s1, "TCP loopback round-trip", async (sg: Suite) => {
+      val roundTripMsg = await loopbackRoundTrip();
       eq(sg, "received message matches sent", roundTripMsg, "ping")
     })
   })
