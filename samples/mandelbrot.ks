@@ -16,6 +16,9 @@ val rangeIm = maxIm - minIm
 val cols = 80.0
 val rows = 24.0
 
+val stepRe = rangeRe / cols
+val stepIm = rangeIm / rows
+
 val charset = " .:-=+*#%@"
 
 // Map escape time to 256-colour index (deep blue → cyan → green → yellow → orange → red).
@@ -60,21 +63,17 @@ fun pickCell(iter: Int): String =
     "${ESC}[38;5;${c}m${ch}${RESET}"
   }
 
-fun renderRow(re: Float, im: Float, x: Int, acc: String): String =
-  if (x >= 80) {
-    acc
-  } else {
-    val stepRe = rangeRe / cols
-    val curRe = minRe + stepRe * re
-    val it = mandelIter(curRe, im, 0.0, 0.0, 0)
-    renderRow(re + 1.0, im, x + 1, "${acc}${pickCell(it)}")
+fun renderRow(col: Float, im: Float, acc: String): String =
+  if (col >= cols) acc
+  else {
+    val it = mandelIter(minRe + stepRe * col, im, 0.0, 0.0, 0)
+    renderRow(col + 1.0, im, "${acc}${pickCell(it)}")
   }
 
-fun render(im: Float, y: Int): Unit =
-  if (y < 24) {
-    val stepIm = rangeIm / rows
-    println(renderRow(0.0, minIm + stepIm * im, 0, ""))
-    render(im + 1.0, y + 1)
+fun render(row: Float): Unit =
+  if (row < rows) {
+    println(renderRow(0.0, minIm + stepIm * row, ""))
+    render(row + 1.0)
   }
 
-render(0.0, 0)
+render(0.0)

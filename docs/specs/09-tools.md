@@ -21,9 +21,10 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.1 run
 
-**Usage:** `kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] [--clean] <script[.ks]> [args...]`
+**Usage:** `kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] [--clean] <script[.ks]|kestrel:module/path> [args...]`
 
 - **Effect:** Compiles the named Kestrel script (and its constituent packages) if the target binary is stale or missing, then executes it via the JVM runtime.
+- **Module specifiers:** In addition to file paths, `kestrel run` accepts stdlib module specifiers of the form `kestrel:<module/path>` (e.g. `kestrel run kestrel:tools/test`, `kestrel run kestrel:tools/format`). The specifier is resolved to the physical stdlib file (`$KESTREL_ROOT/stdlib/kestrel/<module/path>.ks`) before compilation. If the specifier names a module that does not exist, an error is printed and the command exits non-zero. File-path invocations are unaffected.
 - **Target:** JVM is the only execution target; compiled `.class` files are generated for the Java Virtual Machine.
 - **Freshness:** The script is compiled when (a) the generated `.class` files do not exist, or (b) the entry `.ks` is newer than the main generated class, or (c) a `.class.deps` file exists beside that class and any listed dependency path is newer.
 - **URL dependencies:** If any module in the dependency graph contains URL specifiers (`https://`), they are resolved using the URL import cache (see §2.9). On cache miss the source is fetched transparently before compilation proceeds. `--refresh` forces all URL dependencies to be re-fetched even if already cached.

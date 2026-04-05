@@ -57,3 +57,39 @@ resolve_script() {
 - The `resolve_script` function is used by `cmd_run`, `cmd_dis`, and `cmd_build`. Only `cmd_run` should accept module specifiers — `cmd_dis` and `cmd_build` remain file-path-only.
 - `main_class_for` uses the file path to derive the JVM class name. When a module specifier is resolved to a physical file, this function still works correctly (path-based).
 - The `jvm_class_dir_for` function also uses the file path; it works normally once the specifier is resolved.
+
+---
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `scripts/kestrel` `cmd_run()` | Detect `kestrel:` prefix before calling `resolve_script`; resolve to physical file path |
+| `scripts/kestrel` new helper | `resolve_module_specifier()` maps `kestrel:X/Y` → `$ROOT/stdlib/kestrel/X/Y.ks`; returns `""` if file not found |
+| No compiler changes | Resolver already handles sub-paths correctly |
+| No JVM runtime changes | None required |
+
+## Tasks
+
+- [x] Add `resolve_module_specifier()` helper to `scripts/kestrel` that converts `kestrel:X` → `$ROOT/stdlib/kestrel/X.ks` and verifies the file exists
+- [x] In `cmd_run()`, before calling `resolve_script`, check if `$1` starts with `kestrel:` and call `resolve_module_specifier` instead
+- [x] On resolution failure print `"kestrel: stdlib module not found: <specifier>"` to stderr and exit 1
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| E2E negative | `tests/e2e/scenarios/negative/run-unknown-module.ks` (actually a shell script note) | `./kestrel run kestrel:no_such_module` exits non-zero with error message |
+
+Note: A functional test for `./kestrel run kestrel:tools/test` will come naturally in S08-06 after `tools/test.ks` is created.
+
+## Documentation and specs to update
+
+- [x] `docs/specs/09-tools.md` — document that `kestrel run` accepts module specifiers in addition to file paths; add `./kestrel run kestrel:tools/<name>` as a supported invocation form
+
+## Build notes
+
+- 2025-01: Implemented as a pure bash change to `scripts/kestrel`. Added `resolve_module_specifier()` after `resolve_script()`, and patched `cmd_run()` to detect `kestrel:*` prefix and route to it. Only `cmd_run` was modified — `cmd_dis` and `cmd_build` remain file-path-only as designed.
+- All tests pass with no changes to TypeScript or Java: 419 compiler + 532 Kestrel (532 passed).

@@ -76,6 +76,19 @@ resolve_script() {
   echo ""
 }
 
+# Resolve a kestrel: module specifier to an absolute .ks path (or empty string on failure).
+# Example: kestrel:tools/test -> $ROOT/stdlib/kestrel/tools/test.ks
+resolve_module_specifier() {
+  local spec="$1"
+  local rest="${spec#kestrel:}"
+  local candidate="$ROOT/stdlib/kestrel/${rest}.ks"
+  if [ -f "$candidate" ]; then
+    echo "$candidate"
+  else
+    echo ""
+  fi
+}
+
 # Given absolute path to .ks, return directory for JVM .class files
 jvm_class_dir_for() {
   local ks="$1"
@@ -320,10 +333,20 @@ cmd_run() {
     build_compiler_jvm
   fi
   local resolved class_dir main_class
-  resolved=$(resolve_script "$1")
-  if [ -z "$resolved" ]; then
-    echo "kestrel: script not found: $1" >&2
-    exit 1
+  # Support kestrel: module specifiers (e.g. kestrel:tools/test)
+  if [[ "${1:-}" == kestrel:* ]]; then
+    local spec="$1"
+    resolved=$(resolve_module_specifier "$spec")
+    if [ -z "$resolved" ]; then
+      echo "kestrel: stdlib module not found: $spec" >&2
+      exit 1
+    fi
+  else
+    resolved=$(resolve_script "$1")
+    if [ -z "$resolved" ]; then
+      echo "kestrel: script not found: $1" >&2
+      exit 1
+    fi
   fi
   shift
   class_dir=$(jvm_class_dir_for "$resolved")
