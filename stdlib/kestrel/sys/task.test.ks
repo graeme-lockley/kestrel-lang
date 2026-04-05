@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:tools/test"
 import { map, all, race, cancel, Cancelled } from "kestrel:sys/task"
 import { runProcess } from "kestrel:sys/process"
 

@@ -32,8 +32,9 @@ fun collectPrimes(composite: Array<Bool>, limit: Int): Array<Int> = {
   val result = Arr.new()
   var i = 2
   while (i <= limit) {
-    if (!Arr.get(composite, i))
+    if (!Arr.get(composite, i)) {
       Arr.push(result, i)
+    }
     i := i + 1
   }
   result

@@ -1,4 +1,4 @@
-import { outputCompact } from "kestrel:test"
+import { outputCompact } from "kestrel:tools/test"
 import { incPassed } from "./inc_passed_helper.ks"
 
 val counts = {

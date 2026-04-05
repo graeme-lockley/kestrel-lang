@@ -488,11 +488,11 @@ JSON parsing and serialisation implemented **in Kestrel** (no host JSON primitiv
 
 ---
 
-## kestrel:test
+## kestrel:tools/test
 
-Assertions and reporting for the Kestrel unit-test harness (`kestrel test`, `scripts/run_tests.ks`). Imports `kestrel:basics` (`nowMs`), `kestrel:console`, `kestrel:list`, `kestrel:stack` (`format`), and `kestrel:string` (`concat`, `repeat`) for implementation (namespace imports); styled output uses console ANSI constants (✓/✗, colours, default-weight group names, dim for secondary text such as timing and verbose footers).
+Assertions and reporting for the Kestrel unit-test harness (`kestrel test`). Imports from `kestrel:data/basics` (`nowMs`), `kestrel:io/console`, `kestrel:data/list`, `kestrel:dev/stack` (`format`), `kestrel:data/string`, and `kestrel:sys/task` (`asyncTasksInFlight`) for implementation; styled output uses console ANSI constants (✓/✗, colours, default-weight group names, dim for secondary text such as timing and verbose footers).
 
-The CLI (`./scripts/kestrel test`) passes flags **`--verbose`** and **`--summary`** through to the runner. Default output mode is **compact**.
+The CLI entry point is `kestrel:tools/test-runner`, which generates `.kestrel_test_runner.ks`, imports `kestrel:tools/test` for harness functions, and runs it via `./scripts/kestrel run`. The CLI (`./scripts/kestrel test`) passes flags **`--verbose`** and **`--summary`** through to the runner. Default output mode is **compact**.
 
 ### Output mode constants
 

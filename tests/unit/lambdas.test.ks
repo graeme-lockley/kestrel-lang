@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq } from "kestrel:tools/test"
 
 fun apply(f: (Int) -> Int, x: Int): Int = f(x)
 

@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
 import * as Dict from "kestrel:data/dict"
 import * as List from "kestrel:data/list"
 import * as Set from "kestrel:data/set"

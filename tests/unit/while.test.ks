@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq } from "kestrel:tools/test"
 
 fun sumTo(n: Int): Int = {
   var i: Int = 0

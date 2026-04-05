@@ -1,6 +1,7 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
 import { append, fromInt } from "kestrel:data/string"
 import * as List from "kestrel:data/list"
+import * as Arr  from "kestrel:array"
 
 fun inc(n: Int): Int = n + 1
 
@@ -188,6 +189,16 @@ export async fun run(s: Suite): Task<Unit> = {
       eq(sg, "dropWhile", List.dropWhile([2, 4, 5, 6], isEven), [5, 6])
       eq(sg, "dropWhile all", List.dropWhile([2, 4], isEven), emptyInts())
       eq(sg, "dropWhile none", List.dropWhile([1, 2], isEven), [1, 2])
+    })
+
+    group(s1, "forEach", (sg: Suite) => {
+      val acc = Arr.new()
+      List.forEach([1, 2, 3], (x: Int) => Arr.push(acc, x))
+      eq(sg, "visits all elements in order", Arr.toList(acc), [1, 2, 3])
+
+      val acc2 = Arr.new()
+      List.forEach(emptyInts(), (x: Int) => Arr.push(acc2, x))
+      eq(sg, "empty list", Arr.toList(acc2), emptyInts())
     })
   })
 }

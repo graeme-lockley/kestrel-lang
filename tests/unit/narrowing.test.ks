@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:tools/test"
 
 fun optLen(o: Option<Int>): Int =
   if (o is None) { 0 } else {

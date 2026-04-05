@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
 import {
   getOrElse,
   withDefault,

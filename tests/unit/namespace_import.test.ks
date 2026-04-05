@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:tools/test"
 import * as Str from "kestrel:data/string"
 import * as Console from "kestrel:io/console"
 import * as Helper from "../fixtures/export_var_helper.ks"

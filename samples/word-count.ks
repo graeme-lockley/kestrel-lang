@@ -65,17 +65,9 @@ val top15 =
 
 // ── display ──────────────────────────────────────────────────────────────
 
-fun padRight(s: String, w: Int): String =
-  Str.padRight(w, " ", s)
-
 fun printRow(pair: (String, Int)): Unit =
-  println("  ${padRight(pair.0, 18)} ${pair.1}")
-
-fun printAll(rows: List<(String, Int)>): Unit = match (rows) {
-  []     => ()
-  h :: t => { printRow(h); printAll(t) }
-}
+  println("  ${Str.padRight(18, " ", pair.0)} ${pair.1}")
 
 println("Word               Count")
 println("─────────────────────────")
-printAll(top15)
+Lst.forEach(top15, printRow)

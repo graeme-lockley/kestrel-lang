@@ -5,6 +5,8 @@ import * as Stk from "kestrel:dev/stack"
 import * as Str from "kestrel:data/string"
 import { asyncTasksInFlight } from "kestrel:sys/task"
 
+// ─── Harness types and output modes ──────────────────────────────────────────
+
 /** Harness output mode (`Suite.output`). Use these values only; other Int values behave like compact. */
 export val outputVerbose: Int = 0
 export val outputCompact: Int = 1
@@ -26,6 +28,8 @@ export fun makeRoot(output: Int): Suite = {
   val counts = { mut passed = 0, mut failed = 0, mut startTime = Basics.nowMs(), mut compactExpanded = False };
   { depth = 0, output = output, counts = counts }
 }
+
+// ─── Internal formatting helpers ─────────────────────────────────────────────
 
 fun indent(n: Int): String = Str.concat(Lst.repeat(n, "  "))
 

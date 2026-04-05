@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:tools/test"
 
 // Mutual tail-call optimization: direct calls between top-level functions in tail position.
 fun isEven(n: Int): Bool = if (n == 0) True else isOdd(n - 1)

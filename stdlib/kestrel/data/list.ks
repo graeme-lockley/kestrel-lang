@@ -259,3 +259,8 @@ export fun tail<A>(xs: List<A>): List<A> = match (xs) {
   [] => []
   _ :: t => t
 }
+
+export fun forEach<A>(xs: List<A>, f: (A) -> Unit): Unit = match (xs) {
+  []     => ()
+  h :: t => { f(h); forEach(t, f) }
+}

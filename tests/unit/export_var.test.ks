@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq } from "kestrel:tools/test"
 import { counter } from "../fixtures/export_var_helper.ks"
 
 export async fun run(s: Suite): Task<Unit> =

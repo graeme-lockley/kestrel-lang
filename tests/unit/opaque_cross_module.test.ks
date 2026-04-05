@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq } from "kestrel:tools/test"
 import { SecretToken, secretTokenToInt, makeSecretToken, UserId, userIdToInt, makeUserId } from "../fixtures/opaque_pkg/lib.ks"
 
 // Using opaque ADT via its exported functions

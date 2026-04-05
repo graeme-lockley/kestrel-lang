@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq } from "kestrel:tools/test"
 
 // Self tail-call optimization: deep tail recursion must not exhaust the VM call stack.
 fun sumTail(n: Int, acc: Int): Int =

@@ -1,4 +1,4 @@
-import { Suite, group, eq, gt, isTrue } from "kestrel:test"
+import { Suite, group, eq, gt, isTrue } from "kestrel:tools/test"
 import { format, print, trace } from "kestrel:dev/stack"
 import { ArithmeticOverflow } from "kestrel:sys/runtime"
 import { length, indexOf } from "kestrel:data/string"

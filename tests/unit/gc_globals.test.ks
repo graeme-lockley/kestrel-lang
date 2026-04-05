@@ -1,5 +1,5 @@
 // Stress test: module global as only root for a heap value; GC must trace globals (spec 05 §4).
-import { Suite, group, eq } from "kestrel:test"
+import { Suite, group, eq } from "kestrel:tools/test"
 
 // Only root for this string is the module global; GC must trace globals to keep it alive.
 export var globalStr: String = "survived"

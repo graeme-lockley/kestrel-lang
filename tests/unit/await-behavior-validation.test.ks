@@ -2,7 +2,7 @@
 // Compile-time rejection tests (await in non-async contexts) live in
 // tests/conformance/typecheck/invalid/.
 
-import { Suite, group, eq, isTrue } from "kestrel:test"
+import { Suite, group, eq, isTrue } from "kestrel:tools/test"
 
 // --- Helpers ---
 
