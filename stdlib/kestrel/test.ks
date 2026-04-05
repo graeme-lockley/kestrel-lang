@@ -91,7 +91,8 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
   s.counts.compactExpanded := False;
   val child = { depth = s.depth + 1, output = s.output, counts = s.counts };
 
-  if (s.output == outputVerbose) println(groupTitleLine(s, name));
+  if (s.output == outputVerbose | (s.output == outputCompact & s.depth == 0))
+    println(groupTitleLine(s, name));
 
   body(child);
 
@@ -104,7 +105,20 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
     val countStr = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
     println("${indent(s.depth)}${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}")
   } else if (s.output == outputSummary) {
-    if (s.depth == 1) {
+    if (s.depth == 0) {
+      val summaryLine = if (f > 0) {
+        val countStr = "${p} passed, ${f} failed";
+        "${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}"
+      } else {
+        compactSummaryLine(s.depth, name, p, elapsed)
+      };
+      println(summaryLine)
+    } else ()
+  } else {
+    if (s.depth == 0) {
+      val countStr = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
+      println("${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}")
+    } else {
       val summaryLine = if (f > 0) {
         val countStr = "${p} passed, ${f} failed";
         "${indent(s.depth)}${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}"
@@ -112,15 +126,7 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
         compactSummaryLine(s.depth, name, p, elapsed)
       };
       println(summaryLine)
-    } else ()
-  } else {
-    val summaryLine = if (f > 0) {
-      val countStr = "${p} passed, ${f} failed";
-      "${indent(s.depth)}${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}"
-    } else {
-      compactSummaryLine(s.depth, name, p, elapsed)
-    };
-    println(summaryLine)
+    }
   }
 }
 

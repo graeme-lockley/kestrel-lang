@@ -120,7 +120,8 @@ async fun main(): Task<Unit> = {
   val pathArgs = getPathArgs(proc.args)
   val outputModeStr =
     if (hasFlag(proc.args, "--summary")) "outputSummary"
-    else "outputVerbose"
+    else if (hasFlag(proc.args, "--verbose")) "outputVerbose"
+    else "outputCompact"
 
   val tests =
     if (Lst.length(pathArgs) == 0) {
