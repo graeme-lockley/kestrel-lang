@@ -21,7 +21,7 @@ import type { Diagnostic } from './diagnostics/types.js';
 import { CODES, locationFromSpan, locationFileOnly } from './diagnostics/types.js';
 import type { Span } from './lexer/types.js';
 import { uniqueDependencyPaths } from './dependency-paths.js';
-import { buildKtiV4, writeKtiFile } from './kti.js';
+import { buildKtiV4, writeKtiFile, readKtiFile, deserializeExports, extractCodegenMeta, type KtiCodegenMeta } from './kti.js';
 
 export interface CompileFileJvmOptions {
   projectRoot?: string;
@@ -524,6 +524,7 @@ export function compileFileJvm(
       exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>;
       mavenDeps: MavenResolvedDependency[];
       sourceHash: string;
+      codegenMeta?: KtiCodegenMeta;
     }
   >();
   const onCompilingFile = options?.onCompilingFile;
@@ -544,6 +545,7 @@ export function compileFileJvm(
     exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>;
     mavenDeps: MavenResolvedDependency[];
     sourceHash: string;
+    codegenMeta?: KtiCodegenMeta;
   } | { ok: false; diagnostics: Diagnostic[] } {
     if (visited.has(filePath)) {
       return { ok: false, diagnostics: [diag(filePath, CODES.file.circular_import, `Circular import: ${filePath}`)] };
@@ -670,6 +672,42 @@ export function compileFileJvm(
       });
     }
 
+    // Freshness check: if a valid .kti exists for this file and all dep/source
+    // hashes match, short-circuit typecheck + codegen and load from .kti.
+    if (getClassOutputDir && !(stalePaths?.has(filePath))) {
+      const classDir = getClassOutputDir(filePath);
+      const cn = classNameForPath(filePath);
+      const ktiPath = pathResolve(classDir, cn + '.kti');
+      const kti = readKtiFile(ktiPath);
+      if (kti && kti.sourceHash === sourceHash) {
+        let depHashesMatch = true;
+        for (const dr of depResults) {
+          if (kti.depHashes[dr.path] !== cache.get(dr.path)?.sourceHash) {
+            depHashesMatch = false;
+            break;
+          }
+        }
+        if (depHashesMatch) {
+          const deserialized = deserializeExports(kti);
+          const depPaths = depResults.flatMap((d) => [d.path, ...d.dependencyPaths]);
+          const dependencyPathsU = uniqueDependencyPaths([filePath, ...depPaths]);
+          const entry = {
+            program: { kind: 'Program', imports: [], topLevelDecls: [], body: [] } as unknown as Program,
+            jvmResult: { className: cn, classBytes: new Uint8Array(), innerClasses: new Map<string, Uint8Array>() } as unknown as JvmCodegenResult,
+            dependencyPaths: dependencyPathsU,
+            className: cn,
+            ...deserialized,
+            mavenDeps: [] as MavenResolvedDependency[],
+            sourceHash,
+            codegenMeta: kti.codegenMeta,
+          };
+          cache.set(filePath, entry);
+          visited.delete(filePath);
+          return { ok: true, ...entry };
+        }
+      }
+    }
+
     const dependencyExportsBySpec = new Map<string, DependencyExportSnapshot>();
     for (const dr of depResults) {
       const ent = cache.get(dr.path);
@@ -767,7 +805,9 @@ export function compileFileJvm(
     }
 
     for (const dep of depResults) {
-      const depProg = cache.get(dep.path)?.program;
+      const depEntry = cache.get(dep.path);
+      const depMeta = depEntry?.codegenMeta;
+      const depProg = depEntry?.program;
       importClasses.set(dep.spec, dep.className);
       for (const imp of program.imports) {
         if (imp.kind === 'NamedImport' && imp.spec === dep.spec) {
@@ -775,69 +815,106 @@ export function compileFileJvm(
             if (dep.exportSet.has(s.external)) {
               importedNameToClass.set(s.local, dep.className);
               importedNameToOriginal.set(s.local, s.external);
-              if (depProg) {
-                const arity = getFunArity(depProg, s.external);
-                if (arity !== undefined) importedFunArities.set(s.local, arity);
-                if (isAsyncFun(depProg, s.external)) importedAsyncFunNames.add(s.local);
-              }
-              if (depProg && isValOrVar(depProg, s.external)) importedValVarToClass.set(s.local, dep.className);
-              if (depProg && isVar(depProg, s.external)) importedVarNames.add(s.local);
-                // Check if it's an imported exception or ADT constructor (nullary or parametric)
-                if (depProg) {
-                  for (const node of depProg.body) {
-                    if (!node) continue;
-                    if (node.kind === 'ExceptionDecl' && node.name === s.external) {
-                      const excArity = (node.fields?.length) ?? 0;
-                      importedAdtClasses.set(s.local, { className: dep.className + '$' + s.external, arity: excArity });
-                    } else if (node.kind === 'TypeDecl') {
-                      const t = node as TypeDecl;
-                      if (t.body?.kind !== 'ADTBody') continue;
-                      for (const c of (t.body as { constructors: Array<{ name: string; params: unknown[] }> }).constructors) {
-                        if (c.name === s.external) {
-                          importedAdtClasses.set(s.local, { className: dep.className + '$' + t.name + '$' + c.name, arity: c.params.length });
-                        }
+              // Arity and async: prefer codegenMeta, fall back to program walk
+              const arity = depMeta?.funArities[s.external] ?? (depProg ? getFunArity(depProg, s.external) : undefined);
+              if (arity !== undefined) importedFunArities.set(s.local, arity);
+              const isAsync = depMeta
+                ? depMeta.asyncFunNames.includes(s.external)
+                : (depProg ? isAsyncFun(depProg, s.external) : false);
+              if (isAsync) importedAsyncFunNames.add(s.local);
+              // Val/Var: prefer codegenMeta
+              const isVV = depMeta
+                ? depMeta.valOrVarNames.includes(s.external)
+                : (depProg ? isValOrVar(depProg, s.external) : false);
+              if (isVV) importedValVarToClass.set(s.local, dep.className);
+              const isV = depMeta
+                ? depMeta.varNames.includes(s.external)
+                : (depProg ? isVar(depProg, s.external) : false);
+              if (isV) importedVarNames.add(s.local);
+              // Exception / ADT constructors: prefer codegenMeta
+              if (depMeta) {
+                for (const exc of depMeta.exceptionDecls) {
+                  if (exc.name === s.external) {
+                    importedAdtClasses.set(s.local, { className: dep.className + '$' + s.external, arity: exc.arity });
+                  }
+                }
+                for (const adt of depMeta.adtConstructors) {
+                  for (const ctor of adt.constructors) {
+                    if (ctor.name === s.external) {
+                      importedAdtClasses.set(s.local, { className: dep.className + '$' + adt.typeName + '$' + ctor.name, arity: ctor.params });
+                    }
+                  }
+                }
+              } else if (depProg) {
+                for (const node of depProg.body) {
+                  if (!node) continue;
+                  if (node.kind === 'ExceptionDecl' && node.name === s.external) {
+                    const excArity = (node.fields?.length) ?? 0;
+                    importedAdtClasses.set(s.local, { className: dep.className + '$' + s.external, arity: excArity });
+                  } else if (node.kind === 'TypeDecl') {
+                    const t = node as TypeDecl;
+                    if (t.body?.kind !== 'ADTBody') continue;
+                    for (const c of (t.body as { constructors: Array<{ name: string; params: unknown[] }> }).constructors) {
+                      if (c.name === s.external) {
+                        importedAdtClasses.set(s.local, { className: dep.className + '$' + t.name + '$' + c.name, arity: c.params.length });
                       }
                     }
                   }
                 }
+              }
             }
           }
         }
         if (imp.kind === 'NamespaceImport' && imp.spec === dep.spec) {
           namespaceClasses.set(imp.name, dep.className);
-            // Build ADT constructor → inner class map and var fields set for this namespace import
-            if (depProg) {
-              const funArities = new Map<string, number>();
-              const asyncFunNames = new Set<string>();
-              const adtCtors = new Map<string, string>();
-              const varFields = new Set<string>();
-              for (const node of depProg.body) {
-                if (!node) continue;
-                if (node.kind === 'FunDecl') {
-                  const fun = node as FunDecl;
-                  funArities.set(fun.name, fun.params.length);
-                  if (fun.async) asyncFunNames.add(fun.name);
-                } else if (node.kind === 'ExternFunDecl') {
-                  const efun = node as ExternFunDecl;
-                  funArities.set(efun.name, efun.params.length);
-                  const rt = efun.returnType as { kind?: string; name?: string } | undefined;
-                  if (rt?.kind === 'AppType' && rt?.name === 'Task') asyncFunNames.add(efun.name);
-                } else if (node.kind === 'TypeDecl') {
-                  const t = node as TypeDecl;
-                  if (t.body?.kind !== 'ADTBody') continue;
-                  const base = dep.className + '$' + t.name;
-                  for (const c of t.body.constructors) {
-                    adtCtors.set(c.name, base + '$' + c.name);
-                  }
-                } else if (node.kind === 'VarDecl') {
-                  varFields.add((node as { name: string }).name);
-                }
+          // Build ADT constructor → inner class map and var fields: prefer codegenMeta
+          if (depMeta) {
+            const funArities = new Map<string, number>(Object.entries(depMeta.funArities));
+            const asyncFunNames = new Set<string>(depMeta.asyncFunNames);
+            const adtCtors = new Map<string, string>();
+            for (const adt of depMeta.adtConstructors) {
+              const base = dep.className + '$' + adt.typeName;
+              for (const ctor of adt.constructors) {
+                adtCtors.set(ctor.name, base + '$' + ctor.name);
               }
-              if (funArities.size > 0) namespaceFunArities.set(imp.name, funArities);
-              if (asyncFunNames.size > 0) namespaceAsyncFunNames.set(imp.name, asyncFunNames);
-              if (adtCtors.size > 0) namespaceAdtConstructors.set(imp.name, adtCtors);
-              if (varFields.size > 0) namespaceVarFields.set(imp.name, varFields);
             }
+            const varFields = new Set<string>(depMeta.varNames);
+            if (funArities.size > 0) namespaceFunArities.set(imp.name, funArities);
+            if (asyncFunNames.size > 0) namespaceAsyncFunNames.set(imp.name, asyncFunNames);
+            if (adtCtors.size > 0) namespaceAdtConstructors.set(imp.name, adtCtors);
+            if (varFields.size > 0) namespaceVarFields.set(imp.name, varFields);
+          } else if (depProg) {
+            const funArities = new Map<string, number>();
+            const asyncFunNames = new Set<string>();
+            const adtCtors = new Map<string, string>();
+            const varFields = new Set<string>();
+            for (const node of depProg.body) {
+              if (!node) continue;
+              if (node.kind === 'FunDecl') {
+                const fun = node as FunDecl;
+                funArities.set(fun.name, fun.params.length);
+                if (fun.async) asyncFunNames.add(fun.name);
+              } else if (node.kind === 'ExternFunDecl') {
+                const efun = node as ExternFunDecl;
+                funArities.set(efun.name, efun.params.length);
+                const rt = efun.returnType as { kind?: string; name?: string } | undefined;
+                if (rt?.kind === 'AppType' && rt?.name === 'Task') asyncFunNames.add(efun.name);
+              } else if (node.kind === 'TypeDecl') {
+                const t = node as TypeDecl;
+                if (t.body?.kind !== 'ADTBody') continue;
+                const base = dep.className + '$' + t.name;
+                for (const c of t.body.constructors) {
+                  adtCtors.set(c.name, base + '$' + c.name);
+                }
+              } else if (node.kind === 'VarDecl') {
+                varFields.add((node as { name: string }).name);
+              }
+            }
+            if (funArities.size > 0) namespaceFunArities.set(imp.name, funArities);
+            if (asyncFunNames.size > 0) namespaceAsyncFunNames.set(imp.name, asyncFunNames);
+            if (adtCtors.size > 0) namespaceAdtConstructors.set(imp.name, adtCtors);
+            if (varFields.size > 0) namespaceVarFields.set(imp.name, varFields);
+          }
         }
       }
     }
@@ -940,6 +1017,9 @@ export function compileFileJvm(
       writeKtiFile(ktiPath, ktiV4);
     }
 
+    visited.delete(filePath);
+    onCompilingFile?.(filePath, Math.round(performance.now() - compileStart));
+    const codegenMeta = extractCodegenMeta(program, tc.exports, tc.exportedTypeAliases, tc.exportedTypeVisibility ?? new Map());
     cache.set(filePath, {
       program,
       jvmResult,
@@ -951,9 +1031,8 @@ export function compileFileJvm(
       exportedTypeVisibility: tc.exportedTypeVisibility,
       mavenDeps,
       sourceHash,
+      codegenMeta,
     });
-    visited.delete(filePath);
-    onCompilingFile?.(filePath, Math.round(performance.now() - compileStart));
     return {
       ok: true,
       program,
@@ -966,6 +1045,7 @@ export function compileFileJvm(
       exportedTypeVisibility: tc.exportedTypeVisibility,
       mavenDeps,
       sourceHash,
+      codegenMeta,
     };
   }
 

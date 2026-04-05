@@ -141,7 +141,7 @@ public final class KRuntime {
     }
 
     /** Return the current number of async tasks that have not yet completed. */
-    public static long getAsyncTasksInFlight() {
+    public static Long getAsyncTasksInFlight() {
         return asyncTasksInFlight.get();
     }
 

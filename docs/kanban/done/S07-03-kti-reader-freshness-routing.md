@@ -52,22 +52,22 @@
 
 ## Tasks
 
-- [ ] Add `readKtiFile` to `compiler/src/kti.ts`:
+- [x] Add `readKtiFile` to `compiler/src/kti.ts`:
   - `import { existsSync, readFileSync } from 'fs'` (already imported `writeFileSync`; add `existsSync, readFileSync`)
   - Signature: `export function readKtiFile(ktiPath: string): KtiV4 | null`
   - Implementation: if `!existsSync(ktiPath)` return null; try `JSON.parse(readFileSync(ktiPath,'utf-8'))`; check `parsed.version === 4`; cast and return; catch any error → return null
 
-- [ ] Add `deserializeExports` to `compiler/src/kti.ts`:
+- [x] Add `deserializeExports` to `compiler/src/kti.ts`:
   - Signature: `export function deserializeExports(kti: KtiV4): { exports: Map<string,InternalType>; exportedTypeAliases: Map<string,InternalType>; exportedConstructors: Map<string,InternalType>; exportedTypeVisibility: Map<string,'local'|'opaque'|'export'> }`
   - Walk `kti.functions`: kind!='constructor' → `exports.set(name, deserializeType(entry.type))`; kind=='constructor' → `exportedConstructors.set(name, deserializeType(entry.type))`
-  - Walk `kti.types`: → `exportedTypeAliases.set(name, deserializeType(entry.type ?? { k: 'app', n: name, as: [] }))`; → `exportedTypeVisibility.set(name, entry.visibility)`
+  - Walk `kti.types`: → `exportedTypeAliases.set(name, deserializeType(entry.type ?? { k: 'app', n: name, as: [] }))`; → `exportedTypeVisibility.set(name, entry.visibility)` AND `exports.set(name, t)` (type aliases appear in both exports and exportedTypeAliases, per typecheck)
 
-- [ ] Update `compiler/src/compile-file-jvm.ts` — imports and cache type:
+- [x] Update `compiler/src/compile-file-jvm.ts` — imports and cache type:
   - Add `statSync` to the `fs` import line
   - Extend `kti.js` import: `import { buildKtiV4, writeKtiFile, readKtiFile, deserializeExports, extractCodegenMeta, type KtiCodegenMeta } from './kti.js'`
   - Add `codegenMeta?: KtiCodegenMeta` to the cache Map entry type (the object shape inside the `Map<string, {...}>` at ~line 545)
 
-- [ ] Insert freshness shortcut in `compileOne` (after the dep compilation loop, before typecheck):
+- [x] Insert freshness shortcut in `compileOne` (after the dep compilation loop, before typecheck):
   - After the closing `}` of `for (const spec of sourceSpecs)` dep compilation loop, add:
     ```
     if (getClassOutputDir && !(stalePaths?.has(filePath))) {
@@ -105,29 +105,23 @@
     }
     ```
 
-- [ ] Refactor dep-codegen-metadata lookups in `compileOne` to prefer `codegenMeta`:
-  - In the NamedImport loop (~line 770-805): replace `const depProg = cache.get(dep.path)?.program` with `const depEntry = cache.get(dep.path); const depMeta = depEntry?.codegenMeta; const depProg = depEntry?.program`
-  - Replace `getFunArity(depProg, s.external)` → `depMeta?.funArities[s.external] ?? (depProg ? getFunArity(depProg, s.external) : undefined)`
-  - Replace `isAsyncFun(depProg, s.external)` → `(depMeta?.asyncFunNames.includes(s.external) ?? false) || (!depMeta && depProg ? isAsyncFun(depProg, s.external) : false)`
-  - Replace `isValOrVar(depProg, s.external)` → `depMeta ? depMeta.valOrVarNames.includes(s.external) : (depProg ? isValOrVar(depProg, s.external) : false)`
-  - Replace `isVar(depProg, s.external)` → `depMeta ? depMeta.varNames.includes(s.external) : (depProg ? isVar(depProg, s.external) : false)`
-  - Replace the `depProg.body` walk for ExceptionDecl/TypeDecl (importedAdtClasses) with a `codegenMeta`-based lookup; fall back to the existing body walk only when `depMeta` is absent
-  - In the NamespaceImport loop (~line 810-843): similarly, prefer `depMeta` for FunDecl/ExternFunDecl/VarDecl/TypeDecl info when available; fall back to `depProg.body` walk
+- [x] Refactor dep-codegen-metadata lookups in `compileOne` to prefer `codegenMeta`:
+  - In the NamedImport loop: added `const depEntry = cache.get(dep.path); const depMeta = depEntry?.codegenMeta; const depProg = depEntry?.program`
+  - All helper lookups (arity, async, val/var) now prefer `depMeta` fields; fall back to `depProg` walk when `depMeta` absent
+  - Exception/ADT constructor lookups use `depMeta.exceptionDecls` / `depMeta.adtConstructors` first
+  - Namespace import loop similarly prefers `depMeta`
 
-- [ ] Set `codegenMeta` in the full-compile cache entry:
-  - In the `cache.set(filePath, {...})` call near the end of `compileOne`, add `codegenMeta: extractCodegenMeta(program, tc.exports, tc.exportedTypeAliases, tc.exportedTypeVisibility ?? new Map())`
+- [x] Set `codegenMeta` in the full-compile cache entry:
+  - Added `extractCodegenMeta(program, ...)` call after `onCompilingFile`, stored in `codegenMeta`, added to `cache.set` and return value
 
-- [ ] Add unit tests to `compiler/test/unit/kti.test.ts`:
-  - `describe('readKtiFile')`: write valid KtiV4 JSON to a temp file → returns it; missing file → null; malformed JSON → null; version≠4 → null
-  - `describe('deserializeExports')`: build a KtiV4 with function/val/var/constructor/type entries → verify all four maps are populated correctly with deserialized types
+- [x] Add unit tests to `compiler/test/unit/kti.test.ts`:
+  - `describe('readKtiFile')`: 4 tests covering valid file, missing, malformed, version≠4
+  - `describe('deserializeExports')`: 4 tests covering function/val/var, constructors, opaque visibility, type round-trip
 
-- [ ] Add integration test `compiler/test/integration/kti-incremental.test.ts`:
-  - Setup: a two-package project (`leaf.ks` + `main.ks` importing leaf), compiled with a temp `getClassOutputDir`
-  - Test 1 (second-build caching): compile once, then compile again; assert `onCompilingFile` is NOT called for `leaf.ks` on the second build
-  - Test 2 (stale dep triggers recompile): compile, modify `leaf.ks` source, compile again; assert `onCompilingFile` IS called for both `leaf.ks` and `main.ks`
-  - Test 3 (corrupt .kti failsafe): compile, corrupt the leaf's `.kti` (write garbage JSON), compile again; assert compilation succeeds with correct output
+- [x] Add integration test `compiler/test/integration/kti-incremental.test.ts`:
+  - 4 tests: second-build caching, `.kti` file existence + v4 format, stale dep recompile, corrupt `.kti` failsafe
 
-- [ ] Run `cd compiler && npm run build && npm test`
+- [x] Run `cd compiler && npm run build && npm test`
 
 ## Tests to add
 
@@ -155,3 +149,11 @@
 - **Synthetic cache entry**: when loading from `.kti`, set `program` to a minimal stub and `jvmResult` to an empty result. Downstream code in `compileOne` uses `depProg` (the `program` field) to extract codegen metadata; this must be replaced with data from `codegenMeta` in the `.kti`. The simplest approach: after S07-02, refactor the codegen-metadata extraction loop in `compileOne` to use a new `DepCodegenMeta` interface, populated either from `depProg` (full compile path) or from `kti.codegenMeta` (.kti path).
 - **`getClassOutputDir` gating**: `.kti` reading and writing only applies when `getClassOutputDir` is configured. In-memory-only compilations (no `-o` flag) continue to compile everything from source.
 - **Path normalisation**: keys in `depHashes` and in the in-process `cache` Map must use the same path form (already-resolved absolute paths). The reader must normalize `.kti` dep-hash keys the same way `compileOne` resolves specifiers.
+
+## Build notes
+
+- 2025-01-29: **Critical bug found**: typecheck puts type names (ADT/alias) in BOTH `tc.exports` AND `tc.exportedTypeAliases`, but `buildKtiV4` only stores them in `kti.types`. Fix: `deserializeExports` now adds type names to `exports` (in addition to `exportedTypeAliases`) matching typecheck behavior. Without this, `import { DirEntry } from "kestrel:fs"` would fail with "does not export DirEntry".
+- 2025-01-29: Simplified freshness check: since source is already read to get imports, hash is computed at parse time. Freshness check AFTER dep compilation loop uses computed `sourceHash` vs `kti.sourceHash`. No mtime gate needed (source already in memory).
+- 2025-01-29: Kestrel function declarations use `:` not `->` for return-type annotations in tests.
+- 2025-01-29: `.kti` files are written with full-path-based class names (e.g. `Users/graemelockley/.../Leaf.kti`), so test assertions need recursive directory scan.
+- 2025-01-29: 417 tests pass (405 prior + 8 new unit tests for readKtiFile/deserializeExports + 4 integration tests).

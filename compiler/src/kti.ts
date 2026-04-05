@@ -4,7 +4,7 @@
  * Spec: docs/specs/kti-format.md
  */
 import { createHash } from 'node:crypto';
-import { writeFileSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync } from 'fs';
 import type { InternalType } from './types/internal.js';
 import type { Program, FunDecl, ExternFunDecl, TypeDecl, ExceptionDecl } from './ast/nodes.js';
 
@@ -453,7 +453,7 @@ export function buildKtiV4(params: BuildKtiV4Params): KtiV4 {
 }
 
 // ---------------------------------------------------------------------------
-// File writer
+// File writer and reader
 // ---------------------------------------------------------------------------
 
 /**
@@ -461,4 +461,59 @@ export function buildKtiV4(params: BuildKtiV4Params): KtiV4 {
  */
 export function writeKtiFile(ktiPath: string, kti: KtiV4): void {
   writeFileSync(ktiPath, JSON.stringify(kti, null, 2) + '\n', 'utf-8');
+}
+
+/**
+ * Read and parse a .kti file. Returns the KtiV4 object on success, or null
+ * if the file is absent, unreadable, malformed, or not version 4.
+ * Never throws.
+ */
+export function readKtiFile(ktiPath: string): KtiV4 | null {
+  try {
+    if (!existsSync(ktiPath)) return null;
+    const text = readFileSync(ktiPath, 'utf-8');
+    const parsed = JSON.parse(text) as Record<string, unknown>;
+    if (parsed['version'] !== 4) return null;
+    return parsed as unknown as KtiV4;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reconstruct the four typecheck export Maps from a KtiV4 file.
+ * Used when loading a dep's exports from its .kti instead of re-typechecking.
+ */
+export function deserializeExports(kti: KtiV4): {
+  exports: Map<string, InternalType>;
+  exportedTypeAliases: Map<string, InternalType>;
+  exportedConstructors: Map<string, InternalType>;
+  exportedTypeVisibility: Map<string, 'local' | 'opaque' | 'export'>;
+} {
+  const exports = new Map<string, InternalType>();
+  const exportedTypeAliases = new Map<string, InternalType>();
+  const exportedConstructors = new Map<string, InternalType>();
+  const exportedTypeVisibility = new Map<string, 'local' | 'opaque' | 'export'>();
+
+  for (const [name, entry] of Object.entries(kti.functions)) {
+    const t = deserializeType((entry as { type: unknown }).type);
+    if ((entry as { kind: string }).kind === 'constructor') {
+      exportedConstructors.set(name, t);
+    } else {
+      exports.set(name, t);
+    }
+  }
+
+  for (const [name, entry] of Object.entries(kti.types)) {
+    const typeEntry = entry as KtiTypeEntry;
+    const raw = typeEntry.type ?? { k: 'app', n: name, as: [] };
+    const t = deserializeType(raw);
+    exportedTypeAliases.set(name, t);
+    exportedTypeVisibility.set(name, typeEntry.visibility);
+    // Typecheck also adds type names to `exports` (see check.ts TypeDecl handling),
+    // so restore that here so depExportSet checks pass for type-name imports.
+    exports.set(name, t);
+  }
+
+  return { exports, exportedTypeAliases, exportedConstructors, exportedTypeVisibility };
 }

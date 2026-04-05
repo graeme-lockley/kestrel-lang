@@ -1,5 +1,8 @@
-import { describe, it, expect } from 'vitest';
-import { serializeType, deserializeType, extractCodegenMeta, buildKtiV4 } from '../../src/kti.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { serializeType, deserializeType, extractCodegenMeta, buildKtiV4, readKtiFile, deserializeExports, type KtiV4 } from '../../src/kti.js';
 import type { InternalType } from '../../src/types/internal.js';
 import type { Program } from '../../src/ast/nodes.js';
 
@@ -302,5 +305,167 @@ describe('buildKtiV4', () => {
       exportedTypeVisibility: new Map(),
     });
     expect(kti.depHashes['/abs/dep.ks']).toBe('abc123def456789012345678901234567890123456789012345678901234567a');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readKtiFile
+// ---------------------------------------------------------------------------
+
+describe('readKtiFile', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), 'kti-test-'));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('returns KtiV4 for a valid file', () => {
+    const prog = makeProgram([]);
+    const kti = buildKtiV4({
+      program: prog,
+      source: 'val x = 1',
+      depPaths: [],
+      depSourceHashes: new Map(),
+      exports: new Map<string, InternalType>([['x', pInt]]),
+      exportedTypeAliases: new Map(),
+      exportedConstructors: new Map(),
+      exportedTypeVisibility: new Map(),
+    });
+    const p = join(tmpDir, 'test.kti');
+    writeFileSync(p, JSON.stringify(kti, null, 2));
+    const loaded = readKtiFile(p);
+    expect(loaded).not.toBeNull();
+    expect(loaded?.version).toBe(4);
+  });
+
+  it('returns null for a missing file', () => {
+    expect(readKtiFile(join(tmpDir, 'nonexistent.kti'))).toBeNull();
+  });
+
+  it('returns null for malformed JSON', () => {
+    const p = join(tmpDir, 'bad.kti');
+    writeFileSync(p, '{ this is not json }');
+    expect(readKtiFile(p)).toBeNull();
+  });
+
+  it('returns null when version is not 4', () => {
+    const p = join(tmpDir, 'v3.kti');
+    writeFileSync(p, JSON.stringify({ version: 3, functions: {}, types: {} }));
+    expect(readKtiFile(p)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deserializeExports
+// ---------------------------------------------------------------------------
+
+describe('deserializeExports', () => {
+  it('populates exports from function/val/var entries', () => {
+    const prog = makeProgram([
+      { kind: 'FunDecl', exported: true, async: false, name: 'add', params: [{}, {}], returnType: {}, body: {} } as unknown as Program['body'][0],
+      { kind: 'ValDecl', name: 'pi', type: undefined, value: {} } as unknown as Program['body'][0],
+      { kind: 'VarDecl', name: 'counter', type: undefined, value: {} } as unknown as Program['body'][0],
+    ]);
+    const exports = new Map<string, InternalType>([
+      ['add', { kind: 'arrow', params: [pInt, pInt], return: pInt }],
+      ['pi', pInt],
+      ['counter', pInt],
+    ]);
+    const kti = buildKtiV4({
+      program: prog,
+      source: '',
+      depPaths: [],
+      depSourceHashes: new Map(),
+      exports,
+      exportedTypeAliases: new Map(),
+      exportedConstructors: new Map(),
+      exportedTypeVisibility: new Map(),
+    });
+    const { exports: e, exportedConstructors, exportedTypeAliases } = deserializeExports(kti);
+    expect(e.has('add')).toBe(true);
+    expect(e.has('pi')).toBe(true);
+    expect(e.has('counter')).toBe(true);
+    expect(exportedConstructors.size).toBe(0);
+    expect(exportedTypeAliases.size).toBe(0);
+  });
+
+  it('populates exportedConstructors from constructor entries', () => {
+    const prog = makeProgram([
+      {
+        kind: 'TypeDecl',
+        visibility: 'export',
+        name: 'Color',
+        body: { kind: 'ADTBody', constructors: [{ name: 'Red', params: [] }, { name: 'Green', params: [{}] }] },
+      } as unknown as Program['body'][0],
+    ]);
+    const ctorType: InternalType = { kind: 'arrow', params: [], return: { kind: 'app', name: 'Color', args: [] } };
+    const exportedConstructors = new Map<string, InternalType>([['Red', ctorType], ['Green', ctorType]]);
+    const exportedTypeAliases = new Map<string, InternalType>([['Color', { kind: 'app', name: 'Color', args: [] }]]);
+    const vis = new Map<string, 'local' | 'opaque' | 'export'>([['Color', 'export']]);
+    const kti = buildKtiV4({
+      program: prog,
+      source: '',
+      depPaths: [],
+      depSourceHashes: new Map(),
+      exports: new Map<string, InternalType>([['Red', ctorType], ['Green', ctorType]]),
+      exportedTypeAliases,
+      exportedConstructors,
+      exportedTypeVisibility: vis,
+    });
+    const d = deserializeExports(kti);
+    expect(d.exportedConstructors.has('Red')).toBe(true);
+    expect(d.exportedConstructors.has('Green')).toBe(true);
+    expect(d.exportedTypeAliases.has('Color')).toBe(true);
+    expect(d.exportedTypeVisibility.get('Color')).toBe('export');
+  });
+
+  it('preserves opaque visibility', () => {
+    const prog = makeProgram([
+      {
+        kind: 'TypeDecl',
+        visibility: 'opaque',
+        name: 'Token',
+        body: { kind: 'ADTBody', constructors: [{ name: 'MkToken', params: [{}] }] },
+      } as unknown as Program['body'][0],
+    ]);
+    const exportedTypeAliases = new Map<string, InternalType>([['Token', { kind: 'app', name: 'Token', args: [] }]]);
+    const vis = new Map<string, 'local' | 'opaque' | 'export'>([['Token', 'opaque']]);
+    const kti = buildKtiV4({
+      program: prog,
+      source: '',
+      depPaths: [],
+      depSourceHashes: new Map(),
+      exports: new Map(),
+      exportedTypeAliases,
+      exportedConstructors: new Map(),
+      exportedTypeVisibility: vis,
+    });
+    const d = deserializeExports(kti);
+    expect(d.exportedTypeAliases.has('Token')).toBe(true);
+    expect(d.exportedTypeVisibility.get('Token')).toBe('opaque');
+    expect(d.exportedConstructors.size).toBe(0);
+  });
+
+  it('round-trips types through serialize/deserialize', () => {
+    const prog = makeProgram([]);
+    const complexType: InternalType = {
+      kind: 'scheme',
+      vars: [0],
+      body: { kind: 'arrow', params: [{ kind: 'var', id: 0 }], return: { kind: 'app', name: 'List', args: [{ kind: 'var', id: 0 }] } },
+    };
+    const kti: KtiV4 = {
+      version: 4,
+      sourceHash: 'a'.repeat(64),
+      depHashes: {},
+      functions: { 'map': { kind: 'function', function_index: 0, arity: 2, type: serializeType(complexType) } },
+      types: {},
+      codegenMeta: { funArities: { map: 2 }, asyncFunNames: [], varNames: [], valOrVarNames: [], adtConstructors: [], exceptionDecls: [] },
+    };
+    const d = deserializeExports(kti);
+    expect(d.exports.get('map')).toEqual(complexType);
   });
 });
