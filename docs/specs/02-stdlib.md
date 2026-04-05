@@ -200,14 +200,16 @@ Task combinator utilities for composing `Task<T>` values.
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `map` | `(Task<A>, A -> B) -> Task<B>` | Transform the result of a task without blocking. |
-| `all` | `(List<Task<T>>) -> Task<List<T>>` | Wait for all tasks to complete and collect results; fails fast if any task fails. |
-| `race` | `(List<Task<T>>) -> Task<T>` | Return the result of the first task to complete. Losing tasks are cancelled. Fails if the list is empty. |
-| `cancel` | `(Task<T>) -> Unit` | Request cancellation of a task. Calls `CompletableFuture.cancel(true)` — best-effort I/O interruption. Cancelling an already-completed task is a no-op. |
+| `map` | `(Task<A>, A -> B) -> Task<B>` | Transform the result of a task without blocking. Cancelling the returned task also cancels the source task. |
+| `all` | `(List<Task<T>>) -> Task<List<T>>` | Wait for all tasks to complete and collect results; fails fast if any task fails. When one fails, the combined task completes exceptionally but remaining tasks continue running (they are not cancelled). |
+| `race` | `(List<Task<T>>) -> Task<T>` | Return the result of the first task to complete (success or failure). After the first task settles, all still-running tasks are cancelled. If all tasks fail, the first failure propagates. An empty list raises a catchable Kestrel exception with payload `"no tasks provided"`. |
+| `cancel` | `(Task<T>) -> Unit` | Request cancellation of a task. Calls `CompletableFuture.cancel(true)` — best-effort I/O interruption. Cancelling an already-completed task is a no-op. Any callers `await`-ing the task receive `Cancelled`. |
 
 ### Implementation notes
 
 `map`, `all`, `race`, and `cancel` are `extern fun` declarations backed by `KTask.taskMap`, `KTask.taskAll`, `KTask.taskRace`, and `KTask.cancel` static methods. All four are parametric; `cancel` returns `Unit` (JVM `void` → `KUnit.INSTANCE`).
+
+**Quiescence timeout:** When `kestrel run` (the default `--exit-wait` mode) waits for async tasks to finish on process exit, it applies a timeout controlled by the `kestrel.exitWaitTimeoutMs` JVM system property (default `30000` ms; `0` = no timeout). If the deadline passes with tasks still in flight, a warning is printed to stderr and the process exits with code 1.
 
 ---
 

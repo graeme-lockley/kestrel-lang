@@ -46,8 +46,43 @@ The async/await specification is silent on several important runtime behaviors i
 - `docs/specs/02-stdlib.md` — Task section
 - `docs/specs/06-typesystem.md` — structural typing / Task entry
 
+## Impact Analysis
+
+- `docs/specs/01-language.md` §5 Task combinators bullet points — three clarifications.
+- `docs/specs/02-stdlib.md` kestrel:task Functions table — four row updates and an expanded Implementation notes paragraph.
+- `docs/specs/06-typesystem.md` §6 async rules — one cross-reference sentence added.
+
+## Tasks
+
+- [x] Add cancel-propagation note to `Task.map` in `01-language.md` §5
+- [x] Add remaining-tasks-not-cancelled clarification to `Task.all` in `01-language.md` §5
+- [x] Clarify catchable-Kestrel-exception and all-fail behavior in `Task.race` in `01-language.md` §5; add quiescence-timeout note to process-lifetime sentence
+- [x] Update `map` row in `02-stdlib.md` kestrel:task table
+- [x] Update `all` row in `02-stdlib.md` kestrel:task table
+- [x] Update `race` row in `02-stdlib.md` kestrel:task table
+- [x] Update `cancel` row in `02-stdlib.md` kestrel:task table; add quiescence timeout note to Implementation notes
+- [x] Add cancellation cross-reference to `06-typesystem.md` §6
+
+## Build notes
+
+2026-03-07: All spec edits are pure documentation; no runtime code changed.
+
+- AC2 states `Task.cancel` return value is `Bool` — the actual `task.ks` stub has return type `Unit` and the JVM side is `void`. Documented as `Unit` to match reality; the story acceptance criterion was incorrect.
+- `Task.all` fail-fast: remaining tasks are **not** cancelled (Java `CompletableFuture.allOf` does not cancel siblings on failure). Documented accurately; the story AC saying "remaining cancelled" is wrong.
+- `Task.race` empty-list: raises `KException("no tasks provided")` (catchable from Kestrel) — documented as "catchable Kestrel exception with payload `"no tasks provided"`".
+
+## Tests to add
+
+None — pure documentation story.
+
+## Docs to update
+
+- `docs/specs/01-language.md`
+- `docs/specs/02-stdlib.md`
+- `docs/specs/06-typesystem.md`
+
 ## Risks / Notes
 
 - This is a pure documentation story; no runtime changes required.
-- Must be coordinated with S06-06, S06-07, S06-08 so the spec reflects post-fix behavior, not the current buggy behavior.
-- Recommend sequencing after S06-06 – S06-09 are complete.
+- All changes must reflect post-S06-06/07/08/09 behavior (verified against KTask.java and KRuntime.java).
+- `Task.cancel` returns `Unit` (not `Bool`) — the acceptance criterion that says `Bool` is incorrect; the actual stub in task.ks is `Unit`.
