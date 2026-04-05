@@ -57,6 +57,46 @@ The `.kti` types-file format is specified in `docs/specs/07-modules.md §5` (cur
   - Link to `kti-format.md` with a note that both v3 and v4 are described there.
   - Add a **Freshness / Invalidation** subsection documenting the three-step algorithm: mtime gate (check `stat(.kti).mtime > stat(source).mtime` AND dep hashes match in-process cache), hash guard (read source, compute SHA-256, compare stored hash), cache miss (recompile and write fresh `.kti`).
 
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `docs/specs/kti-format.md` | New file — full concrete JSON encoding for v3 and v4 `.kti` format |
+| `docs/specs/07-modules.md §5.1` | Version reference updated from 3 → 4; link to `kti-format.md` strengthened; new **Freshness / Invalidation** subsection added |
+| `compiler/` code | No code changes in this story — pure specification work |
+| Tests | No new test files — spec-only story; existing compiler tests run after to confirm no regressions |
+
+## Tasks
+
+- [ ] Create `docs/specs/kti-format.md`:
+  - Section **1. Overview** — purpose, file extension, versioning policy (reject unsupported version), relationship to `07-modules.md §5`
+  - Section **2. Top-level structure** — JSON object with fields `version`, `functions`, `types`, and (v4) `sourceHash`, `depHashes`, `codegenMeta`
+  - Section **3. Export entry kinds** — complete table of all `kind` values: `function`, `val`, `var`, `constructor`, `type`; field-by-field description for each; `function_index`, `setter_index`, `arity`, `adt_id`, `ctor_index`
+  - Section **4. SerType encoding** — map each `InternalType` variant to its JSON representation: `var` (type variable `{ "k": "v", "id": N }`), `prim`, `arrow`, `record` (with optional `row`), `app`, `tuple`, `union`, `inter`, `scheme`, `namespace` (note: `namespace` only appears in scope, not exported); include worked example
+  - Section **5. v4 additions** — `sourceHash` (hex SHA-256 of source bytes), `depHashes` (object of absPath→hex), `codegenMeta` (all sub-fields with types and semantics)
+  - Section **6. codegenMeta sub-fields** — `funArities`, `asyncFunNames`, `varNames`, `valOrVarNames`, `adtConstructors`, `exceptionDecls`; include minimal example object
+  - Section **7. Full example** — complete v4 `.kti` JSON for a small module with a function, a var, and an ADT
+  - Section **8. Version history** — table of version → what was added (v1–v4)
+- [ ] Update `docs/specs/07-modules.md §5.1`:
+  - Change `version` description to say "reference implementation uses **4**" (was "3")
+  - Add sentence: "v4 adds `sourceHash`, `depHashes`, and `codegenMeta` for incremental compilation. Readers must reject `.kti` with unsupported `version` values."
+  - Add sub-section **5.2 Freshness / Invalidation** documenting the three-step algorithm:
+    1. **mtime gate** (fast-path): if `stat(.kti).mtime > stat(source).mtime` AND every `depHashes[path]` value equals the `sourceHash` from that dep's already-loaded `.kti` in the in-process cache → load from `.kti`, no source read
+    2. **hash guard** (slow-path): source mtime ≥ `.kti` mtime → read source, compute SHA-256, compare against `sourceHash` AND re-check `depHashes` → load from `.kti` if all hashes match
+    3. **cache miss**: `.kti` absent, version mismatch, hash mismatch, or parse error → full recompile; write fresh `.kti` after successful compile
+- [ ] Run `cd compiler && npm run build && npm test` to confirm no regressions
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| (none) | — | Pure spec story — no new test files required |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/kti-format.md` — create with full v3+v4 encoding (primary deliverable of this story)
+- [ ] `docs/specs/07-modules.md §5.1` — bump version to 4, add §5.2 freshness algorithm
+
 ## Spec References
 
 - `docs/specs/07-modules.md §5` — types file format
