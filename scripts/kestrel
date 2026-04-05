@@ -162,7 +162,7 @@ needs_compile_jvm() {
       if [ -f "$dep" ]; then
         dep_mtime=$(file_mtime "$dep")
         class_mtime=$(file_mtime "$class_file")
-        [ -n "$dep_mtime" ] && [ -n "$class_mtime" ] && [ "$dep_mtime" -gt "$class_mtime" ] && return 0
+        [ -n "$dep_mtime" ] && [ -n "$class_mtime" ] && [ "$dep_mtime" -ge "$class_mtime" ] && return 0
       fi
     done < "$deps"
     return 1
