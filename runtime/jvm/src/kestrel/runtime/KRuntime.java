@@ -781,6 +781,11 @@ public final class KRuntime {
         return Long.valueOf(System.currentTimeMillis());
     }
 
+    /** Returns true when stdout is connected to a TTY (interactive terminal). */
+    public static Boolean isTtyStdout() {
+        return System.console() != null;
+    }
+
     public static String getOs() {
         String name = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         if (name.contains("win")) return "windows";

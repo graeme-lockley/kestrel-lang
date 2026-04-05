@@ -147,10 +147,10 @@ async fun main(): Task<Unit> = {
   val calls = buildCalls(testCount, 0)
 
   val genHead =
-    "import { printSummary, outputCompact, outputVerbose, outputSummary } from \"kestrel:test\"\nimport { nowMs } from \"kestrel:basics\"\n";
+    "import { printSummary, outputCompact, outputVerbose, outputSummary } from \"kestrel:test\"\nimport { nowMs, isTtyStdout } from \"kestrel:basics\"\n";
   val genMid =
-    "\nval counts = { mut passed = 0, mut failed = 0, mut startTime = nowMs(), mut compactStackBox = { frames = [] }, mut compactExpanded = False }\nval root = { depth = 1, output = ";
-  val genRest = ", counts = counts }\n\nasync fun main(): Task<Unit> = {\n";
+    "\nval isTty = isTtyStdout()\nval counts = { mut passed = 0, mut failed = 0, mut startTime = nowMs(), mut spinnerActive = False, mut compactExpanded = False }\nval root = { depth = 1, output = ";
+  val genRest = ", isTty = isTty, counts = counts }\n\nasync fun main(): Task<Unit> = {\n";
   val genTail = "  printSummary(counts);\n  ()\n}\n\nmain()\n";
   val generatedSource =
     "${genHead}${impLines}${genMid}${outputModeStr}${genRest}${calls}${genTail}"

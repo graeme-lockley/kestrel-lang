@@ -89,6 +89,7 @@ Numeric, boolean, and general utilities. **Int remainder note:** `%` on `Int` fo
 | `sqrt` | `(Float) -> Float` | `KRuntime#floatSqrt` (NaN for negative input) |
 | `isNaN` / `isInfinite` | `(Float) -> Bool` | `KRuntime#floatIsNan` / `KRuntime#floatIsInfinite` |
 | `nowMs` | `() -> Int` | Wall-clock milliseconds (`KRuntime#nowMs`); also used by `kestrel:http` `nowMs` |
+| `isTtyStdout` | `() -> Bool` | Returns `True` when stdout is connected to an interactive terminal (`System.console() != null`). Used by the test harness to choose between spinner and plain-text output. |
 
 ---
 
@@ -407,9 +408,9 @@ The CLI (`./scripts/kestrel test`) passes through `scripts/run_tests.ks` flags *
 
 | Name | Value | Role |
 |------|-------|------|
-| `outputVerbose` | `0` | Verbose tree (per-test ✓ lines, default-weight group titles, dim footers with pass/fail counts and timing). |
-| `outputCompact` | `1` | Default: one summary line per successful `group`: default-weight `name`, **green** `N` + ✓ (same as verbose pass lines), dim ` Tms)`; nested groups print their own lines with indentation. Passing assertions do not print. On first failure in a compact subtree, buffered lines for that subtree flush in execution order (verbose-shaped), then failure diagnostics; further passing assertions in the same outer `group` print green ✓ lines immediately. |
-| `outputSummary` | `2` | Passing assertions and `group` chrome are silent; failed assertions still print. |
+| `outputVerbose` | `0` | Verbose tree (per-test ✓ lines, default-weight group titles before children, dim footers with pass/fail counts and timing). |
+| `outputCompact` | `1` | Default: group title printed **before** child output. On a TTY, a spinner (`⠋`) prefixes the title; on completion the spinner line is replaced in place by the summary (`name N✓ Tms)`). On a non-interactive/redirected output the title is printed as a plain line and a summary line is printed after children. Passing assertions do not print. After the first failure in a group, further passing assertions in that group print immediately (for context). |
+| `outputSummary` | `2` | Group headers printed before children; passing assertions silent; failed assertions still print. |
 
 Other `Int` values are reserved; treat them as **compact** for forward compatibility.
 
@@ -421,7 +422,8 @@ Other `Int` values are reserved; treat them as **compact** for forward compatibi
 |-------|------|------|
 | `depth` | `Int` | Nesting depth for indentation of group labels and assertion lines |
 | `output` | `Int` | Output mode; use `outputVerbose`, `outputCompact`, or `outputSummary`. |
-| `counts` | See below | Shared mutable tallies, harness timing, and internal compact-buffer state |
+| `isTty` | `Bool` | Whether stdout is an interactive terminal; controls spinner vs plain-text output. |
+| `counts` | See below | Shared mutable tallies and harness timing |
 
 **`counts`** shape (as constructed by `run_tests.ks` and required by `printSummary`):
 
@@ -429,8 +431,8 @@ Other `Int` values are reserved; treat them as **compact** for forward compatibi
 |-------|------|------|
 | `passed` | `mut Int` | Total passing assertions |
 | `failed` | `mut Int` | Total failing assertions |
-| `startTime` | `mut Int` | `__now_ms()` at harness start |
-| `compactStackBox` | `mut { frames: List<List<String>> }` | Internal stack of line batches for compact mode (implementation detail; must be present for the harness) |
+| `startTime` | `mut Int` | `nowMs()` at harness start |
+| `spinnerActive` | `mut Bool` | Internal: `True` while the current group's header line has been printed without a newline (spinner in progress) |
 | `compactExpanded` | `mut Bool` | Internal: after a compact-mode failure, further passes in the same group print immediately |
 
 The harness constructs one root `Suite` (typically `depth = 1`, `output = outputCompact`, as in `run_tests.ks`) whose `counts` is passed to `printSummary` after all `run(s)` calls.
@@ -439,7 +441,7 @@ The harness constructs one root `Suite` (typically `depth = 1`, `output = output
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `group` | `(Suite, String, (Suite) -> Unit) -> Unit` | Runs `body` with a child suite (depth + 1, same `output` and `counts`). **Verbose:** default-weight title, green ✓ lines for passes inside the group, dim footer with pass/fail delta and elapsed ms. **Compact:** buffers title and pass lines; on success prints one line: default-weight `name`, green `N✓`, dim ` Tms)`; on failure flushes buffer then dim footer. **Summary:** no group chrome unless failures expand compact (see above). |
+| `group` | `(Suite, String, (Suite) -> Unit) -> Unit` | Runs `body` with a child suite (depth + 1, same `output`, `isTty`, and `counts`). All modes print the group title **before** children. **Verbose:** default-weight title, ✓ pass lines, dim footer with pass/fail delta and elapsed ms. **Compact TTY:** spinner (`⠋ name`) at start; if no child output was printed, replaced in place with `name (N✓ Tms)` on completion; if child output appeared, parent summary is printed on a new line. **Compact non-TTY:** plain title at start, summary on new line after children. **Summary:** title at start; no completion line. |
 | `eq` | `(Suite, String, X, X) -> Unit` | Success when `actual == expected` (semantic / deep equality; language §3.2.1). On failure: increments `failed`, prints ✗ and three indented lines — `expected (right):`, `actual (left):` (values via `kestrel:stack` `format`), then `(deep equality / same value shape)`. |
 | `neq` | `(Suite, String, X, X) -> Unit` | Success when `actual != notExpected`. On failure: prints ✗, `expected: values must differ (deep inequality)`, `both sides: …` (`format`). |
 | `isTrue` | `(Suite, String, Bool) -> Unit` | Success when `value` is `True`. On failure: `expected (Bool): true`, `actual (Bool): …` (`format`). |

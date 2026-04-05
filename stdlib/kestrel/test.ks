@@ -9,16 +9,15 @@ export val outputVerbose: Int = 0
 export val outputCompact: Int = 1
 export val outputSummary: Int = 2
 
-type CompactStackBox = { frames: List<List<String>> }
-
 export type Suite = {
   depth: Int,
   output: Int,
+  isTty: Bool,
   counts: {
     passed: mut Int,
     failed: mut Int,
     startTime: mut Int,
-    compactStackBox: mut CompactStackBox,
+    spinnerActive: mut Bool,
     compactExpanded: mut Bool
   }
 }
@@ -67,77 +66,58 @@ fun printLinesForward(xs: List<String>): Unit = match (xs) {
   }
 }
 
-fun flushFrameIfNonempty(lines: List<String>): Unit =
-  if (Lst.length(lines) == 0) () else printLinesForward(Lst.reverse(lines))
-
-fun printBatchesOuterFirst(frames: List<List<String>>): Unit = match (frames) {
-  [] => (),
-  batch :: rest => {
-    flushFrameIfNonempty(batch);
-    printBatchesOuterFirst(rest)
-  }
-}
-
-fun emptyFrames(n: Int): List<List<String>> =
-  if (n <= 0) [] else [] :: emptyFrames(n - 1)
-
-fun flushCompactForFailure(s: Suite): Unit = match (Lst.length(s.counts.compactStackBox.frames)) {
-  0 => (),
-  _ => {
-    val depth = Lst.length(s.counts.compactStackBox.frames);
-    printBatchesOuterFirst(Lst.reverse(s.counts.compactStackBox.frames));
-    s.counts.compactStackBox := { frames = emptyFrames(depth) };
-    s.counts.compactExpanded := True;
+/** Commit any pending in-line spinner by printing a newline. */
+fun commitSpinner(s: Suite): Unit =
+  if (s.counts.spinnerActive) {
+    println("");
+    s.counts.spinnerActive := False;
     ()
-  }
-}
-
-fun compactPrependToTop(s: Suite, line: String): Unit = match (s.counts.compactStackBox.frames) {
-  [] => (),
-  top :: rest => {
-    s.counts.compactStackBox := { frames = (line :: top) :: rest };
-    ()
-  }
-}
-
-fun compactPop(s: Suite): List<String> = match (s.counts.compactStackBox.frames) {
-  [] => [],
-  h :: t => {
-    s.counts.compactStackBox := { frames = t };
-    h
-  }
-}
+  } else ()
 
 fun onAssertionPassLine(s: Suite, line: String): Unit =
   if (s.output == outputSummary) ()
-  else {
-    if (s.output == outputVerbose) println(line)
-    else {
-      if (s.counts.compactExpanded) println(line) else compactPrependToTop(s, line)
-    }
+  else if (s.output == outputVerbose) {
+    commitSpinner(s);
+    println(line)
+  } else {
+    if (s.counts.compactExpanded) {
+      commitSpinner(s);
+      println(line)
+    } else ()
   }
 
-fun onAssertionFailure(s: Suite): Unit =
-  if (s.output == outputCompact) flushCompactForFailure(s) else ()
+fun onAssertionFailure(s: Suite): Unit = {
+  commitSpinner(s);
+  s.counts.compactExpanded := True;
+  ()
+}
 
 export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
+  commitSpinner(s);
   val start = Basics.nowMs();
   val passedStart = s.counts.passed;
   val failedStart = s.counts.failed;
-  val child = { depth = s.depth + 1, output = s.output, counts = s.counts };
+  val prevExpanded = s.counts.compactExpanded;
+  s.counts.compactExpanded := False;
+  val child = { depth = s.depth + 1, output = s.output, isTty = s.isTty, counts = s.counts };
 
-  if (s.output == outputVerbose) println(groupTitleLine(s, name))
-  else {
-    if (s.output == outputSummary) ()
-    else {
-      s.counts.compactExpanded := False;
-      s.counts.compactStackBox := { frames = [] :: s.counts.compactStackBox.frames };
-      compactPrependToTop(s, groupTitleLine(s, name))
+  if (s.output == outputVerbose) {
+    println(groupTitleLine(s, name))
+  } else if (s.output == outputSummary) {
+    println(groupTitleLine(s, name))
+  } else {
+    if (s.isTty) {
+      print("${indent(s.depth)}${Console.SPINNER} ${name}");
+      s.counts.spinnerActive := True;
+      ()
+    } else {
+      println(groupTitleLine(s, name))
     }
-  }
+  };
 
   body(child);
 
+  s.counts.compactExpanded := prevExpanded;
   val elapsed = Basics.nowMs() - start;
   val p = s.counts.passed - passedStart;
   val f = s.counts.failed - failedStart;
@@ -145,18 +125,21 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
   if (s.output == outputVerbose) {
     val countStr = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
     println("${indent(s.depth)}${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}")
+  } else if (s.output == outputSummary) {
+    ()
   } else {
-    if (s.output == outputSummary) ()
-    else {
-      val top = compactPop(s);
-      if (f > 0) {
-        flushFrameIfNonempty(top);
-        val countStr = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
-        println("${indent(s.depth)}${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}")
-      } else {
-        val summaryLine = compactSummaryLine(s.depth, name, p, elapsed);
-        println(summaryLine)
-      }
+    val summaryLine = if (f > 0) {
+      val countStr = "${p} passed, ${f} failed";
+      "${indent(s.depth)}${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}"
+    } else {
+      compactSummaryLine(s.depth, name, p, elapsed)
+    };
+    if (s.isTty & s.counts.spinnerActive) {
+      print("${Console.CLEAR_LINE}${summaryLine}\n");
+      s.counts.spinnerActive := False;
+      ()
+    } else {
+      println(summaryLine)
     }
   }
 }
@@ -292,7 +275,7 @@ export fun printSummary(
     passed: mut Int,
     failed: mut Int,
     startTime: mut Int,
-    compactStackBox: mut CompactStackBox,
+    spinnerActive: mut Bool,
     compactExpanded: mut Bool
   }
 ): Unit = {

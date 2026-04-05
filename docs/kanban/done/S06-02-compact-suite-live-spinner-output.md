@@ -54,11 +54,49 @@ Improve test output readability across all three harness styles (compact, verbos
 - `docs/specs/09-tools.md` — `kestrel test` output behavior and mode descriptions.
 - `docs/specs/08-tests.md` — dual-runtime expectations and test harness coverage context.
 
+## Impact Analysis
+
+- `runtime/jvm/src/kestrel/runtime/KRuntime.java` — add `isTtyStdout()`.
+- `stdlib/kestrel/basics.ks` — add `isTtyStdout()` extern.
+- `stdlib/kestrel/console.ks` — add `SPINNER` and `CLEAR_LINE` constants.
+- `stdlib/kestrel/test.ks` — add `isTty: Bool` to `Suite` type; add `spinnerActive: mut Bool` to `counts`; remove `compactStackBox: mut CompactStackBox`; rewrite `group()` for suite-first output; simplify `onAssertionFailure()`.
+- `scripts/run_tests.ks` — update generated test-runner template to include `isTty` field.
+- `docs/specs/02-stdlib.md` — update kestrel:test section.
+- `docs/specs/09-tools.md` — update test output description.
+
+## Tasks
+
+- [x] Add `isTtyStdout()` to `KRuntime.java`
+- [x] Add `isTtyStdout` extern to `basics.ks`
+- [x] Add `SPINNER` and `CLEAR_LINE` to `console.ks`
+- [x] Rewrite `test.ks`: remove `compactStackBox`, add `isTty`/`spinnerActive`, new `group()` behaviour
+- [x] Update `run_tests.ks` generated template for new Suite shape
+- [x] Update `docs/specs/02-stdlib.md`
+- [x] Update `docs/specs/09-tools.md`
+- [x] Verify all tests pass
+
+## Build notes
+
+2026-03-07: All Kestrel tests pass (exit code 0).
+
+- Removed `compactStackBox` and its supporting functions (`printBatchesOuterFirst`, `compactPrependToTop`, `compactPop`, `flushFrameIfNonempty`, `emptyFrames`, `flushCompactForFailure`). The new "suite-first" approach does not need back-buffering since group headers are printed eagerly.
+- `isTtyStdout` uses `System.console() != null` — returns `false` in piped/redirected contexts (CI). In non-TTY mode the output is verbose-style: group title at start + summary line at end, which is clean in log files.
+- Kestrel does not support `&&`/`||` — uses `&`/`|` for boolean operators. Assignments (`:=`) must be statements (semicolon-terminated); using `:=` as the final expression in a block requires an explicit `; ()` to follow.
+- Spinner behavior: leaf groups (no nested group calls) get the in-place update. Parent groups that spawn child groups have their spinner committed when the first child calls `commitSpinner(s)` at group start; the parent's completion line is then printed on a new line below children. The stale `⠋ name` line on screen for non-leaf groups in TTY mode is functionally acceptable.
+- `compactExpanded` is now reset to `False` at each group start and restored after the body completes, ensuring sibling groups each start in unexpanded state.
+
+## Tests to add
+
+No new test files needed — existing tests exercise the group/assertion logic.
+
+## Docs to update
+
+- `docs/specs/02-stdlib.md` — kestrel:test section
+- `docs/specs/09-tools.md` — test output behavior
+
 ## Risks / Notes
 
-- Clarifying note: "applies to all three styles" means each suite still gets a visible lifecycle line (running spinner -> completed duration) in compact, verbose, and summary modes; assertion verbosity remains mode-specific.
-- ANSI cursor control is terminal-dependent; redirected/CI logs must remain clean and readable.
-- Without TTY detection from stdlib process APIs, planned phase must choose between explicit CLI opt-in, runtime capability extension, or conservative fallback behavior.
-- Spinner update cadence should avoid noisy output or expensive redraw loops.
-- Scope should remain test-output UX and avoid broad harness redesign unless separately tracked.
-- Detailed Tasks, Tests to add, and Documentation/spec update checklists belong in `planned/` when this story is promoted.
+- Removing `compactStackBox` is a breaking change to the `Suite` public type; the only consumer outside stdlib is the generated runner in `run_tests.ks` which is also updated.
+- In-place spinner update uses `\r\033[2K` — only applied when `isTty` is true and no child output was printed during the body.
+- Nested groups with child output: parent spinner is committed (newline printed) when the first child group runs; parent completion line is printed on a new line after children complete.
+- TTY detection relies on `System.console() != null` (standard Java approach).
