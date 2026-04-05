@@ -132,11 +132,44 @@ public final class KRuntime {
         }
     }
 
+    private static long getExitWaitTimeoutMs() {
+        String prop = System.getProperty("kestrel.exitWaitTimeoutMs");
+        if (prop == null) return 30_000L;
+        try {
+            return Long.parseLong(prop);
+        } catch (NumberFormatException e) {
+            return 30_000L;
+        }
+    }
+
     private static void awaitAsyncQuiescence() {
+        long timeoutMs = getExitWaitTimeoutMs();
+        if (timeoutMs == 0) {
+            // Infinite wait (opt-in via kestrel.exitWaitTimeoutMs=0).
+            synchronized (quiescenceSignal) {
+                while (asyncTasksInFlight.get() > 0) {
+                    try {
+                        quiescenceSignal.wait();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Interrupted while waiting for async tasks", e);
+                    }
+                }
+            }
+            return;
+        }
+        long deadline = System.currentTimeMillis() + timeoutMs;
         synchronized (quiescenceSignal) {
             while (asyncTasksInFlight.get() > 0) {
+                long remaining = deadline - System.currentTimeMillis();
+                if (remaining <= 0) {
+                    long inFlight = asyncTasksInFlight.get();
+                    System.err.println("[kestrel] warning: exiting with " + inFlight
+                            + " async task(s) still in flight (quiescence timeout)");
+                    System.exit(1);
+                }
                 try {
-                    quiescenceSignal.wait();
+                    quiescenceSignal.wait(remaining);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     throw new RuntimeException("Interrupted while waiting for async tasks", e);
