@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E06 Runtime Modernization and DX](../epics/unplanned/E06-runtime-modernization-and-dx.md)
+- Epic: [E06 Runtime Modernization and DX](../epics/done/E06-runtime-modernization-and-dx.md)
 - Companion stories: S06-03, S06-05
 
 ## Summary
