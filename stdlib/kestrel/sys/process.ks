@@ -18,6 +18,9 @@ extern fun getCwd(): String =
 extern fun runProcessAsync(program: String, args: List<String>): Task<Result<ProcessResult, String>> =
   jvm("kestrel.runtime.KRuntime#runProcessAsync(java.lang.Object,java.lang.Object)")
 
+extern fun runProcessStreamAsync(program: String, args: List<String>): Task<Result<Int, String>> =
+  jvm("kestrel.runtime.KRuntime#runProcessStreamAsync(java.lang.Object,java.lang.Object)")
+
 export fun getProcess(): P = {
   val os = getOs();
   val a = getArgs();
@@ -31,3 +34,6 @@ fun mapProcessError(code: String): ProcessError =
 
 export fun runProcess(program: String, args: List<String>): Task<Result<ProcessResult, ProcessError>> =
   map(runProcessAsync(program, args), (result: Result<ProcessResult, String>) => Res.mapError(result, mapProcessError))
+
+export fun runProcessStream(program: String, args: List<String>): Task<Result<Int, ProcessError>> =
+  map(runProcessStreamAsync(program, args), (result: Result<Int, String>) => Res.mapError(result, mapProcessError))

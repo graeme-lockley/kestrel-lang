@@ -1,7 +1,7 @@
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
 import * as Str from "kestrel:data/string"
-import { getProcess, runProcess, ProcessSpawnError } from "kestrel:sys/process"
+import { getProcess, runProcess, runProcessStream, ProcessSpawnError } from "kestrel:sys/process"
 import { listDir, writeText, NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:io/fs"
 import { all } from "kestrel:sys/task"
 
@@ -99,6 +99,17 @@ async fun runProcessOrExit(program: String, args: List<String>): Task<Int> = {
   }
 }
 
+async fun runProcessStreamOrExit(program: String, args: List<String>): Task<Int> = {
+  match (await runProcessStream(program, args)) {
+    Ok(exitCode) => exitCode,
+    Err(ProcessSpawnError(_)) => {
+      println("kestrel test: runProcess failed for ${program}: process error");
+      exit(1);
+      1
+    }
+  }
+}
+
 fun buildImports(tests: List<String>, idx: Int): String =
   match (tests) {
     [] => "",
@@ -167,7 +178,7 @@ async fun main(): Task<Unit> = {
   if (hasFlag(proc.args, "--generate")) {
     exit(0)
   } else {
-    val exitCode = await runProcessOrExit("./scripts/kestrel", ["run", generatedPath])
+    val exitCode = await runProcessStreamOrExit("./scripts/kestrel", ["run", generatedPath])
     exit(exitCode)
   }
 }

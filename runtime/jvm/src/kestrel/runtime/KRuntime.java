@@ -952,6 +952,73 @@ public final class KRuntime {
         return KTask.fromFuture(future);
     }
 
+    /**
+     * Like runProcessAsync but inherits the parent's stdout and stderr so output
+     * streams to the terminal in real time.  Returns {@code Result<Int, String>}
+     * (the exit code on success).
+     */
+    public static KTask runProcessStreamAsync(Object program, Object argsObj) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(program instanceof String)) {
+            future.completeExceptionally(new IllegalArgumentException("runProcessStream expects String program"));
+            return KTask.fromFuture(future);
+        }
+
+        List<String> cmd = new ArrayList<>();
+        cmd.add((String) program);
+        if (argsObj instanceof KList) {
+            KList xs = (KList) argsObj;
+            while (xs instanceof KCons) {
+                cmd.add(formatOne(((KCons) xs).head));
+                xs = ((KCons) xs).tail;
+            }
+        }
+
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+        asyncTasksInFlight.incrementAndGet();
+
+        try {
+            executor.submit(() -> {
+                Thread me = Thread.currentThread();
+                Process proc = null;
+                try {
+                    if (future.isCancelled()) return;
+                    ProcessBuilder pb = new ProcessBuilder(cmd);
+                    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                    pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+                    proc = pb.start();
+                    final Process finalProc = proc;
+                    future.whenComplete((v, ex) -> {
+                        if (future.isCancelled()) {
+                            finalProc.destroyForcibly();
+                            me.interrupt();
+                        }
+                    });
+                    if (future.isCancelled()) {
+                        proc.destroyForcibly();
+                        return;
+                    }
+                    int exitCode = finalProc.waitFor();
+                    future.complete(new KOk(Long.valueOf(exitCode)));
+                } catch (Throwable t) {
+                    future.complete(new KErr("process_error:" + messageOrDefault(t, "process failed")));
+                } finally {
+                    if (proc != null) proc.destroyForcibly();
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+
+        return KTask.fromFuture(future);
+    }
+
     private static String fsErrorCode(Throwable t) {
         Throwable u = KTask.unwrapFailure(t);
         if (u instanceof NoSuchFileException) return "not_found";
