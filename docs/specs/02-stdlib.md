@@ -89,7 +89,7 @@ Numeric, boolean, and general utilities. **Int remainder note:** `%` on `Int` fo
 | `sqrt` | `(Float) -> Float` | `KRuntime#floatSqrt` (NaN for negative input) |
 | `isNaN` / `isInfinite` | `(Float) -> Bool` | `KRuntime#floatIsNan` / `KRuntime#floatIsInfinite` |
 | `nowMs` | `() -> Int` | Wall-clock milliseconds (`KRuntime#nowMs`); also used by `kestrel:http` `nowMs` |
-| `isTtyStdout` | `() -> Bool` | Returns `True` when stdout is connected to an interactive terminal (`System.console() != null`). Used by the test harness to choose between spinner and plain-text output. |
+| `isTtyStdout` | `() -> Bool` | Returns `True` when stdout is connected to an interactive terminal (`System.console() != null`). |
 
 ---
 
@@ -400,7 +400,7 @@ JSON parsing and serialisation implemented **in Kestrel** (no host JSON primitiv
 
 Assertions and reporting for the Kestrel unit-test harness (`kestrel test`, `scripts/run_tests.ks`). Imports `kestrel:basics` (`nowMs`), `kestrel:console`, `kestrel:list`, `kestrel:stack` (`format`), and `kestrel:string` (`concat`, `repeat`) for implementation (namespace imports); styled output uses console ANSI constants (✓/✗, colours, default-weight group names, dim for secondary text such as timing and verbose footers).
 
-The CLI (`./scripts/kestrel test`) passes through `scripts/run_tests.ks` flags **`--verbose`** and **`--summary`**. Default output mode is **compact**. **`--verbose` and `--summary` together** are rejected with a non-zero exit before tests run.
+The CLI (`./scripts/kestrel test`) passes flags **`--verbose`** and **`--summary`** through to the runner. Default output mode is **compact**.
 
 ### Output mode constants
 
@@ -408,9 +408,9 @@ The CLI (`./scripts/kestrel test`) passes through `scripts/run_tests.ks` flags *
 
 | Name | Value | Role |
 |------|-------|------|
-| `outputVerbose` | `0` | Verbose tree (per-test ✓ lines, default-weight group titles before children, dim footers with pass/fail counts and timing). |
-| `outputCompact` | `1` | Default: group title printed **before** child output. On a TTY, a spinner (`⠋`) prefixes the title; on completion the spinner line is replaced in place by the summary (`name N✓ Tms)`). On a non-interactive/redirected output the title is printed as a plain line and a summary line is printed after children. Passing assertions do not print. After the first failure in a group, further passing assertions in that group print immediately (for context). |
-| `outputSummary` | `2` | Group headers printed before children; passing assertions silent; failed assertions still print. |
+| `outputVerbose` | `0` | Full detail: group title printed **before** children; one ✓ line per passing assertion; dim footer with pass/fail count and elapsed ms after each group. |
+| `outputCompact` | `1` | Default: for the top-level (depth-0) group, prints the name first, then runs children silently, then prints a dim count-only footer (`N passed (Tms)`). Nested sub-groups each print a compact `name (N✓ Tms)` summary line after their children. Passing assertions do not print. After the first failure in a group, further passing assertions in that group print immediately (for context). |
+| `outputSummary` | `2` | One compact `name (N✓ Tms)` line per top-level (depth-0) group after its children. No title printed before children; nested sub-groups silent; passing assertions silent. |
 
 Other `Int` values are reserved; treat them as **compact** for forward compatibility.
 
@@ -422,26 +422,24 @@ Other `Int` values are reserved; treat them as **compact** for forward compatibi
 |-------|------|------|
 | `depth` | `Int` | Nesting depth for indentation of group labels and assertion lines |
 | `output` | `Int` | Output mode; use `outputVerbose`, `outputCompact`, or `outputSummary`. |
-| `isTty` | `Bool` | Whether stdout is an interactive terminal; controls spinner vs plain-text output. |
 | `counts` | See below | Shared mutable tallies and harness timing |
 
-**`counts`** shape (as constructed by `run_tests.ks` and required by `printSummary`):
+**`counts`** shape (internal; not accessed directly by test suite modules):
 
 | Field | Type | Role |
 |-------|------|------|
 | `passed` | `mut Int` | Total passing assertions |
 | `failed` | `mut Int` | Total failing assertions |
 | `startTime` | `mut Int` | `nowMs()` at harness start |
-| `spinnerActive` | `mut Bool` | Internal: `True` while the current group's header line has been printed without a newline (spinner in progress) |
 | `compactExpanded` | `mut Bool` | Internal: after a compact-mode failure, further passes in the same group print immediately |
 
-The harness constructs one root `Suite` (typically `depth = 1`, `output = outputCompact`, as in `run_tests.ks`) whose `counts` is passed to `printSummary` after all `run(s)` calls.
+The harness constructs a root `Suite` via `makeRoot(outputMode)` (depth `0`); `printSummary(root)` is called after all `run(s)` calls.
 
 ### Functions
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `group` | `(Suite, String, (Suite) -> Unit) -> Unit` | Runs `body` with a child suite (depth + 1, same `output`, `isTty`, and `counts`). All modes print the group title **before** children. **Verbose:** default-weight title, ✓ pass lines, dim footer with pass/fail delta and elapsed ms. **Compact TTY:** spinner (`⠋ name`) at start; if no child output was printed, replaced in place with `name (N✓ Tms)` on completion; if child output appeared, parent summary is printed on a new line. **Compact non-TTY:** plain title at start, summary on new line after children. **Summary:** title at start; no completion line. |
+| `group` | `(Suite, String, (Suite) -> Unit) -> Unit` | Runs `body` with a child suite (depth + 1, same `output` and `counts`). **Verbose:** prints default-weight title before children; ✓ pass lines during body; dim `N passed (Tms)` footer after. **Compact depth-0:** prints title before body; after body prints dim count-only footer (no name repeated). **Compact depth>0:** no title before body; after body prints `name (N✓ Tms)` compact summary. **Summary depth-0:** no title before body; after body prints `name (N✓ Tms)` compact summary. **Summary depth>0:** silent. |
 | `eq` | `(Suite, String, X, X) -> Unit` | Success when `actual == expected` (semantic / deep equality; language §3.2.1). On failure: increments `failed`, prints ✗ and three indented lines — `expected (right):`, `actual (left):` (values via `kestrel:stack` `format`), then `(deep equality / same value shape)`. |
 | `neq` | `(Suite, String, X, X) -> Unit` | Success when `actual != notExpected`. On failure: prints ✗, `expected: values must differ (deep inequality)`, `both sides: …` (`format`). |
 | `isTrue` | `(Suite, String, Bool) -> Unit` | Success when `value` is `True`. On failure: `expected (Bool): true`, `actual (Bool): …` (`format`). |
@@ -449,7 +447,8 @@ The harness constructs one root `Suite` (typically `depth = 1`, `output = output
 | `gt` / `lt` | `(Suite, String, Int, Int) -> Unit` | Strict order on `Int` (`left > right` / `left < right`). On failure: requirement line (`need: left > right` or `left < right`, “strict total order on Int”), then `left (Int):` / `right (Int):` with `format`. **Float is not in scope** for these helpers. |
 | `gte` / `lte` | `(Suite, String, Int, Int) -> Unit` | Non-strict order (`>=` / `<=`). On failure: `need: left >= right` or `left <= right` (“total order on Int”), then labelled `Int` lines (`format`). |
 | `throws` | `(Suite, String, (Unit) -> Unit) -> Unit` | Invokes `thunk(())`. Success if the call throws any exception (catch-all `_`); failure if it returns normally. On failure: `expected: callee throws an exception`, `actual: completed normally (no exception)`. **Note:** The surface type is `(Unit) -> Unit` because the language does not accept `() -> T` in type position for a zero-parameter function type; callers use e.g. `(_: Unit) => { … }`. |
-| `printSummary` | `(counts record as above) -> Unit` | Prints a blank line, then total elapsed ms. If `failed > 0`: red `M failed, N passed (…ms)` and **`exit(1)`**. If `failed == 0`: green `N passed (…ms)`. |
+| `makeRoot` | `(Int) -> Suite` | Create a root `Suite` for the given output mode (`outputCompact`, `outputVerbose`, or `outputSummary`). Sets `depth = 0` and zeroes all counts. Use this instead of constructing `Suite` directly. |
+| `printSummary` | `(Suite) -> Unit` | Prints a blank line, then a total: green `N passed (…ms)` when all pass; red `M failed, N passed (…ms)` and **`exit(1)`** when any fail. |
 
 Passing assertions increment `passed`. In **verbose** and expanded compact, they print a green ✓ line with the description. In **compact** (before expansion) and **summary**, passing assertions do not print.
 
