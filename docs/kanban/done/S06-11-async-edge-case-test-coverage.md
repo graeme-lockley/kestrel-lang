@@ -49,8 +49,34 @@ Several important async/await scenarios have no test coverage: cross-module asyn
 - `docs/specs/02-stdlib.md` — Task
 - `docs/specs/07-modules.md` — §10 Async Exports and Cross-Module Async Calling
 
-## Risks / Notes
+## Impact Analysis
 
-- Cross-module test may require a new E2E scenario under `tests/e2e/scenarios/` if the existing unit test runner does not support multi-file imports.
-- The `Task.race` all-fail case depends on understanding which exception surfaces (first? last? combined?); check `KTask.taskRace` before deciding the expected value.
-- The stuck-task/timeout test (AC linked to S06-07) is optional here; it may need a special test-only system property to keep CI fast.
+- `tests/fixtures/async_helper.ks` — new file; exported `async fun` for cross-module async test.
+- `tests/unit/async_virtual_threads.test.ks` — add import and four new test cases (AC1–AC4); AC5 already covered by S06-08.
+- No runtime or compiler changes.
+
+## Tasks
+
+- [x] Create `tests/fixtures/async_helper.ks` with `export async fun asyncDouble`
+- [x] Add `import * as AsyncHelper` to `async_virtual_threads.test.ks` and add `crossModule` computation (AC1)
+- [x] Add `allFailed` computation for `Task.all` with two failing tasks (AC2)
+- [x] Add `raceFailed` computation for `Task.race` with two failing tasks (AC3)
+- [x] Add cancel-propagation-through-map computation (AC4)
+- [x] Add group assertions for AC1–AC4
+
+## Build notes
+
+2026-03-07: All tests pass (exit code 0). AC5 (Task.race([]) try/catch) was already satisfied by S06-08; confirmed still present in the "Task.race" group.
+
+- `Task.map` cancel propagation (AC4): source is `Process.runProcess("sh", ["-c", "sleep 10"])`; after `Task.cancel(mapped)`, `await slowSource` throws `Cancelled` immediately because the Java future is marked cancelled synchronously before `get()` is called. The OS process continues briefly but does not block the test.
+- `Task.all` with `[fail(), fail()]` (AC2): both tasks throw `AsyncBoom` synchronously; `allOf` completes exceptionally with first failure; `await` rethrows as a Kestrel value caught by `_ => 1`.
+- `Task.race` all-fail (AC3): same async exception; `anyOf` completes when first task fails; remaining task gets cancelled by `whenComplete`; caught by `_ => 1`.
+
+## Tests to add
+
+- All new tests live in `tests/unit/async_virtual_threads.test.ks`.
+- New fixture: `tests/fixtures/async_helper.ks`.
+
+## Docs to update
+
+None — S06-10 already updated the specs.
