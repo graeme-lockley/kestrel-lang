@@ -21,8 +21,10 @@ Adds seamless URL import resolution: remote modules are fetched on first use and
 ## Epic Completion Criteria
 
 - URL specifiers (`https://`) are fetched on first use, cached under `~/.kestrel/cache/`, and reused on subsequent builds — no user action needed for first download.
-- `kestrel run --refresh` and `kestrel build --refresh` force re-download of all URL dependencies.
-- `kestrel build --status` pretty-prints the cache state of every URL dependency (cached, not cached, stale) without building.
+- Relative imports inside a URL-fetched module are resolved against that module's base URL, recursively — the entire transitive remote dependency tree is pulled into the cache automatically.
+- Relative path traversal from remote modules is bounded to the same origin; cross-host traversal is a compile error.
+- `kestrel run --refresh` and `kestrel build --refresh` force re-download of the full transitive URL dependency tree.
+- `kestrel build --status` pretty-prints the cache state of every URL dependency (direct and transitive: cached, not cached, stale) without building.
 - Compile errors for URL resolution failures include source span information.
-- Integration tests demonstrate cache hit/miss behaviour and `--refresh` using a local mock server.
+- Integration tests demonstrate cache hit/miss behaviour, transitive fetching, and `--refresh` using a local mock server.
 - `kestrel:X` and `kestrel:X/Y` specifiers resolve by file existence under `stdlib/`, not a hardcoded whitelist.
