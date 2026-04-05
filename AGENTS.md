@@ -61,7 +61,7 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime wit
 ./kestrel build [script.ks]
 
 # Run Kestrel test suite
-./kestrel test [files...]
+./kestrel test [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]
 ```
 
 ---

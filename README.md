@@ -72,7 +72,7 @@ The `kestrel` script implements the CLI described in [docs/specs/09-tools.md](do
 - **`kestrel run`** — `<script.ks>` and runtime arguments. Compiles if needed, then runs on the JVM. Pass `--refresh` to re-download URL dependencies; `--allow-http` to permit `http://` imports.
 - **`kestrel build`** — Builds the compiler; optional script path to compile. `--refresh`, `--allow-http`, and `--status` (print URL cache report without compiling) are also accepted.
 - **`kestrel dis`** — Compiles if needed, then prints JVM bytecode disassembly via `javap`.
-- **`kestrel test`** — Runs Kestrel unit tests; optional test file paths.
+- **`kestrel test`** — Runs Kestrel unit tests; optional test file paths. `--verbose` prints per-assertion lines; `--summary` prints one line per suite. `--clean`, `--refresh`, and `--allow-http` have the same meaning as for `run` and `build`.
 
 JVM class output is cached under `~/.kestrel/jvm/` unless you set `KESTREL_JVM_CACHE`.
 

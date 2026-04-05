@@ -743,8 +743,10 @@ On failure, `eq` prints labelled lines (`expected (right)` / `actual (left)`) pl
 Run tests from the repository root:
 
 ```bash
-./kestrel test                          # all tests (tests/unit + stdlib/kestrel)
-./kestrel test tests/unit/match.test.ks # one file
+./kestrel test                           # all tests (tests/unit + stdlib/kestrel)
+./kestrel test tests/unit/match.test.ks  # one file
+./kestrel test --verbose                 # per-assertion output
+./kestrel test --summary                 # one line per suite
 ```
 
 The runner ends with `printSummary(counts)` (see `scripts/run_tests.ks`): if any assertion failed, the process exits with code **1**.
