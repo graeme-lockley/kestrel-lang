@@ -813,6 +813,51 @@ public final class KRuntime {
         return System.console() != null;
     }
 
+    // Terminal size — detected once at class-load time.
+    private static final long[] TERM_SIZE = detectTermSize();
+
+    private static long[] detectTermSize() {
+        // 1. Prefer $COLUMNS / $LINES if both are exported to the environment.
+        String envCols = System.getenv("COLUMNS");
+        String envRows = System.getenv("LINES");
+        if (envCols != null && envRows != null) {
+            try {
+                return new long[]{Long.parseLong(envCols.trim()), Long.parseLong(envRows.trim())};
+            } catch (NumberFormatException ignored) { /* fall through */ }
+        }
+        // 2. Ask stty (works on macOS and Linux when stdin is a TTY).
+        try {
+            Process p = new ProcessBuilder("stty", "size")
+                    .redirectInput(ProcessBuilder.Redirect.INHERIT)
+                    .start();
+            String out = new String(p.getInputStream().readAllBytes()).trim();
+            p.waitFor(2, java.util.concurrent.TimeUnit.SECONDS);
+            String[] parts = out.split("\\s+");
+            if (parts.length == 2) {
+                long rows = Long.parseLong(parts[0]);
+                long cols = Long.parseLong(parts[1]);
+                if (cols > 0 && rows > 0) return new long[]{cols, rows};
+            }
+        } catch (Exception ignored) { /* fall through */ }
+        // 3. Sane default.
+        return new long[]{80L, 24L};
+    }
+
+    /** Returns the terminal width in columns (falls back to 80). */
+    public static Long terminalWidth() { return TERM_SIZE[0]; }
+
+    /** Returns the terminal height in rows (falls back to 24). */
+    public static Long terminalHeight() { return TERM_SIZE[1]; }
+
+    /** Returns a record { width: Int, height: Int, isTty: Bool } describing the current terminal. */
+    public static KRecord terminalInfo() {
+        KRecord r = new KRecord();
+        r.set("width",  TERM_SIZE[0]);
+        r.set("height", TERM_SIZE[1]);
+        r.set("isTty",  Boolean.valueOf(System.console() != null));
+        return r;
+    }
+
     public static String getOs() {
         String name = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
         if (name.contains("win")) return "windows";

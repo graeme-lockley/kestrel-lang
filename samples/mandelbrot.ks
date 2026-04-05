@@ -1,20 +1,27 @@
 // Render a colour Mandelbrot set in the terminal (ANSI 256-colour + density chars).
+// Detects terminal width and height at startup; falls back to 80×24.
 
 import * as Str     from "kestrel:data/string"
+import * as B       from "kestrel:data/basics"
 import * as Console from "kestrel:io/console"
+
 
 val maxIter = 50
 
+val term = Console.terminalInfo()
+val cols  = B.toFloat(term.width)
+val rows  = B.toFloat(term.height)
+
+// Fix the real axis and derive the imaginary range from the terminal dimensions.
+// Terminal characters are ~2× taller than wide, so the effective pixel height
+// is rows×2 — which we account for by halving the imaginary half-range.
 val minRe = 0.0 - 2.0
 val maxRe = 1.0
-val minIm = 0.0 - 1.2
-val maxIm = 1.2
-
 val rangeRe = maxRe - minRe
+val halfIm = rangeRe * rows / cols
+val minIm = 0.0 - halfIm
+val maxIm = halfIm
 val rangeIm = maxIm - minIm
-
-val cols = 80.0
-val rows = 24.0
 
 val stepRe = rangeRe / cols
 val stepIm = rangeIm / rows
