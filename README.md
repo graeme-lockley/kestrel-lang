@@ -54,6 +54,20 @@ val result =
 
 More examples appear in [tests/unit/](tests/unit/) and [tests/e2e/scenarios/](tests/e2e/scenarios/).
 
+The [samples/](samples/) directory contains standalone programs that showcase the language:
+
+| File | What it shows |
+|------|---------------|
+| [samples/quicksort.ks](samples/quicksort.ks) | Divide-and-conquer sort with pattern matching on lists |
+| [samples/primes.ks](samples/primes.ks) | Sieve of Eratosthenes |
+| [samples/mandelbrot.ks](samples/mandelbrot.ks) | Mandelbrot set rendered in the terminal |
+| [samples/expr.ks](samples/expr.ks) | Expression parser and evaluator using ADTs |
+| [samples/word-count.ks](samples/word-count.ks) | Word-frequency counter with dictionaries and higher-order functions |
+| [samples/life.ks](samples/life.ks) | Conway's Game of Life |
+| [samples/lambda.ks](samples/lambda.ks) | Lambda calculus parser and reducer |
+
+Run any sample with `./kestrel run samples/<name>.ks`.
+
 ## Java interop
 
 Kestrel runs on the JVM and can call any Java class directly. Three mechanisms cover the common cases:
