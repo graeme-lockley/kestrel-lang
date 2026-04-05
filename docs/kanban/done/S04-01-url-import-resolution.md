@@ -5,7 +5,7 @@
 
 ## Epic
 
-- Epic: [E04 Module Resolution and Reproducibility](../epics/unplanned/E04-module-resolution-and-reproducibility.md)
+- Epic: [E04 Module Resolution and Reproducibility](../epics/done/E04-module-resolution-and-reproducibility.md)
 - Companion stories: S04-02 (stdlib sub-path resolver)
 
 ## Summary

@@ -2,7 +2,7 @@
 
 ## Status
 
-Unplanned
+Done
 
 ## Summary
 
@@ -10,8 +10,8 @@ Adds seamless URL import resolution: remote modules are fetched on first use and
 
 ## Stories
 
-- [S04-01-url-import-resolution.md](../../unplanned/S04-01-url-import-resolution.md)
-- [S04-02-stdlib-subpath-resolver.md](../../unplanned/S04-02-stdlib-subpath-resolver.md)
+- [S04-01-url-import-resolution.md](../../done/S04-01-url-import-resolution.md)
+- [S04-02-stdlib-subpath-resolver.md](../../done/S04-02-stdlib-subpath-resolver.md)
 
 ## Dependencies
 
