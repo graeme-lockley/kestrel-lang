@@ -34,10 +34,10 @@ The `.kti` (types file) format is fully specified in `docs/specs/07-modules.md �
 ## Epic Completion Criteria
 
 - `compile-file-jvm.ts` writes a `.kti` file alongside each successfully compiled package's `.class` output.
-- On a subsequent compilation, if a package's `.kti` is present and its embedded source hash matches the current source content, `compile-file-jvm.ts` loads the exported environment from the `.kti` instead of re-parsing and re-typechecking that package.
+- On a subsequent compilation, if a package's `.kti` is present, its embedded source hash matches the current source content, and all embedded direct-dependency hashes match the hashes of those deps' already-loaded `.kti` files, `compile-file-jvm.ts` loads the exported environment from the `.kti` instead of re-parsing and re-typechecking that package.
 - A changed source file (or a changed transitive dependency) causes that package and all packages that transitively depend on it to be recompiled; unchanged unrelated packages are not recompiled.
 - `.kti` files produced by an incompatible compiler version are rejected (format version mismatch) and the package is recompiled from source; no silent misread.
-- `kestrel build --clean <script>` deletes all `.kti` files in the output directory before compilation, forcing a full rebuild from source. It is composable with `--refresh` (`kestrel build --clean --refresh`) for a fully-from-scratch build including URL re-download.
+- `kestrel build --clean <script>` and `kestrel run --clean <script>` delete all `.kti` files in the output directory before compilation, forcing a full rebuild from source. `--clean` is composable with `--refresh` for a fully-from-scratch build including URL re-download.
 - The three-layer freshness model is consistent:
   - **Shell level** (`kestrel run` only): skip compiler invocation entirely if the entry `.class` is up to date (mtime vs. source deps).
   - **Compiler level** (all invocations): skip re-parse/re-typecheck of deps whose `.kti` hash is up to date. Bypassed by `--clean`.
@@ -53,16 +53,22 @@ The `.kti` (types file) format is fully specified in `docs/specs/07-modules.md �
 ## Risks / Notes
 
 - **`--refresh` vs `--clean`**: these are distinct flags covering different caches. `--refresh` re-downloads URL source files; `--clean` discards `.kti` metadata. Both can be combined. `--clean` is chosen over `--no-cache` to align with build-tool convention (`make clean`, `gradle clean`) and to reflect that it deletes stale files rather than merely bypassing them.
-- **Invalidation correctness**: mtime is unreliable in CI and on coarse-timestamp filesystems. Prefer SHA-256 of source content as the freshness key; embed it in the `.kti` as a new `sourceHash` field. The current spec does not include `sourceHash` — adding it is a minor version bump (version 4).
+- **Invalidation correctness**: mtime alone is unreliable in CI and on coarse-timestamp filesystems. Use mtime as a cheap fast-path gate (if `.kti` mtime > source mtime, skip the source read entirely); when mtime indicates a possible change, read the source and verify against the stored SHA-256 as a correctness guard. This keeps the common case (nothing changed) at 2 `stat()` calls + 1 small `.kti` read per dep, with no source reads. The `sourceHash` field must be added to the `.kti` format — a minor version bump (version 4).
 - **Transitive invalidation**: a changed dep must invalidate all packages that directly or transitively depend on it. The simplest correct approach is to embed the hashes of all direct dependencies' `.kti` files in the dependent's own `.kti`; a mismatch triggers recompilation.
 - **stdlib packages**: stdlib `.ks` files compile to a shared output dir. `.kti` placement for stdlib (alongside `.class` files vs a separate dir) must be decided before implementation.
 - **`.kti` writer in the JVM pipeline**: the old VM implementation no longer exists in `compiler/src/`. The writer must be re-implemented (or extracted from done-story context) to match spec version 4.
+- **`--clean` on `kestrel run`**: `kestrel run` invokes the compiler when the shell-level mtime check fires. Without `--clean` support on `run`, a user cannot force a clean recompile without switching to `kestrel build`. `--clean` must be added to both `run` and `build` in `scripts/kestrel`.
 
 ## Implementation Approach
 
-`compile-file-jvm.ts` is extended to operate in two modes per dependency:
+`compile-file-jvm.ts` is extended to check freshness per dependency before compiling it. The freshness check uses mtime as a cheap fast-path to avoid source reads in the common case:
 
-1. **Cache hit**: if `<dep>.kti` exists, its `version` matches the current compiler's supported version, and its `sourceHash` matches `SHA-256(source)` and all declared dep hashes match their own `.kti` files, load the exported environment (functions, type aliases, constructors) directly from the `.kti` and skip lexing, parsing, and type inference for that package.
-2. **Cache miss / stale**: compile the package normally (existing path), then write a `.kti` alongside its `.class` output containing the version, `sourceHash`, dep hashes, and the full exported environment.
+Dependencies are processed in topological order (leaves first), so by the time a package is checked, all its direct deps have already been resolved and their final `sourceHash` values are in the in-process cache. Freshness for each package is determined as follows:
+
+1. **Fast-path (mtime gate)**: if `<dep>.kti` exists, its `version` matches the current compiler's supported version, `stat(<dep>.kti).mtime > stat(<dep>.ks).mtime`, **and** the dep hashes stored in the `.kti` all match the `sourceHash` values of the already-loaded dep `.kti`s in the in-process cache — treat the `.kti` as fresh. Load the exported environment directly and skip lexing, parsing, and type inference entirely. No source read required. The dep-hash check is pure in-memory comparison with no extra I/O, since those deps were already processed.
+2. **Slow-path (hash guard)**: if mtime indicates a possible change (source is newer or timestamps are equal, as can happen in CI), read the source and compute `SHA-256`. If it matches the stored `sourceHash`, and all dep hashes also match, the `.kti` is still valid — load it. This handles coarse-timestamp environments without paying the SHA-256 cost on every clean run.
+3. **Cache miss / stale**: if the `.kti` is absent, the version is incompatible, any hash does not match, or any dep hash does not match its dep's resolved hash — compile the package normally (existing path), then write a fresh `.kti` containing the version, `sourceHash`, dep hashes, and the full exported environment.
+
+Transitive invalidation is correct by construction: when dep A is recompiled its `.kti` gets a new `sourceHash`; any package B that embeds A's old hash will fail step 1's dep-hash check and fall through to step 3, triggering recompilation of B and a fresh `.kti` with updated dep hashes — propagating the invalidation up the dependency tree.
 
 `kestrel build --clean` is added to the CLI: it deletes all `.kti` files in the output directory before invoking the compiler, restoring full-recompile behaviour without removing `.class` output.
