@@ -66,3 +66,40 @@ No CLI argument parsing library exists in the stdlib. Each tool (currently only 
 - `--help` and `--version` are reserved; the library intercepts them before calling the user handler. Tools must not declare them in their `CliSpec`.
 - Variadic positional args are collected as a list in `ParsedArgs.positional`; only the last `CliArg` can be variadic.
 - Error messages from `parse` should be actionable (e.g. "unknown option: --foo; run with --help for usage").
+- `CliOption.long` stores the full option string including `--` (e.g. `"--output"`). Keys in `ParsedArgs.options` omit the `--` (e.g. `"output"`).
+- `Dict.emptyStringDict()` is the right constructor for `Dict<String, String>`.
+
+---
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `stdlib/kestrel/dev/cli.ks` | New file: `CliOptionKind`, `CliOption`, `CliArg`, `CliSpec`, `ParsedArgs`, `CliError` types plus `parse`, `help`, `version`, `run` functions |
+| `stdlib/kestrel/dev/cli.test.ks` | New file: unit tests |
+| `docs/specs/02-stdlib.md` | Add `kestrel:dev/cli` section |
+
+## Tasks
+
+- [x] Create `stdlib/kestrel/dev/cli.ks` with all types and functions
+- [x] Create `stdlib/kestrel/dev/cli.test.ks` with unit tests
+- [x] Add `kestrel:dev/cli` section to `docs/specs/02-stdlib.md`
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Stdlib unit | `stdlib/kestrel/dev/cli.test.ks` | parse flags, values, positionals, errors; help/version formatting |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/02-stdlib.md` — add `kestrel:dev/cli` section with all exported types and functions
+
+## Build notes
+
+- 2025-01: Discovered a compiler bug: non-generic record type aliases passed `undefined` for `typeAliases` when converting field types, causing user-defined type references (e.g. `kind: CliOptionKind`) to become fresh type variables. This made ADT constructor patterns (e.g. `Value(meta)`) fail with "Unknown variable: meta". Fixed in `compiler/src/typecheck/check.ts` (passing `typeAliases` instead of `undefined`). All 419 compiler tests still pass.
+- Implemented `cli.ks` with 6 types (`CliOptionKind`, `CliOption`, `CliArg`, `CliSpec`, `ParsedArgs`, `CliError`) and 4 public functions (`parse`, `help`, `version`, `run`). Used `Dict.emptyStringDict()` for `Dict<String, String>`. Positional constructor patterns work after the compiler fix.
+- 29 unit tests in `cli.test.ks` covering all parse paths, help/version rendering, and error cases — all pass.
+- The subdirectory tests (`dev/cli.test.ks` etc.) are not reached by the full `./scripts/kestrel test` run because the test runner uses a shallow `listDir`. This is deferred to S08-06.

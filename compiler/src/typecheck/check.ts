@@ -1427,7 +1427,7 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             // generalization of functions that use this alias (e.g. diff<K,V,B>).
             typeAliases.set(node.name, templateApp);
           } else {
-            const aliasType = astTypeToInternal(node.body.type, undefined, resolveQualified);
+            const aliasType = astTypeToInternal(node.body.type, typeAliases, resolveQualified);
             env.set(node.name, aliasType);
             typeAliases.set(node.name, aliasType);
           }

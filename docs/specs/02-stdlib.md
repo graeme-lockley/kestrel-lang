@@ -284,6 +284,40 @@ Index bounds are enforced by the Java runtime (`IndexOutOfBoundsException` on ou
 
 **Built-in primitives (language):** The language provides built-in `print` and `println` (variadic, space-separated output; see language spec). These are distinct from the stdlib module below.
 
+## kestrel:dev/cli
+
+Declarative CLI argument parser for Kestrel tools. Provides types and functions for parsing command-line arguments, rendering help text, and dispatching to a handler function.
+
+**Types:**
+
+| Type | Definition |
+|------|------------|
+| `CliOptionKind` | ADT: `Flag \| Value(String)`. `Flag` — boolean presence (no value token). `Value(metavar)` — consumes the next token; `String` is the metavar for help display (e.g. `"FILE"`). |
+| `CliOption` | Record `{ short: Option<String>, long: String, kind: CliOptionKind, description: String }`. `long` includes the `--` prefix (e.g. `"--output"`). `short` includes the `-` prefix (e.g. `Some("-o")`). |
+| `CliArg` | Record `{ name: String, description: String, variadic: Bool }`. Describes a positional argument. |
+| `CliSpec` | Record `{ name: String, version: String, description: String, usage: String, options: List<CliOption>, args: List<CliArg> }`. Complete description of a tool. |
+| `ParsedArgs` | Record `{ options: Dict<String, String>, positional: List<String> }`. Keys in `options` are bare long names without `--` (e.g. `"output"`); `Flag` values are `"true"`. |
+| `CliError` | ADT: `UnknownOption(String) \| MissingValue(String) \| MissingArg(String) \| UnexpectedArg(String)`. |
+
+**Functions:**
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `parse` | `(CliSpec, List<String>) -> Result<ParsedArgs, CliError>` | Parse argv against the spec. `--help` and `--version` are NOT intercepted; use `run` for that. |
+| `help` | `(CliSpec) -> String` | Render formatted help text. Includes built-in `--help` / `--version` options. |
+| `version` | `(CliSpec) -> String` | Render `"name vX.Y.Z"`. |
+| `run` | `(CliSpec, (ParsedArgs) -> Task<Int>, List<String>) -> Task<Int>` | Intercept `--help` / `--version`, then parse and dispatch to the handler. Returns exit code. |
+
+**Parsing rules:**
+- `--flag` sets `options["flag"] = "true"`.
+- `--key value` and `--key=value` set `options["key"] = "value"`.
+- `-s` (short) is an alias for its long name; stores under the long name's bare key.
+- `-sVALUE` (short with inline value) is accepted for Value options.
+- `--` terminates option parsing; remaining tokens are positional.
+- `--help` / `-h` and `--version` / `-V` are always available via `run`; tools must not re-declare them.
+
+---
+
 ## kestrel:dev/stack
 
 Stack traces and basic I/O formatting. This module is for stack-trace and formatting utilities; the **built-in** `print`/`println` are language primitives (variadic, space-separated).

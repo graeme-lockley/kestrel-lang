@@ -1,7 +1,7 @@
 // Render a colour Mandelbrot set in the terminal (ANSI 256-colour + density chars).
 
-import { slice } from "kestrel:data/string"
-import { ESC, RESET } from "kestrel:io/console"
+import * as Str     from "kestrel:data/string"
+import * as Console from "kestrel:io/console"
 
 val maxIter = 50
 
@@ -55,12 +55,12 @@ fun mandelIter(cRe: Float, cIm: Float, zRe: Float, zIm: Float, i: Int): Int =
 
 fun pickCell(iter: Int): String =
   if (iter >= maxIter) {
-    "${ESC}[48;5;17m ${RESET}"
+    "${Console.ESC}[48;5;17m ${Console.RESET}"
   } else {
     val idx = iter % 10
-    val ch = slice(charset, idx, idx + 1)
+    val ch = Str.slice(charset, idx, idx + 1)
     val c = iterToFg256(iter)
-    "${ESC}[38;5;${c}m${ch}${RESET}"
+    "${Console.ESC}[38;5;${c}m${ch}${Console.RESET}"
   }
 
 fun renderRow(col: Float, im: Float, acc: String): String =
