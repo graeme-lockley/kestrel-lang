@@ -191,6 +191,12 @@ export async fun run(s: Suite): Task<Unit> = {
       eq(sg, "dropWhile none", List.dropWhile([1, 2], isEven), [1, 2])
     })
 
+    group(s1, "generate", (sg: Suite) => {
+      eq(sg, "identity indices", List.generate(4, (i: Int) => i), [0, 1, 2, 3])
+      eq(sg, "squares",         List.generate(5, (i: Int) => i * i), [0, 1, 4, 9, 16])
+      eq(sg, "zero length",     List.generate(0, (i: Int) => i), emptyInts())
+    })
+
     group(s1, "forEach", (sg: Suite) => {
       val acc = Arr.new()
       List.forEach([1, 2, 3], (x: Int) => Arr.push(acc, x))

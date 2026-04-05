@@ -264,3 +264,9 @@ export fun forEach<A>(xs: List<A>, f: (A) -> Unit): Unit = match (xs) {
   []     => ()
   h :: t => { f(h); forEach(t, f) }
 }
+
+fun generateAcc<A>(i: Int, n: Int, f: (Int) -> A): List<A> =
+  if (i >= n) []
+  else f(i) :: generateAcc(i + 1, n, f)
+
+export fun generate<A>(n: Int, f: (Int) -> A): List<A> = generateAcc(0, n, f)
