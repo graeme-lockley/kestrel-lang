@@ -69,8 +69,8 @@ See the [Java interop section of the guide](docs/guide.md#java-interop) for full
 
 The `kestrel` script implements the CLI described in [docs/specs/09-tools.md](docs/specs/09-tools.md):
 
-- **`kestrel run`** — `<script.ks>` and runtime arguments. Compiles if needed, then runs on the JVM.
-- **`kestrel build`** — Builds the compiler; optional script path to compile.
+- **`kestrel run`** — `<script.ks>` and runtime arguments. Compiles if needed, then runs on the JVM. Pass `--refresh` to re-download URL dependencies; `--allow-http` to permit `http://` imports.
+- **`kestrel build`** — Builds the compiler; optional script path to compile. `--refresh`, `--allow-http`, and `--status` (print URL cache report without compiling) are also accepted.
 - **`kestrel dis`** — Compiles if needed, then prints JVM bytecode disassembly via `javap`.
 - **`kestrel test`** — Runs Kestrel unit tests; optional test file paths.
 

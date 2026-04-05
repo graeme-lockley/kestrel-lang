@@ -479,7 +479,37 @@ Relative imports use file paths:
 import { helper } from "./utils.ks"
 ```
 
-### Exporting
+### URL imports
+
+Kestrel can import modules directly from the web using `https://` (or `http://` with `--allow-http`):
+
+```kestrel
+import * as Lib from "https://example.com/lib.ks"
+
+fun main(): Unit = println(Lib.greet("world"))
+```
+
+On first use the compiler fetches the source and caches it under `~/.kestrel/cache/<sha256-of-url>/source.ks`. Subsequent builds use the cached copy with no network request. If the remote module contains relative imports (e.g. `"./dir/utils.ks"`), those are resolved against the **base URL** of the remote file and fetched transitively — the entire dependency tree is cached in a single pass.
+
+Useful flags:
+
+| Flag | Command | Effect |
+|------|---------|--------|
+| `--refresh` | `run`, `build` | Re-download all URL dependencies even when cached |
+| `--allow-http` | `run`, `build` | Accept `http://` imports (HTTPS only by default) |
+| `--status` | `build` only | Print cache state for every URL dependency; do not compile |
+
+```bash
+# Show cache status without building
+kestrel build --status main.ks
+
+# Force re-download of all URL dependencies
+kestrel run --refresh main.ks
+```
+
+Cache location defaults to `~/.kestrel/cache/`; override with `KESTREL_CACHE`. Staleness threshold defaults to 7 days; override with `KESTREL_CACHE_TTL` (seconds).
+
+
 
 Mark declarations with `export` to make them available to other modules:
 
