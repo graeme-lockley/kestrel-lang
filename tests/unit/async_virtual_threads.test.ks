@@ -2,6 +2,7 @@ import { Suite, group, eq } from "kestrel:test"
 import * as Fs from "kestrel:fs"
 import * as Process from "kestrel:process"
 import * as Task from "kestrel:task"
+import { Cancelled } from "kestrel:task"
 import * as AsyncHelper from "../fixtures/async_helper.ks"
 
 export exception AsyncBoom
@@ -48,7 +49,7 @@ export async fun run(s: Suite): Task<Unit> = {
   val slowSource = Process.runProcess("sh", ["-c", "sleep 10"])
   val mapped = Task.map(slowSource, (r) => 0)
   Task.cancel(mapped)
-  val cancelPropagated: Int = try { val _ = await slowSource; 0 } catch { _ => 1 }
+  val cancelPropagated: Int = try { val _ = await slowSource; 0 } catch { Cancelled => 1 }
 
   group(s, "async virtual threads", (s1: Suite) => {
     group(s1, "await success", (sg: Suite) => {
