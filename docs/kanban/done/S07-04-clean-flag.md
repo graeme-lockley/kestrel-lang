@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E07 Incremental Compilation](../epics/unplanned/E07-incremental-compilation.md)
+- Epic: [E07 Incremental Compilation](../epics/done/E07-incremental-compilation.md)
 - Companion stories: S07-01 (spec), S07-02 (writer), S07-03 (reader)
 
 ## Summary
