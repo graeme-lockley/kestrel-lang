@@ -17,6 +17,9 @@ import java.util.concurrent.ExecutionException;
 public final class KTask {
     private final CompletableFuture<Object> future;
 
+    /** Maximum unwrapping depth in unwrapFailure() — prevents infinite loops on pathological chains. */
+    private static final int MAX_UNWRAP_DEPTH = 64;
+
     private KTask(CompletableFuture<Object> future) {
         this.future = future;
     }
@@ -31,18 +34,21 @@ public final class KTask {
 
     static Throwable unwrapFailure(Throwable failure) {
         Throwable current = failure;
-        while (current != null) {
+        int depth = 0;
+        while (current != null && depth < MAX_UNWRAP_DEPTH) {
             if ((current instanceof ExecutionException || current instanceof CompletionException || current instanceof InvocationTargetException) && current.getCause() != null) {
                 current = current.getCause();
+                depth++;
                 continue;
             }
             if (current.getClass().equals(RuntimeException.class) && current.getCause() != null) {
                 current = current.getCause();
+                depth++;
                 continue;
             }
             return current;
         }
-        return new RuntimeException("Unknown async task failure");
+        return current != null ? current : new RuntimeException("Unknown async task failure");
     }
 
     public Object get() {

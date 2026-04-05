@@ -28,6 +28,10 @@ export interface CompileFileJvmOptions {
   stalePaths?: Set<string>;
   /** Return class output directory for a source path. Writes <classDir>/<ClassName>.class and inner classes. */
   getClassOutputDir?: (sourcePath: string) => string;
+  /** Root directory for the URL import cache (spec 07 §7). Defaults to ~/.kestrel/cache/. */
+  urlCacheRoot?: string;
+  /** Allow http:// (non-TLS) URL imports. Defaults to false. */
+  allowHttp?: boolean;
 }
 
 function getRequestedImports(imp: ImportDecl): Map<string, string> {
@@ -476,6 +480,7 @@ export function compileFileJvm(
 ): { ok: true; classDir: string; mainClass: string; dependencyPaths: string[] } | { ok: false; diagnostics: Diagnostic[] } {
   const projectRoot = options?.projectRoot ?? process.cwd();
   const stdlibDir = options?.stdlibDir ?? pathResolve(projectRoot, 'stdlib');
+  const urlCacheRoot = options?.urlCacheRoot;
   const absPath = pathResolve(inputPath);
 
   // Only write a .class file if the content has changed, to avoid bumping
@@ -578,7 +583,7 @@ export function compileFileJvm(
       }
     }
 
-    const resolveOpts = { fromFile: filePath, projectRoot, stdlibDir };
+    const resolveOpts = { fromFile: filePath, projectRoot, stdlibDir, cacheRoot: urlCacheRoot };
     const specs = distinctSpecifiersInSourceOrder(program);
     const mavenSpecs = specs.filter((s) => isMavenSpecifier(s));
     const sourceSpecs = specs.filter((s) => !isMavenSpecifier(s));

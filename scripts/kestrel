@@ -203,6 +203,20 @@ cmd_build() {
   build_compiler_jvm
   if [ -n "${1:-}" ]; then
     local resolved class_dir
+    local refresh_flag="" allow_http_flag="" status_flag=""
+    # Parse optional flags before the script path
+    while [ $# -gt 0 ]; do
+      case "${1:-}" in
+        --refresh) refresh_flag="--refresh"; shift ;;
+        --allow-http) allow_http_flag="--allow-http"; shift ;;
+        --status) status_flag="--status"; shift ;;
+        *) break ;;
+      esac
+    done
+    if [ -z "${1:-}" ]; then
+      echo "kestrel build: script path required after flags" >&2
+      exit 1
+    fi
     resolved=$(resolve_script "$1")
     if [ -z "$resolved" ]; then
       echo "kestrel: script not found: $1" >&2
@@ -210,16 +224,19 @@ cmd_build() {
     fi
     class_dir=$(jvm_class_dir_for "$resolved")
     mkdir -p "$class_dir"
-    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"; then
+    # shellcheck disable=SC2086
+    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $status_flag; then
       echo "kestrel: JVM compile failed" >&2
       exit 1
     fi
-    echo "Built $class_dir (JVM)"
+    if [ -z "$status_flag" ]; then
+      echo "Built $class_dir (JVM)"
+    fi
   fi
 }
 
 cmd_run() {
-  local exit_mode=""
+  local exit_mode="" refresh_flag="" allow_http_flag=""
   while [ $# -gt 0 ]; do
     case "${1:-}" in
       --help|-h)
@@ -240,6 +257,14 @@ cmd_run() {
           exit 1
         fi
         exit_mode="no-wait"
+        shift
+        ;;
+      --refresh)
+        refresh_flag="--refresh"
+        shift
+        ;;
+      --allow-http)
+        allow_http_flag="--allow-http"
         shift
         ;;
       *)
@@ -264,7 +289,8 @@ cmd_run() {
   class_dir=$(jvm_class_dir_for "$resolved")
   if needs_compile_jvm "$resolved" "$class_dir"; then
     mkdir -p "$class_dir"
-    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"; then
+    # shellcheck disable=SC2086
+    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag; then
       echo "kestrel: JVM compile failed for $resolved" >&2
       exit 1
     fi

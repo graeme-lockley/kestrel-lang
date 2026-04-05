@@ -37,9 +37,9 @@ While circular `Throwable` chains are extremely rare in practice (Java's excepti
 
 ## Acceptance Criteria
 
-1. `unwrapFailure` with a chain of 1 000 nested `ExecutionException` wrappers terminates and returns a non-null value.
-2. Normal usage (chains of depth 1–5) is unaffected.
-3. All existing tests pass.
+1. [x] `unwrapFailure` with a chain of 1 000 nested `ExecutionException` wrappers terminates and returns a non-null value.
+2. [x] Normal usage (chains of depth 1–5) is unaffected.
+3. [x] All existing tests pass.
 
 ## Spec References
 
@@ -50,3 +50,29 @@ While circular `Throwable` chains are extremely rare in practice (Java's excepti
 - The chosen depth limit (64) is arbitrary but safe; document it as a constant.
 - Returning the last seen `Throwable` at the limit is preferable to throwing a new error, to avoid masking the original failure.
 - A `HashSet<Throwable>` visited set would be more precisely correct but is unnecessary overhead for a depth limit of 64.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| JVM runtime | `KTask.java` `unwrapFailure()` — add `MAX_UNWRAP_DEPTH = 64` constant and an iteration counter; return `current` when depth is exceeded |
+
+## Tasks
+
+- [x] Add `private static final int MAX_UNWRAP_DEPTH = 64;` constant to `KTask.java`
+- [x] Add iteration counter to `unwrapFailure()` loop; `return current` when depth exceeds `MAX_UNWRAP_DEPTH`
+- [x] Run `cd runtime/jvm && bash build.sh`
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+None — the cycle/depth case is an internal hardening not exercised by normal tests.
+
+## Documentation and specs to update
+
+None — internal implementation detail.
+
+## Build notes
+
+- 2026-04-05: Added `MAX_UNWRAP_DEPTH = 64` constant. Loop counter `depth` increments on each unwrap step; when `depth >= MAX_UNWRAP_DEPTH` the loop exits and returns whatever `current` is (non-null at that point), not a replacement exception. This is safer than returning a new `RuntimeException` as it preserves the last available failure. Also fixed the null-fall-through case: replaced `return new RuntimeException("Unknown async task failure")` with `return current != null ? current : new RuntimeException(...)`. 1072 Kestrel tests pass.
