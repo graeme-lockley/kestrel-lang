@@ -152,7 +152,7 @@ public final class KTask {
         }
         if (tasks.isEmpty()) {
             CompletableFuture<Object> failed = new CompletableFuture<>();
-            failed.completeExceptionally(new RuntimeException("Task.race called with empty list"));
+            failed.completeExceptionally(new KException("no tasks provided"));
             return new KTask(failed);
         }
         CompletableFuture<Object>[] futures = tasks.stream()

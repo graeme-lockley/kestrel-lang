@@ -32,6 +32,7 @@ export async fun run(s: Suite): Task<Unit> = {
     }
   val delayed = await delayedValue()
   val raceWinner = await Task.race([fastTask(), slowTask()])
+  val raceEmptyResult = try { val _ = await Task.race([]); 0 } catch { _ => 1 }
 
   group(s, "async virtual threads", (s1: Suite) => {
     group(s1, "await success", (sg: Suite) => {
@@ -52,7 +53,8 @@ export async fun run(s: Suite): Task<Unit> = {
     });
 
     group(s1, "Task.race", (sg: Suite) => {
-      eq(sg, "race returns winner value", raceWinner, 1)
+      eq(sg, "race returns winner value", raceWinner, 1);
+      eq(sg, "race empty list is catchable", raceEmptyResult, 1)
     });
   });
   ()
