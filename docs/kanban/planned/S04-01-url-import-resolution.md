@@ -132,3 +132,74 @@ tree of any remote module is therefore automatically downloaded into the cache o
 - 07-modules §4.2 (URL specifier resolution, base-URL-relative resolution)
 - 07-modules §7 (URL import cache)
 - 09-tools §2.1 run, §2.3 build (`--refresh`, `--status`, `--allow-http`)
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `compiler/src/url-cache.ts` (new) | All URL cache logic: SHA-256 keying, atomic fetch (tmp+rename), `origin.url` tracking for base-URL resolution, BFS pre-fetch, staleness check, `--status` data collection |
+| `compiler/src/resolve.ts` | New URL specifier fast-path: reads `origin.url` from importing file's cache dir to determine base URL; resolves relative spec to absolute URL; looks up cache path synchronously |
+| `compiler/src/compile-file-jvm.ts` | Add `urlCacheRoot`, `allowHttp` to `CompileFileJvmOptions`; forward both into `resolveOpts` |
+| `compiler/cli.ts` | Wrap in `(async () => {})()`, parse `--refresh`, `--allow-http`, `--status`; call `prefetchUrlDependencies` before `compileFileJvm`; implement `--status` output and exit |
+| `scripts/kestrel` | `cmd_run`: add `--refresh`, `--allow-http`; `cmd_build`: add same plus `--status`; forward all three flags to `$COMPILER_CLI` |
+| `compiler/test/fixtures/mock-http-server.ts` (new) | Tiny `node:http` server fixture used by integration tests; serves `.ks` source from an in-memory map; supports recording which URLs were requested (to verify cache-hit bypasses network) |
+| `compiler/test/integration/url-import.test.ts` (new) | Integration tests: cache miss/hit, transitive fetch, `--refresh`, `--status`, error paths |
+
+**Design notes:**
+- `cli.ts` drives a two-phase flow: async pre-fetch phase → sync `compileFileJvm`. URL specifiers are fully cached before compilation starts so `resolveSpecifier` stays synchronous.
+- Resolution context for URL-fetched files is stored alongside the cached source as `origin.url` (one URL per line — just the first line is used). Written before the atomic rename, so presence without `source.ks` is harmless.
+- `fetch` (global, Node 18+) is used for HTTP/HTTPS; `--allow-http` gate applied at pre-fetch time.
+- Origin bounding uses Node.js `URL` class (RFC 3986); cross-host `../` is a compile error with span.
+
+## Tasks
+
+- [ ] Create `compiler/src/url-cache.ts`:
+  - `sha256Hex(text: string): string` — crypto SHA-256 lowercase hex
+  - `defaultCacheRoot(): string` — `$KESTREL_CACHE` env or `~/.kestrel/cache/`
+  - `urlCacheDir(url, cacheRoot): string` — `<cacheRoot>/<sha256(url)>/`
+  - `urlCachePath(url, cacheRoot): string` — `urlCacheDir + "source.ks"`
+  - `originUrlFile(url, cacheRoot): string` — `urlCacheDir + "origin.url"`
+  - `isCached(url, cacheRoot): boolean` — checks existence of `source.ks`
+  - `isStale(url, cacheRoot, ttlSecs): boolean` — mtime + TTL check
+  - `cleanStaleTemp(cacheDir): void` — remove `source.ks.tmp` if present
+  - `readOriginUrl(cachedFilePath): string | null` — reads `origin.url` from same dir
+  - `resolveRelativeUrl(baseUrl, relSpec): { ok: true; url: string } | { ok: false; reason: 'cross-origin' | 'invalid' }` — Node.js `URL` class; validate same scheme+host
+  - `async fetchToCache(url, cacheRoot, opts: { allowHttp, refresh }): Promise<{ ok: true; path: string } | { ok: false; error: string }>` — fetch, write `origin.url`, atomic tmp+rename; handle stale-tmp cleanup
+  - `async prefetchUrlDependencies(entryPath, opts): Promise<PrefetchError[]>` — BFS over URL imports (parse entry, find URL specs, fetch, parse fetched file, recurse); track visited URLs; return diagnostics on failure
+  - `async buildStatusEntries(entryPath, cacheRoot, ttlSecs): Promise<UrlStatusEntry[]>` — same BFS but collect `{ url, cached, ageMs, stale }` records without fetching
+  - `formatStatusReport(entries: UrlStatusEntry[]): string` — render the `--status` table
+- [ ] Update `compiler/src/resolve.ts`:
+  - Add `cacheRoot?: string` to `ResolveOptions`
+  - Add URL specifier case (between stdlib and path): call `readOriginUrl(fromFile)` to get base URL; if spec is absolute URL check directly; if relative resolve via `resolveRelativeUrl`; look up `urlCachePath`; return `ok: true` if exists, else descriptive error
+  - Keep `resolveSpecifier` synchronous
+- [ ] Update `compiler/src/compile-file-jvm.ts`:
+  - Add `urlCacheRoot?: string` and `allowHttp?: boolean` to `CompileFileJvmOptions`
+  - Inject `cacheRoot` into `resolveOpts`
+- [ ] Update `compiler/cli.ts`:
+  - Wrap all existing logic in `(async () => { ... })().catch(...)`
+  - Parse `--refresh` (boolean), `--allow-http` (boolean), `--status` (boolean) from `args`
+  - If `--status`: call `buildStatusEntries`, print `formatStatusReport`, `process.exit(0)`
+  - Before `compileFileJvm`: call `prefetchUrlDependencies`; on errors call `report()` and exit 1
+  - Pass `urlCacheRoot` and `allowHttp` into `compileFileJvm` options
+- [ ] Update `scripts/kestrel`:
+  - `cmd_run` flag loop: add `--refresh`, `--allow-http` cases; accumulate in local vars
+  - `cmd_build` flag loop: same plus `--status`
+  - Both: forward `--refresh`, `--allow-http` (and `--status` for build) to `node "$COMPILER_CLI" "$resolved" ...`
+- [ ] Create `compiler/test/fixtures/mock-http-server.ts`:
+  - `interface MockServer { url: string; requestedUrls: string[]; close(): Promise<void> }`
+  - `async startMockServer(files: Map<string, string>): Promise<MockServer>` — serves each URL path from the map; records requests
+- [ ] Create `compiler/test/integration/url-import.test.ts` with tests (see **Tests to add**)
+- [ ] Run `cd compiler && npm run build && npm test`
+- [ ] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `compiler/test/unit/url-cache.test.ts` | `sha256Hex` determinism; `resolveRelativeUrl` happy-path; `resolveRelativeUrl` cross-origin → `{ ok: false, reason: 'cross-origin' }`; `isCached` false on empty dir; `isStale` true/false on mtime |
+| Vitest integration | `compiler/test/integration/url-import.test.ts` | Cache miss: fetches from mock server, compiles OK; cache hit: mock server receives zero requests; transitive: `fred.ks` → `./dir/mary.ks`, both fetched, function call succeeds; `--refresh` re-fetches warm cache; `--status` output contains URL with ✓/✗; `http://` without `--allow-http` → compile error with span; unreachable URL → compile error with source location; `../` escape → compile error with import span; stale-tmp cleanup: place `source.ks.tmp` without `source.ks`, verify it is deleted and re-fetched |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/07-modules.md` — §4.2 and §7 are already up to date (updated in prior commits); verify no changes needed after implementation
+- [ ] `docs/specs/09-tools.md` — §2.1 run and §2.3 build are already updated with new flags; §2.9 URL import cache section already present; verify accuracy after implementation
