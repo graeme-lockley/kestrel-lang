@@ -1,6 +1,6 @@
 import { Suite, group, eq, isTrue } from "kestrel:test"
-import * as Str from "kestrel:string"
-import * as Console from "kestrel:console"
+import * as Str from "kestrel:data/string"
+import * as Console from "kestrel:io/console"
 import * as Helper from "../fixtures/export_var_helper.ks"
 import * as Lib from "../fixtures/opaque_pkg/lib.ks"
 

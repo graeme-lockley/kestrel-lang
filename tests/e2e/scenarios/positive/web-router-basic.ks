@@ -1,6 +1,6 @@
 // E2E test: basic web routing with GET and POST routes (S03-04).
 // Verifies 200 for matched routes, 404 for unmatched path, 405 for wrong method.
-import * as Http from "kestrel:http"
+import * as Http from "kestrel:io/http"
 import * as Web from "kestrel:web"
 
 async fun helloHandler(req: Http.Request, params: Dict<String, String>): Task<Http.Response> =

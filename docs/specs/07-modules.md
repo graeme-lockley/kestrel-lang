@@ -101,11 +101,44 @@ For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashM
 
 ### 4.2 Specifier kinds
 
-- **Standard library:** Any specifier that starts with `kestrel:` followed by one or more path segments is a **stdlib specifier**. The specifier `kestrel:X` or `kestrel:X/Y/...` is mapped to the file `<stdlibDir>/kestrel/X.ks` or `<stdlibDir>/kestrel/X/Y/....ks`. **Segment validation:** each segment between `:` and `/` must match `[a-zA-Z0-9_-]+`; any segment containing characters outside this set (including `..` path traversal) is a **compile error**. If the mapped file exists, it is resolved as-is. If the file does not exist, the compiler must report an `unknown stdlib module` error identifying the specifier and the expected file path. No hardcoded allowlist of module names is required: any `kestrel:` specifier that passes segment validation and whose mapped file exists is a valid stdlib module. The well-known stdlib modules (e.g. `kestrel:string`, `kestrel:list`, `kestrel:http`) remain valid under this rule. How stdlib modules are provided (bundled `.ks` source, compiled `.kbc`, or generated) is implementation-defined.
+- **Standard library:** Any specifier that starts with `kestrel:` followed by one or more path segments is a **stdlib specifier**. The specifier `kestrel:X` or `kestrel:X/Y/...` is mapped to the file `<stdlibDir>/kestrel/X.ks` or `<stdlibDir>/kestrel/X/Y/....ks`. **Segment validation:** each segment between `:` and `/` must match `[a-zA-Z0-9_-]+`; any segment containing characters outside this set (including `..` path traversal) is a **compile error**. If the mapped file exists, it is resolved as-is. If the file does not exist, the compiler must report an `unknown stdlib module` error identifying the specifier and the expected file path. No hardcoded allowlist of module names is required: any `kestrel:` specifier that passes segment validation and whose mapped file exists is a valid stdlib module. The well-known stdlib modules listed in the table below remain valid under this rule. How stdlib modules are provided (bundled `.ks` source, compiled `.kbc`, or generated) is implementation-defined.
 
-  **Note for `kestrel:http`:** The module exports three opaque types — `Server`, `Request`, and `Response` — backed by JDK classes (`com.sun.net.httpserver.HttpServer`, `com.sun.net.httpserver.HttpExchange`, and an implementation-defined response representation respectively). These types are not constructible by user code; they are produced exclusively by the `kestrel:http` module functions (`createServer`, `get`, `makeResponse`). See 02 §`kestrel:http` and 05 §2 for the concurrency model.
+  **Stdlib namespace structure** (as of E08):
 
-  **Note for `kestrel:web`:** A lightweight routing framework built on `kestrel:http` and implemented entirely in Kestrel. See 02 §`kestrel:web` for the `Router` type, pattern syntax, and `serve`. Depends on `kestrel:http`, `kestrel:list`, `kestrel:dict`, and `kestrel:string`.
+  | Namespace | Purpose |
+  |-----------|---------|
+  | `kestrel:data/*` | Pure, stateless modules: data structures, algorithms, type utilities |
+  | `kestrel:io/*` | Effectful modules that communicate with the outside world |
+  | `kestrel:sys/*` | System-level concerns: processes, concurrency, runtime errors |
+  | `kestrel:dev/*` | Developer tools and infrastructure |
+  | `kestrel:tools/*` | User-facing tools (format, test runner) |
+
+  | Specifier | Physical file | Description |
+  |-----------|--------------|-------------|
+  | `kestrel:data/basics` | `stdlib/kestrel/data/basics.ks` | Primitive ops and built-ins |
+  | `kestrel:data/char` | `stdlib/kestrel/data/char.ks` | Character operations |
+  | `kestrel:data/string` | `stdlib/kestrel/data/string.ks` | String operations |
+  | `kestrel:data/list` | `stdlib/kestrel/data/list.ks` | List operations |
+  | `kestrel:data/dict` | `stdlib/kestrel/data/dict.ks` | Dictionary (HashMap) |
+  | `kestrel:data/set` | `stdlib/kestrel/data/set.ks` | Set |
+  | `kestrel:data/tuple` | `stdlib/kestrel/data/tuple.ks` | Tuple utilities |
+  | `kestrel:data/option` | `stdlib/kestrel/data/option.ks` | Option type |
+  | `kestrel:data/result` | `stdlib/kestrel/data/result.ks` | Result type |
+  | `kestrel:data/json` | `stdlib/kestrel/data/json.ks` | JSON encoding/decoding |
+  | `kestrel:io/console` | `stdlib/kestrel/io/console.ks` | Console I/O |
+  | `kestrel:io/fs` | `stdlib/kestrel/io/fs.ks` | Filesystem |
+  | `kestrel:io/http` | `stdlib/kestrel/io/http.ks` | HTTP client/server |
+  | `kestrel:sys/process` | `stdlib/kestrel/sys/process.ks` | Process spawning |
+  | `kestrel:sys/task` | `stdlib/kestrel/sys/task.ks` | Async tasks |
+  | `kestrel:sys/runtime` | `stdlib/kestrel/sys/runtime.ks` | Runtime errors |
+  | `kestrel:dev/stack` | `stdlib/kestrel/dev/stack.ks` | Stack traces (debug) |
+  | `kestrel:array` | `stdlib/kestrel/array.ks` | Array built-in type |
+  | `kestrel:socket` | `stdlib/kestrel/socket.ks` | TCP/TLS sockets |
+  | `kestrel:web` | `stdlib/kestrel/web.ks` | Lightweight routing |
+
+  **Note for `kestrel:io/http`:** The module exports three opaque types — `Server`, `Request`, and `Response` — backed by JDK classes (`com.sun.net.httpserver.HttpServer`, `com.sun.net.httpserver.HttpExchange`, and an implementation-defined response representation respectively). These types are not constructible by user code; they are produced exclusively by the `kestrel:io/http` module functions (`createServer`, `get`, `makeResponse`). See 02 §`kestrel:io/http` and 05 §2 for the concurrency model.
+
+  **Note for `kestrel:web`:** A lightweight routing framework built on `kestrel:io/http` and implemented entirely in Kestrel. See 02 §`kestrel:web` for the `Router` type, pattern syntax, and `serve`. Depends on `kestrel:io/http`, `kestrel:data/list`, `kestrel:data/dict`, and `kestrel:data/string`.
 
   **Note for `kestrel:socket`:** TCP and TLS socket library backed by `java.net.Socket` / `javax.net.ssl.SSLSocket` via `extern type`/`extern fun`. No maven dependencies — JDK-only. See 02 §`kestrel:socket` for types (`Socket`, `ServerSocket`), client functions (`tcpConnect`, `tlsConnect`), I/O functions (`sendText`, `readAll`, `readLine`, `close`), and server functions (`listen`, `accept`, `serverPort`, `serverClose`).
 - **URL:** If the specifier is a valid URL (e.g. starts with `https://` or `http://`, or implementation-defined URL scheme), it is a **URL specifier**. On first encounter the source is fetched, content-hashed (SHA-256), and cached under `~/.kestrel/cache/` (see §7); subsequent resolutions use the cached copy. Resolution is deterministic for a given cache state (see §7).
@@ -276,5 +309,5 @@ This section specifies how `async fun` declarations interact with the module sys
 | Spec | Relation |
 |------|----------|
 | **01** | ImportDecl, ExportDecl, TopLevelDecl grammar (01 §3.1). STRING is the specifier. UPPER_IDENT for namespace; IDENT for named import/export. Program order: imports first, then declarations and statements. |
-| **02** | Standard library module names (including `kestrel:string`, `kestrel:char`, `kestrel:list`, `kestrel:stack`, `kestrel:http`, `kestrel:json`, `kestrel:fs`, `kestrel:web`, `kestrel:socket`) must resolve to modules that satisfy 02. No other spec may use those names for a different contract. |
+| **02** | Standard library module names (including `kestrel:data/string`, `kestrel:data/char`, `kestrel:data/list`, `kestrel:dev/stack`, `kestrel:io/http`, `kestrel:data/json`, `kestrel:io/fs`, `kestrel:web`, `kestrel:socket`) must resolve to modules that satisfy 02. No other spec may use those names for a different contract. |
 | **03** | One .kbc (binary) per module; references in bytecode are by offset/index only (03 §0). Import table (§6.5): `import_count` and one u32 (string table index) per distinct import specifier; the string is the **exact source specifier**. Exported names and their offsets appear in the package’s types file (07 §5); function table (§6.1), exported type declarations (§6.4), and ADT table (§10) hold the definitions in the binary. || **06** | Structural async typing (06 §6): `async fun f(x: A): Task<B>` has the same type `(A) -> Task<B>` as a plain `fun f(x: A): Task<B>`. The `async` keyword is invisible at module boundaries. `await` prohibition at module scope enforced by the type checker (06 §6). |

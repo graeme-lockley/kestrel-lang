@@ -1,8 +1,8 @@
 // kestrel:set — sets as opaque Set<E> (= Dict<E, Unit>), pipe-friendly.
 
-import * as List from "kestrel:list"
-import * as D from "kestrel:dict"
-import { Dict } from "kestrel:dict"
+import * as List from "kestrel:data/list"
+import * as D from "kestrel:data/dict"
+import { Dict } from "kestrel:data/dict"
 
 // Parens: parser otherwise treats `= Dict<...>` as starting an ADT body (uppercase ident + `<`).
 opaque type Set<E> = (Dict<E, Unit>)

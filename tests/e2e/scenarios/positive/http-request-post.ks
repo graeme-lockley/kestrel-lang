@@ -1,7 +1,7 @@
 // E2E test: Http.request() with POST method and body (S03-03).
 // Starts an echo server on 127.0.0.1:0, sends POST with body via Http.request(),
 // asserts the response body equals the sent body.
-import * as Http from "kestrel:http"
+import * as Http from "kestrel:io/http"
 
 async fun echoBody(req: Http.Request): Task<Http.Response> = {
   val body = await Http.requestBodyText(req);

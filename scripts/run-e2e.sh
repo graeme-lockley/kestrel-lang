@@ -188,7 +188,7 @@ if [ -f "$sample_run" ] && [ -f "$sample_expected" ]; then
   fi
 
   cat >"$nowait_probe" <<'EOF'
-import * as Process from "kestrel:process"
+import * as Process from "kestrel:sys/process"
 
 async fun linger(): Task<Unit> = {
   val _ = await Process.runProcess("sh", ["-c", "sleep 2"]);

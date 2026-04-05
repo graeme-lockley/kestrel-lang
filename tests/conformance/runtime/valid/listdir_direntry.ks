@@ -1,7 +1,7 @@
 // Runtime conformance: listDir returns DirEntry ADT values
-import * as Fs from "kestrel:fs"
-import * as Lst from "kestrel:list"
-import { File, Dir, DirEntry } from "kestrel:fs"
+import * as Fs from "kestrel:io/fs"
+import * as Lst from "kestrel:data/list"
+import { File, Dir, DirEntry } from "kestrel:io/fs"
 
 async fun run(): Task<Unit> = {
   match (await Fs.listDir("tests/fixtures/fs/list_sample")) {

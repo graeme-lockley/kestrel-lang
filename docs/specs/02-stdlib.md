@@ -8,7 +8,7 @@ This document defines the standard library modules that a Kestrel implementation
 
 ---
 
-## kestrel:string
+## kestrel:data/string
 
 String operations. All functions take the string as an explicit argument (no member-call syntax). Strings are UTF-8. **Character** means Unicode code point: `length` returns the number of code points; `slice` and `indexOf` use code-point indices (not byte offsets).
 
@@ -34,7 +34,7 @@ String operations. All functions take the string as an explicit argument (no mem
 
 ---
 
-## kestrel:char
+## kestrel:data/char
 
 Operations on `Char` / `Rune` (one Unicode code point; same type per language spec).
 
@@ -53,7 +53,7 @@ Operations on `Char` / `Rune` (one Unicode code point; same type per language sp
 
 ---
 
-## kestrel:tuple
+## kestrel:data/tuple
 
 Helpers for pairs `(A, B)`. **Pipe-friendly:** the tuple is the first argument on `mapFirst` / `mapSecond` / `mapBoth` (so `t \|> mapFirst(f)` desugars to `mapFirst(t, f)`).
 
@@ -68,7 +68,7 @@ Helpers for pairs `(A, B)`. **Pipe-friendly:** the tuple is the first argument o
 
 ---
 
-## kestrel:basics
+## kestrel:data/basics
 
 Numeric, boolean, and general utilities. **Int remainder note:** `%` on `Int` follows floored division semantics in the VM; `remainderBy` and `modBy` use truncated and floored division respectively (see implementation).
 
@@ -93,7 +93,7 @@ Numeric, boolean, and general utilities. **Int remainder note:** `%` on `Int` fo
 
 ---
 
-## kestrel:runtime
+## kestrel:sys/runtime
 
 Canonical **exception ADTs** used by the VM for arithmetic traps (see language spec §Int operations). User code should import these names to `catch` or to annotate types; implementations must not rely on a duplicate `export exception` in the entry module.
 
@@ -104,7 +104,7 @@ Canonical **exception ADTs** used by the VM for arithmetic traps (see language s
 
 ---
 
-## kestrel:option
+## kestrel:data/option
 
 Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on `map`, `andThen`, `withDefault`, etc.
 
@@ -119,7 +119,7 @@ Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on 
 
 ---
 
-## kestrel:list
+## kestrel:data/list
 
 | `map` | `(List<A>, (A) -> B) -> List<B>` | Element-wise map |
 | `filter` | `(List<A>, (A) -> Bool) -> List<A>` | Keep elements satisfying predicate |
@@ -150,7 +150,7 @@ Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on 
 
 ---
 
-## kestrel:fs
+## kestrel:io/fs
 
 File system. File operations are async and return `Task<Result<T, FsError>>` so callers use `await` and pattern matching instead of exception control flow.
 
@@ -167,7 +167,7 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 
 ---
 
-## kestrel:process
+## kestrel:sys/process
 
 Process information and subprocess execution.
 
@@ -187,7 +187,7 @@ Process information and subprocess execution.
 
 ---
 
-## kestrel:task
+## kestrel:sys/task
 
 Task combinator utilities for composing `Task<T>` values.
 
@@ -214,7 +214,7 @@ Task combinator utilities for composing `Task<T>` values.
 
 ---
 
-## kestrel:result
+## kestrel:data/result
 
 Helpers for `Result<T, E>` (see §Library types). Functions are polymorphic in both type parameters. **Pipe-friendly:** the result is the first argument on transforming functions.
 
@@ -233,7 +233,7 @@ Helpers for `Result<T, E>` (see §Library types). Functions are polymorphic in b
 
 ---
 
-## kestrel:dict
+## kestrel:data/dict
 
 Finite maps exposed as the **opaque** type `Dict<K, V>`: clients use the functions below only and must not rely on a visible record shape. The implementation is backed by `java.util.HashMap` via `KRuntime` static helpers. **Pipe-friendly:** the dict is the first argument on `insert`, `get`, `map`, etc.
 
@@ -258,7 +258,7 @@ Convenience: `hashString` / `eqString`, `hashInt` / `eqInt`, `emptyStringDict` /
 
 ---
 
-## kestrel:set
+## kestrel:data/set
 
 Sets as the **opaque** type `Set<E>` (defined in the module as an alias of `Dict<E, Unit>`; keys only, values are `()`). Same pipe-friendly convention as `kestrel:dict`. Helpers `emptyStringSet` / `emptyIntSet`, `singletonStringSet` / `singletonIntSet`, and `fromStringList` / `fromIntList` for common key types. `map` requires new `hash` / `eq` for the mapped key type.
 
@@ -284,7 +284,7 @@ Index bounds are enforced by the Java runtime (`IndexOutOfBoundsException` on ou
 
 **Built-in primitives (language):** The language provides built-in `print` and `println` (variadic, space-separated output; see language spec). These are distinct from the stdlib module below.
 
-## kestrel:stack
+## kestrel:dev/stack
 
 Stack traces and basic I/O formatting. This module is for stack-trace and formatting utilities; the **built-in** `print`/`println` are language primitives (variadic, space-separated).
 
@@ -305,7 +305,7 @@ Stack traces and basic I/O formatting. This module is for stack-trace and format
 
 ---
 
-## kestrel:http
+## kestrel:io/http
 
 HTTP server and client. Provides an HTTP GET client and an HTTP server that dispatches incoming requests to a Kestrel handler function.
 
@@ -370,7 +370,7 @@ If a URL query string contains the same key multiple times (e.g. `?a=1&a=2`), `q
 
 ---
 
-## kestrel:json
+## kestrel:data/json
 
 JSON parsing and serialisation implemented **in Kestrel** (no host JSON primitives). Import `Value`, `JsonParseError`, constructors, and helpers from this module; there is **no** separate `kestrel:value` module and no language prelude injection for JSON `Value` constructors.
 

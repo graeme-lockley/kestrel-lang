@@ -2,8 +2,8 @@
 // Uses java.util.HashMap via KRuntime static helpers.
 // Keys use Java .equals()/.hashCode() — primitives (Int, String, Bool) work correctly.
 
-import * as List from "kestrel:list"
-import * as Str from "kestrel:string"
+import * as List from "kestrel:data/list"
+import * as Str from "kestrel:data/string"
 
 extern type JHashMap = jvm("java.util.HashMap")
 

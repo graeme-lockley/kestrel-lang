@@ -1,7 +1,7 @@
 import { Suite, group, eq, gt, isTrue } from "kestrel:test"
-import { format, print, trace } from "kestrel:stack"
-import { ArithmeticOverflow } from "kestrel:runtime"
-import { length, indexOf } from "kestrel:string"
+import { format, print, trace } from "kestrel:dev/stack"
+import { ArithmeticOverflow } from "kestrel:sys/runtime"
+import { length, indexOf } from "kestrel:data/string"
 
 fun throwDeep(): Unit = throw ArithmeticOverflow
 fun callDeep(): Unit = throwDeep()

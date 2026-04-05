@@ -1,6 +1,6 @@
 import { Suite, group, eq, isTrue } from "kestrel:test"
-import { map, all, race, cancel, Cancelled } from "kestrel:task"
-import { runProcess } from "kestrel:process"
+import { map, all, race, cancel, Cancelled } from "kestrel:sys/task"
+import { runProcess } from "kestrel:sys/process"
 
 async fun mkInt(x: Int): Task<Int> = x
 

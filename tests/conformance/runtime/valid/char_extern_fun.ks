@@ -1,5 +1,5 @@
 // Runtime conformance: codePoint, fromCode, charToString via extern fun pathway
-import { codePoint, fromCode, charToString } from "kestrel:char"
+import { codePoint, fromCode, charToString } from "kestrel:data/char"
 
 val cp = codePoint('A')
 println(cp)

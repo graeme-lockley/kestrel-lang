@@ -1,5 +1,5 @@
 // Runtime conformance: length, slice, indexOf, equals, toUpperCase, toLowerCase, trim via extern fun
-import { length, slice, indexOf, equals, toUpperCase, toLowerCase, trim } from "kestrel:string"
+import { length, slice, indexOf, equals, toUpperCase, toLowerCase, trim } from "kestrel:data/string"
 
 val s = "Hello, World!"
 println(length(s))

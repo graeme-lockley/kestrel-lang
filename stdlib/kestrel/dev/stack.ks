@@ -1,5 +1,5 @@
 // kestrel:stack — format, print (VM primitives); trace via captureTrace (spec 02).
-import * as List from "kestrel:list"
+import * as List from "kestrel:data/list"
 
 export type StackFrame = { file: String, line: Int, function: String }
 

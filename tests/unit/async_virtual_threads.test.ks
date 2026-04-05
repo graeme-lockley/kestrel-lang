@@ -1,8 +1,8 @@
 import { Suite, group, eq } from "kestrel:test"
-import * as Fs from "kestrel:fs"
-import * as Process from "kestrel:process"
-import * as Task from "kestrel:task"
-import { Cancelled } from "kestrel:task"
+import * as Fs from "kestrel:io/fs"
+import * as Process from "kestrel:sys/process"
+import * as Task from "kestrel:sys/task"
+import { Cancelled } from "kestrel:sys/task"
 import * as AsyncHelper from "../fixtures/async_helper.ks"
 
 export exception AsyncBoom

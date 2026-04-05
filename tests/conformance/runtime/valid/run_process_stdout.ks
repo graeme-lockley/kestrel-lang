@@ -1,6 +1,6 @@
 // Runtime conformance: runProcess captures stdout into ProcessResult
-import * as Process from "kestrel:process"
-import { ProcessSpawnError } from "kestrel:process"
+import * as Process from "kestrel:sys/process"
+import { ProcessSpawnError } from "kestrel:sys/process"
 
 async fun run(): Task<Unit> = {
   match (await Process.runProcess("sh", ["-c", "echo hello; echo world; exit 3"])) {

@@ -1,5 +1,5 @@
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
-import { equals as stringEquals } from "kestrel:string"
+import { equals as stringEquals } from "kestrel:data/string"
 import {
   codePoint,
   toCode,
@@ -16,7 +16,7 @@ import {
   isHexDigit,
   toUpper,
   toLower
-} from "kestrel:char"
+} from "kestrel:data/char"
 
 export async fun run(s: Suite): Task<Unit> =
   group(s, "char", (s1: Suite) => {

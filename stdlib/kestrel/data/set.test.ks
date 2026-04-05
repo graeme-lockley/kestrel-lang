@@ -1,7 +1,7 @@
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
-import * as Dict from "kestrel:dict"
-import * as List from "kestrel:list"
-import * as Set from "kestrel:set"
+import * as Dict from "kestrel:data/dict"
+import * as List from "kestrel:data/list"
+import * as Set from "kestrel:data/set"
 
 fun isEven(n: Int): Bool = n % 2 == 0
 

@@ -1,5 +1,5 @@
 import { Suite, group, eq } from "kestrel:test"
-import { pair, first, second, mapFirst, mapSecond, mapBoth } from "kestrel:tuple"
+import { pair, first, second, mapFirst, mapSecond, mapBoth } from "kestrel:data/tuple"
 
 fun double(n: Int): Int = n + n
 fun incStr(s: String): String = "${s}!"

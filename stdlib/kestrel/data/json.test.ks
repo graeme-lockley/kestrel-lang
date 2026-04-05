@@ -17,10 +17,10 @@ import {
   asBool,
   asStrVal,
   objectPairCount
-} from "kestrel:json"
-import * as Opt from "kestrel:option"
-import * as Res from "kestrel:result"
-import * as Str from "kestrel:string"
+} from "kestrel:data/json"
+import * as Opt from "kestrel:data/option"
+import * as Res from "kestrel:data/result"
+import * as Str from "kestrel:data/string"
 
 fun intVal(v: Value, n: Int): Bool = Opt.getOrElse(asInt(v), n + 90210) == n
 

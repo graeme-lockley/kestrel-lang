@@ -1,7 +1,7 @@
 // Runtime conformance: async + await execute through JVM Task plumbing (spec 08 §2.3).
-import * as Fs from "kestrel:fs"
-import * as Str from "kestrel:string"
-import { NotFound } from "kestrel:fs"
+import * as Fs from "kestrel:io/fs"
+import * as Str from "kestrel:data/string"
+import { NotFound } from "kestrel:io/fs"
 
 export exception Boom
 

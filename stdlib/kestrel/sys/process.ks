@@ -1,6 +1,6 @@
-import * as Res from "kestrel:result"
-import * as Str from "kestrel:string"
-import { map } from "kestrel:task"
+import * as Res from "kestrel:data/result"
+import * as Str from "kestrel:data/string"
+import { map } from "kestrel:sys/task"
 
 export type ProcessError = ProcessSpawnError(String)
 

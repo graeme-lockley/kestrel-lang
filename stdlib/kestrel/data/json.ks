@@ -1,11 +1,11 @@
 // kestrel:json — JSON Value ADT, parse (Result), stringify (spec 02). Pure Kestrel; no host JSON hooks.
 
-import * as Str from "kestrel:string"
-import * as List from "kestrel:list"
-import * as Res from "kestrel:result"
-import * as Char from "kestrel:char"
-import * as Basics from "kestrel:basics"
-import * as Stk from "kestrel:stack"
+import * as Str from "kestrel:data/string"
+import * as List from "kestrel:data/list"
+import * as Res from "kestrel:data/result"
+import * as Char from "kestrel:data/char"
+import * as Basics from "kestrel:data/basics"
+import * as Stk from "kestrel:dev/stack"
 
 export type Value = Null | Bool(Bool) | Int(Int) | Float(Float) | StrVal(String) | Array(List<Value>) | Object(List<(String, Value)>)
 

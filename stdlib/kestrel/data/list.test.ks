@@ -1,6 +1,6 @@
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
-import { append, fromInt } from "kestrel:string"
-import * as List from "kestrel:list"
+import { append, fromInt } from "kestrel:data/string"
+import * as List from "kestrel:data/list"
 
 fun inc(n: Int): Int = n + 1
 

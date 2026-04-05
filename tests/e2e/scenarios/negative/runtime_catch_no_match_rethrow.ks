@@ -2,7 +2,7 @@
 // Expected phase: runtime — catch has no arm for thrown value (01 §4); rethrows and terminates.
 // Substitute for “unexpected ADT constructor” bucket: discriminant mismatch in catch patterns.
 
-import { DivideByZero, ArithmeticOverflow } from "kestrel:runtime"
+import { DivideByZero, ArithmeticOverflow } from "kestrel:sys/runtime"
 
 fun run(): Unit =
   try {

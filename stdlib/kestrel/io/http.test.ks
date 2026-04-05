@@ -4,8 +4,8 @@
 // S03-03: request() with method/headers/body; responseHeaders/responseHeader.
 // HTTP GET integration tests also live in tests/e2e/scenarios/positive/.
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
-import * as Http from "kestrel:http"
-import * as Str from "kestrel:string"
+import * as Http from "kestrel:io/http"
+import * as Str from "kestrel:data/string"
 
 // Handler that echoes back the value of the "v" query param, or "none" if absent.
 async fun echoQueryParam(req: Http.Request): Task<Http.Response> = {

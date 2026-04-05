@@ -1,7 +1,7 @@
 import { message as message1 } from "./m1.ks"
 import { message as message2 } from "./m2.ks"
-import * as Http from "kestrel:http"
-import * as Str from "kestrel:string"
+import * as Http from "kestrel:io/http"
+import * as Str from "kestrel:data/string"
 
 import { hello } from "./m3.ks"
 

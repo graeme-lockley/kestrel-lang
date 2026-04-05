@@ -1,7 +1,7 @@
 // E2E test: queryParam end-to-end (S03-06).
 // Server handler reads queryParam(req, "name") and responds "hello <name>".
 // Client calls the server with ?name=world and asserts body is "hello world".
-import * as Http from "kestrel:http"
+import * as Http from "kestrel:io/http"
 
 async fun handler(req: Http.Request): Task<Http.Response> = {
   val name = Http.queryParam(req, "name");

@@ -1,8 +1,8 @@
 // E2E test: Http.responseHeader() (S03-03).
 // Starts an echo server on 127.0.0.1:0, sends a POST with body via Http.request(),
 // checks that the "content-length" response header is present and non-empty.
-import * as Http from "kestrel:http"
-import * as Str from "kestrel:string"
+import * as Http from "kestrel:io/http"
+import * as Str from "kestrel:data/string"
 
 async fun echoBody(req: Http.Request): Task<Http.Response> = {
   val body = await Http.requestBodyText(req);

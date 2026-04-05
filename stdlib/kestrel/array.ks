@@ -2,7 +2,7 @@
 // Array<T> is mutable in place: set and push operate on the same object.
 // Use fromList / toList to convert between Array<T> and the immutable List<T>.
 
-import * as List from "kestrel:list"
+import * as List from "kestrel:data/list"
 
 extern type JArrayList = jvm("java.util.ArrayList")
 

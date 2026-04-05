@@ -1,9 +1,9 @@
 import { Suite, group, eq, isTrue } from "kestrel:test"
-import { NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:fs"
-import * as Fs from "kestrel:fs"
-import * as Lst from "kestrel:list"
-import * as Process from "kestrel:process"
-import * as Str from "kestrel:string"
+import { NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:io/fs"
+import * as Fs from "kestrel:io/fs"
+import * as Lst from "kestrel:data/list"
+import * as Process from "kestrel:sys/process"
+import * as Str from "kestrel:data/string"
 
 fun entryHasName(entries: List<DirEntry>, name: String): Bool =
   Lst.any(entries, (e: DirEntry) => match (e) {

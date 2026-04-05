@@ -1,6 +1,6 @@
 import { Suite, group, eq, isTrue } from "kestrel:test"
-import { ProcessSpawnError } from "kestrel:process"
-import * as Process from "kestrel:process"
+import { ProcessSpawnError } from "kestrel:sys/process"
+import * as Process from "kestrel:sys/process"
 
 export async fun run(s: Suite): Task<Unit> = {
   val successResult = await Process.runProcess("sh", ["-c", "exit 7"]);

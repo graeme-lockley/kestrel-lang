@@ -1,5 +1,5 @@
-import * as Fs from "kestrel:fs"
-import * as Str from "kestrel:string"
+import * as Fs from "kestrel:io/fs"
+import * as Str from "kestrel:data/string"
 
 async fun run(): Task<Unit> = {
 	val leftTask = Fs.readText("tests/fixtures/fs/read_fixture.txt");

@@ -1,7 +1,7 @@
 // Render a colour Mandelbrot set in the terminal (ANSI 256-colour + density chars).
 
-import { slice } from "kestrel:string"
-import { ESC, RESET } from "kestrel:console"
+import { slice } from "kestrel:data/string"
+import { ESC, RESET } from "kestrel:io/console"
 
 val maxIter = 50
 

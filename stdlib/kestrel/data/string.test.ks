@@ -1,6 +1,6 @@
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
-import { isDigit } from "kestrel:char"
-import * as List from "kestrel:list"
+import { isDigit } from "kestrel:data/char"
+import * as List from "kestrel:data/list"
 import {
   length,
   slice,
@@ -49,7 +49,7 @@ import {
   toList,
   anyChar,
   allChars
-} from "kestrel:string"
+} from "kestrel:data/string"
 
 export async fun run(s: Suite): Task<Unit> =
   group(s, "string", (s1: Suite) => {

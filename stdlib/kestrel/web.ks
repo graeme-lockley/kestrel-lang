@@ -4,7 +4,7 @@
 //
 // Usage:
 //   import * as Web from "kestrel:web"
-//   import * as Http from "kestrel:http"
+//   import * as Http from "kestrel:io/http"
 //
 //   val router =
 //     Web.newRouter()
@@ -13,10 +13,10 @@
 //   val server = await Http.createServer(Web.serve(router));
 //   await Http.listen(server, { host = "127.0.0.1", port = 8080 });
 
-import * as Http from "kestrel:http"
-import * as List from "kestrel:list"
-import * as Str from "kestrel:string"
-import * as Dict from "kestrel:dict"
+import * as Http from "kestrel:io/http"
+import * as List from "kestrel:data/list"
+import * as Str from "kestrel:data/string"
+import * as Dict from "kestrel:data/dict"
 
 // ---------------------------------------------------------------------------
 // Path matching

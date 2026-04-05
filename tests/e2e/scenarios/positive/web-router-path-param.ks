@@ -1,8 +1,8 @@
 // E2E test: web routing with path parameters (S03-04).
 // Verifies that :name and multi-segment parameters are extracted correctly.
-import * as Http from "kestrel:http"
+import * as Http from "kestrel:io/http"
 import * as Web from "kestrel:web"
-import * as Dict from "kestrel:dict"
+import * as Dict from "kestrel:data/dict"
 
 async fun greetHandler(req: Http.Request, params: Dict<String, String>): Task<Http.Response> = {
   val name = match (Dict.get(params, "name")) {

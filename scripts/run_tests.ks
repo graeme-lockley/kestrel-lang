@@ -1,8 +1,8 @@
-import { getProcess, runProcess, ProcessSpawnError } from "kestrel:process"
-import { listDir, writeText, NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:fs"
-import * as Lst from "kestrel:list"
-import * as Opt from "kestrel:option"
-import * as Str from "kestrel:string"
+import { getProcess, runProcess, ProcessSpawnError } from "kestrel:sys/process"
+import { listDir, writeText, NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:io/fs"
+import * as Lst from "kestrel:data/list"
+import * as Opt from "kestrel:data/option"
+import * as Str from "kestrel:data/string"
 
 val proc = getProcess()
 val cwd = proc.cwd
@@ -141,8 +141,8 @@ async fun main(): Task<Unit> = {
   val genHead =
     "import { printSummary, makeRoot, outputCompact, outputVerbose, outputSummary } from \"kestrel:test\"\n";
   val genMid =
-    "\nval root = makeRoot(";
-  val genRest = ")\n\nasync fun main(): Task<Unit> = {\n";
+    "\nasync fun main(): Task<Unit> = {\n  val root = makeRoot(";
+  val genRest = ")\n";
   val genTail = "  printSummary(root);\n  ()\n}\n\nmain()\n";
   val generatedSource =
     "${genHead}${impLines}${genMid}${outputModeStr}${genRest}${calls}${genTail}"

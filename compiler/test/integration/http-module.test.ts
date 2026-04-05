@@ -2,7 +2,7 @@
  * Integration tests for kestrel:http module resolution (S03-01).
  *
  * Verifies that:
- * - `import * as Http from "kestrel:http"` resolves without error via stdlib
+ * - `import * as Http from "kestrel:io/http"` resolves without error via stdlib
  * - All exported function names are usable in expressions after import
  * - The Http namespace is accessible in Kestrel code
  */
@@ -19,10 +19,10 @@ const kestrelRoot = join(compilerRoot, '..');
 const stdlibDir = join(kestrelRoot, 'stdlib');
 
 describe('kestrel:http module: stdlib resolution (S03-01)', () => {
-  it('import * as Http from "kestrel:http" resolves without error', () => {
+  it('import * as Http from "kestrel:io/http" resolves without error', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'kestrel-http-module-'));
     const srcPath = join(tmpDir, 'TestHttpImport.ks');
-    writeFileSync(srcPath, `import * as Http from "kestrel:http"
+    writeFileSync(srcPath, `import * as Http from "kestrel:io/http"
 
 fun main(): Unit = {
   println("ok")
@@ -42,7 +42,7 @@ fun main(): Unit = {
   it('Http.nowMs is callable and returns Int', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'kestrel-http-nowms-'));
     const srcPath = join(tmpDir, 'TestHttpNowMs.ks');
-    writeFileSync(srcPath, `import * as Http from "kestrel:http"
+    writeFileSync(srcPath, `import * as Http from "kestrel:io/http"
 
 fun main(): Unit = {
   val t = Http.nowMs()
@@ -60,7 +60,7 @@ fun main(): Unit = {
   it('Http.Server, Http.Request, Http.Response opaque types are exported', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'kestrel-http-types-'));
     const srcPath = join(tmpDir, 'TestHttpTypes.ks');
-    writeFileSync(srcPath, `import * as Http from "kestrel:http"
+    writeFileSync(srcPath, `import * as Http from "kestrel:io/http"
 
 fun acceptServer(s: Http.Server): Unit = ()
 fun acceptRequest(r: Http.Request): Unit = ()
@@ -80,7 +80,7 @@ fun acceptResponse(r: Http.Response): Unit = ()
   it('Http.get is callable with a String argument', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'kestrel-http-get-'));
     const srcPath = join(tmpDir, 'TestHttpGet.ks');
-    writeFileSync(srcPath, `import * as Http from "kestrel:http"
+    writeFileSync(srcPath, `import * as Http from "kestrel:io/http"
 
 fun getRef(): (String) -> Task<Http.Response> = Http.get
 `);
@@ -98,7 +98,7 @@ fun getRef(): (String) -> Task<Http.Response> = Http.get
   it('Http.makeResponse is callable with Int and String arguments', () => {
     const tmpDir = mkdtempSync(join(tmpdir(), 'kestrel-http-makeresponse-'));
     const srcPath = join(tmpDir, 'TestHttpMakeResponse.ks');
-    writeFileSync(srcPath, `import * as Http from "kestrel:http"
+    writeFileSync(srcPath, `import * as Http from "kestrel:io/http"
 
 fun buildResp(): Http.Response = Http.makeResponse(200, "ok")
 `);

@@ -1,9 +1,9 @@
-import * as Basics from "kestrel:basics"
-import * as Console from "kestrel:console"
-import * as Lst from "kestrel:list"
-import * as Stk from "kestrel:stack"
-import * as Str from "kestrel:string"
-import { asyncTasksInFlight } from "kestrel:task"
+import * as Basics from "kestrel:data/basics"
+import * as Console from "kestrel:io/console"
+import * as Lst from "kestrel:data/list"
+import * as Stk from "kestrel:dev/stack"
+import * as Str from "kestrel:data/string"
+import { asyncTasksInFlight } from "kestrel:sys/task"
 
 /** Harness output mode (`Suite.output`). Use these values only; other Int values behave like compact. */
 export val outputVerbose: Int = 0

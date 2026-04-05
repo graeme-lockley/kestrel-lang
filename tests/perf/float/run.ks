@@ -1,9 +1,9 @@
-import * as Basics from "kestrel:basics"
-import * as Lst from "kestrel:list"
-import * as Opt from "kestrel:option"
-import { ProcessSpawnError } from "kestrel:process"
-import * as Process from "kestrel:process"
-import * as Str from "kestrel:string"
+import * as Basics from "kestrel:data/basics"
+import * as Lst from "kestrel:data/list"
+import * as Opt from "kestrel:data/option"
+import { ProcessSpawnError } from "kestrel:sys/process"
+import * as Process from "kestrel:sys/process"
+import * as Str from "kestrel:data/string"
 
 async fun runProcessCode(kestrelBin: String, args: List<String>): Task<Int> = {
   match (await Process.runProcess(kestrelBin, args)) {

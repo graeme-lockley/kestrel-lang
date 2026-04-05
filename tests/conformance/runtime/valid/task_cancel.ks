@@ -1,6 +1,6 @@
 // Runtime conformance: Task.cancel API
-import { cancel, Cancelled } from "kestrel:task"
-import { runProcess } from "kestrel:process"
+import { cancel, Cancelled } from "kestrel:sys/task"
+import { runProcess } from "kestrel:sys/process"
 
 async fun testCancelAfterComplete(): Task<Unit> = {
   async fun immediate(): Task<Int> = 42

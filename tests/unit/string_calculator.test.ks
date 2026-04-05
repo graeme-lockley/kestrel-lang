@@ -1,6 +1,6 @@
 import { Suite, group, eq } from "kestrel:test"
-import { slice, left, right, dropLeft, dropRight, indexOf, split, splitWithDelimiters, parseInt } from "kestrel:string"
-import { isEmpty, map, filter, sum } from "kestrel:list"
+import { slice, left, right, dropLeft, dropRight, indexOf, split, splitWithDelimiters, parseInt } from "kestrel:data/string"
+import { isEmpty, map, filter, sum } from "kestrel:data/list"
 
 /** Spec after `//`: either one literal (e.g. `;`) or `[a][b]...` — peel outer `[`/`]`, split inners on `][`. */
 fun parseDelimitersFromHeader(spec: String): List<String> =

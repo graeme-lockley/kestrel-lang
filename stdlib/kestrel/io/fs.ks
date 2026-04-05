@@ -1,6 +1,6 @@
-import * as Res from "kestrel:result"
-import * as Str from "kestrel:string"
-import * as Lst from "kestrel:list"
+import * as Res from "kestrel:data/result"
+import * as Str from "kestrel:data/string"
+import * as Lst from "kestrel:data/list"
 
 export type FsError = NotFound | PermissionDenied | IoError(String)
 

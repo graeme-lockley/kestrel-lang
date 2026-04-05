@@ -1,5 +1,5 @@
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
-import { getOrElse as optGet } from "kestrel:option"
+import { getOrElse as optGet } from "kestrel:data/option"
 import {
   getOrElse,
   withDefault,
@@ -12,7 +12,7 @@ import {
   map3,
   toOption,
   fromOption
-} from "kestrel:result"
+} from "kestrel:data/result"
 
 fun double(n: Int): Int = n + n
 

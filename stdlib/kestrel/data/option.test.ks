@@ -10,7 +10,7 @@ import {
   map3,
   map4,
   map5
-} from "kestrel:option"
+} from "kestrel:data/option"
 
 fun double(n: Int): Int = n + n
 

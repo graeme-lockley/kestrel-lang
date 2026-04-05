@@ -1,7 +1,7 @@
 // E2E test: createServer + listen + plain text response (S03-06).
 // Starts a server on 127.0.0.1:0 (OS-assigned port), uses Http.get to call it,
 // asserts response status 200 and body "hello".
-import * as Http from "kestrel:http"
+import * as Http from "kestrel:io/http"
 
 async fun handler(req: Http.Request): Task<Http.Response> =
   Http.makeResponse(200, "hello")

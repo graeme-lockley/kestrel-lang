@@ -28,8 +28,8 @@ describe('JVM runtime stdlib async wiring', () => {
 
     writeFileSync(
       srcPath,
-      `import * as Fs from "kestrel:fs"
-import * as Str from "kestrel:string"
+      `import * as Fs from "kestrel:io/fs"
+import * as Str from "kestrel:data/string"
 
 async fun run(): Task<Unit> = {
   val t =
@@ -73,8 +73,8 @@ run()
 
     writeFileSync(
       srcPath,
-      `import * as Fs from "kestrel:fs"
-import { NotFound } from "kestrel:fs"
+      `import * as Fs from "kestrel:io/fs"
+import { NotFound } from "kestrel:io/fs"
 
 async fun run(): Task<Unit> = {
   val caught =
@@ -123,9 +123,9 @@ run()
 
     writeFileSync(
       srcPath,
-      `import * as Fs from "kestrel:fs"
-import * as Str from "kestrel:string"
-import * as Basics from "kestrel:basics"
+      `import * as Fs from "kestrel:io/fs"
+import * as Str from "kestrel:data/string"
+import * as Basics from "kestrel:data/basics"
 
 async fun run(): Task<Unit> = {
   val launchStart = Basics.nowMs();
@@ -183,10 +183,10 @@ run()
 
     writeFileSync(
       srcPath,
-      `import * as Fs from "kestrel:fs"
-import { File, Dir, DirEntry } from "kestrel:fs"
-import * as Lst from "kestrel:list"
-import * as Str from "kestrel:string"
+      `import * as Fs from "kestrel:io/fs"
+import { File, Dir, DirEntry } from "kestrel:io/fs"
+import * as Lst from "kestrel:data/list"
+import * as Str from "kestrel:data/string"
 
 fun hasFile(entries: List<DirEntry>, name: String): Bool =
   Lst.any(entries, (e: DirEntry) => match (e) {
@@ -247,8 +247,8 @@ run()
 
     writeFileSync(
       srcPath,
-      `import * as Fs from "kestrel:fs"
-import { NotFound } from "kestrel:fs"
+      `import * as Fs from "kestrel:io/fs"
+import { NotFound } from "kestrel:io/fs"
 
 async fun run(): Task<Unit> = {
   val caught =
@@ -292,8 +292,8 @@ run()
 
     writeFileSync(
       srcPath,
-      `import * as Fs from "kestrel:fs"
-import * as Str from "kestrel:string"
+      `import * as Fs from "kestrel:io/fs"
+import * as Str from "kestrel:data/string"
 
 async fun run(): Task<Unit> = {
   val writeResult = await Fs.writeText(${JSON.stringify(outPath)}, "hello write\\n");
@@ -344,8 +344,8 @@ run()
 
     writeFileSync(
       srcPath,
-      `import * as Fs from "kestrel:fs"
-import { NotFound } from "kestrel:fs"
+      `import * as Fs from "kestrel:io/fs"
+import { NotFound } from "kestrel:io/fs"
 
 async fun run(): Task<Unit> = {
   val caught =
@@ -388,7 +388,7 @@ run()
 
     writeFileSync(
       srcPath,
-      `import * as Process from "kestrel:process"
+      `import * as Process from "kestrel:sys/process"
 
 async fun run(): Task<Unit> = {
   match (await Process.runProcess("sh", ["-c", "echo out-line; echo err-line 1>&2; exit 7"])) {
@@ -435,8 +435,8 @@ run()
 
     writeFileSync(
       srcPath,
-      `import * as Process from "kestrel:process"
-import { ProcessSpawnError } from "kestrel:process"
+      `import * as Process from "kestrel:sys/process"
+import { ProcessSpawnError } from "kestrel:sys/process"
 
 async fun run(): Task<Unit> = {
   val caught =

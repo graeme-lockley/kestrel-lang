@@ -1,7 +1,7 @@
-import * as Fs from "kestrel:fs"
-import * as Lst from "kestrel:list"
-import * as Str from "kestrel:string"
-import { NotFound, DirEntry, File, Dir } from "kestrel:fs"
+import * as Fs from "kestrel:io/fs"
+import * as Lst from "kestrel:data/list"
+import * as Str from "kestrel:data/string"
+import { NotFound, DirEntry, File, Dir } from "kestrel:io/fs"
 
 fun hasFile(entries: List<DirEntry>, name: String): Bool =
   Lst.any(entries, (e: DirEntry) => match (e) {

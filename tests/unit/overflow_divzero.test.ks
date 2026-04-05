@@ -1,7 +1,7 @@
 // VM integer overflow and division-by-zero throw catchable exceptions (01 §2.6, 05 §1, 05 §5).
 // Canonical types: `kestrel:runtime` (stdlib).
 import { Suite, group, eq } from "kestrel:test"
-import { ArithmeticOverflow, DivideByZero } from "kestrel:runtime"
+import { ArithmeticOverflow, DivideByZero } from "kestrel:sys/runtime"
 
 // 2^62; two of these sum to 2^63 which exceeds 64-bit signed max (2^63 - 1)
 val halfMax = 4611686018427387904

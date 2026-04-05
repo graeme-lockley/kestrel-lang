@@ -1,6 +1,6 @@
 import { Suite, group, eq } from "kestrel:test"
-import { parseInt } from "kestrel:string"
-import { map } from "kestrel:list"
+import { parseInt } from "kestrel:data/string"
+import { map } from "kestrel:data/list"
 
 export async fun run(s: Suite): Task<Unit> =
   group(s, "imported function values", (sg: Suite) => {

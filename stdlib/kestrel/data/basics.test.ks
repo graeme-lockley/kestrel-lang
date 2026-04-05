@@ -18,7 +18,7 @@ import {
   isNaN,
   isInfinite,
   nowMs
-} from "kestrel:basics"
+} from "kestrel:data/basics"
 
 export async fun run(s: Suite): Task<Unit> =
   group(s, "basics", (s1: Suite) => {

@@ -1,6 +1,6 @@
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:test"
-import * as Dict from "kestrel:dict"
-import * as Opt from "kestrel:option"
+import * as Dict from "kestrel:data/dict"
+import * as Opt from "kestrel:data/option"
 
 export async fun run(s: Suite): Task<Unit> = {
   group(s, "dict", (s1: Suite) => {

@@ -3,7 +3,7 @@
 // S03-06: createServer, listen, queryParam, requestId, requestBodyText,
 //         serverPort, serverStop implemented.
 // S03-03: request (any method/headers/body), responseHeaders, responseHeader implemented.
-import * as Basics from "kestrel:basics"
+import * as Basics from "kestrel:data/basics"
 
 // ---------------------------------------------------------------------------
 // Opaque types (backed by JDK classes via KRuntime helpers)

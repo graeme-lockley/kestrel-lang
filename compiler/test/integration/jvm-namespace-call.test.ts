@@ -15,7 +15,7 @@ describe('JVM codegen: namespace-qualified calls', () => {
     const srcPath = join(tmpDir, 'NsCall.ks');
     writeFileSync(
       srcPath,
-      `import * as Str from "kestrel:string"
+      `import * as Str from "kestrel:data/string"
 
 export fun main(): Unit = println(Str.length("hi"))
 `
@@ -32,8 +32,8 @@ export fun main(): Unit = println(Str.length("hi"))
     }
   });
 
-  it('JVM-compiles kestrel:option (Some(_) must POP payload; avoids VerifyError)', () => {
-    const srcPath = join(stdlibDir, 'kestrel', 'option.ks');
+  it('JVM-compiles kestrel:data/option (Some(_) must POP payload; avoids VerifyError)', () => {
+    const srcPath = join(stdlibDir, 'kestrel', 'data', 'option.ks');
     const tmpDir = join(compilerRoot, 'test', 'integration', '_tmp_jvm_option');
     mkdirSync(tmpDir, { recursive: true });
     try {

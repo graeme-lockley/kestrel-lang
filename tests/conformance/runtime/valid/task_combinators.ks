@@ -1,4 +1,4 @@
-import * as Task from "kestrel:task"
+import * as Task from "kestrel:sys/task"
 
 async fun mkInt(x: Int): Task<Int> = x
 
