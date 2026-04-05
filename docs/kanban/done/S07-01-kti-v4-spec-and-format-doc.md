@@ -68,7 +68,7 @@ The `.kti` types-file format is specified in `docs/specs/07-modules.md §5` (cur
 
 ## Tasks
 
-- [ ] Create `docs/specs/kti-format.md`:
+- [x] Create `docs/specs/kti-format.md`:
   - Section **1. Overview** — purpose, file extension, versioning policy (reject unsupported version), relationship to `07-modules.md §5`
   - Section **2. Top-level structure** — JSON object with fields `version`, `functions`, `types`, and (v4) `sourceHash`, `depHashes`, `codegenMeta`
   - Section **3. Export entry kinds** — complete table of all `kind` values: `function`, `val`, `var`, `constructor`, `type`; field-by-field description for each; `function_index`, `setter_index`, `arity`, `adt_id`, `ctor_index`
@@ -77,14 +77,14 @@ The `.kti` types-file format is specified in `docs/specs/07-modules.md §5` (cur
   - Section **6. codegenMeta sub-fields** — `funArities`, `asyncFunNames`, `varNames`, `valOrVarNames`, `adtConstructors`, `exceptionDecls`; include minimal example object
   - Section **7. Full example** — complete v4 `.kti` JSON for a small module with a function, a var, and an ADT
   - Section **8. Version history** — table of version → what was added (v1–v4)
-- [ ] Update `docs/specs/07-modules.md §5.1`:
+- [x] Update `docs/specs/07-modules.md §5.1`:
   - Change `version` description to say "reference implementation uses **4**" (was "3")
   - Add sentence: "v4 adds `sourceHash`, `depHashes`, and `codegenMeta` for incremental compilation. Readers must reject `.kti` with unsupported `version` values."
   - Add sub-section **5.2 Freshness / Invalidation** documenting the three-step algorithm:
     1. **mtime gate** (fast-path): if `stat(.kti).mtime > stat(source).mtime` AND every `depHashes[path]` value equals the `sourceHash` from that dep's already-loaded `.kti` in the in-process cache → load from `.kti`, no source read
     2. **hash guard** (slow-path): source mtime ≥ `.kti` mtime → read source, compute SHA-256, compare against `sourceHash` AND re-check `depHashes` → load from `.kti` if all hashes match
     3. **cache miss**: `.kti` absent, version mismatch, hash mismatch, or parse error → full recompile; write fresh `.kti` after successful compile
-- [ ] Run `cd compiler && npm run build && npm test` to confirm no regressions
+- [x] Run `cd compiler && npm run build && npm test` to confirm no regressions
 
 ## Tests to add
 
@@ -94,8 +94,8 @@ The `.kti` types-file format is specified in `docs/specs/07-modules.md §5` (cur
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/kti-format.md` — create with full v3+v4 encoding (primary deliverable of this story)
-- [ ] `docs/specs/07-modules.md §5.1` — bump version to 4, add §5.2 freshness algorithm
+- [x] `docs/specs/kti-format.md` — create with full v3+v4 encoding (primary deliverable of this story)
+- [x] `docs/specs/07-modules.md §5.1` — bump version to 4, add §5.2 freshness algorithm
 
 ## Spec References
 
@@ -107,3 +107,7 @@ The `.kti` types-file format is specified in `docs/specs/07-modules.md §5` (cur
 - `codegenMeta.adtConstructors` must include *every* exported non-opaque ADT (not just the ones explicitly listed in `functions` as `constructor` entries), because the JVM codegen needs to build inner-class names like `ClassName$TypeName$CtorName`. The `functions` map carries type-level constructor entries; `codegenMeta.adtConstructors` is the codegen-level companion.
 - The `depHashes` map keys must be **absolute paths** (the same form used as keys in the in-process `cache` Map in `compile-file-jvm.ts`), so the reader can look up an already-loaded dep's hash without path normalization ambiguity.
 - Version bump from 3 → 4 is additive (new top-level fields); readers can treat a missing `codegenMeta` field as absent and fall through to a full recompile rather than hard-erroring (but must still reject `version < 4` for incremental use).
+
+## Build notes
+
+- 2025-01-01: Created `docs/specs/kti-format.md` with full v3+v4 encoding including all 8 sections. Updated `07-modules.md §5.1` to reference version 4 and added new §5.2 Freshness/Invalidation subsection with the three-step algorithm. All 376 compiler tests pass.

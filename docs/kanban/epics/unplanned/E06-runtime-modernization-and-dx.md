@@ -2,7 +2,7 @@
 
 ## Status
 
-Unplanned
+Done
 
 ## Summary
 
@@ -10,16 +10,16 @@ Tracks cleanup and modernization work spanning runtime semantics and developer e
 
 ## Stories
 
-1. [S06-01-vm-spread-instruction.md](../../unplanned/S06-01-vm-spread-instruction.md) — Verify SPREAD opcode coverage, then close (archival)
-2. [S06-04-vm-float-constant-loading-and-arithmetic.md](../../unplanned/S06-04-vm-float-constant-loading-and-arithmetic.md) — Verify JVM float constant/arithmetic, then close (archival)
-3. [S06-03-int-64-bit-jvm-native-representation.md](../../unplanned/S06-03-int-64-bit-jvm-native-representation.md) — Migrate Int to 64-bit JVM-native semantics
-4. [S06-06-task-race-cancel-losing-tasks-only.md](../../unplanned/S06-06-task-race-cancel-losing-tasks-only.md) — Fix Task.race to only cancel losing tasks, not the winner
-5. [S06-07-async-quiescence-timeout.md](../../unplanned/S06-07-async-quiescence-timeout.md) — Add configurable timeout to awaitAsyncQuiescence to prevent silent hangs
-6. [S06-08-task-race-empty-list-kestrel-exception.md](../../unplanned/S06-08-task-race-empty-list-kestrel-exception.md) — Raise catchable Kestrel exception for Task.race([])
-7. [S06-09-unwrap-failure-cycle-detection.md](../../unplanned/S06-09-unwrap-failure-cycle-detection.md) — Add depth limit to KTask.unwrapFailure to prevent infinite loop
-8. [S06-10-async-cancellation-spec.md](../../unplanned/S06-10-async-cancellation-spec.md) — Document async cancellation semantics in specs (Cancelled, Task.cancel, Task.all/race edge cases)
-9. [S06-11-async-edge-case-test-coverage.md](../../unplanned/S06-11-async-edge-case-test-coverage.md) — Add cross-module async, concurrent failure, and cancel-propagation tests
-10. [S06-02-compact-suite-live-spinner-output.md](../../unplanned/S06-02-compact-suite-live-spinner-output.md) — Live spinner and duration output for test suites
+1. [S06-01-vm-spread-instruction.md](../../done/S06-01-vm-spread-instruction.md) ✓ — Verified SPREAD opcode coverage (archival)
+2. [S06-04-vm-float-constant-loading-and-arithmetic.md](../../done/S06-04-vm-float-constant-loading-and-arithmetic.md) ✓ — Verified JVM float constant/arithmetic (archival)
+3. [S06-03-int-64-bit-jvm-native-representation.md](../../done/S06-03-int-64-bit-jvm-native-representation.md) ✓ — Migrated Int to 64-bit JVM-native semantics
+4. [S06-06-task-race-cancel-losing-tasks-only.md](../../done/S06-06-task-race-cancel-losing-tasks-only.md) ✓ — Fixed Task.race to only cancel losing tasks
+5. [S06-07-async-quiescence-timeout.md](../../done/S06-07-async-quiescence-timeout.md) ✓ — Configurable quiescence timeout
+6. [S06-08-task-race-empty-list-kestrel-exception.md](../../done/S06-08-task-race-empty-list-kestrel-exception.md) ✓ — Catchable Kestrel exception for Task.race([])
+7. [S06-09-unwrap-failure-cycle-detection.md](../../done/S06-09-unwrap-failure-cycle-detection.md) ✓ — Depth limit in KTask.unwrapFailure
+8. [S06-10-async-cancellation-spec.md](../../done/S06-10-async-cancellation-spec.md) ✓ — Documented async cancellation semantics
+9. [S06-11-async-edge-case-test-coverage.md](../../done/S06-11-async-edge-case-test-coverage.md) ✓ — Cross-module async, concurrent failure, cancel-propagation tests
+10. [S06-02-compact-suite-live-spinner-output.md](../../done/S06-02-compact-suite-live-spinner-output.md) ✓ — Live spinner and suite-first output for test harness
 
 ## Dependencies
 

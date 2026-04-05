@@ -139,8 +139,11 @@ For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashM
 The types file is **JSON**. Implementations must produce and consume this format so that compilers and tools remain compatible. File extension is implementation-defined (e.g. `.kti`).
 
 - **Top-level fields:**
-  - `version` (number): format version; the reference implementation uses **3** (adds **`constructor`** export entries; see [kti-format.md](kti-format.md)). Consumers must reject unsupported versions.
+  - `version` (number): format version; the reference implementation uses **4** (adds `sourceHash`, `depHashes`, and `codegenMeta` for incremental compilation; see [kti-format.md](kti-format.md)). Consumers must reject unsupported versions.
   - `functions` (object): map from **export name** (string) to an **export entry** (object). Every exported function, value, variable, and (for non-opaque exported ADTs) each **constructor name** must appear exactly once under its export name where applicable.
+  - `sourceHash` (string, v4+): lowercase hex SHA-256 of the source file bytes used to produce this `.kti`. Used for cache invalidation; see §5.2.
+  - `depHashes` (object, v4+): map from absolute path of each direct dependency to that dependency's `sourceHash`. Used for transitive invalidation; see §5.2.
+  - `codegenMeta` (object, v4+): JVM codegen metadata (function arities, async flags, ADT constructor groups, etc.) extracted from the compiled AST. Allows importers to emit bytecode without re-parsing the dependency. Concrete sub-fields in [kti-format.md §6](kti-format.md).
 
 - **Export entry by kind.** Each entry in `functions` has a `kind` field and, for most kinds, a `type` field (serialized type for typechecking). The remaining fields depend on `kind`:
 
@@ -162,6 +165,20 @@ The types file is **JSON**. Implementations must produce and consume this format
   - **Local** types (no qualifier) are NOT included in the types file.
 
 - **Implementation note:** The reference implementation uses a single `functions` map that includes value/function exports, **`constructor`** rows for exported ADT constructors, type alias entries (`kind` = `"type"` and optional `opaque`), and exceptions. Consumers must support `setter_index` for `kind` = `"var"`, **`constructor`** entries when `version` ≥ 3, and reject unsupported `version` values. See [kti-format.md](kti-format.md) for the concrete encoding.
+
+### 5.2 Freshness / Invalidation
+
+When a `.kti` file is present alongside a dependency's `.class` output, the compiler uses a three-step algorithm to decide whether to load the cached metadata (fast) or recompile from source (slow). Dependencies are processed in topological order (leaves first), so a dep's own freshness determination is always resolved before any package that imports it. The algorithm is performed per-dependency:
+
+1. **mtime gate (fast-path, no source read):** Check `stat(.kti).mtime > stat(source.ks).mtime`. If the `.kti` is newer and every entry in `depHashes` matches the `sourceHash` from that dep's already-loaded `.kti` in the in-process cache, the `.kti` is considered fresh without reading the source file. Load the exported environment from the `.kti` and skip parse/typecheck/codegen for this dependency. This is the common case (nothing changed) and requires only 2 `stat()` calls plus one small `.kti` JSON read per dep.
+
+2. **hash guard (slow-path, source read):** If the mtime check is inconclusive (source mtime ≥ `.kti` mtime, as can happen on coarse-resolution filesystems or in CI), read the source file and compute its SHA-256. If the result matches `sourceHash` AND every `depHashes` entry still matches, the `.kti` is still valid — load it. Otherwise proceed to step 3.
+
+3. **cache miss (full recompile):** The `.kti` is absent, has an unsupported `version`, fails the hash check, or cannot be parsed (fail-safe). Compile the dependency from source and write a fresh `.kti` after successful compilation.
+
+**Transitive invalidation:** A change to a leaf package A propagates to packages that import A through `depHashes`. When A is recompiled and gets a new `sourceHash`, any package B that lists A in its `depHashes` will find a mismatch in step 1 (depHash check) or step 2 (depHash re-check), causing B to be recompiled even if B's own source has not changed.
+
+**`--clean` flag:** `kestrel build --clean` and `kestrel run --clean` delete all `.kti` files in the configured output directory before compilation begins, bypassing steps 1 and 2 entirely and forcing a full rebuild from source. `--clean` is composable with `--refresh` for a fully-from-scratch build including URL re-download.
 
 ---
 
