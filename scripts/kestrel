@@ -178,6 +178,8 @@ _run_unit_tests() {
     echo "kestrel: test runner not found: $runner" >&2
     exit 1
   fi
+
+  # Phase 1: Generate .kestrel_test_runner.ks (stdout captured; fast)
   local class_dir main_class
   class_dir=$(jvm_class_dir_for "$runner")
   if needs_compile_jvm "$runner" "$class_dir"; then
@@ -185,7 +187,25 @@ _run_unit_tests() {
     node "$COMPILER_CLI" "$runner" --target jvm -o "$class_dir" || return 1
   fi
   main_class=$(main_class_for "$runner")
-  java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" "$@"
+  java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" --generate "$@"
+
+  # Phase 2: Compile and run the generated runner with inherited stdout
+  local generated="$ROOT/.kestrel_test_runner.ks"
+  if [ ! -f "$generated" ]; then
+    echo "kestrel: generated test runner not found: $generated" >&2
+    exit 1
+  fi
+  local gen_class_dir gen_main_class
+  gen_class_dir=$(jvm_class_dir_for "$generated")
+  if needs_compile_jvm "$generated" "$gen_class_dir"; then
+    mkdir -p "$gen_class_dir"
+    if ! node "$COMPILER_CLI" "$generated" --target jvm -o "$gen_class_dir"; then
+      echo "kestrel: JVM compile failed for generated test runner" >&2
+      exit 1
+    fi
+  fi
+  gen_main_class=$(main_class_for "$generated")
+  exec java -cp "$RUNTIME_JAR:$gen_class_dir" "$gen_main_class"
 }
 
 maven_classpath_for_entry() {

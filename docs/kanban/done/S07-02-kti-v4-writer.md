@@ -66,7 +66,7 @@ After `compile-file-jvm.ts` successfully compiles a package (typecheck + JVM cod
 
 ## Tasks
 
-- [ ] Create `compiler/src/kti.ts`:
+- [x] Create `compiler/src/kti.ts`:
   - Define `KtiExportEntry` discriminated union type (function/val/var/constructor/type kinds matching kti-format.md §3)
   - Define `KtiTypeEntry` type (visibility + kind + type + optional constructors/typeParams)
   - Define `KtiCodegenMeta` type (`funArities`, `asyncFunNames`, `varNames`, `valOrVarNames`, `adtConstructors`, `exceptionDecls`)
@@ -84,20 +84,20 @@ After `compile-file-jvm.ts` successfully compiles a package (typecheck + JVM cod
     - `codegenMeta` = from `extractCodegenMeta`
   - Export `writeKtiFile(ktiPath: string, kti: KtiV4): void` — writes `JSON.stringify(kti, null, 2) + '\n'`
 
-- [ ] Update `compiler/src/compile-file-jvm.ts`:
+- [x] Update `compiler/src/compile-file-jvm.ts`:
   - Add `import { createHash } from 'node:crypto';`
   - Add `sourceHash: string` field to the `cache` Map entry type
   - At the point where `source` is read (before parsing), compute `const sourceHash = createHash('sha256').update(source, 'utf8').digest('hex');`
   - Add `sourceHash` to the `cache.set(...)` call and the return value
   - Inside `if (getClassOutputDir)` block, after all `.class` and sidecar file writes, call `writeKtiFile(pathResolve(classDir, jvmResult.className + '.kti'), buildKtiV4({...}))` passing `source`, `sourceHash`, `depResults`, `tc.*`, `cache`
 
-- [ ] Create `compiler/test/unit/kti.test.ts`:
+- [x] Create `compiler/test/unit/kti.test.ts`:
   - `describe('serializeType')`: test all InternalType variants → correct `k` and fields
   - `describe('deserializeType')`: round-trip for each variant (serializeType → deserializeType → deep-equals original)
   - `describe('extractCodegenMeta')`: build minimal Programs with FunDecl/VarDecl/TypeDecl/ExceptionDecl and verify each codegenMeta field
   - `describe('buildKtiV4')`: build a KtiV4 from a sample program and assert `version: 4`, `sourceHash` is 64 hex chars, all fields present
 
-- [ ] Run `cd compiler && npm run build && npm test`
+- [x] Run `cd compiler && npm run build && npm test`
 
 ## Tests to add
 
@@ -116,3 +116,11 @@ After `compile-file-jvm.ts` successfully compiles a package (typecheck + JVM cod
 
 - `docs/specs/kti-format.md` — v4 format (created in S07-01)
 - `docs/specs/07-modules.md §5` — types file spec
+
+## Build notes
+
+- 2025-01-29: `function_index` and `setter_index` are set to `0` as JVM placeholder values. The JVM pipeline resolves calls by class name + method name (`invokestatic`), not by index. The reader (S07-03) will use the type field only; the index fields remain in the format for potential VM-target use.
+- 2025-01-29: `prim` type cast required a union cast `n as ('Int' | 'Float' | 'Bool' | 'String' | 'Unit' | 'Char' | 'Rune')` instead of intersection (`InternalType & { kind: 'prim' }['name']`), which TypeScript rejects structurally.
+- 2025-01-29: `depSourceHashes` is built from the in-process `cache` Map — all transitive deps are compiled before the current package (topological order guaranteed by recursion), so their `sourceHash` is always available without re-reading files.
+- 2025-01-29: `namespace` kind is the only `InternalType` variant that is never serialized (module-scope only). `serializeType` throws with a clear message.
+- 2025-01-29: 405 tests pass (376 prior + 29 new kti unit tests). No regressions.

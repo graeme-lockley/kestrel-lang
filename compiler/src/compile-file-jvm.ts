@@ -3,6 +3,7 @@
  * Uses jvmCodegen and writes .class + inner classes.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync, utimesSync, unlinkSync } from 'fs';
+import { createHash } from 'node:crypto';
 import { resolve as pathResolve, dirname } from 'path';
 import { tokenize } from './lexer/index.js';
 import { parse } from './parser/index.js';
@@ -20,6 +21,7 @@ import type { Diagnostic } from './diagnostics/types.js';
 import { CODES, locationFromSpan, locationFileOnly } from './diagnostics/types.js';
 import type { Span } from './lexer/types.js';
 import { uniqueDependencyPaths } from './dependency-paths.js';
+import { buildKtiV4, writeKtiFile } from './kti.js';
 
 export interface CompileFileJvmOptions {
   projectRoot?: string;
@@ -521,6 +523,7 @@ export function compileFileJvm(
       exportedConstructors: Map<string, InternalType>;
       exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>;
       mavenDeps: MavenResolvedDependency[];
+      sourceHash: string;
     }
   >();
   const onCompilingFile = options?.onCompilingFile;
@@ -540,6 +543,7 @@ export function compileFileJvm(
     exportedConstructors: Map<string, InternalType>;
     exportedTypeVisibility?: Map<string, 'local' | 'opaque' | 'export'>;
     mavenDeps: MavenResolvedDependency[];
+    sourceHash: string;
   } | { ok: false; diagnostics: Diagnostic[] } {
     if (visited.has(filePath)) {
       return { ok: false, diagnostics: [diag(filePath, CODES.file.circular_import, `Circular import: ${filePath}`)] };
@@ -557,6 +561,7 @@ export function compileFileJvm(
     } catch {
       return { ok: false, diagnostics: [diag(filePath, CODES.file.read_error, `Cannot read file: ${filePath}`)] };
     }
+    const sourceHash = createHash('sha256').update(source, 'utf8').digest('hex');
 
     const tokens = tokenize(source);
     const parseResult = parse(tokens);
@@ -914,6 +919,25 @@ export function compileFileJvm(
         const sidecarPath = pathResolve(classDir, alias + '.extern.ks');
         writeFileSync(sidecarPath, content);
       }
+
+      // Write .kti v4 types file alongside the .class output
+      const depSourceHashes = new Map<string, string>();
+      for (const dr of depResults) {
+        const depEntry = cache.get(dr.path);
+        if (depEntry) depSourceHashes.set(dr.path, depEntry.sourceHash);
+      }
+      const ktiV4 = buildKtiV4({
+        program,
+        source,
+        depPaths: depResults.map((dr) => dr.path),
+        depSourceHashes,
+        exports: tc.exports,
+        exportedTypeAliases: tc.exportedTypeAliases,
+        exportedConstructors: tc.exportedConstructors,
+        exportedTypeVisibility: tc.exportedTypeVisibility ?? new Map(),
+      });
+      const ktiPath = pathResolve(classDir, jvmResult.className + '.kti');
+      writeKtiFile(ktiPath, ktiV4);
     }
 
     cache.set(filePath, {
@@ -926,6 +950,7 @@ export function compileFileJvm(
       exportedConstructors: tc.exportedConstructors,
       exportedTypeVisibility: tc.exportedTypeVisibility,
       mavenDeps,
+      sourceHash,
     });
     visited.delete(filePath);
     onCompilingFile?.(filePath, Math.round(performance.now() - compileStart));
@@ -940,6 +965,7 @@ export function compileFileJvm(
       exportedConstructors: tc.exportedConstructors,
       exportedTypeVisibility: tc.exportedTypeVisibility,
       mavenDeps,
+      sourceHash,
     };
   }
 
