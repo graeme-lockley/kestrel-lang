@@ -91,7 +91,7 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
   s.counts.compactExpanded := False;
   val child = { depth = s.depth + 1, output = s.output, counts = s.counts };
 
-  if (s.output != outputSummary) println(groupTitleLine(s, name));
+  if (s.output == outputVerbose) println(groupTitleLine(s, name));
 
   body(child);
 
