@@ -1,8 +1,9 @@
-// Conway's Game of Life — functional grid evolution on a flat Array<Bool>.
+// Conway's Game of Life — functional grid evolution on a flat Array<Int>.
 //
-// The live grid is a width×height boolean array indexed as y*width+x.
-// stepGrid derives the next generation without mutating the current one.
-// Prints several generations so you can watch patterns evolve.
+// The live grid is a width×height integer array indexed as y*width+x.
+// 1 = alive, 0 = dead. stepGrid derives the next generation without
+// mutating the current one.  Prints several generations so you can
+// watch patterns evolve.
 
 import * as Arr from "kestrel:array"
 import * as Str from "kestrel:data/string"
@@ -12,28 +13,29 @@ val height = 20
 
 // ── grid primitives ──────────────────────────────────────────────────────
 
-fun mkGrid(): Array<Bool> = {
+fun mkGrid(): Array<Int> = {
   val g = Arr.new()
   var i = 0
   while (i < width * height) {
-    Arr.push(g, False)
+    Arr.push(g, 0)
     i := i + 1
   }
   g
 }
 
-fun alive(g: Array<Bool>, x: Int, y: Int): Bool =
+fun alive(g: Array<Int>, x: Int, y: Int): Bool =
   if (x < 0 | x >= width | y < 0 | y >= height) False
-  else Arr.get(g, y * width + x)
+  else Arr.get(g, y * width + x) != 0
 
-fun countNeighbours(g: Array<Bool>, x: Int, y: Int): Int = {
+fun countNeighbours(g: Array<Int>, x: Int, y: Int): Int = {
   var n = 0
   var dy = 0 - 1
   while (dy <= 1) {
     var dx = 0 - 1
     while (dx <= 1) {
-      if (!(dx == 0 & dy == 0) & alive(g, x + dx, y + dy))
+      if (!(dx == 0 & dy == 0) & alive(g, x + dx, y + dy)) {
         n := n + 1
+      }
       dx := dx + 1
     }
     dy := dy + 1
@@ -41,16 +43,17 @@ fun countNeighbours(g: Array<Bool>, x: Int, y: Int): Int = {
   n
 }
 
-fun stepGrid(g: Array<Bool>): Array<Bool> = {
+fun stepGrid(g: Array<Int>): Array<Int> = {
   val next = mkGrid()
   var y = 0
   while (y < height) {
     var x = 0
     while (x < width) {
-      val n        = countNeighbours(g, x, y)
-      val on       = alive(g, x, y)
-      val survives = (on & (n == 2 | n == 3)) | (!on & n == 3)
-      Arr.set(next, y * width + x, survives)
+      var n  = countNeighbours(g, x, y)
+      var on = Arr.get(g, y * width + x)
+      if ((on != 0 & (n == 2 | n == 3)) | (on == 0 & n == 3)) {
+        Arr.set(next, y * width + x, 1)
+      }
       x := x + 1
     }
     y := y + 1
@@ -60,22 +63,25 @@ fun stepGrid(g: Array<Bool>): Array<Bool> = {
 
 // ── rendering ────────────────────────────────────────────────────────────
 
-fun printRow(g: Array<Bool>, x: Int, y: Int, acc: String): String =
-  if (x >= width) acc
-  else {
-    val ch = if (alive(g, x, y)) "█" else " "
-    printRow(g, x + 1, y, "${acc}${ch}")
+fun printGrid(g: Array<Int>): Unit = {
+  var y = 0
+  while (y < height) {
+    var x = 0
+    var row = "│"
+    while (x < width) {
+      val v = Arr.get(g, y * width + x)
+      val ch = if (v != 0) "█" else " "
+      row := "${row}${ch}"
+      x := x + 1
+    }
+    println("${row}│")
+    y := y + 1
   }
+}
 
-fun printGrid(g: Array<Bool>, y: Int): Unit =
-  if (y < height) {
-    println("│${printRow(g, 0, y, "")}│")
-    printGrid(g, y + 1)
-  }
-
-fun showGen(g: Array<Bool>, gen: Int): Unit = {
+fun showGen(g: Array<Int>, gen: Int): Unit = {
   println("┌── Generation ${Str.fromInt(gen)} ${Str.repeat(21, "─")}┐")
-  printGrid(g, 0)
+  printGrid(g)
   println("└${Str.repeat(width + 2, "─")}┘")
 }
 
@@ -111,15 +117,15 @@ val blockCells = [
 
 // ── initialise ───────────────────────────────────────────────────────────
 
-fun plantCells(g: Array<Bool>, cells: List<(Int, Int)>): Unit = match (cells) {
+fun plantCells(g: Array<Int>, cells: List<(Int, Int)>): Unit = match (cells) {
   [] => ()
   h :: t => {
-    Arr.set(g, h.1 * width + h.0, True)
+    Arr.set(g, h.1 * width + h.0, 1)
     plantCells(g, t)
   }
 }
 
-fun initGrid(): Array<Bool> = {
+fun initGrid(): Array<Int> = {
   val g = mkGrid()
   plantCells(g, gliderCells)
   plantCells(g, blinkerCells)
@@ -131,7 +137,7 @@ fun initGrid(): Array<Bool> = {
 
 // ── run ──────────────────────────────────────────────────────────────────
 
-fun run(g: Array<Bool>, gen: Int, limit: Int): Unit =
+fun run(g: Array<Int>, gen: Int, limit: Int): Unit =
   if (gen > limit) ()
   else {
     showGen(g, gen)
