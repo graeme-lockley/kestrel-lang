@@ -23,7 +23,7 @@ export type Suite = {
 /** Create a root Suite for the given output mode. Use this in generated runners instead of constructing Suite directly. */
 export fun makeRoot(output: Int): Suite = {
   val counts = { mut passed = 0, mut failed = 0, mut startTime = Basics.nowMs(), mut compactExpanded = False };
-  { depth = 1, output = output, counts = counts }
+  { depth = 0, output = output, counts = counts }
 }
 
 fun indent(n: Int): String = Str.concat(Lst.repeat(n, "  "))
