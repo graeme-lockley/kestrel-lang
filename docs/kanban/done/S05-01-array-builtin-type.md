@@ -6,8 +6,7 @@
 
 ## Epic
 
-- Epic: [E05 Core Language Ergonomics](../epics/unplanned/E05-core-language-ergonomics.md)
-- Companion stories: S05-02
+- Epic: [E05 Core Language Ergonomics](../epics/done/E05-core-language-ergonomics.md)
 
 ## Summary
 

@@ -10,14 +10,14 @@ Adds deterministic dependency management for remote modules by pairing lockfile 
 
 ## Stories
 
-- [S04-01-url-import-resolution.md](../../unplanned/S04-01-url-import-resolution.md)
-- [S04-02-lockfile-kestrel-lock.md](../../unplanned/S04-02-lockfile-kestrel-lock.md)
+- [S04-01-lockfile-kestrel-lock.md](../../unplanned/S04-01-lockfile-kestrel-lock.md)
+- [S04-02-url-import-resolution.md](../../unplanned/S04-02-url-import-resolution.md)
 - [S04-03-stdlib-subpath-resolver.md](../../unplanned/S04-03-stdlib-subpath-resolver.md)
 
 ## Dependencies
 
-- S04-02 (Lockfile) should land before S04-01 (URL imports); S04-01 depends on S04-02's cache and lockfile infrastructure.
-- S04-03 (stdlib sub-path resolver) is independent and can land at any time; it should land before E08.
+- S04-01 (Lockfile) must land before S04-02 (URL imports); S04-02 depends on S04-01's cache and lockfile infrastructure.
+- S04-03 (stdlib sub-path resolver) is independent and can land at any time; it **must** land before E08 begins.
 
 ## Epic Completion Criteria
 
