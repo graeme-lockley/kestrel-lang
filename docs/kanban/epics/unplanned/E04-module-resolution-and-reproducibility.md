@@ -6,26 +6,23 @@ Unplanned
 
 ## Summary
 
-Adds deterministic dependency management for remote modules by pairing lockfile support with URL import resolution. Also removes the hardcoded stdlib whitelist so that `kestrel:` sub-path specifiers (needed by E08) resolve by file-existence rather than an explicit list.
+Adds seamless URL import resolution: remote modules are fetched on first use and cached under `~/.kestrel/cache/`; subsequent builds use the cache. `--refresh` forces re-download; `--status` reports cache health. Also removes the hardcoded stdlib whitelist so that `kestrel:` sub-path specifiers (needed by E08) resolve by file-existence rather than an explicit list.
 
 ## Stories
 
-- [S04-01-lockfile-kestrel-lock.md](../../unplanned/S04-01-lockfile-kestrel-lock.md)
-- [S04-02-url-import-resolution.md](../../unplanned/S04-02-url-import-resolution.md)
-- [S04-03-stdlib-subpath-resolver.md](../../unplanned/S04-03-stdlib-subpath-resolver.md)
+- [S04-01-url-import-resolution.md](../../unplanned/S04-01-url-import-resolution.md)
+- [S04-02-stdlib-subpath-resolver.md](../../unplanned/S04-02-stdlib-subpath-resolver.md)
 
 ## Dependencies
 
-- S04-01 (Lockfile) must land before S04-02 (URL imports); S04-02 depends on S04-01's cache and lockfile infrastructure.
-- S04-03 (stdlib sub-path resolver) is independent and can land at any time; it **must** land before E08 begins.
+- S04-01 (URL imports) and S04-02 (stdlib sub-path resolver) are independent; either can land first.
+- S04-02 **must** land before E08 begins.
 
 ## Epic Completion Criteria
 
-- `kestrel.lock` format is defined (JSON), implemented, and documented in docs/specs/09-tools.md.
-- `kestrel lock` CLI command resolves all dependencies and writes/updates the lockfile.
-- When a lockfile is present, URL resolution uses only locked artifacts (no live network fetch for known specifiers).
-- Specifiers starting with `https://` or `http://` are fetched, content-hashed (SHA-256), and cached under `~/.kestrel/cache/`.
+- URL specifiers (`https://`) are fetched on first use, cached under `~/.kestrel/cache/`, and reused on subsequent builds — no user action needed for first download.
+- `kestrel run --refresh` and `kestrel build --refresh` force re-download of all URL dependencies.
+- `kestrel build --status` pretty-prints the cache state of every URL dependency (cached, not cached, stale) without building.
 - Compile errors for URL resolution failures include source span information.
-- Integration tests demonstrate reproducible URL dependency resolution using a local mock server and a lockfile.
+- Integration tests demonstrate cache hit/miss behaviour and `--refresh` using a local mock server.
 - `kestrel:X` and `kestrel:X/Y` specifiers resolve by file existence under `stdlib/`, not a hardcoded whitelist.
-- The project root is determined canonically (walk up from entry file to first `kestrel.lock` or project root sentinel, documented in spec).

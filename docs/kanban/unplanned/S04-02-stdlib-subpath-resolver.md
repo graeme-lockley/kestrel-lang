@@ -1,12 +1,12 @@
 # Stdlib Sub-Path Resolver
 
-## Sequence: S04-03
+## Sequence: S04-02
 ## Tier: 4 — Near-term (small, unblocks E08)
 
 ## Epic
 
 - Epic: [E04 Module Resolution and Reproducibility](../epics/unplanned/E04-module-resolution-and-reproducibility.md)
-- Companion stories: S04-01, S04-02
+- Companion stories: S04-01 (URL Import Resolution)
 
 ## Summary
 

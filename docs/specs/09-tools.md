@@ -21,11 +21,13 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.1 run
 
-**Usage:** `kestrel run [--exit-wait|--exit-no-wait] <script[.ks]> [args...]`
+**Usage:** `kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] <script[.ks]> [args...]`
 
 - **Effect:** Compiles the named Kestrel script (and its constituent packages) if the target binary is stale or missing, then executes it via the JVM runtime.
 - **Target:** JVM is the only execution target; compiled `.class` files are generated for the Java Virtual Machine.
 - **Freshness:** The script is compiled when (a) the generated `.class` files do not exist, or (b) the entry `.ks` is newer than the main generated class, or (c) a `.class.deps` file exists beside that class and any listed dependency path is newer.
+- **URL dependencies:** If any module in the dependency graph contains URL specifiers (`https://`), they are resolved using the URL import cache (see §2.9). On cache miss the source is fetched transparently before compilation proceeds. `--refresh` forces all URL dependencies to be re-fetched even if already cached.
+- **`--allow-http`:** Accept `http://` URL specifiers in addition to `https://`. Without this flag, `http://` imports are a compile error.
 - **Cache:**
   - Compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/jvm/Users/me/proj/foo.class`. This avoids cluttering the project directory. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run foo.ks`).
 - **Execution:** `kestrel` runs `java` with a classpath containing `kestrel-runtime.jar` and the JVM cache root, and uses a main class derived from the entry source file path (strip leading `/`, remove `.ks`, capitalize the last path segment; convert `/` to `.` for the Java binary name). Entry-point discovery is implementation-defined, but the derived class name is stable for a given absolute source path.
@@ -52,10 +54,26 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.3 build
 
-**Usage:** `kestrel build [script[.ks]]`
+**Usage:** `kestrel build [--refresh] [--allow-http] [--status] [script[.ks]]`
 
 - **Effect:** Builds the compiler so that it is up-to-date. If a script path is provided, also compiles that script to a `.class` file using the same cache and freshness rules as `run`.
 - **Build steps:** `cd compiler && npm run build`. Compiler output is `compiler/dist/`.
+- **URL dependencies:** Same on-demand fetch behaviour as `run` (see §2.9). `--refresh` and `--allow-http` have the same meaning as for `run`.
+- **`--status`:** When `--status` is provided, the compiler is built (if needed) but the script is **not** compiled or run. Instead, the full transitive dependency graph is resolved and a pretty-printed report is printed to stdout showing the cache state of every URL dependency. Exit 0 on success.
+
+  Report format example:
+  ```
+  Dependencies for hello.ks
+  ─────────────────────────────────────────────────────────
+  https://example.com/lib.ks          ✓ cached   3 days ago
+  https://other.com/util.ks           ✓ cached   9 days ago  ⚠ stale
+  https://new.com/mod.ks              ✗ not cached
+  ─────────────────────────────────────────────────────────
+  3 URL dependencies  (1 stale, 1 not cached)
+  ```
+
+  Columns are aligned. Stale entries (older than `KESTREL_CACHE_TTL`) are marked ⚠. Entries not yet cached are marked ✗. Local (path/stdlib) dependencies are omitted from this report.
+- **`--status` with `--refresh`:** Not a valid combination; exits non-zero with a usage error.
 
 ### 2.4 test
 
@@ -86,9 +104,18 @@ When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
 - **Offline mode:** set `KESTREL_MAVEN_OFFLINE=1` (or `true`) to disable downloads and fail on cache miss.
 - **Sidecar format:** for modules with `maven:` imports, the compiler emits `<ClassName>.kdeps` alongside `<ClassName>.class`, recording Maven coordinates, resolved jar paths, and checksums.
 
----
+### 2.9 URL import cache
 
-## 3. Implementation Responsibilities
+- **Cache root:** `~/.kestrel/cache/` by default; overridable via `KESTREL_CACHE`. Created on first use.
+- **Cache layout:** `<cacheRoot>/<sha256-of-url>/source.ks` where the directory name is the lowercase hex SHA-256 of the URL string.
+- **On-demand fetch:** When a URL specifier is encountered during compilation and no cached copy exists, the source is fetched over HTTPS and written to the cache. Compilation then proceeds using the cached file. This is fully transparent to the user.
+- **Cache hit:** Cached file is used directly; no network request.
+- **`--refresh`:** All URL dependencies are re-fetched and the cache updated before compilation.
+- **Staleness threshold:** `KESTREL_CACHE_TTL` environment variable (seconds, default `604800` = 7 days). Stale entries are used for compilation; `kestrel build --status` flags them. Only `--refresh` triggers a re-download.
+- **`KESTREL_CACHE_TTL`:** Override staleness threshold in seconds.
+- **SSRF / security:** `https://` only by default. `http://` accepted only with `--allow-http`. Redirects to a different host are not followed.
+
+---
 
 | Component | Language | Role |
 |-----------|----------|------|

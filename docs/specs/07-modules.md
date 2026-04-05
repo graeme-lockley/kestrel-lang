@@ -95,9 +95,9 @@ For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashM
 
 ### 4.1 What resolution does
 
-- **Input:** A module specifier (string) and the **context**: current file path (or current module identity), project root (if any), lockfile (if present), and environment (e.g. cache directory).
+- **Input:** A module specifier (string) and the **context**: current file path (or current module identity), and environment (e.g. cache directory).
 - **Output:** Either (1) a **resolved artifact** (the module’s source or compiled form, or a handle to a built-in module), or (2) **failure** (module not found, invalid specifier, or other error). The implementation must report failure as a **compile error** (or a defined error behaviour).
-- **Invariant:** For a given specifier and context, resolution must be **deterministic**: the same specifier and same context (same current file, project layout, lockfile, cache state) must always yield the same result (same artifact or same failure).
+- **Invariant:** For a given specifier and context, resolution must be **deterministic**: the same specifier and same context (same current file, project layout, cache state) must always yield the same result (same artifact or same failure).
 
 ### 4.2 Specifier kinds
 
@@ -108,7 +108,7 @@ For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashM
   **Note for `kestrel:web`:** A lightweight routing framework built on `kestrel:http` and implemented entirely in Kestrel. See 02 §`kestrel:web` for the `Router` type, pattern syntax, and `serve`. Depends on `kestrel:http`, `kestrel:list`, `kestrel:dict`, and `kestrel:string`.
 
   **Note for `kestrel:socket`:** TCP and TLS socket library backed by `java.net.Socket` / `javax.net.ssl.SSLSocket` via `extern type`/`extern fun`. No maven dependencies — JDK-only. See 02 §`kestrel:socket` for types (`Socket`, `ServerSocket`), client functions (`tcpConnect`, `tlsConnect`), I/O functions (`sendText`, `readAll`, `readLine`, `close`), and server functions (`listen`, `accept`, `serverPort`, `serverClose`).
-- **URL:** If the specifier is a valid URL (e.g. starts with `https://` or `http://`, or implementation-defined URL scheme), it is a **URL specifier**. Resolution (fetch, cache, lockfile lookup) is implementation-defined but must be deterministic when a lockfile is present (see §7).
+- **URL:** If the specifier is a valid URL (e.g. starts with `https://` or `http://`, or implementation-defined URL scheme), it is a **URL specifier**. On first encounter the source is fetched, content-hashed (SHA-256), and cached under `~/.kestrel/cache/` (see §7); subsequent resolutions use the cached copy. Resolution is deterministic for a given cache state (see §7).
 - **Maven:** If the specifier matches the pattern `maven:groupId:artifactId:version` (the prefix `maven:` followed by exactly three colon-separated segments), it is a **maven specifier**. Maven specifiers are **side-effect-only** imports: they add a JAR to the compile-time and runtime classpath but do **not** bind any names into scope. Consequently they may only appear in the bare side-effect import form (`import STRING`); using them with a named or namespace clause (`import { … } from STRING` or `import * as N from STRING`) is a **compile error**. **Segment validation**: each of `groupId`, `artifactId`, and `version` must match the pattern `[a-zA-Z0-9._-]+` after trimming whitespace; any segment containing characters outside this set (including path separators, spaces, or control characters) is a **compile error** before any filesystem or network operation is performed. Resolution: the implementation locates or downloads the artifact JAR from the configured Maven repository (default `https://repo1.maven.org/maven2`), stores it under `~/.kestrel/maven/` (overridable via `KESTREL_MAVEN_CACHE`), and records the Maven coordinate in a `.kdeps` sidecar alongside the emitted `.class` file. At runtime `kestrel run` reads `.kdeps` sidecars transitively and appends the resolved JARs to the JVM classpath. If the same `groupId:artifactId` appears at two different versions in the transitive dependency graph, the implementation **must** report a **compile-time** version-conflict error (naming both offending source files and versions) — not a runtime error. An `extern import "maven:g:a:version#Class"` whose version does not match the version declared by the corresponding side-effect import `import "maven:g:a:version"` in the same compilation unit is also a **compile error**.
 - **Path:** Otherwise, the specifier is treated as a **path** (relative or absolute). Resolution: the implementation interprets the path relative to a **base** (e.g. the directory containing the current source file, or the project root). The base and the rules for resolving `"."`, `".."`, and file extensions (e.g. whether `"./m"` can resolve to `./m.ks` or `./m.kbc`) are **implementation-defined** but must be **deterministic**. The result must be a single file (or failure). Path resolution must not depend on non-deterministic state (e.g. current working directory at compile time may be fixed by the implementation).
 
@@ -173,20 +173,30 @@ The types file is **JSON**. Implementations must produce and consume this format
 
 ---
 
-## 7. Lockfile
+## 7. URL Import Cache
 
-- **File name and location:** `kestrel.lock` in the **same directory as the entry file** passed to `kestrel run` or `kestrel lock`. Kestrel has no project manifest, so no directory walk is required; the lockfile is always co-located with the entry point.
-- **Purpose:** When present, the lockfile records enough information to resolve **URL** (and optionally **path**) dependencies **without network access or other non-determinism**. For each specifier that was resolved from a URL (or path), the lockfile typically stores a content hash or a pinned URL/version so that the next resolution uses the same artifact.
-- **Format:** Implementation-defined (e.g. TOML, JSON). The format must be sufficient to map every such specifier used in the project to a single artifact (e.g. a path to a cached file or a content hash).
-- **Compiler is read-only with respect to the lockfile:** The compiler reads the lockfile to locate cached artifacts but never writes or updates it. Only `kestrel lock` creates or modifies `kestrel.lock`.
-- **Behaviour when lockfile is absent or specifier is unlocked:** The compiler must report a compile error for any URL specifier that is not listed in the lockfile (or when no lockfile exists). The error message must include the import source span and suggest running `kestrel lock <entry.ks>`.
-- **Behaviour when lockfile is present and specifier is listed:** The compiler uses the cached artifact at the derived path (`<cacheRoot>/<sha256>/source.ks`). If the cached file is missing, the compiler reports an error suggesting re-running `kestrel lock`. If the file content does not match the locked SHA-256, the compiler reports a tampered-cache error.
+- **Cache root:** `~/.kestrel/cache/` by default; overridable via the `KESTREL_CACHE` environment variable. Created on first use.
+- **Cache layout:** Each URL specifier is stored under `<cacheRoot>/<sha256-of-url>/source.ks`, where the directory name is the lowercase hex SHA-256 of the URL string. This makes the layout stable and human-inspectable.
+- **On cache miss (first use):** The implementation fetches the URL source over HTTPS (`http://` requires `--allow-http`), writes the source to the cache path above, and continues compilation. No user action is required — resolution is seamless.
+- **On cache hit:** The cached file is used directly; no network request is made.
+- **`--refresh` flag:** When `kestrel run --refresh` or `kestrel build --refresh` is invoked, all URL dependencies in the transitive dependency graph are re-fetched unconditionally and the cache is updated, even if a cached copy already exists.
+- **Staleness:** A cached entry is considered stale when it was downloaded more than `KESTREL_CACHE_TTL` seconds ago (default: 604800 = 7 days). Stale entries are used for compilation unless `--refresh` is supplied; `kestrel build --status` flags stale entries.
+- **`--status` flag:** `kestrel build --status <entry.ks>` resolves the full transitive dependency graph without compiling or running. It prints a pretty-printed dependency report to stdout and exits 0. Each URL dependency appears as one line:
+
+  ```
+  https://example.com/lib.ks   ✓ cached  3 days ago
+  https://other.com/util.ks    ✓ cached  9 days ago  ⚠ stale
+  https://new.com/mod.ks       ✗ not cached
+  ```
+
+- **No lockfile.** There is no `kestrel.lock` file. The cache is the sole persistence mechanism. Reproducibility is achieved by keeping the cache warm and using `--refresh` when updates are desired.
+- **URL fetch rules:** `https://` is accepted by default. `http://` requires `--allow-http` on the invoking command. Redirects to a different host are not followed. A fetch failure with no cached copy is a compile error that includes the import source span.
 
 ---
 
 ## 8. Determinism and Compile-Time Errors
 
-- **Determinism:** Given the same **source files**, **project layout**, **lockfile** (if present), and **environment** (e.g. cache directory, network disabled when lockfile present), module resolution and the resulting dependency graph must be **the same**. No implementation may produce different resolved modules or different export sets for the same inputs.
+- **Determinism:** Given the same **source files**, **project layout**, and **environment** (cache directory and cache contents), module resolution and the resulting dependency graph must be **the same**. No implementation may produce different resolved modules or different export sets for the same inputs.
 - **Compile-time errors (summary):** The implementation must report an error and must not produce a valid .kbc in at least the following cases: (1) A named import or re-export references a name that the resolved module does not export. (2) Two exports introduce the same name from different sources (export conflict). (3) Two imports bind the same local name from different specifiers (import name conflict), unless the programmer uses `as` to rename. (4) Module not found (resolution failure). (5) Invalid specifier (if the implementation defines validity). The implementation may report additional errors (e.g. namespace name not UPPER_IDENT, duplicate import of same name from same specifier); see 01 for lexical and grammatical requirements.
 
 ---
