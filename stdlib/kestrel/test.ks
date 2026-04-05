@@ -3,6 +3,7 @@ import * as Console from "kestrel:console"
 import * as Lst from "kestrel:list"
 import * as Stk from "kestrel:stack"
 import * as Str from "kestrel:string"
+import { asyncTasksInFlight } from "kestrel:task"
 
 /** Harness output mode (`Suite.output`). Use these values only; other Int values behave like compact. */
 export val outputVerbose: Int = 0
@@ -261,11 +262,16 @@ export fun printSummary(root: Suite): Unit = {
   val p = counts.passed;
   val f = counts.failed;
   val totalElapsed = Basics.nowMs() - counts.startTime;
+  // Subtract 1 for the current (main) async task.
+  val leaked = asyncTasksInFlight() - 1;
+  val leakedSuffix =
+    if (leaked > 0) " ${Console.YELLOW}(${leaked} async task(s) still in flight)${Console.RESET}"
+    else "";
   println("");
   if (f > 0) {
-    println("${Console.RED}${f} failed${Console.RESET}, ${p} passed (${totalElapsed}ms)");
+    println("${Console.RED}${f} failed${Console.RESET}, ${p} passed (${totalElapsed}ms)${leakedSuffix}");
     exit(1)
   } else {
-    println("${Console.GREEN}${p} passed${Console.RESET} (${totalElapsed}ms)")
+    println("${Console.GREEN}${p} passed${Console.RESET} (${totalElapsed}ms)${leakedSuffix}")
   }
 }

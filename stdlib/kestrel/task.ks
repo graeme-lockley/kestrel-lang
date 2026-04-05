@@ -14,3 +14,6 @@ export extern fun race<T>(tasks: List<Task<T>>): Task<T> =
 
 export extern fun cancel<T>(t: Task<T>): Unit =
   jvm("kestrel.runtime.KTask#cancel(java.lang.Object)")
+
+export extern fun asyncTasksInFlight(): Int =
+  jvm("kestrel.runtime.KRuntime#getAsyncTasksInFlight()")

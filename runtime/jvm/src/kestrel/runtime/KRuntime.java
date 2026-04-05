@@ -107,10 +107,18 @@ public final class KRuntime {
         asyncTasksInFlight.incrementAndGet();
         try {
             executor.submit(() -> {
+                Thread me = Thread.currentThread();
+                // When the future is cancelled, interrupt this thread so that
+                // blocking calls (.get(), sleep, I/O) are unblocked promptly.
+                future.whenComplete((v, ex) -> {
+                    if (future.isCancelled()) me.interrupt();
+                });
                 try {
                     future.complete(fn.apply(taskArgs));
                 } catch (Throwable t) {
-                    future.completeExceptionally(KTask.unwrapFailure(t));
+                    if (!future.isCancelled()) {
+                        future.completeExceptionally(KTask.unwrapFailure(t));
+                    }
                 } finally {
                     decrementAndSignal();
                 }
@@ -130,6 +138,11 @@ public final class KRuntime {
                 quiescenceSignal.notifyAll();
             }
         }
+    }
+
+    /** Return the current number of async tasks that have not yet completed. */
+    public static long getAsyncTasksInFlight() {
+        return asyncTasksInFlight.get();
     }
 
     private static long getExitWaitTimeoutMs() {
@@ -832,6 +845,7 @@ public final class KRuntime {
 
         try {
             executor.submit(() -> {
+                Thread me = Thread.currentThread();
                 Process proc = null;
                 try {
                     if (future.isCancelled()) return;
@@ -839,9 +853,12 @@ public final class KRuntime {
                     pb.redirectErrorStream(true);
                     proc = pb.start();
                     final Process finalProc = proc;
-                    // Destroy the OS process if the future is cancelled after start.
+                    // Destroy the OS process and interrupt this thread if the future is cancelled.
                     future.whenComplete((v, ex) -> {
-                        if (future.isCancelled()) finalProc.destroyForcibly();
+                        if (future.isCancelled()) {
+                            finalProc.destroyForcibly();
+                            me.interrupt();
+                        }
                     });
                     // Re-check after registering the callback to close the race window.
                     if (future.isCancelled()) {

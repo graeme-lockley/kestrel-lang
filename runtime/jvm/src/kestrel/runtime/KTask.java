@@ -57,8 +57,12 @@ public final class KTask {
         } catch (CancellationException e) {
             throw e;
         } catch (InterruptedException e) {
+            // Propagate cancellation to the task we were waiting on so that
+            // nested async chains (e.g. submitAsync → runProcessAsync) are
+            // cleaned up promptly.
+            future.cancel(true);
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Interrupted while awaiting task", e);
+            throw new CancellationException("Interrupted while awaiting task");
         } catch (ExecutionException e) {
             Throwable failure = unwrapFailure(e.getCause());
             if (failure instanceof RuntimeException) {
