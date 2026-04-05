@@ -20,6 +20,12 @@ export type Suite = {
   }
 }
 
+/** Create a root Suite for the given output mode. Use this in generated runners instead of constructing Suite directly. */
+export fun makeRoot(output: Int): Suite = {
+  val counts = { mut passed = 0, mut failed = 0, mut startTime = Basics.nowMs(), mut compactExpanded = False };
+  { depth = 1, output = output, counts = counts }
+}
+
 fun indent(n: Int): String = Str.concat(Lst.repeat(n, "  "))
 
 fun groupTitleLine(s: Suite, name: String): String =
@@ -244,14 +250,8 @@ export fun throws(s: Suite, desc: String, thunk: (Unit) -> Unit): Unit = {
   }
 }
 
-export fun printSummary(
-  counts: {
-    passed: mut Int,
-    failed: mut Int,
-    startTime: mut Int,
-    compactExpanded: mut Bool
-  }
-): Unit = {
+export fun printSummary(root: Suite): Unit = {
+  val counts = root.counts;
   val p = counts.passed;
   val f = counts.failed;
   val totalElapsed = Basics.nowMs() - counts.startTime;

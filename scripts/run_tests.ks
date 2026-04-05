@@ -1,6 +1,5 @@
 import { getProcess, runProcess, ProcessSpawnError } from "kestrel:process"
 import { listDir, writeText, NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:fs"
-import { isTtyStdout } from "kestrel:basics"
 import * as Lst from "kestrel:list"
 import * as Opt from "kestrel:option"
 import * as Str from "kestrel:string"
@@ -147,13 +146,12 @@ async fun main(): Task<Unit> = {
   val impLines = buildImports(tests, 0)
   val calls = buildCalls(testCount, 0)
 
-  val isTtyLit = if (isTtyStdout()) "True" else "False"
   val genHead =
-    "import { printSummary, outputCompact, outputVerbose, outputSummary } from \"kestrel:test\"\nimport { nowMs } from \"kestrel:basics\"\n";
+    "import { printSummary, makeRoot, outputCompact, outputVerbose, outputSummary } from \"kestrel:test\"\n";
   val genMid =
-    "\nval isTty = ${isTtyLit}\nval counts = { mut passed = 0, mut failed = 0, mut startTime = nowMs(), mut spinnerActive = False, mut compactExpanded = False }\nval root = { depth = 1, output = ";
-  val genRest = ", isTty = isTty, counts = counts }\n\nasync fun main(): Task<Unit> = {\n";
-  val genTail = "  printSummary(counts);\n  ()\n}\n\nmain()\n";
+    "\nval root = makeRoot(";
+  val genRest = ")\n\nasync fun main(): Task<Unit> = {\n";
+  val genTail = "  printSummary(root);\n  ()\n}\n\nmain()\n";
   val generatedSource =
     "${genHead}${impLines}${genMid}${outputModeStr}${genRest}${calls}${genTail}"
 
