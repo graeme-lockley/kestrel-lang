@@ -79,9 +79,12 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.4 test
 
-**Usage:** `kestrel test [--verbose|--summary] [files...]`
+**Usage:** `kestrel test [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]`
 
 - **Effect:** Runs the Kestrel unit test suite via [`scripts/run_tests.ks`](../../scripts/run_tests.ks), which compiles dependencies, writes a generated runner (e.g. `.kestrel_test_runner.ks` under the project root), and executes it on the JVM runtime. If no file arguments are given, the runner discovers all `*.test.ks` under `tests/unit/` and `stdlib/kestrel/` via awaited `kestrel:fs` `listDir` calls; discovery failures terminate with a non-zero exit before test execution. With file arguments, only those tests run (paths relative to the current working directory).
+- **`--clean`:** Delete all `.kti` incremental-cache files before compiling the test runner, forcing a full recompile from source. Has the same semantics as `--clean` for `run` and `build`.
+- **`--refresh`:** Re-fetch all URL dependencies before compiling. Same semantics as `--refresh` for `run` and `build`.
+- **`--allow-http`:** Accept `http://` URL specifiers. Same semantics as `--allow-http` for `run` and `build`.
 - **Output:** While compiling, the compiler may print short "Compiling …" lines. Test output comes from **`kestrel:test`**: **compact** (default) prints each top-level suite name first, then silent sub-group `name (N✓ Tms)` summaries, then a dim count footer; **`--verbose`** prints per-assertion ✓ lines inside each group plus timing footers; **`--summary`** prints one `name (N✓ Tms)` compact line per top-level suite with no assertion detail. Any mode ends with a blank line and a total line such as green `N passed (…ms)` or red `M failed, N passed (…ms)` from `printSummary`.
 - **Exit code:** 0 if all tests passed; 1 if any test failed or did not compile.
 

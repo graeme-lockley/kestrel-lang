@@ -22,7 +22,7 @@ usage() {
   echo "  run   [--exit-wait|--exit-no-wait] <script[.ks]> [args...]  Compile if needed, then execute on JVM" >&2
   echo "  dis   [--verbose|--code-only] <script[.ks]>  Compile if needed, then disassemble JVM bytecode" >&2
   echo "  build [script.ks]  Build compiler and JVM runtime; optionally compile script" >&2
-  echo "  test  [--verbose|--summary] [files...]   Run unit tests on JVM (default: compact output)" >&2
+  echo "  test  [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]   Run unit tests on JVM (default: compact output)" >&2
   exit 1
 }
 
@@ -180,15 +180,28 @@ _run_unit_tests() {
     exit 1
   fi
 
+  # Separate compiler flags from test runner args (file paths + --verbose/--summary)
+  local refresh_flag="" allow_http_flag="" clean_flag=""
+  local runner_args=()
+  while [ $# -gt 0 ]; do
+    case "${1:-}" in
+      --clean)      clean_flag="--clean"; shift ;;
+      --refresh)    refresh_flag="--refresh"; shift ;;
+      --allow-http) allow_http_flag="--allow-http"; shift ;;
+      *)            runner_args+=("$1"); shift ;;
+    esac
+  done
+
   # Phase 1: Generate .kestrel_test_runner.ks (stdout captured; fast)
   local class_dir main_class
   class_dir=$(jvm_class_dir_for "$runner")
-  if needs_compile_jvm "$runner" "$class_dir"; then
+  if [ -n "$clean_flag" ] || needs_compile_jvm "$runner" "$class_dir"; then
     mkdir -p "$class_dir"
-    node "$COMPILER_CLI" "$runner" --target jvm -o "$class_dir" || return 1
+    # shellcheck disable=SC2086
+    node "$COMPILER_CLI" "$runner" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $clean_flag || return 1
   fi
   main_class=$(main_class_for "$runner")
-  java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" --generate "$@"
+  java -cp "$RUNTIME_JAR:$class_dir" "$main_class" "" "" "$ROOT" --generate "${runner_args[@]+"${runner_args[@]}"}"
 
   # Phase 2: Compile and run the generated runner with inherited stdout
   local generated="$ROOT/.kestrel_test_runner.ks"
@@ -198,15 +211,16 @@ _run_unit_tests() {
   fi
   local gen_class_dir gen_main_class
   gen_class_dir=$(jvm_class_dir_for "$generated")
-  if needs_compile_jvm "$generated" "$gen_class_dir"; then
+  if [ -n "$clean_flag" ] || needs_compile_jvm "$generated" "$gen_class_dir"; then
     mkdir -p "$gen_class_dir"
-    if ! node "$COMPILER_CLI" "$generated" --target jvm -o "$gen_class_dir"; then
+    # shellcheck disable=SC2086
+    if ! node "$COMPILER_CLI" "$generated" --target jvm -o "$gen_class_dir" $refresh_flag $allow_http_flag $clean_flag; then
       echo "kestrel: JVM compile failed for generated test runner" >&2
       exit 1
     fi
   fi
   gen_main_class=$(main_class_for "$generated")
-  exec java -cp "$RUNTIME_JAR:$gen_class_dir" "$gen_main_class"
+  exec java -cp "$RUNTIME_JAR:$gen_class_dir" "$gen_main_class" "${runner_args[@]+"${runner_args[@]}"}"
 }
 
 maven_classpath_for_entry() {
