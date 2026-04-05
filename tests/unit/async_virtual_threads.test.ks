@@ -1,6 +1,7 @@
 import { Suite, group, eq } from "kestrel:test"
 import * as Fs from "kestrel:fs"
 import * as Process from "kestrel:process"
+import * as Task from "kestrel:task"
 
 export exception AsyncBoom
 
@@ -10,6 +11,11 @@ async fun delayedValue(): Task<Int> = {
   val _ = await Process.runProcess("sh", ["-c", "sleep 0.05"]);
   99
 }
+async fun slowTask(): Task<Int> = {
+  val _ = await Process.runProcess("sh", ["-c", "sleep 1"]);
+  2
+}
+async fun fastTask(): Task<Int> = 1
 
 export async fun run(s: Suite): Task<Unit> = {
   val plusOneValue = await plusOne(41)
@@ -25,6 +31,7 @@ export async fun run(s: Suite): Task<Unit> = {
       _ => 0
     }
   val delayed = await delayedValue()
+  val raceWinner = await Task.race([fastTask(), slowTask()])
 
   group(s, "async virtual threads", (s1: Suite) => {
     group(s1, "await success", (sg: Suite) => {
@@ -42,6 +49,10 @@ export async fun run(s: Suite): Task<Unit> = {
 
     group(s1, "await delayed task", (sg: Suite) => {
       eq(sg, "delayed task value", delayed, 99)
+    });
+
+    group(s1, "Task.race", (sg: Suite) => {
+      eq(sg, "race returns winner value", raceWinner, 1)
     });
   });
   ()

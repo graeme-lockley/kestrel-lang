@@ -162,7 +162,9 @@ public final class KTask {
         CompletableFuture<Object> winner = CompletableFuture.anyOf(futures);
         winner.thenRun(() -> {
             for (KTask t : tasksCopy) {
-                t.future.cancel(true);
+                if (!t.future.isDone()) {
+                    t.future.cancel(true);
+                }
             }
         });
         return new KTask(winner);
