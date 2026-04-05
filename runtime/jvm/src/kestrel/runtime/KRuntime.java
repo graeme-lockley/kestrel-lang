@@ -794,6 +794,20 @@ public final class KRuntime {
         return Long.valueOf(System.currentTimeMillis());
     }
 
+    private static final java.util.random.RandomGenerator RNG =
+        java.util.random.RandomGenerator.getDefault();
+
+    /** Returns a pseudo-random Int in [0, bound). */
+    public static Long randomInt(Long bound) {
+        return Long.valueOf(RNG.nextLong(bound.longValue()));
+    }
+
+    /** Returns a pseudo-random Int in [lo, hi]. */
+    public static Long randomIntRange(Long lo, Long hi) {
+        long range = hi.longValue() - lo.longValue() + 1L;
+        return Long.valueOf(lo.longValue() + RNG.nextLong(range));
+    }
+
     /** Returns true when stdout is connected to a TTY (interactive terminal). */
     public static Boolean isTtyStdout() {
         return System.console() != null;
