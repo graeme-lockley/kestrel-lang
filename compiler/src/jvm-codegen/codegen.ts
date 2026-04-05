@@ -2415,6 +2415,21 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               env.set(tailPat.name, slot);
               mb.emit1b(JvmOp.ASTORE, slot);
             }
+            // Empty list tail pattern: h :: [] — check tail is KNil
+            let ifeqTailNil = -1;
+            if (tailPat.kind === 'ListPattern' && tailPat.elements.length === 0) {
+              mb.emit1b(JvmOp.ALOAD, scrutSlot);
+              mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
+              mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'tail', 'Lkestrel/runtime/KList;'));
+              mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_NIL));
+              ifeqTailNil = mb.length();
+              mb.emit1s(JvmOp.IFEQ, 0);
+              // No addBranchTarget for the fall-through here: the fall-through frame is the
+              // natural continuation of sequential execution (with h already bound), which
+              // the JVM verifier infers correctly. Adding a matchBaseState frame here would
+              // override the natural frame with a stale one that marks h's slot as 'top',
+              // causing a VerifyError on any subsequent aload of h.
+            }
             const xferConsPat = emitExpr(c.body, mb, tcT, stackDepth);
             for (let bi = headFieldBindings.length - 1; bi >= 0; bi--) {
               const b = headFieldBindings[bi]!;
@@ -2431,6 +2446,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             const afterGoto = mb.length();
             patchShort(mb, ifeq + 1, afterGoto - ifeq);
             if (ifeqHead >= 0) patchShort(mb, ifeqHead + 1, afterGoto - ifeqHead);
+            if (ifeqTailNil >= 0) patchShort(mb, ifeqTailNil + 1, afterGoto - ifeqTailNil);
             mb.addBranchTarget(afterGoto, matchBaseState);
             continue;
           }

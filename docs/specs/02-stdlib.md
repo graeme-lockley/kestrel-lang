@@ -318,6 +318,64 @@ Declarative CLI argument parser for Kestrel tools. Provides types and functions 
 
 ---
 
+## kestrel:dev/text/prettyprinter
+
+Wadler–Lindig combinatorial pretty-printer. Builds abstract `Doc` values from combinators and renders them to a `String` at a given column width. Used by `kestrel:tools/format` to produce canonical Kestrel source text.
+
+**Type:**
+
+| Type | Definition |
+|------|------------|
+| `Doc` | ADT: `Empty \| Text(String) \| Concat(Doc, Doc) \| Nest(Int, Doc) \| Line \| LineBreak \| Group(Doc) \| FlatAlt(Doc, Doc)`. |
+
+**Rendering:**
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `pretty` | `(Int, Doc) -> String` | Render `doc` to a `String` fitting within `width` columns. Uses the Lindig bounded algorithm. |
+
+**Primitive combinators:**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `empty` | `Doc` | The empty document. |
+| `text` | `(String) -> Doc` | A literal string (must not contain newlines). |
+| `concat` | `(Doc, Doc) -> Doc` | Horizontal concatenation of two documents. |
+| `append` | `(Doc, Doc) -> Doc` | Alias for `concat`. |
+| `nest` | `(Int, Doc) -> Doc` | Increase indentation by `n` for all newlines inside `d`. |
+| `line` | `Doc` | A newline in broken mode; a single space in flat mode. |
+| `lineBreak` | `Doc` | A newline in broken mode; empty in flat mode. |
+| `softBreak` | `Doc` | A space in flat mode; empty in broken mode. |
+| `group` | `(Doc) -> Doc` | Try to render `d` flat; fall back to broken if it does not fit. |
+| `flatAlt` | `(Doc, Doc) -> Doc` | `flatAlt(broken, flat)`: use `broken` in broken mode, `flat` in flat mode. |
+
+**Derived combinators:**
+
+| Name | Signature | Description |
+|------|-----------|-------------|
+| `beside` | `(Doc, Doc) -> Doc` | Two documents separated by a single space. |
+| `softLine` | `(Doc, Doc) -> Doc` | Two documents separated by `line`. |
+| `hcat` | `(List<Doc>) -> Doc` | Concatenate a list with no separator. |
+| `hsep` | `(List<Doc>) -> Doc` | Concatenate a list separated by spaces. |
+| `vsep` | `(List<Doc>) -> Doc` | Concatenate a list separated by `line`. |
+| `vcat` | `(List<Doc>) -> Doc` | Concatenate a list separated by `lineBreak`. |
+| `sep` | `(List<Doc>) -> Doc` | `group(vsep(docs))`: tries horizontal; falls back to vertical. |
+| `indent` | `(Int, Doc) -> Doc` | Indent `d` by `n` spaces from the current column. |
+| `hang` | `(Int, Doc) -> Doc` | Hanging indent: first item at current column; rest indented by `n`. |
+| `align` | `(Doc) -> Doc` | Align continuation to current column (identity in this implementation). |
+| `punctuate` | `(Doc, List<Doc>) -> List<Doc>` | Append separator after every element except the last. |
+| `enclose` | `(Doc, Doc, Doc) -> Doc` | Surround `d` with `open` and `close` delimiters. |
+| `encloseSep` | `(Doc, Doc, Doc, List<Doc>) -> Doc` | Like `enclose` but with a separator between items. |
+| `space` | `Doc` | A single space (`Text(" ")`). |
+| `comma` | `Doc` | A comma (`Text(",")`). |
+
+**Layout rules:**
+- `nest(n, d)` increases the indentation level used when a newline is rendered inside `d`. Nest the `concat(line, ...)` call inside `nest(n, ...)` for correct indentation: `nest(2, concat(line, body))`.
+- `Group(d)` first attempts flat rendering via `fitsQ`; if the flat version does not fit in the remaining columns it falls back to broken rendering.
+- In flat mode, `Line` → `" "`, `LineBreak` → `""`. In broken mode both → `"\n"` followed by the current indentation.
+
+---
+
 ## kestrel:dev/stack
 
 Stack traces and basic I/O formatting. This module is for stack-trace and formatting utilities; the **built-in** `print`/`println` are language primitives (variadic, space-separated).
