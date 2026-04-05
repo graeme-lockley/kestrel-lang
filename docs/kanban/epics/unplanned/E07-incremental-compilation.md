@@ -25,7 +25,10 @@ The `.kti` (types file) format is fully specified in `docs/specs/07-modules.md �
 
 ## Stories
 
-(None yet — use plan-epic to decompose, or story-create to add individual stories.)
+1. [S07-01 — `.kti` v4 spec and `kti-format.md`](../../kanban/unplanned/S07-01-kti-v4-spec-and-format-doc.md)
+2. [S07-02 — `.kti` v4 writer in `compile-file-jvm.ts`](../../kanban/unplanned/S07-02-kti-v4-writer.md)
+3. [S07-03 — `.kti` reader and freshness routing](../../kanban/unplanned/S07-03-kti-reader-freshness-routing.md)
+4. [S07-04 — `--clean` flag for `kestrel build` and `kestrel run`](../../kanban/unplanned/S07-04-clean-flag.md)
 
 ## Dependencies
 
