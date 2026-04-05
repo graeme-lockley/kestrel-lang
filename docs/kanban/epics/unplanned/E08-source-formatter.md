@@ -10,9 +10,22 @@ An opinionated, Elm-style source code formatter for Kestrel, written entirely in
 
 Because the formatter is the first major developer tool, this epic begins with establishing a complete, principled stdlib namespace structure. The existing flat `kestrel:X` stdlib is reorganised into `kestrel:data/*`, `kestrel:io/*`, and `kestrel:sys/*` categories (breaking change — all callers within the repo are updated). Developer infrastructure lives under `kestrel:dev/*`. User-facing tools live under `kestrel:tools/*`, and each tool module is directly runnable via `./kestrel run kestrel:tools/<name>` — `kestrel test` and `kestrel fmt` become thin CLI aliases over this mechanism.
 
-## Stories
+## Stories (ordered — implement sequentially)
 
-(None yet — use plan-epic to decompose, or story-create to add individual stories.)
+1. [S08-01-stdlib-namespace-restructure.md](../../unplanned/S08-01-stdlib-namespace-restructure.md) — Move flat `kestrel:X` stdlib to `data/*`, `io/*`, `sys/*`, `dev/stack`; update all import sites
+2. [S08-02-kestrel-run-module-specifier.md](../../unplanned/S08-02-kestrel-run-module-specifier.md) — Extend `kestrel run` to accept `kestrel:X/Y` module specifiers (bash change only)
+3. [S08-03-dev-cli-library.md](../../unplanned/S08-03-dev-cli-library.md) — Create `kestrel:dev/cli`: declarative CLI arg parser with auto `--help`/`--version`
+4. [S08-04-dev-text-prettyprinter.md](../../unplanned/S08-04-dev-text-prettyprinter.md) — Create `kestrel:dev/text/prettyprinter`: Wadler–Lindig Doc IR and renderer
+5. [S08-05-dev-parser.md](../../unplanned/S08-05-dev-parser.md) — Create `kestrel:dev/parser`: full Kestrel lexer + AST + parser written in Kestrel
+6. [S08-06-tools-test-and-alias.md](../../unplanned/S08-06-tools-test-and-alias.md) — Move `kestrel:test` → `kestrel:tools/test`; wire `kestrel test` via module-specifier
+7. [S08-07-tools-format-and-fmt-command.md](../../unplanned/S08-07-tools-format-and-fmt-command.md) — Create `kestrel:tools/format` formatter; add `kestrel fmt` CLI alias
+
+Notes:
+- S08-01 must go first (all later stories import from the new paths).
+- S08-02 is independent but placed second as it unblocks S08-06 and S08-07.
+- S08-03, S08-04, S08-05 each depend on S08-01 and are otherwise independent of each other.
+- S08-06 depends on S08-01, S08-02, S08-03.
+- S08-07 depends on all previous stories.
 
 ## Dependencies
 
