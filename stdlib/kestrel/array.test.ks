@@ -44,9 +44,10 @@ export async fun run(s: Suite): Task<Unit> =
     });
 
     group(s1, "toList", (sg: Suite) => {
-      val a = fromList([10, 20, 30])
+      val lst = [10, 20, 30, 40]
+      val a = fromList(lst)
       val xs = toList(a)
-      eq(sg, "toList", xs, [10, 20, 30])
+      eq(sg, "toList", xs, lst)
     });
 
     group(s1, "fromList/toList round-trip", (sg: Suite) => {
