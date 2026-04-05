@@ -139,7 +139,9 @@ export fun group(s: Suite, name: String, body: (Suite) -> Unit): Unit = {
 }
 
 /** Async variant of `group`. Accepts a callback returning `Task<Unit>` so that
- *  `await` expressions can appear naturally inside group bodies. */
+ *  `await` expressions can appear naturally inside group bodies.
+ *  Any exception thrown by body is caught and recorded as a test failure so
+ *  that sibling groups are not affected. */
 export async fun asyncGroup(s: Suite, name: String, body: (Suite) -> Task<Unit>): Task<Unit> = {
   val start = Basics.nowMs();
   val passedStart = s.counts.passed;
@@ -148,7 +150,17 @@ export async fun asyncGroup(s: Suite, name: String, body: (Suite) -> Task<Unit>)
   s.counts.compactExpanded := False;
   val child = groupPrologue(s, name);
 
-  await body(child);
+  val _r = try {
+    await body(child);
+    True
+  } catch {
+    _ => {
+      s.counts.failed := s.counts.failed + 1;
+      s.counts.compactExpanded := True;
+      println("${indent(child.depth)}${Console.RED}${Console.CROSS} group threw an unexpected exception${Console.RESET}");
+      False
+    }
+  };
 
   groupEpilogue(s, name, passedStart, failedStart, prevExpanded, start)
 }
