@@ -1,16 +1,16 @@
 // Render a colour Mandelbrot set in the terminal (ANSI 256-colour + density chars).
 // Detects terminal width and height at startup; falls back to 80×24.
 
-import * as Str     from "kestrel:data/string"
-import * as B       from "kestrel:data/basics"
+import * as Str from "kestrel:data/string"
+import * as Basics from "kestrel:data/basics"
 import * as Console from "kestrel:io/console"
 
 
 val maxIter = 50
 
 val term = Console.terminalInfo()
-val cols  = B.toFloat(term.width)
-val rows  = B.toFloat(term.height)
+val cols = Basics.toFloat(term.width)
+val rows = Basics.toFloat(term.height)
 
 // Fix the real axis and derive the imaginary range from the terminal dimensions.
 // Terminal characters are ~2× taller than wide, so the effective pixel height
@@ -30,40 +30,39 @@ val charset = " .:-=+*#%@"
 
 // Map escape time to 256-colour index (deep blue → cyan → green → yellow → orange → red).
 fun iterToFg256(iter: Int): Int =
-  if (iter >= maxIter) {
+  if (iter >= maxIter)
     17
-  } else {
+  else {
     val x = iter * 220 / maxIter
-    if (x < 25) {
+    if (x < 25)
       17 + x
-    } else if (x < 70) {
+    else if (x < 70)
       39 + (x - 25) / 2
-    } else if (x < 120) {
+    else if (x < 120)
       79 + (x - 70) / 2
-    } else if (x < 165) {
+    else if (x < 165)
       190 + (x - 120) / 3
-    } else if (x < 200) {
+    else if (x < 200)
       214 + (x - 165) / 4
-    } else {
+    else
       196 + (x - 200) / 5
-    }
   }
 
 fun mandelIter(cRe: Float, cIm: Float, zRe: Float, zIm: Float, i: Int): Int =
-  if (i >= maxIter) {
+  if (i >= maxIter)
     i
-  } else if ((zRe * zRe + zIm * zIm) > 4.0) {
+  else if ((zRe * zRe + zIm * zIm) > 4.0)
     i
-  } else {
+  else {
     val newRe = zRe * zRe - zIm * zIm + cRe
     val newIm = 2.0 * zRe * zIm + cIm
     mandelIter(cRe, cIm, newRe, newIm, i + 1)
   }
 
 fun pickCell(iter: Int): String =
-  if (iter >= maxIter) {
+  if (iter >= maxIter)
     "${Console.ESC}[48;5;17m ${Console.RESET}"
-  } else {
+  else {
     val idx = iter % 10
     val ch = Str.slice(charset, idx, idx + 1)
     val c = iterToFg256(iter)
@@ -71,7 +70,8 @@ fun pickCell(iter: Int): String =
   }
 
 fun renderRow(col: Float, im: Float, acc: String): String =
-  if (col >= cols) acc
+  if (col >= cols) 
+    acc
   else {
     val it = mandelIter(minRe + stepRe * col, im, 0.0, 0.0, 0)
     renderRow(col + 1.0, im, "${acc}${pickCell(it)}")
