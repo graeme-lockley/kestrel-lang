@@ -103,42 +103,42 @@ Do NOT skip ahead or implement before writing the corresponding tests.
 
 ### Phase A — Token unit tests — *TDD red* (`stdlib/kestrel/dev/parser/token.test.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/token.test.ks` with imports:
+- [x] Create `stdlib/kestrel/dev/parser/token.test.ks` with imports:
   ```
   import { run as testRun, group, test, assertEqual, assertTrue, assertFalse } from "kestrel:tools/test"
   import * as Token from "kestrel:dev/parser/token"
   ```
-- [ ] Add `export fun run(): Unit` entry point calling `testRun` with all groups
+- [x] Add `export fun run(): Unit` entry point calling `testRun` with all groups
 
 **`Token.spanZero` tests:**
-- [ ] Assert `Token.spanZero().start == 0`
-- [ ] Assert `Token.spanZero().end == 0`
-- [ ] Assert `Token.spanZero().line == 1`
-- [ ] Assert `Token.spanZero().col == 1`
+- [x] Assert `Token.spanZero().start == 0`
+- [x] Assert `Token.spanZero().end == 0`
+- [x] Assert `Token.spanZero().line == 1`
+- [x] Assert `Token.spanZero().col == 1`
 
 **`Token.isTrivia` tests:**
-- [ ] Assert `Token.isTrivia({ kind = Token.TkWs, text = " ", span = Token.spanZero() }) == True`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkLineComment, text = "// x", span = Token.spanZero() }) == True`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkBlockComment, text = "/* */", span = Token.spanZero() }) == True`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkIdent, text = "x", span = Token.spanZero() }) == False`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkKw, text = "fun", span = Token.spanZero() }) == False`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkEof, text = "", span = Token.spanZero() }) == False`
+- [x] Assert `Token.isTrivia({ kind = Token.TkWs, text = " ", span = Token.spanZero() }) == True`
+- [x] Assert `Token.isTrivia({ kind = Token.TkLineComment, text = "// x", span = Token.spanZero() }) == True`
+- [x] Assert `Token.isTrivia({ kind = Token.TkBlockComment, text = "/* */", span = Token.spanZero() }) == True`
+- [x] Assert `Token.isTrivia({ kind = Token.TkIdent, text = "x", span = Token.spanZero() }) == False`
+- [x] Assert `Token.isTrivia({ kind = Token.TkKw, text = "fun", span = Token.spanZero() }) == False`
+- [x] Assert `Token.isTrivia({ kind = Token.TkEof, text = "", span = Token.spanZero() }) == False`
 
 **`Token.TemplatePart` construction tests:**
-- [ ] Construct `Token.TPLiteral("hello")`, match to extract string, assert equals `"hello"`
-- [ ] Construct `Token.TPInterp("x + 1")`, match to extract string, assert equals `"x + 1"`
-- [ ] Construct `Token.TkTemplate([Token.TPLiteral("a"), Token.TPInterp("x")])`, match to verify list length is 2
+- [x] Construct `Token.TPLiteral("hello")`, match to extract string, assert equals `"hello"`
+- [x] Construct `Token.TPInterp("x + 1")`, match to extract string, assert equals `"x + 1"`
+- [x] Construct `Token.TkTemplate([Token.TPLiteral("a"), Token.TPInterp("x")])`, match to verify list length is 2
 
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/token.test.ks` → confirm compile error (`token.ks` not yet written — **red phase**)
+- [x] Run: `./kestrel test stdlib/kestrel/dev/parser/token.test.ks` → confirm compile error (`token.ks` not yet written — **red phase**)
 
 ### Phase B — Token types — *TDD green* (`stdlib/kestrel/dev/parser/token.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/token.ks` with module-level imports: `import * as Lst from "kestrel:data/list"`
-- [ ] Define `export type Span = { start: Int, end: Int, line: Int, col: Int }`
-- [ ] Define `export type TemplatePart = TPLiteral(String) | TPInterp(String)`
+- [x] Create `stdlib/kestrel/dev/parser/token.ks` with module-level imports: `import * as Lst from "kestrel:data/list"`
+- [x] Define `export type Span = { start: Int, end: Int, line: Int, col: Int }`
+- [x] Define `export type TemplatePart = TPLiteral(String) | TPInterp(String)`
   - `TPLiteral(String)` — a decoded literal text segment between interpolations
   - `TPInterp(String)` — the raw source of an interpolated expression (between `${` and `}`)
-- [ ] Define `export type TokenKind` sum type with all 14 variants:
+- [x] Define `export type TokenKind` sum type with all 14 variants:
   ```
   export type TokenKind =
       TkInt               // integer literal; token.text = raw ("42", "0xff", "0b101")
@@ -166,11 +166,11 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   - Single-char operators: `+ - * / % | & < > = !`
   - Single-char punctuation (not operators): `( ) { } [ ] , : . ;`
   - `:` alone is `TkPunct`; `::` is `TkOp` — multi-op check runs before single-char check.
-- [ ] Define `export type Token = { kind: TokenKind, text: String, span: Span }`
-- [ ] Implement `export fun isTrivia(t: Token): Bool` — returns `True` for `TkWs`, `TkLineComment`, `TkBlockComment`; `False` for all other variants
-- [ ] Implement `export fun spanZero(): Span` — returns `{ start = 0, end = 0, line = 1, col = 1 }`
-- [ ] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/token.ks`
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/token.test.ks` → confirm all tests pass (**green**)
+- [x] Define `export type Token = { kind: TokenKind, text: String, span: Span }`
+- [x] Implement `export fun isTrivia(t: Token): Bool` — returns `True` for `TkWs`, `TkLineComment`, `TkBlockComment`; `False` for all other variants
+- [x] Implement `export fun spanZero(): Span` — returns `{ start = 0, end = 0, line = 1, col = 1 }`
+- [x] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/token.ks`
+- [x] Run: `./kestrel test stdlib/kestrel/dev/parser/token.test.ks` → confirm all tests pass (**green**)
 
 ### Phase C — AST unit tests — *TDD red* (`stdlib/kestrel/dev/parser/ast.test.ks`)
 
