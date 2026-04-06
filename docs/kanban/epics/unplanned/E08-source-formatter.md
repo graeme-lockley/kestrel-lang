@@ -19,6 +19,10 @@ Because the formatter is the first major developer tool, this epic begins with e
 5. [S08-05-dev-parser.md](../../unplanned/S08-05-dev-parser.md) — Create `kestrel:dev/parser`: full Kestrel lexer + AST + parser written in Kestrel
 6. [S08-06-tools-test-and-alias.md](../../unplanned/S08-06-tools-test-and-alias.md) — Move `kestrel:test` → `kestrel:tools/test`; wire `kestrel test` via module-specifier
 7. [S08-07-tools-format-and-fmt-command.md](../../unplanned/S08-07-tools-format-and-fmt-command.md) — Create `kestrel:tools/format` formatter; add `kestrel fmt` CLI alias
+8. [S08-08-codegen-val-ifelse-classcastexception.md](../../unplanned/S08-08-codegen-val-ifelse-classcastexception.md) — Fix JVM codegen: `val` across `if`/`else` branches causes ClassCastException
+9. [S08-09-codegen-var-while-verifyerror.md](../../unplanned/S08-09-codegen-var-while-verifyerror.md) — Fix JVM codegen: `var`/`val` inside `while` loop body causes VerifyError (inconsistent stackmap)
+10. [S08-10-codegen-var-try-verifyerror.md](../../unplanned/S08-10-codegen-var-try-verifyerror.md) — Fix JVM codegen: `var` inside `try` block causes VerifyError (stack map mismatch)
+11. [S08-11-codegen-listexpr-spread-check.md](../../done/S08-11-codegen-listexpr-spread-check.md) — **DONE** Fix JVM codegen: ListExpr spread-element check incorrectly matched RecordExpr (fixed in commit 63ccd25)
 
 Notes:
 - S08-01 must go first (all later stories import from the new paths).
