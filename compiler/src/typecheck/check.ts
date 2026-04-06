@@ -1265,6 +1265,26 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         env.set(inner.name, freshVar());
       }
     }
+
+    // Second pre-pass: pre-register all ADT type names so type aliases that
+    // forward-reference an ADT (e.g. `type Case_ = { body: Expr }` before
+    // `type Expr = ...`) resolve to the correct `App(name, [])` instead of a
+    // fresh variable that can collide across module boundaries.
+    for (const node of program.body) {
+      if (!node) continue;
+      const typeNode = node.kind === 'TypeDecl' ? node
+        : (node.kind === 'ExportDecl' && (node as { inner?: { kind?: string } }).inner?.kind === 'TypeDecl')
+          ? (node as { inner: import('../ast/nodes.js').TypeDecl }).inner
+          : null;
+      if (typeNode && typeNode.body?.kind === 'ADTBody') {
+        if (!typeAliases.has(typeNode.name)) {
+          const adtTypeParams = (typeNode.typeParams || []).map(() => freshVar());
+          const adtType = { kind: 'app' as const, name: typeNode.name, args: adtTypeParams };
+          typeAliases.set(typeNode.name, adtType);
+        }
+      }
+    }
+
     for (const node of program.body) {
       if (!node) continue;
       const primary = mainExpr(node);
@@ -1432,8 +1452,19 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
             typeAliases.set(node.name, aliasType);
           }
         } else if (node.body.kind === 'ADTBody') {
-          const adtTypeParams = (node.typeParams || []).map(() => freshVar());
-          const adtType = { kind: 'app' as const, name: node.name, args: adtTypeParams };
+          // Reuse pre-registered ADT type if available (from the pre-pass above);
+          // otherwise create fresh.  Pre-registration ensures type aliases that
+          // forward-reference this ADT already resolved to the correct App node.
+          const preReg = typeAliases.get(node.name);
+          let adtTypeParams: InternalType[];
+          let adtType: InternalType & { kind: 'app' };
+          if (preReg && preReg.kind === 'app' && preReg.name === node.name) {
+            adtType = preReg as InternalType & { kind: 'app' };
+            adtTypeParams = adtType.args;
+          } else {
+            adtTypeParams = (node.typeParams || []).map(() => freshVar());
+            adtType = { kind: 'app' as const, name: node.name, args: adtTypeParams };
+          }
           env.set(node.name, adtType);
           typeAliases.set(node.name, adtType);
           
