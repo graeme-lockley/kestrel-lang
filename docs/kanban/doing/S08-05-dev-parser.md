@@ -349,108 +349,108 @@ Do NOT skip ahead or implement before writing the corresponding tests.
 
 ### Phase E — Lexer unit tests — *TDD red* (`stdlib/kestrel/dev/parser/lexer.test.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/lexer.test.ks` with imports for test harness, `lex`, and the `Token` namespace from `kestrel:dev/parser/token`
-- [ ] Add `export fun run(): Unit` entry point
-- [ ] Implement helper `fun kindOf(src: String): Token.TokenKind` — `lex(src)` then return kind of first token
-- [ ] Implement helper `fun textOf(src: String): String` — `lex(src)` then return text of first token
-- [ ] Implement helper `fun allKinds(src: String): List<Token.TokenKind>` — `lex(src)` then map `.kind`
-- [ ] Implement helper `fun joinTexts(src: String): String` — `lex(src)` then `Str.join("", Lst.map(tokens, (t) => t.text))`
+- [x] Create `stdlib/kestrel/dev/parser/lexer.test.ks` with imports for test harness, `lex`, and the `Token` namespace from `kestrel:dev/parser/token`
+- [x] Add `export fun run(): Unit` entry point
+- [x] Implement helper `fun kindOf(src: String): Token.TokenKind` — `lex(src)` then return kind of first token
+- [x] Implement helper `fun textOf(src: String): String` — `lex(src)` then return text of first token
+- [x] Implement helper `fun allKinds(src: String): List<Token.TokenKind>` — `lex(src)` then map `.kind`
+- [x] Implement helper `fun joinTexts(src: String): String` — `lex(src)` then `Str.join("", Lst.map(tokens, (t) => t.text))`
 
 **Round-trip tests:**
-- [ ] `joinTexts("") == ""`
-- [ ] `joinTexts("fun main(): Unit = ()")` equals source
-- [ ] `joinTexts("  val x = 1  ")` equals `"  val x = 1  "` (whitespace preserved)
-- [ ] `joinTexts("// comment\nval x = 1")` equals original (line comment and newline preserved)
-- [ ] `joinTexts("/* block */val x = 1")` equals original (block comment preserved)
-- [ ] `joinTexts("\"hello\"")` equals `"\"hello\""` (string quotes in token text)
-- [ ] `joinTexts("'a'")` equals `"'a'"` (char quotes in token text)
-- [ ] `joinTexts("x // c\ny")` equals original (comment between two identifiers preserved)
+- [x] `joinTexts("") == ""`
+- [x] `joinTexts("fun main(): Unit = ()")` equals source
+- [x] `joinTexts("  val x = 1  ")` equals `"  val x = 1  "` (whitespace preserved)
+- [x] `joinTexts("// comment\nval x = 1")` equals original (line comment and newline preserved)
+- [x] `joinTexts("/* block */val x = 1")` equals original (block comment preserved)
+- [x] `joinTexts("\"hello\"")` equals `"\"hello\""` (string quotes in token text)
+- [x] `joinTexts("'a'")` equals `"'a'"` (char quotes in token text)
+- [x] `joinTexts("x // c\ny")` equals original (comment between two identifiers preserved)
 
 **Whitespace and comment token tests:**
-- [ ] `kindOf("  ")` equals `Token.TkWs`
-- [ ] `kindOf("\n")` equals `Token.TkWs`
-- [ ] `textOf("\t ")` equals `"\t "` (raw tabs and spaces)
-- [ ] `kindOf("// hi")` equals `Token.TkLineComment`
-- [ ] `textOf("// hi there")` equals `"// hi there"`
-- [ ] `kindOf("/* hi */")` equals `Token.TkBlockComment`
-- [ ] `textOf("/* hi */")` equals `"/* hi */"`
+- [x] `kindOf("  ")` equals `Token.TkWs`
+- [x] `kindOf("\n")` equals `Token.TkWs`
+- [x] `textOf("\t ")` equals `"\t "` (raw tabs and spaces)
+- [x] `kindOf("// hi")` equals `Token.TkLineComment`
+- [x] `textOf("// hi there")` equals `"// hi there"`
+- [x] `kindOf("/* hi */")` equals `Token.TkBlockComment`
+- [x] `textOf("/* hi */")` equals `"/* hi */"`
 
 **Identifier and keyword tests:**
-- [ ] `kindOf("foo")` equals `Token.TkIdent`
-- [ ] `kindOf("_bar")` equals `Token.TkIdent`
-- [ ] `textOf("myVar")` equals `"myVar"`
-- [ ] `kindOf("Foo")` equals `Token.TkUpper`
-- [ ] `kindOf("True")` equals `Token.TkUpper` (NOT `Token.TkKw`)
-- [ ] `kindOf("False")` equals `Token.TkUpper` (NOT `Token.TkKw`)
-- [ ] Test each keyword tokenises as `Token.TkKw` — one test per keyword (23 tests): `as`, `fun`, `type`, `val`, `var`, `mut`, `if`, `else`, `while`, `break`, `continue`, `match`, `try`, `catch`, `throw`, `async`, `await`, `export`, `import`, `from`, `exception`, `is`, `opaque`, `extern`
+- [x] `kindOf("foo")` equals `Token.TkIdent`
+- [x] `kindOf("_bar")` equals `Token.TkIdent`
+- [x] `textOf("myVar")` equals `"myVar"`
+- [x] `kindOf("Foo")` equals `Token.TkUpper`
+- [x] `kindOf("True")` equals `Token.TkUpper` (NOT `Token.TkKw`)
+- [x] `kindOf("False")` equals `Token.TkUpper` (NOT `Token.TkKw`)
+- [x] Test each keyword tokenises as `Token.TkKw` — one test per keyword (23 tests): `as`, `fun`, `type`, `val`, `var`, `mut`, `if`, `else`, `while`, `break`, `continue`, `match`, `try`, `catch`, `throw`, `async`, `await`, `export`, `import`, `from`, `exception`, `is`, `opaque`, `extern`
 
 **Integer literal tests:**
-- [ ] `kindOf("42")` equals `Token.TkInt`, `textOf("42")` equals `"42"`
-- [ ] `kindOf("0")` equals `Token.TkInt`
-- [ ] `kindOf("0xff")` equals `Token.TkInt`, `textOf("0xff")` equals `"0xff"`
-- [ ] `kindOf("0b101")` equals `Token.TkInt`, `textOf("0b101")` equals `"0b101"`
-- [ ] `kindOf("0o77")` equals `Token.TkInt`
-- [ ] `kindOf("1_000_000")` equals `Token.TkInt`, `textOf("1_000_000")` equals `"1_000_000"`
+- [x] `kindOf("42")` equals `Token.TkInt`, `textOf("42")` equals `"42"`
+- [x] `kindOf("0")` equals `Token.TkInt`
+- [x] `kindOf("0xff")` equals `Token.TkInt`, `textOf("0xff")` equals `"0xff"`
+- [x] `kindOf("0b101")` equals `Token.TkInt`, `textOf("0b101")` equals `"0b101"`
+- [x] `kindOf("0o77")` equals `Token.TkInt`
+- [x] `kindOf("1_000_000")` equals `Token.TkInt`, `textOf("1_000_000")` equals `"1_000_000"`
 
 **Float literal tests:**
-- [ ] `kindOf("3.14")` equals `Token.TkFloat`, `textOf("3.14")` equals `"3.14"`
-- [ ] `kindOf("1e10")` equals `Token.TkFloat`
-- [ ] `kindOf("1.5e-3")` equals `Token.TkFloat`
-- [ ] `kindOf(".5")` equals `Token.TkFloat`
-- [ ] `kindOf("1E10")` equals `Token.TkFloat`
+- [x] `kindOf("3.14")` equals `Token.TkFloat`, `textOf("3.14")` equals `"3.14"`
+- [x] `kindOf("1e10")` equals `Token.TkFloat`
+- [x] `kindOf("1.5e-3")` equals `Token.TkFloat`
+- [x] `kindOf(".5")` equals `Token.TkFloat`
+- [x] `kindOf("1E10")` equals `Token.TkFloat`
 
 **String literal tests:**
-- [ ] `kindOf("\"hello\"")` equals `Token.TkStr`
-- [ ] `textOf("\"hello\"")` equals `"\"hello\""` (raw text includes quotes)
-- [ ] `textOf("\"a\\nb\"")` equals `"\"a\\nb\""` (raw text preserves backslash)
-- [ ] Lex `"\"${x}\""` → first token kind is `Token.TkTemplate`
-- [ ] Lex `"\"${x}\""` → `Token.TkTemplate` parts contain `Token.TPInterp("x")`
-- [ ] Lex `"\"hello ${name}\""` → parts are `[Token.TPLiteral("hello "), Token.TPInterp("name")]`
-- [ ] Lex `"\"$name\""` → parts are `[Token.TPInterp("name")]` (short `$ident` form)
-- [ ] Lex `"\"a ${1 + 2} b\""` → parts are `[Token.TPLiteral("a "), Token.TPInterp("1 + 2"), Token.TPLiteral(" b")]`
-- [ ] `textOf("\"${x}\"")` equals `"\"${x}\""` (raw text of whole template token preserved)
+- [x] `kindOf("\"hello\"")` equals `Token.TkStr`
+- [x] `textOf("\"hello\"")` equals `"\"hello\""` (raw text includes quotes)
+- [x] `textOf("\"a\\nb\"")` equals `"\"a\\nb\""` (raw text preserves backslash)
+- [x] Lex `"\"${x}\""` → first token kind is `Token.TkTemplate`
+- [x] Lex `"\"${x}\""` → `Token.TkTemplate` parts contain `Token.TPInterp("x")`
+- [x] Lex `"\"hello ${name}\""` → parts are `[Token.TPLiteral("hello "), Token.TPInterp("name")]`
+- [x] Lex `"\"$name\""` → parts are `[Token.TPInterp("name")]` (short `$ident` form)
+- [x] Lex `"\"a ${1 + 2} b\""` → parts are `[Token.TPLiteral("a "), Token.TPInterp("1 + 2"), Token.TPLiteral(" b")]`
+- [x] `textOf("\"${x}\"")` equals `"\"${x}\""` (raw text of whole template token preserved)
 
 **Char literal tests:**
-- [ ] `kindOf("'a'")` equals `Token.TkChar`
-- [ ] `textOf("'a'")` equals `"'a'"` (raw text includes quotes)
-- [ ] `textOf("'\\n'")` equals `"'\\n'"` (raw escape preserved)
+- [x] `kindOf("'a'")` equals `Token.TkChar`
+- [x] `textOf("'a'")` equals `"'a'"` (raw text includes quotes)
+- [x] `textOf("'\\n'")` equals `"'\\n'"` (raw escape preserved)
 
 **Operator tests:**
-- [ ] `kindOf("=>")` is `Token.TkOp`, text is `"=>"`
-- [ ] `kindOf(":=")` is `Token.TkOp`, text is `":="`
-- [ ] `kindOf("==")` is `Token.TkOp`, text is `"=="`
-- [ ] `kindOf("!=")` is `Token.TkOp`, text is `"!="`
-- [ ] `kindOf(">=")` is `Token.TkOp`, text is `">="`
-- [ ] `kindOf("<=")` is `Token.TkOp`, text is `"<="`
-- [ ] `kindOf("**")` is `Token.TkOp`, text is `"**"`
-- [ ] `kindOf("<|")` is `Token.TkOp`, text is `"<|"`
-- [ ] `kindOf("::")` is `Token.TkOp`, text is `"::"`
-- [ ] `kindOf("|>")` is `Token.TkOp`, text is `"|>"`
-- [ ] `kindOf("->")` is `Token.TkOp`, text is `"->"`
-- [ ] `kindOf("...")` is `Token.TkOp`, text is `"..."`
-- [ ] `kindOf("+")` is `Token.TkOp`; `kindOf("-")` is `Token.TkOp`; `kindOf("!")` is `Token.TkOp`
+- [x] `kindOf("=>")` is `Token.TkOp`, text is `"=>"`
+- [x] `kindOf(":=")` is `Token.TkOp`, text is `":="`
+- [x] `kindOf("==")` is `Token.TkOp`, text is `"=="`
+- [x] `kindOf("!=")` is `Token.TkOp`, text is `"!="`
+- [x] `kindOf(">=")` is `Token.TkOp`, text is `">="`
+- [x] `kindOf("<=")` is `Token.TkOp`, text is `"<="`
+- [x] `kindOf("**")` is `Token.TkOp`, text is `"**"`
+- [x] `kindOf("<|")` is `Token.TkOp`, text is `"<|"`
+- [x] `kindOf("::")` is `Token.TkOp`, text is `"::"`
+- [x] `kindOf("|>")` is `Token.TkOp`, text is `"|>"`
+- [x] `kindOf("->")` is `Token.TkOp`, text is `"->"`
+- [x] `kindOf("...")` is `Token.TkOp`, text is `"..."`
+- [x] `kindOf("+")` is `Token.TkOp`; `kindOf("-")` is `Token.TkOp`; `kindOf("!")` is `Token.TkOp`
 
 **Punctuation tests:**
-- [ ] `:` vs `::` — lex `": ::"` kinds are `[Token.TkPunct, Token.TkWs, Token.TkOp, Token.TkEof]`, texts are `[":", " ", "::", ""]`
-- [ ] `kindOf("(")` is `Token.TkPunct`, text is `"("`
-- [ ] `kindOf(")")` is `Token.TkPunct`; `kindOf("{")` is `Token.TkPunct`; `kindOf("}")` is `Token.TkPunct`
-- [ ] `kindOf("[")` is `Token.TkPunct`; `kindOf("]")` is `Token.TkPunct`
-- [ ] `kindOf(",")` is `Token.TkPunct`; `kindOf(".")` is `Token.TkPunct`; `kindOf(";")` is `Token.TkPunct`
+- [x] `:` vs `::` — lex `": ::"` kinds are `[Token.TkPunct, Token.TkWs, Token.TkOp, Token.TkEof]`, texts are `[":", " ", "::", ""]`
+- [x] `kindOf("(")` is `Token.TkPunct`, text is `"("`
+- [x] `kindOf(")")` is `Token.TkPunct`; `kindOf("{")` is `Token.TkPunct`; `kindOf("}")` is `Token.TkPunct`
+- [x] `kindOf("[")` is `Token.TkPunct`; `kindOf("]")` is `Token.TkPunct`
+- [x] `kindOf(",")` is `Token.TkPunct`; `kindOf(".")` is `Token.TkPunct`; `kindOf(";")` is `Token.TkPunct`
 
 **Span tracking tests:**
-- [ ] Lex `"42"`: first token `span.start == 0`, `span.end == 2`, `span.line == 1`, `span.col == 1`
-- [ ] Lex `"\nx"`: identifier `x` has `span.line == 2`, `span.col == 1`
-- [ ] Lex `"a\nb"`: second non-trivia token is `b` at `line == 2`
+- [x] Lex `"42"`: first token `span.start == 0`, `span.end == 2`, `span.line == 1`, `span.col == 1`
+- [x] Lex `"\nx"`: identifier `x` has `span.line == 2`, `span.col == 1`
+- [x] Lex `"a\nb"`: second non-trivia token is `b` at `line == 2`
 
 **EOF token test:**
-- [ ] Last token of `lex("")` kind is `Token.TkEof`, text is `""`
-- [ ] `lex("x")` length is 2 (one `Token.TkIdent` plus `Token.TkEof`)
+- [x] Last token of `lex("")` kind is `Token.TkEof`, text is `""`
+- [x] `lex("x")` length is 2 (one `Token.TkIdent` plus `Token.TkEof`)
 
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/lexer.test.ks` → confirm compile error (`lexer.ks` not yet written — **red phase**)
+- [x] Run: `./kestrel test stdlib/kestrel/dev/parser/lexer.test.ks` → confirm compile error (`lexer.ks` not yet written — **red phase**)
 
 ### Phase F — Lexer — *TDD green* (`stdlib/kestrel/dev/parser/lexer.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/lexer.ks` with imports:
+- [x] Create `stdlib/kestrel/dev/parser/lexer.ks` with imports:
   ```
   import * as Str from "kestrel:data/string"
   import * as Lst from "kestrel:data/list"
@@ -460,7 +460,7 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   ```
 
 **LexState and primitive helpers:**
-- [ ] Define `LexState` mutable record:
+- [x] Define `LexState` mutable record:
   ```
   type LexState = {
     src: String,
@@ -470,53 +470,53 @@ Do NOT skip ahead or implement before writing the corresponding tests.
     mut col: Int      // current column, 1-based
   }
   ```
-- [ ] Implement `fun lsEof(ls: LexState): Bool` — returns `ls.pos >= ls.len`
-- [ ] Implement `fun lsCp(ls: LexState): Int` — returns `Str.codePointAt(ls.src, ls.pos)` or `-1` when `lsEof`
-- [ ] Implement `fun lsCp1(ls: LexState): Int` — returns code point at `ls.pos + 1`, or `-1` if out of bounds
-- [ ] Implement `fun lsTake(ls: LexState): Int` — read `lsCp`, increment `ls.line` and reset `ls.col := 1` on LF (code point 10), else increment `ls.col`; then `ls.pos := ls.pos + 1`; return the code point read
-- [ ] Implement `fun lsMakeSpan(ls: LexState, start: Int, startLine: Int, startCol: Int): Token.Span` — `{ start = start, end = ls.pos, line = startLine, col = startCol }`
-- [ ] Implement `fun lsMakeTok(ls: LexState, kind: Token.TokenKind, text: String, start: Int, sl: Int, sc: Int): Token.Token` — `{ kind = kind, text = text, span = lsMakeSpan(ls, start, sl, sc) }`
+- [x] Implement `fun lsEof(ls: LexState): Bool` — returns `ls.pos >= ls.len`
+- [x] Implement `fun lsCp(ls: LexState): Int` — returns `Str.codePointAt(ls.src, ls.pos)` or `-1` when `lsEof`
+- [x] Implement `fun lsCp1(ls: LexState): Int` — returns code point at `ls.pos + 1`, or `-1` if out of bounds
+- [x] Implement `fun lsTake(ls: LexState): Int` — read `lsCp`, increment `ls.line` and reset `ls.col := 1` on LF (code point 10), else increment `ls.col`; then `ls.pos := ls.pos + 1`; return the code point read
+- [x] Implement `fun lsMakeSpan(ls: LexState, start: Int, startLine: Int, startCol: Int): Token.Span` — `{ start = start, end = ls.pos, line = startLine, col = startCol }`
+- [x] Implement `fun lsMakeTok(ls: LexState, kind: Token.TokenKind, text: String, start: Int, sl: Int, sc: Int): Token.Token` — `{ kind = kind, text = text, span = lsMakeSpan(ls, start, sl, sc) }`
 
 **Skip helpers:**
-- [ ] Implement `fun lexSkipToEndOfLine(ls: LexState): Unit` — consume chars until LF (10) or EOF
-- [ ] Implement `fun lexSkipBom(ls: LexState): Unit` — consume one char if `lsCp == 0xFEFF` (U+FEFF BOM)
-- [ ] Implement `fun lexSkipShebang(ls: LexState): Unit` — call `lexSkipToEndOfLine` if first two code points are `#` (35) and `!` (33)
+- [x] Implement `fun lexSkipToEndOfLine(ls: LexState): Unit` — consume chars until LF (10) or EOF
+- [x] Implement `fun lexSkipBom(ls: LexState): Unit` — consume one char if `lsCp == 0xFEFF` (U+FEFF BOM)
+- [x] Implement `fun lexSkipShebang(ls: LexState): Unit` — call `lexSkipToEndOfLine` if first two code points are `#` (35) and `!` (33)
 
 **Whitespace and comment tokenisers:**
-- [ ] Implement `fun lexWsLoop(ls: LexState): Unit` — call `lsTake` while current code point is space (32), tab (9), CR (13), or LF (10)
-- [ ] Implement `fun lexWs(ls: LexState, tokens: Array<Token.Token>): Unit` — record start/line/col; call `lexWsLoop`; push `Token.TkWs` token with `Str.slice(ls.src, start, ls.pos)`
-- [ ] Implement `fun lexLineComment(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume `//` with two `lsTake` calls; call `lexSkipToEndOfLine`; push `Token.TkLineComment` with raw slice
-- [ ] Implement `fun lexBlockCommentBody(ls: LexState): Unit` — consume chars until `*/` (code points 42 then 47) or EOF; consume both chars of `*/`
-- [ ] Implement `fun lexBlockComment(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume `/*`; call `lexBlockCommentBody`; push `Token.TkBlockComment` with raw slice
+- [x] Implement `fun lexWsLoop(ls: LexState): Unit` — call `lsTake` while current code point is space (32), tab (9), CR (13), or LF (10)
+- [x] Implement `fun lexWs(ls: LexState, tokens: Array<Token.Token>): Unit` — record start/line/col; call `lexWsLoop`; push `Token.TkWs` token with `Str.slice(ls.src, start, ls.pos)`
+- [x] Implement `fun lexLineComment(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume `//` with two `lsTake` calls; call `lexSkipToEndOfLine`; push `Token.TkLineComment` with raw slice
+- [x] Implement `fun lexBlockCommentBody(ls: LexState): Unit` — consume chars until `*/` (code points 42 then 47) or EOF; consume both chars of `*/`
+- [x] Implement `fun lexBlockComment(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume `/*`; call `lexBlockCommentBody`; push `Token.TkBlockComment` with raw slice
 
 **Identifier/keyword tokeniser:**
-- [ ] Implement `fun isIdentStart(cp: Int): Bool` — true for A–Z (65–90), a–z (97–122), `_` (95)
-- [ ] Implement `fun isIdentContinue(cp: Int): Bool` — true for `isIdentStart(cp)` or 0–9 (48–57)
-- [ ] Define `val keywords: List<String>` — the 23 keywords: `["as","fun","type","val","var","mut","if","else","while","break","continue","match","try","catch","throw","async","await","export","import","from","exception","is","opaque","extern"]`
-- [ ] Implement `fun isKeyword(s: String): Bool` — uses `Lst.any(keywords, (kw) => Str.equals(kw, s))`
-- [ ] Implement `fun lexIdentLoop(ls: LexState): Unit` — call `lsTake` while `isIdentContinue(lsCp(ls))`
-- [ ] Implement `fun lexIdent(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; call `lexIdentLoop`; slice text; check: if `isKeyword` → `Token.TkKw`; else if first code point A–Z (65–90) → `Token.TkUpper`; else → `Token.TkIdent`; push token with raw text. Note: `True` and `False` start uppercase so become `Token.TkUpper`.
+- [x] Implement `fun isIdentStart(cp: Int): Bool` — true for A–Z (65–90), a–z (97–122), `_` (95)
+- [x] Implement `fun isIdentContinue(cp: Int): Bool` — true for `isIdentStart(cp)` or 0–9 (48–57)
+- [x] Define `val keywords: List<String>` — the 23 keywords: `["as","fun","type","val","var","mut","if","else","while","break","continue","match","try","catch","throw","async","await","export","import","from","exception","is","opaque","extern"]`
+- [x] Implement `fun isKeyword(s: String): Bool` — uses `Lst.any(keywords, (kw) => Str.equals(kw, s))`
+- [x] Implement `fun lexIdentLoop(ls: LexState): Unit` — call `lsTake` while `isIdentContinue(lsCp(ls))`
+- [x] Implement `fun lexIdent(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; call `lexIdentLoop`; slice text; check: if `isKeyword` → `Token.TkKw`; else if first code point A–Z (65–90) → `Token.TkUpper`; else → `Token.TkIdent`; push token with raw text. Note: `True` and `False` start uppercase so become `Token.TkUpper`.
 
 **Number tokeniser:**
-- [ ] Implement `fun isDigit(cp: Int): Bool` — true for 48–57
-- [ ] Implement `fun isHexDigit(cp: Int): Bool` — true for 0–9 (48–57), A–F (65–70), a–f (97–102)
-- [ ] Implement `fun lexDecDigits(ls: LexState): Unit` — consume decimal digits and underscores (95) while digit or underscore
-- [ ] Implement `fun lexHexDigits(ls: LexState): Unit` — consume hex digits and underscores
-- [ ] Implement `fun lexBinDigits(ls: LexState): Unit` — consume `0`, `1`, and underscores
-- [ ] Implement `fun lexOctDigits(ls: LexState): Unit` — consume 0–7 (48–55) and underscores
-- [ ] Implement `fun lexExponent(ls: LexState): Unit` — check for `e`/`E` (101/69); if present, call `lsTake`; then optional `+`/`-`; then `lexDecDigits`
-- [ ] Implement `fun lexNumberBody(ls: LexState): Bool` — dispatches on prefix:
+- [x] Implement `fun isDigit(cp: Int): Bool` — true for 48–57
+- [x] Implement `fun isHexDigit(cp: Int): Bool` — true for 0–9 (48–57), A–F (65–70), a–f (97–102)
+- [x] Implement `fun lexDecDigits(ls: LexState): Unit` — consume decimal digits and underscores (95) while digit or underscore
+- [x] Implement `fun lexHexDigits(ls: LexState): Unit` — consume hex digits and underscores
+- [x] Implement `fun lexBinDigits(ls: LexState): Unit` — consume `0`, `1`, and underscores
+- [x] Implement `fun lexOctDigits(ls: LexState): Unit` — consume 0–7 (48–55) and underscores
+- [x] Implement `fun lexExponent(ls: LexState): Unit` — check for `e`/`E` (101/69); if present, call `lsTake`; then optional `+`/`-`; then `lexDecDigits`
+- [x] Implement `fun lexNumberBody(ls: LexState): Bool` — dispatches on prefix:
   - `0x`/`0X` → `lsTake` twice, `lexHexDigits`, return `False`
   - `0b`/`0B` → `lsTake` twice, `lexBinDigits`, return `False`
   - `0o`/`0O` → `lsTake` twice, `lexOctDigits`, return `False`
   - `.` followed by digit → `lsTake`, `lexDecDigits`, `lexExponent`, return `True`
   - otherwise → `lexDecDigits`; if `.` then digit: `lsTake`, `lexDecDigits`, `lexExponent`, return `True`; else if `e`/`E`: `lexExponent`, return `True`; else return `False`
-- [ ] Implement `fun lexNumber(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; call `lexNumberBody` (returns isFloat); slice text; push `Token.TkFloat` or `Token.TkInt`
+- [x] Implement `fun lexNumber(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; call `lexNumberBody` (returns isFloat); slice text; push `Token.TkFloat` or `Token.TkInt`
 
 **String and char tokenisers:**
-- [ ] Implement `fun hexToIntLoop(hex: String, i: Int, acc: Int): Int` — recursive; each hex char: subtract 48 for `0–9`, 55 for `A–F`, 87 for `a–f`; multiply acc by 16 and add digit
-- [ ] Implement `fun hexToInt(hex: String): Int` — calls `hexToIntLoop(hex, 0, 0)`
-- [ ] Implement `fun lexEscape(ls: LexState): String` — called after consuming `\`; dispatch on next code point:
+- [x] Implement `fun hexToIntLoop(hex: String, i: Int, acc: Int): Int` — recursive; each hex char: subtract 48 for `0–9`, 55 for `A–F`, 87 for `a–f`; multiply acc by 16 and add digit
+- [x] Implement `fun hexToInt(hex: String): Int` — calls `hexToIntLoop(hex, 0, 0)`
+- [x] Implement `fun lexEscape(ls: LexState): String` — called after consuming `\`; dispatch on next code point:
   - 110 `n` → consume, return `"\n"`
   - 114 `r` → consume, return `"\r"`
   - 116 `t` → consume, return `"\t"`
@@ -524,8 +524,8 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   - 92 `\` → consume, return `"\\"`
   - 117 `u` when next is `{` (123) → consume `u{`, call `lexHexDigits`, slice hex, consume `}`, return `Chr.charToString(Chr.fromCode(hexToInt(hex)))`
   - else → consume, return `""` (unknown escape — skip)
-- [ ] Implement `fun lexInterpBody(ls: LexState, depth: Int): Unit` — scan tracking brace depth: `{` (123) → recurse with `depth + 1`; `}` (125) → if depth is 1 consume and return, else recurse with `depth - 1`; else consume and recurse
-- [ ] Implement `fun lexStringBody(ls: LexState, parts: Array<Token.TemplatePart>, litAcc: String): Unit` — state machine loop:
+- [x] Implement `fun lexInterpBody(ls: LexState, depth: Int): Unit` — scan tracking brace depth: `{` (123) → recurse with `depth + 1`; `}` (125) → if depth is 1 consume and return, else recurse with `depth - 1`; else consume and recurse
+- [x] Implement `fun lexStringBody(ls: LexState, parts: Array<Token.TemplatePart>, litAcc: String): Unit` — state machine loop:
   - EOF or LF → stop (unterminated string)
   - `"` (34) → `lsTake`, stop (closing quote)
   - `\` (92) → `lsTake`; call `lexEscape`; append decoded char to `litAcc`; recurse
@@ -533,16 +533,16 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   - `$ident` (36 then `isIdentStart`) → flush `litAcc`; consume `$`; record identStart; call `lexIdentLoop`; push `Token.TPInterp` of sliced ident; recurse with empty acc
   - else → consume char, append to `litAcc`; recurse
   - At end (either stop condition): if `litAcc` is non-empty and template parts exist, push final `Token.TPLiteral(litAcc)`
-- [ ] Implement `fun lexString(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume opening `"`; create `parts: Array<Token.TemplatePart> = Arr.new()`; call `lexStringBody(ls, parts, "")`; slice `rawText = Str.slice(ls.src, start, ls.pos)`; if `Arr.length(parts) == 0` push `Token.TkStr` else push `Token.TkTemplate(Arr.toList(parts))`; both with `rawText` as token text
-- [ ] Implement `fun lexChar(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume `'`; if `\` consume `\` then call `lexEscape` (decoded content for AST use, but raw text for token); else consume one char; consume closing `'`; push `Token.TkChar` with `rawText = Str.slice(ls.src, start, ls.pos)` (includes surrounding `'` delimiters)
+- [x] Implement `fun lexString(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume opening `"`; create `parts: Array<Token.TemplatePart> = Arr.new()`; call `lexStringBody(ls, parts, "")`; slice `rawText = Str.slice(ls.src, start, ls.pos)`; if `Arr.length(parts) == 0` push `Token.TkStr` else push `Token.TkTemplate(Arr.toList(parts))`; both with `rawText` as token text
+- [x] Implement `fun lexChar(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume `'`; if `\` consume `\` then call `lexEscape` (decoded content for AST use, but raw text for token); else consume one char; consume closing `'`; push `Token.TkChar` with `rawText = Str.slice(ls.src, start, ls.pos)` (includes surrounding `'` delimiters)
 
 **Operator/punctuation tokeniser:**
-- [ ] Define `val multiOps: List<String>` — `["=>",":=","==","!=",">=","<=","**","<|","::","|>","->","..."]` (order matters — longer first)
-- [ ] Implement `fun tryMatchMultiOp(ls: LexState, ops: List<String>): String` — for each op, compare `Str.slice(ls.src, ls.pos, ls.pos + Str.length(op))` with op using `Str.equals`; on match, advance pos by `Str.length(op)` (loop with `lsTake`), return the matched op; if list exhausted return `""`
-- [ ] Implement `fun lexOpOrPunct(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; call `tryMatchMultiOp`; if matched push `Token.TkOp` with matched text; else consume one char with `lsTake` and push: if char is in `"+-*/%|&<>=!"` → `Token.TkOp`, else → `Token.TkPunct`
+- [x] Define `val multiOps: List<String>` — `["=>",":=","==","!=",">=","<=","**","<|","::","|>","->","..."]` (order matters — longer first)
+- [x] Implement `fun tryMatchMultiOp(ls: LexState, ops: List<String>): String` — for each op, compare `Str.slice(ls.src, ls.pos, ls.pos + Str.length(op))` with op using `Str.equals`; on match, advance pos by `Str.length(op)` (loop with `lsTake`), return the matched op; if list exhausted return `""`
+- [x] Implement `fun lexOpOrPunct(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; call `tryMatchMultiOp`; if matched push `Token.TkOp` with matched text; else consume one char with `lsTake` and push: if char is in `"+-*/%|&<>=!"` → `Token.TkOp`, else → `Token.TkPunct`
 
 **Main lex loop:**
-- [ ] Implement `fun lexLoop(ls: LexState, tokens: Array<Token.Token>): Unit` — while not `lsEof`:
+- [x] Implement `fun lexLoop(ls: LexState, tokens: Array<Token.Token>): Unit` — while not `lsEof`:
   - Code point 32/9/13/10 (whitespace) → `lexWs`
   - Code points 47+47 (`//`) → `lexLineComment`
   - Code points 47+42 (`/*`) → `lexBlockComment`
@@ -553,9 +553,9 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   - Code point 39 (`'`) → `lexChar`
   - else → `lexOpOrPunct`
   - recurse (tail-recursive loop)
-- [ ] Implement `export fun lex(src: String): List<Token.Token>` — create `LexState { src, len=Str.length(src), mut pos=0, mut line=1, mut col=1 }`; create `tokens: Array<Token.Token> = Arr.new()`; call `lexSkipBom`, `lexSkipShebang`, `lexLoop`; push EOF token `{ kind=Token.TkEof, text="", span={start=ls.pos,...} }`; return `Arr.toList(tokens)`
-- [ ] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/lexer.ks`
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/lexer.test.ks` → confirm all tests pass (**green**)
+- [x] Implement `export fun lex(src: String): List<Token.Token>` — create `LexState { src, len=Str.length(src), mut pos=0, mut line=1, mut col=1 }`; create `tokens: Array<Token.Token> = Arr.new()`; call `lexSkipBom`, `lexSkipShebang`, `lexLoop`; push EOF token `{ kind=Token.TkEof, text="", span={start=ls.pos,...} }`; return `Arr.toList(tokens)`
+- [x] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/lexer.ks`
+- [x] Run: `./kestrel test stdlib/kestrel/dev/parser/lexer.test.ks` → confirm all tests pass (**green**)
 
 ### Phase G — Parser unit tests — *TDD red* (`stdlib/kestrel/dev/parser/parser.test.ks`)
 
