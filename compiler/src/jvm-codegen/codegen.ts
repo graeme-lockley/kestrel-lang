@@ -982,6 +982,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   const env = new Map<string, number>();
   let nextLocal = 0;
   const varNames = new Set<string>();
+  const varSlots = new Set<number>();
   let freeVarToIndex: Map<string, number> | undefined; // set when emitting capturing lambda body
   let localFunNamesInEnv: Set<string> | undefined; // set when emitting block-local lambda (mutual recursion)
 
@@ -1393,7 +1394,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         const slot = env.get(expr.name);
         if (slot !== undefined) {
           mb.emit1b(JvmOp.ALOAD, slot);
-          if (varNames.has(expr.name)) {
+          if (varSlots.has(slot)) {
             mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
             mb.emit1s(JvmOp.LDC_W, cf.string('0'));
             mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'get', '(Ljava/lang/String;)Ljava/lang/Object;'));
@@ -1672,6 +1673,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       case 'BlockExpr': {
         const outerEnv = new Map(env);
         const outerNextLocal = nextLocal;
+        const outerVarSlots = new Set(varSlots);
         const blockEnv = new Map(env);
         let slot = nextLocal;
         const funStmts = expr.stmts.filter((s): s is FunStmt => s.kind === 'FunStmt');
@@ -1696,16 +1698,21 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             mb.emit1b(JvmOp.ASTORE, slot);
             slot++;
           } else if (stmt.kind === 'VarStmt') {
+            // Evaluate RHS first so branchy expressions don't inherit ambient KRecord/set operands.
+            const rhsVarSlot = nextLocal++;
+            emitExpr(stmt.value, mb, tcN, stackDepth);
+            mb.emit1b(JvmOp.ASTORE, rhsVarSlot);
             mb.emit1s(JvmOp.NEW, cf.classRef(KRECORD));
             mb.emit1(JvmOp.DUP);
             mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(KRECORD, '<init>', '()V'));
             mb.emit1(JvmOp.DUP);
             mb.emit1s(JvmOp.LDC_W, cf.string('0'));
-            emitExpr(stmt.value, mb, tcN, stackDepth);
+            mb.emit1b(JvmOp.ALOAD, rhsVarSlot);
             mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
             blockEnv.set(stmt.name, slot);
             env.set(stmt.name, slot);
             varNames.add(stmt.name);
+            varSlots.add(slot);
             mb.emit1b(JvmOp.ASTORE, slot);
             slot++;
           } else if (stmt.kind === 'FunStmt') {
@@ -1934,6 +1941,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         env.clear();
         for (const [k, v] of outerEnv) env.set(k, v);
         nextLocal = outerNextLocal;
+        varSlots.clear();
+        for (const s of outerVarSlots) varSlots.add(s);
         return blockTail;
       }
       case 'CallExpr': {
@@ -3312,7 +3321,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     const prevFree = freeVarToIndex;
     const prevLocalFuns = localFunNamesInEnv;
     const prevVarNames = new Set(varNames);
+    const prevVarSlots = new Set(varSlots);
     varNames.clear();
+    varSlots.clear();
     if (l.freeVarVars) for (const v of l.freeVarVars) varNames.add(v);
     env.clear();
     // Never use slot 0 for temporaries: it holds __env (capturing) or first param (arity >= 1).
@@ -3347,6 +3358,8 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     localFunNamesInEnv = prevLocalFuns;
     varNames.clear();
     for (const v of prevVarNames) varNames.add(v);
+    varSlots.clear();
+    for (const s of prevVarSlots) varSlots.add(s);
     innerClasses.set(className + '$Lambda' + i, buildLambdaClass(className, i, arity, l.capturing, l.async));
     if (l.async) {
       innerClasses.set(className + '$Lambda' + i + '$Payload', buildAsyncLambdaPayloadClass(className, i, arity, l.capturing));
@@ -3396,6 +3409,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       member.params.forEach((p, pi) => paramEnv.set(p.name, pi + 1));
       helperMb.addBranchTarget(caseStart, frameState(paramEnv, group.arity + 1));
       env.clear();
+      varSlots.clear();
       for (const [k, v] of paramEnv) env.set(k, v);
       for (let pi = 0; pi < group.arity; pi++) env.set(`__param$${pi}`, pi + 1);
       nextLocal = group.arity + 1;
@@ -3418,6 +3432,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     helperMb.setMaxs(32, Math.max(Math.max(group.arity + 1, nextLocal) + 8, 70));
     cf.flushLastMethod();
     env.clear();
+    varSlots.clear();
     nextLocal = 0;
   }
 
@@ -3435,6 +3450,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       env.set(fixedKey, i);
     }
     nextLocal = arity;
+    varSlots.clear();
     const payloadXfer = emitExpr(fun.body, payloadMb, undefined);
     payloadMb.setMaxs(32, Math.max(Math.max(arity, nextLocal) + 8, 70));
     if (!payloadXfer) payloadMb.emit1(JvmOp.ARETURN);
@@ -3525,6 +3541,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     }
     nextLocal = arity;
     varNames.clear();
+    varSlots.clear();
     const funLoopHead = mb.length();
     mb.addBranchTarget(funLoopHead, frameState(env, nextLocal));
     const funSelfTail: JvmEmitTailContext = {
@@ -3543,6 +3560,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
 
   nextLocal = 0;
   env.clear();
+  varSlots.clear();
   const initMb = cf.addMethod('$init', '()V', ACC_PUBLIC | ACC_STATIC);
   initMb.emit1s(JvmOp.GETSTATIC, cf.fieldref(className, '$initialized', 'Z'));
   const initGuardPos = initMb.length();
@@ -3558,12 +3576,15 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       initMb.emit1s(JvmOp.PUTSTATIC, cf.fieldref(className, jvmMangleName(v.name), 'Ljava/lang/Object;'));
     } else if (node.kind === 'VarDecl' || node.kind === 'VarStmt') {
       const v = node as VarDecl | { name: string; value: Expr };
+      const rhsInitVarSlot = 66;
+      emitExpr(v.value, initMb);
+      initMb.emit1b(JvmOp.ASTORE, rhsInitVarSlot);
       initMb.emit1s(JvmOp.NEW, cf.classRef(KRECORD));
       initMb.emit1(JvmOp.DUP);
       initMb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(KRECORD, '<init>', '()V'));
       initMb.emit1(JvmOp.DUP);
       initMb.emit1s(JvmOp.LDC_W, cf.string('0'));
-      emitExpr(v.value, initMb);
+      initMb.emit1b(JvmOp.ALOAD, rhsInitVarSlot);
       initMb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
       initMb.emit1s(JvmOp.PUTSTATIC, cf.fieldref(className, jvmMangleName(v.name), 'Ljava/lang/Object;'));
     } else if (node.kind === 'ExprStmt') {
