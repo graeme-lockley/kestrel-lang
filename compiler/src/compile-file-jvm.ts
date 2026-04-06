@@ -44,6 +44,59 @@ function getRequestedImports(imp: ImportDecl): Map<string, string> {
   return m;
 }
 
+function freshenImportedTypeVars(t: InternalType, nextIdRef: { value: number }): InternalType {
+  const varMap = new Map<number, number>();
+
+  const freshIdFor = (oldId: number): number => {
+    const existing = varMap.get(oldId);
+    if (existing != null) return existing;
+    const fresh = nextIdRef.value;
+    nextIdRef.value -= 1;
+    varMap.set(oldId, fresh);
+    return fresh;
+  };
+
+  const walk = (x: InternalType): InternalType => {
+    switch (x.kind) {
+      case 'var':
+        return { kind: 'var', id: freshIdFor(x.id) };
+      case 'prim':
+        return x;
+      case 'arrow':
+        return {
+          kind: 'arrow',
+          params: x.params.map((p) => walk(p)),
+          return: walk(x.return),
+        };
+      case 'record':
+        return {
+          kind: 'record',
+          fields: x.fields.map((f) => ({ ...f, type: walk(f.type) })),
+          row: x.row ? walk(x.row) : undefined,
+        };
+      case 'app':
+        return { kind: 'app', name: x.name, args: x.args.map((a) => walk(a)) };
+      case 'tuple':
+        return { kind: 'tuple', elements: x.elements.map((e) => walk(e)) };
+      case 'union':
+        return { kind: 'union', left: walk(x.left), right: walk(x.right) };
+      case 'inter':
+        return { kind: 'inter', left: walk(x.left), right: walk(x.right) };
+      case 'scheme': {
+        const newVars = x.vars.map((v) => freshIdFor(v));
+        return { kind: 'scheme', vars: newVars, body: walk(x.body) };
+      }
+      case 'namespace': {
+        const bindings = new Map<string, InternalType>();
+        for (const [k, v] of x.bindings) bindings.set(k, walk(v));
+        return { kind: 'namespace', bindings };
+      }
+    }
+  };
+
+  return walk(t);
+}
+
 function diag(file: string, code: string, message: string, span?: Span, source?: string): Diagnostic {
   return {
     severity: 'error',
@@ -530,6 +583,7 @@ export function compileFileJvm(
   const onCompilingFile = options?.onCompilingFile;
   const stalePaths = options?.stalePaths;
   const getClassOutputDir = options?.getClassOutputDir;
+  const importedTypeVarIdRef = { value: -1 };
 
   function compileOne(
     filePath: string
@@ -646,11 +700,12 @@ export function compileFileJvm(
           let t = depOut.exports.get(externalName);
           if (t == null) t = depOut.exportedConstructors.get(externalName);
           if (t != null) {
+            const freshT = freshenImportedTypeVars(t, importedTypeVarIdRef);
             if (depOut.exportedTypeAliases.has(externalName)) {
-              typeAliasBindings.set(localName, t);
+              typeAliasBindings.set(localName, freshT);
               if (depOut.exportedTypeVisibility?.get(externalName) === 'opaque') importOpaqueTypes.add(localName);
             } else {
-              importBindings.set(localName, t);
+              importBindings.set(localName, freshT);
             }
           }
         }
@@ -658,9 +713,9 @@ export function compileFileJvm(
       for (const imp of program.imports) {
         if (imp.kind !== 'NamespaceImport' || imp.spec !== spec) continue;
         const bindings = new Map<string, InternalType>();
-        for (const [name, t] of depOut.exports) bindings.set(name, t);
-        for (const [name, t] of depOut.exportedTypeAliases) bindings.set(name, t);
-        for (const [name, t] of depOut.exportedConstructors) bindings.set(name, t);
+        for (const [name, t] of depOut.exports) bindings.set(name, freshenImportedTypeVars(t, importedTypeVarIdRef));
+        for (const [name, t] of depOut.exportedTypeAliases) bindings.set(name, freshenImportedTypeVars(t, importedTypeVarIdRef));
+        for (const [name, t] of depOut.exportedConstructors) bindings.set(name, freshenImportedTypeVars(t, importedTypeVarIdRef));
         importBindings.set(imp.name, { kind: 'namespace', bindings });
       }
       depResults.push({

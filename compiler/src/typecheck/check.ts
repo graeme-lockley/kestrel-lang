@@ -1515,6 +1515,9 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         }
       } else if (node.kind === 'ExceptionDecl') {
         const adtType: InternalType = { kind: 'app', name: node.name, args: [] };
+        // Register exception type in typeAliases so it resolves correctly in type annotations
+        // (without this, `fun f(...): ParseError` creates a fresh var instead of App("ParseError",[]))
+        typeAliases.set(node.name, adtType);
         const ctorType: InternalType =
           node.fields && node.fields.length > 0
             ? {
