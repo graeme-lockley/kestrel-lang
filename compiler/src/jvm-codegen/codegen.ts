@@ -3458,6 +3458,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       env.set(fixedKey, i);
     }
     nextLocal = arity;
+    varNames.clear();
     const funLoopHead = mb.length();
     mb.addBranchTarget(funLoopHead, frameState(env, nextLocal));
     const funSelfTail: JvmEmitTailContext = {
