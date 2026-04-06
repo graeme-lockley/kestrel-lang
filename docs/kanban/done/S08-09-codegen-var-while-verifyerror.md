@@ -95,3 +95,48 @@ None — this is a compiler defect, not a language spec change.
   need to emit wider (merged) frame types for locals declared inside the loop.
 - Consider whether the fix should widen all conditionally-typed locals to `Object` at the
   loop back-edge target, or use a more precise approach.
+
+---
+
+## Build Notes
+
+**Completed**: 2026-04-06 | **Commit**: 0e63692 (fix/S08-09), merged via 84f00c7  
+**Also includes**: S08-09 fix cherry-picked into fix/S08-10 (commit 2413308)
+
+**Two-Part Root Cause**:
+
+1. **Loop-head frame too narrow**: `WhileExpr` at codegen.ts:2640 created `loopState = frameState(env, nextLocal, ...)` using `nextLocal` BEFORE emitting the loop body. The body allocates new local slots (via ValStmt/VarStmt/IfExpr/MatchExpr), but the back-edge GOTO jumped to a frame that didn't account for them, causing "Inconsistent stackmap frames" VerifyError.
+
+2. **Var assignment RHS with wrong stack depth**: All `varNames.has(...)` assignment paths (AssignStmt) pushed KRecord+String (2+ items) onto the stack, then called `emitExpr(rhs, mb, tcN, stackDepth)` with the original (too-small) stackDepth. Any branch targets inside the RHS (IfExpr/MatchExpr) would see wrong ambient stack depth, causing frame type mismatches when branches later rejoin the handler or other code paths.
+
+**Solution**:
+
+1. **`estimateBodyLocals()` helper**: Added ~35-line function (after `frameState()` at line 122) to count locals in an expression tree without descending into LambdaExpr. Returns count of ValStmt/VarStmt/FunStmt nodes.
+
+2. **Widen loopState frame**: Changed `frameState(env, nextLocal, ...)` to `frameState(env, Math.max(nextLocal + loopBodyExtra, 70), ...)` where `loopBodyExtra = estimateBodyLocals(expr.body)`. The `70` guard covers all hardcoded temp slots (ifResultSlot=53, matchResultSlot=54, scrutSlot=55, etc.).
+
+3. **RHS-first AssignStmt**: Restructured all `varNames.has(...)`, `freeVarToIndex`, `globalVarNames`, and `importedValVar` assignment paths to:
+   - Evaluate RHS FIRST at clean stack (stackDepth)
+   - Store result to a temp slot
+   - Then push KRecord/String/temp and invoke `set`
+   - This ensures branch frames declared inside RHS see correct stack depth
+
+**Key Changes**:
+- `compiler/src/jvm-codegen/codegen.ts` ~line 122: Add `estimateBodyLocals()` function
+- `codegen.ts` WhileExpr (line 2645~): Use `Math.max(nextLocal + estimateBodyLocals(expr.body), 70)` for loopState
+- `codegen.ts` AssignStmt (4 paths for var names): RHS-first emission with temp slot storage
+
+**Verification**:
+- Repro test: `tests/repro/S08-09-while-verifyerror.ks` (while loop with val inside if-expr; output: 15 / 0)
+- Compiler tests: 420/420 pass
+- No regressions in JVM runtime tests
+
+**Unlocks**:
+- Enables natural `val` bindings inside loops (S08-05 parser.ks)
+- Removes the `parseOneParam` helper function extraction workaround
+- Complements S08-08 fix; together they eliminate both ClassCastException and VerifyError
+
+**Related Bugs**:
+- S08-08: Fixed the `varNames` pollution that caused users to use more `var` bindings
+- S08-10: Uses same `estimateBodyLocals()` and RHS-first pattern for TryExpr handler frames
+

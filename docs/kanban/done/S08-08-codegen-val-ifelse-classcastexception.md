@@ -79,3 +79,31 @@ None — this is a compiler defect, not a language spec change.
   and in both branches.
 - After fixing this bug, re-check whether S08-09 and S08-10 still manifest (the `var`
   workarounds used for this bug may be the direct cause of those VerifyErrors).
+
+---
+
+## Build Notes
+
+**Completed**: 2026-04-06 | **Commit**: bccab13 (fix/S08-08), merged via 944ea3f
+
+**Root Cause**: The `varNames` Set at line 948 (in a top-level module codegen function) was declared once per file and never cleared between top-level function body emissions. When `VarStmt` added a `val` name to the set, it persisted for all subsequent functions. This caused a `val` from function B to incorrectly be treated as if it were a `var` from function A, which would apply CHECKCAST KRecord and cause ClassCastException at runtime.
+
+**Solution**: Added `varNames.clear()` before the top-level function body loop (line ~3462) to reset the set for each new function.
+
+**Key Changes**:
+- `compiler/src/jvm-codegen/codegen.ts` @ function emission: Clear `varNames` set before each top-level function body
+
+**Verification**:
+- Repro test: `tests/repro/S08-08-varnames-pollution.ks` (3 functions each with `var result` and `val result` — output: 11 / 43 / 42)
+- Compiler tests: 420/420 pass
+- No regressions in JVM runtime tests
+
+**Unlocks**: 
+- Removes the `val`→`var` workarounds in stdlib/kestrel/dev/parser/parser.ks (S08-05)
+- Enables the parser.ks implementation to use natural `val` bindings throughout
+
+**Related Bugs**: 
+- S08-09 (var-in-while VerifyError) — fixed via separate loopState widening
+- S08-10 (var-in-try VerifyError) — fixed via separate handler frame widening
+- All three bugs were discovered together while working on S08-05; S08-08's workaround amplified S08-09/S08-10
+

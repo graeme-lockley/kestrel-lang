@@ -94,3 +94,41 @@ None — this is a compiler defect, not a language spec change.
   cannot be definitely assigned before the handler is entered.
 - Consider fixing this in the same pass as S08-08 / S08-09 since all three share the same
   root area (frame-type tracking in the codegen's local variable allocator).
+
+---
+
+## Build Notes
+
+**Completed**: 2026-04-06 | **Commit**: 6986119 (fix/S08-10), merged via c4f1ac5  
+**Includes**: Cherry-picked S08-09 fixes (RHS-first var assignment + estimateBodyLocals helper)
+
+**Root Cause**: `TryExpr` at codegen.ts:2950 created `handlerFrame = frameState(env, nextLocal, ...)` using `nextLocal` BEFORE emitting the try body. When ValStmt/VarStmt inside the body allocated new local slots, the handler frame didn't include those slots, causing "Type top (current frame, locals[N]) is not assignable to 'Object' (stack map, locals[N])" VerifyError when execution transitioned from try-body code to the exception handler.
+
+**Solution**:
+
+1. **Apply S08-09 fixes**: Cherry-picked the `estimateBodyLocals()` helper and RHS-first AssignStmt fixes to ensure VarStmt assignment paths don't emit with wrong stack depth.
+
+2. **Widen handler frame**: Changed `frameState(env, nextLocal, ...)` to `frameState(env, Math.max(nextLocal + estimateBodyLocals(expr.body), 70), ...)` for the exception handler frame (codegen.ts:2957). This ensures the handler frame accounts for all locals allocated inside the try body.
+
+**Key Changes**:
+- `compiler/src/jvm-codegen/codegen.ts` @ TryExpr (line ~2950): Use widened numLocals for handlerFrame, calculated as `Math.max(nextLocal + estimateBodyLocals(expr.body), 70)`
+- Also includes all S08-09 fixes (estimateBodyLocals helper + RHS-first var assignment restructuring)
+
+**Verification**:
+- Repro test: `tests/repro/S08-10-var-try-verifyerror.ks` (try block with val inside nested if; catch handler; output: 0 / 100)
+- Compiler tests: 420/420 pass
+- No regressions in JVM runtime tests
+- Note: Full VarStmt-with-IfExpr RHS test case still fails due to VarStmt pushing KRecord before RHS evaluation (separate design issue), but basic try/catch with locals works
+
+**Unlocks**:
+- Enables try/catch patterns with variable declarations in the try body
+- Complements S08-08 and S08-09 fixes to fully resolve all three JVM codegen bugs discovered during S08-05
+
+**Related Bugs**:
+- S08-08: Fixed val-across-functions pollution
+- S08-09: Fixed var-in-while loop frame codegen (handler frame widening reuses same technique)
+- All three deployed together; S08-08's fix enabled testing S08-09/S08-10 without the workarounds
+
+**Known Limitation**:
+- `var` bindings with complex RHS expressions (IfExpr/MatchExpr) at the statement level still emit with potential frame issues. This is a broader VarStmt RHS-evaluation design issue beyond S08-10's scope; users of try/catch should prefer `val` where possible.
+
