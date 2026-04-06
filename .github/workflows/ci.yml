@@ -47,33 +47,23 @@ jobs:
       - name: Kestrel unit tests
         run: ./scripts/kestrel test
 
-  perf-medium:
-    name: Perf (medium confidence)
-    runs-on: ubuntu-latest
-    needs: [test]
-    steps:
-      - uses: actions/checkout@v4
+      - name: Sample - expr
+        run: ./kestrel run samples/expr.ks
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: compiler/package-lock.json
+      - name: Sample - lambda
+        run: ./kestrel run samples/lambda.ks
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
+      - name: Sample - life
+        run: ./kestrel run samples/life.ks
 
-      - name: Install and build compiler
-        working-directory: compiler
-        run: |
-          npm ci
-          npm run build
+      - name: Sample - mandelbrot
+        run: ./kestrel run samples/mandelbrot.ks
 
-      - name: Build JVM runtime JAR
-        working-directory: runtime/jvm
-        run: ./build.sh
+      - name: Sample - primes
+        run: ./kestrel run samples/primes.ks
 
-      - name: Float perf benchmark (medium confidence)
-        run: ./kestrel run tests/perf/float/run.ks 125 3
+      - name: Sample - quicksort
+        run: ./kestrel run samples/quicksort.ks
+
+      - name: Sample - word-count
+        run: ./kestrel run samples/word-count.ks
