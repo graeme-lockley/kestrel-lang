@@ -121,6 +121,42 @@ function frameState(
 }
 
 /**
+ * Estimate the number of additional JVM local variable slots that will be allocated when emitting
+ * `expr`, not counting slots for the expression's own children in nested lambdas/funs.
+ * Used to widen loop-head and exception-handler frame numLocals so the JVM stackmap verifier
+ * accepts back-edge GOTOs and exception handler entries even after inner ValStmt/VarStmt/FunStmt
+ * allocate slots that the outer frame didn't declare.
+ *
+ * Over-estimates are harmless (unused slots are typed as 'top'); under-estimates cause VerifyError.
+ * We add a fixed overhead of 70 to also cover all hardcoded temp slots (ifResultSlot=53,
+ * matchResultSlot=54, scrutSlot=55, PAYLOAD_SLOT=56, EXN_SLOT=57, CALLEE_TEMP=60, ...).
+ */
+function estimateBodyLocals(expr: Expr): number {
+  let count = 0;
+  function walk(e: Expr): void {
+    switch (e.kind) {
+      case 'BlockExpr': {
+        for (const s of e.stmts) {
+          if (s.kind === 'ValStmt' || s.kind === 'VarStmt' || s.kind === 'FunStmt') count++;
+          if (s.kind === 'ExprStmt') walk(s.expr);
+          if (s.kind === 'AssignStmt') { walk(s.target); walk(s.value); }
+        }
+        walk(e.result);
+        return;
+      }
+      case 'IfExpr': walk(e.then); if (e.else) walk(e.else); return;
+      case 'WhileExpr': walk(e.body); return;
+      case 'MatchExpr': for (const c of e.cases) { count += collectPatternVars(c.pattern).length; walk(c.body); } return;
+      case 'TryExpr': walk(e.body); for (const c of e.cases) { count += collectPatternVars(c.pattern).length; walk(c.body); } return;
+      // Do NOT descend into LambdaExpr — it gets its own stack frame.
+      default: return;
+    }
+  }
+  walk(expr);
+  return count;
+}
+
+/**
  * True if an if-arm ends by falling through with one value on the JVM stack (needs astore / goto glue).
  * False for arms that always transfer out via break/continue/never without pushing a value.
  */
@@ -1602,7 +1638,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         return false;
       }
       case 'WhileExpr': {
-        const loopState = frameState(env, nextLocal, undefined, stackDepth);
+        // The loop-head frame must have numLocals large enough to cover all local slots
+        // allocated inside the loop body (named val/var + hardcoded temp slots like
+        // ifResultSlot=53, scrutSlot=55, etc.).  Without this, the JVM stackmap verifier
+        // rejects the back-edge GOTO as "Inconsistent stackmap frames" (S08-09).
+        const loopBodyExtra = estimateBodyLocals(expr.body);
+        const loopState = frameState(env, Math.max(nextLocal + loopBodyExtra, 70), undefined, stackDepth);
         const loopHead = mb.length();
         mb.addBranchTarget(loopHead, loopState);
         emitExpr(expr.cond, mb, tcN, stackDepth);
@@ -1761,21 +1802,30 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             if (stmt.target.kind === 'IdentExpr') {
               const s = blockEnv.get(stmt.target.name);
               if (s !== undefined && varNames.has(stmt.target.name)) {
+                // Evaluate RHS first with clean ambient stack depth, THEN push KRecord+String.
+                // This avoids branch-target stackmap frames seeing typed-as-Object ambient items.
+                const rhs808Slot = nextLocal++;
+                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ASTORE, rhs808Slot);
                 mb.emit1b(JvmOp.ALOAD, s);
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
                 mb.emit1s(JvmOp.LDC_W, cf.string('0'));
-                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ALOAD, rhs808Slot);
                 mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
               } else if (freeVarToIndex?.has(stmt.target.name) && varNames.has(stmt.target.name)) {
+                // Evaluate RHS first, then push env[freeVarIdx] KRecord + string '0'.
+                const rhs809Slot = nextLocal++;
+                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ASTORE, rhs809Slot);
                 mb.emit1b(JvmOp.ALOAD, 0);
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef('[Ljava/lang/Object;'));
                 mb.emit1s(JvmOp.LDC_W, cf.constantInt(freeVarToIndex.get(stmt.target.name)!));
                 mb.emit1(JvmOp.AALOAD);
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
                 mb.emit1s(JvmOp.LDC_W, cf.string('0'));
-                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ALOAD, rhs809Slot);
                 mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
@@ -1785,21 +1835,27 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
               } else if (globalVarNames.has(stmt.target.name)) {
+                const rhsGvSlot = nextLocal++;
+                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ASTORE, rhsGvSlot);
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(className, jvmMangleName(stmt.target.name), 'Ljava/lang/Object;'));
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
                 mb.emit1s(JvmOp.LDC_W, cf.string('0'));
-                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ALOAD, rhsGvSlot);
                 mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
               } else if (options.importedValVarToClass?.get(stmt.target.name) != null) {
                 const importedVarClass = options.importedValVarToClass.get(stmt.target.name)!;
                 const originalName = options.importedNameToOriginal?.get(stmt.target.name) ?? stmt.target.name;
+                const rhsIvSlot = nextLocal++;
+                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ASTORE, rhsIvSlot);
                 mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(importedVarClass, '$init', '()V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(importedVarClass, jvmMangleName(originalName), 'Ljava/lang/Object;'));
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
                 mb.emit1s(JvmOp.LDC_W, cf.string('0'));
-                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ALOAD, rhsIvSlot);
                 mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
@@ -1820,18 +1876,24 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
                 if (nsClass !== className) {
                   mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(nsClass, '$init', '()V'));
                 }
+                const rhsNsSlot = nextLocal++;
+                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ASTORE, rhsNsSlot);
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(nsClass, jvmMangleName(stmt.target.field), 'Ljava/lang/Object;'));
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
                 mb.emit1s(JvmOp.LDC_W, cf.string('0'));
-                emitExpr(stmt.value, mb, tcN, stackDepth);
+                mb.emit1b(JvmOp.ALOAD, rhsNsSlot);
                 mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
                 mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
                 mb.emit1(JvmOp.POP);
               } else {
+              const rhsFldSlot = nextLocal++;
+              emitExpr(stmt.value, mb, tcN, stackDepth);
+              mb.emit1b(JvmOp.ASTORE, rhsFldSlot);
               emitExpr(stmt.target.object, mb, tcN, stackDepth);
               mb.emit1s(JvmOp.CHECKCAST, cf.classRef(KRECORD));
               mb.emit1s(JvmOp.LDC_W, cf.string(stmt.target.field));
-              emitExpr(stmt.value, mb, tcN, stackDepth + 2);
+              mb.emit1b(JvmOp.ALOAD, rhsFldSlot);
               mb.emit1s(JvmOp.INVOKEVIRTUAL, cf.methodref(KRECORD, 'set', '(Ljava/lang/String;Ljava/lang/Object;)V'));
               mb.emit1s(JvmOp.GETSTATIC, cf.fieldref(KUNIT, 'INSTANCE', 'Lkestrel/runtime/KUnit;'));
               mb.emit1(JvmOp.POP);
