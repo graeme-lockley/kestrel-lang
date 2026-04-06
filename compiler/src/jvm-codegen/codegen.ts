@@ -2944,7 +2944,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           mb.emit1s(JvmOp.GOTO, 0);
         }
         const handlerStart = mb.length();
-        const handlerFrame = frameState(env, nextLocal, undefined, 1);
+        // The exception handler frame must have numLocals large enough to cover all local slots
+        // allocated inside the try body.  Without this, the JVM stackmap verifier rejects the
+        // handler entry as having mismatched local variable frames (S08-10).
+        const tryBodyExtra = estimateBodyLocals(expr.body);
+        const handlerFrame = frameState(env, Math.max(nextLocal + tryBodyExtra, 70), undefined, 1);
         handlerFrame.stackItemCpIdx = throwableClassIdx;
         mb.addBranchTarget(handlerStart, handlerFrame);
         const EXN_SLOT = 57;
