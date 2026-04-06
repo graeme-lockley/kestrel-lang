@@ -33,6 +33,9 @@ public final class KRuntime {
     private static final AtomicLong asyncTasksInFlight = new AtomicLong(0);
     /** Signalled only when asyncTasksInFlight reaches zero; held only by awaitAsyncQuiescence. */
     private static final Object quiescenceSignal = new Object();
+    /** Stores the KTask (if any) returned by the entry-point top-level expression (e.g. main())
+     *  so runMain can check for failure after quiescence. */
+    private static volatile Object mainResult;
 
     /** Shared HTTP client — reuses TCP connections and avoids per-request DNS cycling. */
     private static volatile java.net.http.HttpClient sharedHttpClient;
@@ -195,11 +198,33 @@ public final class KRuntime {
         setMainArgs(args);
         initAsyncRuntime();
         boolean waitForAsync = exitWaitEnabled();
+        Throwable mainFailure = null;
         try {
-            init.apply(new Object[0]);
+            Object result = init.apply(new Object[0]);
             if (waitForAsync) {
                 awaitAsyncQuiescence();
             }
+            // After quiescence all tasks are done. Check the top-level KTask (from the
+            // entry-point's main() call stored via storeMainResult) for failure, so that
+            // async errors (e.g. VerifyError / ClassCastException on a virtual thread)
+            // propagate to a non-zero exit code instead of silently exiting 0.
+            Object mr = mainResult;
+            if (mr instanceof KTask) {
+                try {
+                    ((KTask) mr).get();
+                } catch (Throwable t) {
+                    mainFailure = t;
+                }
+            } else if (result instanceof KTask) {
+                // Fallback: if $init returned a KTask directly, check it too.
+                try {
+                    ((KTask) result).get();
+                } catch (Throwable t) {
+                    mainFailure = t;
+                }
+            }
+        } catch (Throwable t) {
+            mainFailure = t;
         } finally {
             if (waitForAsync) {
                 shutdownAsyncRuntime();
@@ -207,6 +232,19 @@ public final class KRuntime {
                 shutdownAsyncRuntimeNow();
             }
         }
+        if (mainFailure != null) {
+            mainFailure.printStackTrace(System.err);
+            System.exit(1);
+        }
+    }
+
+    /**
+     * Called by compiled $init for every top-level ExprStmt instead of discarding
+     * the value with POP.  If the value is a KTask (async main()), runMain() will
+     * check it for failure after quiescence so that async errors produce exit code 1.
+     */
+    public static void storeMainResult(Object value) {
+        mainResult = value;
     }
 
     public static void println(Object... args) {

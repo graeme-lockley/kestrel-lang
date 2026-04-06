@@ -3592,7 +3592,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       initMb.emit1s(JvmOp.PUTSTATIC, cf.fieldref(className, jvmMangleName(v.name), 'Ljava/lang/Object;'));
     } else if (node.kind === 'ExprStmt') {
       emitExpr(node.expr, initMb);
-      initMb.emit1(JvmOp.POP);
+      // Instead of POP, store the result so runMain can check for async failure
+      // (e.g. the KTask returned by `main()` at the bottom of a script).
+      initMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'storeMainResult', '(Ljava/lang/Object;)V'));
     }
   }
   const initEndPos = initMb.length();
