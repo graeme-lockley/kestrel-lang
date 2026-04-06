@@ -2633,12 +2633,12 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1b(JvmOp.ASTORE, listTemp);
         for (let i = expr.elements.length - 1; i >= 0; i--) {
           const el = expr.elements[i];
-          if (el && typeof el === 'object' && 'spread' in el) {
+          if (el && typeof el === 'object' && (el as { spread?: unknown }).spread === true) {
             emitExpr((el as { expr: Expr }).expr, mb, tcN);
           } else {
             emitExpr(el as Expr, mb, tcN);
           }
-          const elExpr = el && typeof el === 'object' && 'spread' in el ? (el as { expr: Expr }).expr : (el as Expr);
+          const elExpr = el && typeof el === 'object' && (el as { spread?: unknown }).spread === true ? (el as { expr: Expr }).expr : (el as Expr);
           if (elExpr && (elExpr.kind === 'IfExpr' || elExpr.kind === 'MatchExpr')) {
             mb.emit1b(JvmOp.ALOAD, elExpr.kind === 'IfExpr' ? 53 : 54);
           }

@@ -174,64 +174,64 @@ Do NOT skip ahead or implement before writing the corresponding tests.
 
 ### Phase C — AST unit tests — *TDD red* (`stdlib/kestrel/dev/parser/ast.test.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/ast.test.ks` with imports for test harness and all exported types from `kestrel:dev/parser/ast`
-- [ ] Add `export fun run(): Unit` entry point
+- [x] Create `stdlib/kestrel/dev/parser/ast.test.ks` with imports for test harness and all exported types from `kestrel:dev/parser/ast`
+- [x] Add `export fun run(): Unit` entry point
 
 **AstType construction tests:**
-- [ ] Construct `ATIdent("Foo")`, match to extract name, assert equals `"Foo"`
-- [ ] Construct `ATArrow([ATPrim("Int")], ATPrim("Bool"))`, match params list and return type
-- [ ] Construct `ATApp("List", [ATPrim("Int")])`, match name and args
-- [ ] Construct `ATRecord([{ name = "x", mut_ = False, type_ = ATPrim("Int") }])`, match fields list
-- [ ] Construct `ATTuple([ATPrim("Int"), ATPrim("Bool")])`, match list length is 2
-- [ ] Construct `ATUnion(ATIdent("A"), ATIdent("B"))`, match both sides
-- [ ] Construct `ATQualified("Mod", "T")`, match both strings
+- [x] Construct `ATIdent("Foo")`, match to extract name, assert equals `"Foo"`
+- [x] Construct `ATArrow([ATPrim("Int")], ATPrim("Bool"))`, match params list and return type
+- [x] Construct `ATApp("List", [ATPrim("Int")])`, match name and args
+- [x] Construct `ATRecord([{ name = "x", mut_ = False, type_ = ATPrim("Int") }])`, match fields list
+- [x] Construct `ATTuple([ATPrim("Int"), ATPrim("Bool")])`, match list length is 2
+- [x] Construct `ATUnion(ATIdent("A"), ATIdent("B"))`, match both sides
+- [x] Construct `ATQualified("Mod", "T")`, match both strings
 
 **Pattern construction tests:**
-- [ ] Construct `PWild`, match fires the `PWild` branch
-- [ ] Construct `PVar("x")`, match to extract name, assert equals `"x"`
-- [ ] Construct `PLit("int", "42")`, match kind and value
-- [ ] Construct `PCon("Some", [{ name = "__field_0", pattern = Some(PVar("x")) }])`, match name and field
-- [ ] Construct `PList([PWild], Some("rest"))`, match list and rest name
-- [ ] Construct `PCons(PVar("h"), PVar("t"))`, match head and tail
-- [ ] Construct `PTuple([PVar("a"), PVar("b")])`, match elements list length is 2
+- [x] Construct `PWild`, match fires the `PWild` branch
+- [x] Construct `PVar("x")`, match to extract name, assert equals `"x"`
+- [x] Construct `PLit("int", "42")`, match kind and value
+- [x] Construct `PCon("Some", [{ name = "__field_0", pattern = Some(PVar("x")) }])`, match name and field
+- [x] Construct `PList([PWild], Some("rest"))`, match list and rest name
+- [x] Construct `PCons(PVar("h"), PVar("t"))`, match head and tail
+- [x] Construct `PTuple([PVar("a"), PVar("b")])`, match elements list length is 2
 
 **Expr construction tests:**
-- [ ] Construct `ELit("int", "42")`, match kind is `"int"` and value is `"42"`
-- [ ] Construct `EIdent("x")`, match name is `"x"`
-- [ ] Construct `ECall(EIdent("f"), [ELit("int", "1")])`, match callee and args
-- [ ] Construct `EBinary("+", ELit("int","1"), ELit("int","2"))`, match op and operands
-- [ ] Construct `EIf(EIdent("c"), EIdent("t"), Some(EIdent("e")))`, match all three parts
-- [ ] Construct `EIf(EIdent("c"), EIdent("t"), None)`, confirm else is `None`
-- [ ] Construct `ELambda(False, [], [{ name="x", type_=None }], EIdent("x"))`, match params list
-- [ ] Construct `ETemplate([TmplLit("hello "), TmplExpr(EIdent("name"))])`, match both parts
-- [ ] Construct `ERecord(None, [{ name="x", mut_=False, value=ELit("int","1") }])`, match spread is None and fields
-- [ ] Construct `ENever`, match fires the `ENever` branch
+- [x] Construct `ELit("int", "42")`, match kind is `"int"` and value is `"42"`
+- [x] Construct `EIdent("x")`, match name is `"x"`
+- [x] Construct `ECall(EIdent("f"), [ELit("int", "1")])`, match callee and args
+- [x] Construct `EBinary("+", ELit("int","1"), ELit("int","2"))`, match op and operands
+- [x] Construct `EIf(EIdent("c"), EIdent("t"), Some(EIdent("e")))`, match all three parts
+- [x] Construct `EIf(EIdent("c"), EIdent("t"), None)`, confirm else is `None`
+- [x] Construct `ELambda(False, [], [{ name="x", type_=None }], EIdent("x"))`, match params list
+- [x] Construct `ETemplate([TmplLit("hello "), TmplExpr(EIdent("name"))])`, match both parts
+- [x] Construct `ERecord(None, [{ name="x", mut_=False, value=ELit("int","1") }])`, match spread is None and fields
+- [x] Construct `ENever`, match fires the `ENever` branch
 
 **Stmt construction tests:**
-- [ ] Construct `SVal("x", None, ELit("int","1"))`, match name and expr
-- [ ] Construct `SAssign(EIdent("x"), ELit("int","2"))`, match target and rhs
-- [ ] Construct `SBreak`, match fires
-- [ ] Construct `SContinue`, match fires
-- [ ] Construct `SFun(False, "f", [], [], ATPrim("Unit"), ELit("unit","()"))`, match name
+- [x] Construct `SVal("x", None, ELit("int","1"))`, match name and expr
+- [x] Construct `SAssign(EIdent("x"), ELit("int","2"))`, match target and rhs
+- [x] Construct `SBreak`, match fires
+- [x] Construct `SContinue`, match fires
+- [x] Construct `SFun(False, "f", [], [], ATPrim("Unit"), ELit("unit","()"))`, match name
 
 **ImportDecl construction tests:**
-- [ ] Construct `IDNamed("m", [{ external="foo", local="bar" }])`, match spec and importspecs
-- [ ] Construct `IDNamespace("m", "M")`, match spec and alias
-- [ ] Construct `IDSideEffect("m")`, match spec
+- [x] Construct `IDNamed("m", [{ external="foo", local="bar" }])`, match spec and importspecs
+- [x] Construct `IDNamespace("m", "M")`, match spec and alias
+- [x] Construct `IDSideEffect("m")`, match spec
 
 **TopDecl construction tests:**
-- [ ] Construct `TDSVal("x", ELit("int","1"))`, match name and expr
-- [ ] Construct `TDExport(EIStar("m"))`, match inner spec
-- [ ] Construct `TDType(TypeDecl{ visibility="local", name="T", typeParams=[], body=TBAlias(ATPrim("Int")) })`, match fields
+- [x] Construct `TDSVal("x", ELit("int","1"))`, match name and expr
+- [x] Construct `TDExport(EIStar("m"))`, match inner spec
+- [x] Construct `TDType(TypeDecl{ visibility="local", name="T", typeParams=[], body=TBAlias(ATPrim("Int")) })`, match fields
 
 **Program construction test:**
-- [ ] Construct `{ imports = [], body = [TDSExpr(ELit("unit","()"))] }`, match imports length 0, body length 1
+- [x] Construct `{ imports = [], body = [TDSExpr(ELit("unit","()"))] }`, match imports length 0, body length 1
 
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/ast.test.ks` → confirm compile error (`ast.ks` not yet written — **red phase**)
+- [x] Run: `./kestrel test stdlib/kestrel/dev/parser/ast.test.ks` → confirm compile error (`ast.ks` not yet written — **red phase**)
 
 ### Phase D — AST types — *TDD green* (`stdlib/kestrel/dev/parser/ast.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/ast.ks` with imports:
+- [x] Create `stdlib/kestrel/dev/parser/ast.ks` with imports:
   ```
   import * as Lst from "kestrel:data/list"
   import * as Token from "kestrel:dev/parser/token"
@@ -239,7 +239,7 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   Naming conventions: field/type names clashing with reserved words get a trailing underscore (`type_`, `mut_`, `async_`).
 
 **Type-level types:**
-- [ ] Define `export type AstType` sum type with all 10 variants:
+- [x] Define `export type AstType` sum type with all 10 variants:
   - `ATIdent(String)` — simple type name e.g. `"Foo"`
   - `ATQualified(String, String)` — qualified `Mod.T` (module name, type name)
   - `ATPrim(String)` — primitive: `"Int"`, `"Float"`, `"Bool"`, `"String"`, `"Unit"`, `"Char"`
@@ -250,16 +250,16 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   - `ATUnion(AstType, AstType)` — union `A | B`
   - `ATInter(AstType, AstType)` — intersection `A & B`
   - `ATTuple(List<AstType>)` — tuple product `A * B * C`
-- [ ] Define `export type TypeField = { name: String, mut_: Bool, type_: AstType }` (forward ref to `AstType` — declare `AstType` first)
+- [x] Define `export type TypeField = { name: String, mut_: Bool, type_: AstType }` (forward ref to `AstType` — declare `AstType` first)
 
 **Parameter type:**
-- [ ] Define `export type Param = { name: String, type_: Option<AstType> }`
+- [x] Define `export type Param = { name: String, type_: Option<AstType> }`
 
 **Pattern types:**
-- [ ] Define `export type ConField = { name: String, pattern: Option<Pattern> }`
+- [x] Define `export type ConField = { name: String, pattern: Option<Pattern> }`
   - Positional patterns use names `"__field_0"`, `"__field_1"`, … (matching TypeScript behaviour)
   - Record-style patterns use the field name; `pattern = None` means bind the field name as a variable
-- [ ] Define `export type Pattern` sum type with all 7 variants:
+- [x] Define `export type Pattern` sum type with all 7 variants:
   - `PWild` — wildcard `_`
   - `PVar(String)` — variable binding `x`
   - `PLit(String, String)` — literal pattern `(kind, raw-value)` e.g. `("int","42")`
@@ -269,12 +269,12 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   - `PTuple(List<Pattern>)` — tuple pattern `(a, b, c)`
 
 **Expression types:**
-- [ ] Define `export type RecField = { name: String, mut_: Bool, value: Expr }`
-- [ ] Define `export type ListElem = LElem(Expr) | LSpread(Expr)`
-- [ ] Define `export type TmplPart = TmplLit(String) | TmplExpr(Expr)`
-- [ ] Define `export type Case_ = { pattern: Pattern, body: Expr }`
-- [ ] Define `export type Block = { stmts: List<Stmt>, result: Expr }`
-- [ ] Define `export type Expr` sum type with all 22 variants:
+- [x] Define `export type RecField = { name: String, mut_: Bool, value: Expr }`
+- [x] Define `export type ListElem = LElem(Expr) | LSpread(Expr)`
+- [x] Define `export type TmplPart = TmplLit(String) | TmplExpr(Expr)`
+- [x] Define `export type Case_ = { pattern: Pattern, body: Expr }`
+- [x] Define `export type Block = { stmts: List<Stmt>, result: Expr }`
+- [x] Define `export type Expr` sum type with all 22 variants:
   - `ELit(String, String)` — literal `(kind, raw-value)`; kinds: `"int"`,`"float"`,`"string"`,`"char"`,`"true"`,`"false"`,`"unit"`
   - `EIdent(String)` — identifier name
   - `ECall(Expr, List<Expr>)` — function call `f(args)`
@@ -299,7 +299,7 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   - `ENever` — synthetic unreachable node (result position of `break`/`continue`)
 
 **Statement types:**
-- [ ] Define `export type Stmt` sum type with all 7 variants:
+- [x] Define `export type Stmt` sum type with all 7 variants:
   - `SVal(String, Option<AstType>, Expr)` — `val name : T? = e`
   - `SVar(String, Option<AstType>, Expr)` — `var name : T? = e`
   - `SAssign(Expr, Expr)` — `target := rhs`
@@ -309,27 +309,27 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   - `SContinue` — `continue`
 
 **Declaration types:**
-- [ ] Define `export type CtorDef = { name: String, params: List<AstType> }`
-- [ ] Define `export type TypeBody = TBAdt(List<CtorDef>) | TBAlias(AstType)`
-- [ ] Define `export type FunDecl = { exported: Bool, async_: Bool, name: String, typeParams: List<String>, params: List<Param>, retType: AstType, body: Expr }`
-- [ ] Define `export type ExternFunDecl = { exported: Bool, name: String, typeParams: List<String>, params: List<Param>, retType: AstType, jvmDesc: String }`
-- [ ] Define `export type ExternTypeDecl = { visibility: String, name: String, typeParams: List<String>, jvmClass: String }` (visibility: `"local"` | `"opaque"` | `"export"`)
-- [ ] Define `export type ExternOverride = { name: String, params: List<Param>, retType: AstType }`
-- [ ] Define `export type ExternImportDecl = { target: String, alias: String, overrides: List<ExternOverride> }`
-- [ ] Define `export type TypeDecl = { visibility: String, name: String, typeParams: List<String>, body: TypeBody }`
-- [ ] Define `export type ExceptionDecl = { exported: Bool, name: String, fields: Option<List<TypeField>> }`
+- [x] Define `export type CtorDef = { name: String, params: List<AstType> }`
+- [x] Define `export type TypeBody = TBAdt(List<CtorDef>) | TBAlias(AstType)`
+- [x] Define `export type FunDecl = { exported: Bool, async_: Bool, name: String, typeParams: List<String>, params: List<Param>, retType: AstType, body: Expr }`
+- [x] Define `export type ExternFunDecl = { exported: Bool, name: String, typeParams: List<String>, params: List<Param>, retType: AstType, jvmDesc: String }`
+- [x] Define `export type ExternTypeDecl = { visibility: String, name: String, typeParams: List<String>, jvmClass: String }` (visibility: `"local"` | `"opaque"` | `"export"`)
+- [x] Define `export type ExternOverride = { name: String, params: List<Param>, retType: AstType }`
+- [x] Define `export type ExternImportDecl = { target: String, alias: String, overrides: List<ExternOverride> }`
+- [x] Define `export type TypeDecl = { visibility: String, name: String, typeParams: List<String>, body: TypeBody }`
+- [x] Define `export type ExceptionDecl = { exported: Bool, name: String, fields: Option<List<TypeField>> }`
 
 **Import / export / program types:**
-- [ ] Define `export type ImportSpec = { external: String, local: String }`
-- [ ] Define `export type ImportDecl` sum type:
+- [x] Define `export type ImportSpec = { external: String, local: String }`
+- [x] Define `export type ImportDecl` sum type:
   - `IDNamed(String, List<ImportSpec>)` — `import { x, y as z } from "spec"`
   - `IDNamespace(String, String)` — `import * as M from "spec"` (spec, alias)
   - `IDSideEffect(String)` — `import "spec"`
-- [ ] Define `export type ExportInner` sum type:
+- [x] Define `export type ExportInner` sum type:
   - `EIStar(String)` — `export * from "spec"`
   - `EINamed(String, List<ImportSpec>)` — `export { x } from "spec"`
   - `EIDecl(TopDecl)` — `export <decl>`
-- [ ] Define `export type TopDecl` sum type with all 13 variants:
+- [x] Define `export type TopDecl` sum type with all 13 variants:
   - `TDFun(FunDecl)`
   - `TDExternFun(ExternFunDecl)`
   - `TDExternImport(ExternImportDecl)`
@@ -343,9 +343,9 @@ Do NOT skip ahead or implement before writing the corresponding tests.
   - `TDSVar(String, Expr)` — top-level `var name = e` (NO type annotation, NO export)
   - `TDSAssign(Expr, Expr)` — top-level assignment statement
   - `TDSExpr(Expr)` — top-level expression statement
-- [ ] Define `export type Program = { imports: List<ImportDecl>, body: List<TopDecl> }`
-- [ ] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/ast.ks`
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/ast.test.ks` → confirm all tests pass (**green**)
+- [x] Define `export type Program = { imports: List<ImportDecl>, body: List<TopDecl> }`
+- [x] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/ast.ks`
+- [x] Run: `./kestrel test stdlib/kestrel/dev/parser/ast.test.ks` → confirm all tests pass (**green**)
 
 ### Phase E — Lexer unit tests — *TDD red* (`stdlib/kestrel/dev/parser/lexer.test.ks`)
 
@@ -933,3 +933,6 @@ Do NOT skip ahead or implement before writing the corresponding tests.
 ## Build notes
 
 - 2026-04-06: Started implementation. TDD structure: test file written and red-confirmed before each impl phase. Story restructured so test phases (A/C/E/G) precede their matching impl phases (B/D/F/H).
+- 2026-04-06: Phases A+B complete. token.ks and token.test.ks created; 13/13 tests green.
+- 2026-04-06: **Compiler bug discovered and fixed (Phase C/D).** When a `RecordExpr` (which has `spread?: Expr` in its TypeScript interface) appeared as an element of a list literal `[{...}]`, the JVM codegen incorrectly classified it as a *list spread element* due to checking `'spread' in el` (which is `true` for any object with the key present, even if `undefined`). The fix: changed the check in `compiler/src/jvm-codegen/codegen.ts` (ListExpr handler) from `'spread' in el` to `(el as { spread?: unknown }).spread === true`, so only genuine spread-list elements (`{ spread: true, expr: Expr }`) take the spread code path. All 420 compiler tests still pass after the fix.
+- 2026-04-06: Phases C+D complete. ast.ks and ast.test.ks created; 51/51 tests green.
