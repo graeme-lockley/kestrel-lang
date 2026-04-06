@@ -90,13 +90,48 @@ required (the formatter only formats valid programs; compilation errors use the 
 
 ## Tasks
 
-Work in phase order A → H. Each phase ends with a compile/test check and can be committed
-independently. Do NOT skip phases or attempt parser before lexer — each phase depends on
-the previous.
+Follow **TDD order** A → H. Phases pair as: (A tests, B impl), (C tests, D impl), (E tests, F impl), (G tests, H impl).
+
+**Within each pair:**
+1. Write the full test file first (the *-red* phase) — run tests to confirm compile error (module not
+   yet written is the expected failure).
+2. Implement the module (the *-green* phase) — run tests again to confirm all pass.
+
+Do NOT skip ahead or implement before writing the corresponding tests.
 
 ---
 
-### Phase A — Token types (`stdlib/kestrel/dev/parser/token.ks`)
+### Phase A — Token unit tests — *TDD red* (`stdlib/kestrel/dev/parser/token.test.ks`)
+
+- [ ] Create `stdlib/kestrel/dev/parser/token.test.ks` with imports:
+  ```
+  import { run as testRun, group, test, assertEqual, assertTrue, assertFalse } from "kestrel:tools/test"
+  import * as Token from "kestrel:dev/parser/token"
+  ```
+- [ ] Add `export fun run(): Unit` entry point calling `testRun` with all groups
+
+**`Token.spanZero` tests:**
+- [ ] Assert `Token.spanZero().start == 0`
+- [ ] Assert `Token.spanZero().end == 0`
+- [ ] Assert `Token.spanZero().line == 1`
+- [ ] Assert `Token.spanZero().col == 1`
+
+**`Token.isTrivia` tests:**
+- [ ] Assert `Token.isTrivia({ kind = Token.TkWs, text = " ", span = Token.spanZero() }) == True`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkLineComment, text = "// x", span = Token.spanZero() }) == True`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkBlockComment, text = "/* */", span = Token.spanZero() }) == True`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkIdent, text = "x", span = Token.spanZero() }) == False`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkKw, text = "fun", span = Token.spanZero() }) == False`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkEof, text = "", span = Token.spanZero() }) == False`
+
+**`Token.TemplatePart` construction tests:**
+- [ ] Construct `Token.TPLiteral("hello")`, match to extract string, assert equals `"hello"`
+- [ ] Construct `Token.TPInterp("x + 1")`, match to extract string, assert equals `"x + 1"`
+- [ ] Construct `Token.TkTemplate([Token.TPLiteral("a"), Token.TPInterp("x")])`, match to verify list length is 2
+
+- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/token.test.ks` → confirm compile error (`token.ks` not yet written — **red phase**)
+
+### Phase B — Token types — *TDD green* (`stdlib/kestrel/dev/parser/token.ks`)
 
 - [ ] Create `stdlib/kestrel/dev/parser/token.ks` with module-level imports: `import * as Lst from "kestrel:data/list"`
 - [ ] Define `export type Span = { start: Int, end: Int, line: Int, col: Int }`
@@ -135,38 +170,66 @@ the previous.
 - [ ] Implement `export fun isTrivia(t: Token): Bool` — returns `True` for `TkWs`, `TkLineComment`, `TkBlockComment`; `False` for all other variants
 - [ ] Implement `export fun spanZero(): Span` — returns `{ start = 0, end = 0, line = 1, col = 1 }`
 - [ ] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/token.ks`
+- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/token.test.ks` → confirm all tests pass (**green**)
 
-### Phase B — Token unit tests (`stdlib/kestrel/dev/parser/token.test.ks`)
+### Phase C — AST unit tests — *TDD red* (`stdlib/kestrel/dev/parser/ast.test.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/token.test.ks` with imports:
-  ```
-  import { run as testRun, group, test, assertEqual, assertTrue, assertFalse } from "kestrel:tools/test"
-  import * as Token from "kestrel:dev/parser/token"
-  ```
-- [ ] Add `export fun run(): Unit` entry point calling `testRun` with all groups
+- [ ] Create `stdlib/kestrel/dev/parser/ast.test.ks` with imports for test harness and all exported types from `kestrel:dev/parser/ast`
+- [ ] Add `export fun run(): Unit` entry point
 
-**`Token.spanZero` tests:**
-- [ ] Assert `Token.spanZero().start == 0`
-- [ ] Assert `Token.spanZero().end == 0`
-- [ ] Assert `Token.spanZero().line == 1`
-- [ ] Assert `Token.spanZero().col == 1`
+**AstType construction tests:**
+- [ ] Construct `ATIdent("Foo")`, match to extract name, assert equals `"Foo"`
+- [ ] Construct `ATArrow([ATPrim("Int")], ATPrim("Bool"))`, match params list and return type
+- [ ] Construct `ATApp("List", [ATPrim("Int")])`, match name and args
+- [ ] Construct `ATRecord([{ name = "x", mut_ = False, type_ = ATPrim("Int") }])`, match fields list
+- [ ] Construct `ATTuple([ATPrim("Int"), ATPrim("Bool")])`, match list length is 2
+- [ ] Construct `ATUnion(ATIdent("A"), ATIdent("B"))`, match both sides
+- [ ] Construct `ATQualified("Mod", "T")`, match both strings
 
-**`Token.isTrivia` tests:**
-- [ ] Assert `Token.isTrivia({ kind = Token.TkWs, text = " ", span = Token.spanZero() }) == True`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkLineComment, text = "// x", span = Token.spanZero() }) == True`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkBlockComment, text = "/* */", span = Token.spanZero() }) == True`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkIdent, text = "x", span = Token.spanZero() }) == False`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkKw, text = "fun", span = Token.spanZero() }) == False`
-- [ ] Assert `Token.isTrivia({ kind = Token.TkEof, text = "", span = Token.spanZero() }) == False`
+**Pattern construction tests:**
+- [ ] Construct `PWild`, match fires the `PWild` branch
+- [ ] Construct `PVar("x")`, match to extract name, assert equals `"x"`
+- [ ] Construct `PLit("int", "42")`, match kind and value
+- [ ] Construct `PCon("Some", [{ name = "__field_0", pattern = Some(PVar("x")) }])`, match name and field
+- [ ] Construct `PList([PWild], Some("rest"))`, match list and rest name
+- [ ] Construct `PCons(PVar("h"), PVar("t"))`, match head and tail
+- [ ] Construct `PTuple([PVar("a"), PVar("b")])`, match elements list length is 2
 
-**`Token.TemplatePart` construction tests:**
-- [ ] Construct `Token.TPLiteral("hello")`, match to extract string, assert equals `"hello"`
-- [ ] Construct `Token.TPInterp("x + 1")`, match to extract string, assert equals `"x + 1"`
-- [ ] Construct `Token.TkTemplate([Token.TPLiteral("a"), Token.TPInterp("x")])`, match to verify list length is 2
+**Expr construction tests:**
+- [ ] Construct `ELit("int", "42")`, match kind is `"int"` and value is `"42"`
+- [ ] Construct `EIdent("x")`, match name is `"x"`
+- [ ] Construct `ECall(EIdent("f"), [ELit("int", "1")])`, match callee and args
+- [ ] Construct `EBinary("+", ELit("int","1"), ELit("int","2"))`, match op and operands
+- [ ] Construct `EIf(EIdent("c"), EIdent("t"), Some(EIdent("e")))`, match all three parts
+- [ ] Construct `EIf(EIdent("c"), EIdent("t"), None)`, confirm else is `None`
+- [ ] Construct `ELambda(False, [], [{ name="x", type_=None }], EIdent("x"))`, match params list
+- [ ] Construct `ETemplate([TmplLit("hello "), TmplExpr(EIdent("name"))])`, match both parts
+- [ ] Construct `ERecord(None, [{ name="x", mut_=False, value=ELit("int","1") }])`, match spread is None and fields
+- [ ] Construct `ENever`, match fires the `ENever` branch
 
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/token.test.ks`
+**Stmt construction tests:**
+- [ ] Construct `SVal("x", None, ELit("int","1"))`, match name and expr
+- [ ] Construct `SAssign(EIdent("x"), ELit("int","2"))`, match target and rhs
+- [ ] Construct `SBreak`, match fires
+- [ ] Construct `SContinue`, match fires
+- [ ] Construct `SFun(False, "f", [], [], ATPrim("Unit"), ELit("unit","()"))`, match name
 
-### Phase C — AST types (`stdlib/kestrel/dev/parser/ast.ks`)
+**ImportDecl construction tests:**
+- [ ] Construct `IDNamed("m", [{ external="foo", local="bar" }])`, match spec and importspecs
+- [ ] Construct `IDNamespace("m", "M")`, match spec and alias
+- [ ] Construct `IDSideEffect("m")`, match spec
+
+**TopDecl construction tests:**
+- [ ] Construct `TDSVal("x", ELit("int","1"))`, match name and expr
+- [ ] Construct `TDExport(EIStar("m"))`, match inner spec
+- [ ] Construct `TDType(TypeDecl{ visibility="local", name="T", typeParams=[], body=TBAlias(ATPrim("Int")) })`, match fields
+
+**Program construction test:**
+- [ ] Construct `{ imports = [], body = [TDSExpr(ELit("unit","()"))] }`, match imports length 0, body length 1
+
+- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/ast.test.ks` → confirm compile error (`ast.ks` not yet written — **red phase**)
+
+### Phase D — AST types — *TDD green* (`stdlib/kestrel/dev/parser/ast.ks`)
 
 - [ ] Create `stdlib/kestrel/dev/parser/ast.ks` with imports:
   ```
@@ -282,65 +345,110 @@ the previous.
   - `TDSExpr(Expr)` — top-level expression statement
 - [ ] Define `export type Program = { imports: List<ImportDecl>, body: List<TopDecl> }`
 - [ ] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/ast.ks`
+- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/ast.test.ks` → confirm all tests pass (**green**)
 
-### Phase D — AST unit tests (`stdlib/kestrel/dev/parser/ast.test.ks`)
+### Phase E — Lexer unit tests — *TDD red* (`stdlib/kestrel/dev/parser/lexer.test.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/ast.test.ks` with imports for test harness and all exported types from `kestrel:dev/parser/ast`
+- [ ] Create `stdlib/kestrel/dev/parser/lexer.test.ks` with imports for test harness, `lex`, and the `Token` namespace from `kestrel:dev/parser/token`
 - [ ] Add `export fun run(): Unit` entry point
+- [ ] Implement helper `fun kindOf(src: String): Token.TokenKind` — `lex(src)` then return kind of first token
+- [ ] Implement helper `fun textOf(src: String): String` — `lex(src)` then return text of first token
+- [ ] Implement helper `fun allKinds(src: String): List<Token.TokenKind>` — `lex(src)` then map `.kind`
+- [ ] Implement helper `fun joinTexts(src: String): String` — `lex(src)` then `Str.join("", Lst.map(tokens, (t) => t.text))`
 
-**AstType construction tests:**
-- [ ] Construct `ATIdent("Foo")`, match to extract name, assert equals `"Foo"`
-- [ ] Construct `ATArrow([ATPrim("Int")], ATPrim("Bool"))`, match params list and return type
-- [ ] Construct `ATApp("List", [ATPrim("Int")])`, match name and args
-- [ ] Construct `ATRecord([{ name = "x", mut_ = False, type_ = ATPrim("Int") }])`, match fields list
-- [ ] Construct `ATTuple([ATPrim("Int"), ATPrim("Bool")])`, match list length is 2
-- [ ] Construct `ATUnion(ATIdent("A"), ATIdent("B"))`, match both sides
-- [ ] Construct `ATQualified("Mod", "T")`, match both strings
+**Round-trip tests:**
+- [ ] `joinTexts("") == ""`
+- [ ] `joinTexts("fun main(): Unit = ()")` equals source
+- [ ] `joinTexts("  val x = 1  ")` equals `"  val x = 1  "` (whitespace preserved)
+- [ ] `joinTexts("// comment\nval x = 1")` equals original (line comment and newline preserved)
+- [ ] `joinTexts("/* block */val x = 1")` equals original (block comment preserved)
+- [ ] `joinTexts("\"hello\"")` equals `"\"hello\""` (string quotes in token text)
+- [ ] `joinTexts("'a'")` equals `"'a'"` (char quotes in token text)
+- [ ] `joinTexts("x // c\ny")` equals original (comment between two identifiers preserved)
 
-**Pattern construction tests:**
-- [ ] Construct `PWild`, match fires the `PWild` branch
-- [ ] Construct `PVar("x")`, match to extract name, assert equals `"x"`
-- [ ] Construct `PLit("int", "42")`, match kind and value
-- [ ] Construct `PCon("Some", [{ name = "__field_0", pattern = Some(PVar("x")) }])`, match name and field
-- [ ] Construct `PList([PWild], Some("rest"))`, match list and rest name
-- [ ] Construct `PCons(PVar("h"), PVar("t"))`, match head and tail
-- [ ] Construct `PTuple([PVar("a"), PVar("b")])`, match elements list length is 2
+**Whitespace and comment token tests:**
+- [ ] `kindOf("  ")` equals `Token.TkWs`
+- [ ] `kindOf("\n")` equals `Token.TkWs`
+- [ ] `textOf("\t ")` equals `"\t "` (raw tabs and spaces)
+- [ ] `kindOf("// hi")` equals `Token.TkLineComment`
+- [ ] `textOf("// hi there")` equals `"// hi there"`
+- [ ] `kindOf("/* hi */")` equals `Token.TkBlockComment`
+- [ ] `textOf("/* hi */")` equals `"/* hi */"`
 
-**Expr construction tests:**
-- [ ] Construct `ELit("int", "42")`, match kind is `"int"` and value is `"42"`
-- [ ] Construct `EIdent("x")`, match name is `"x"`
-- [ ] Construct `ECall(EIdent("f"), [ELit("int", "1")])`, match callee and args
-- [ ] Construct `EBinary("+", ELit("int","1"), ELit("int","2"))`, match op and operands
-- [ ] Construct `EIf(EIdent("c"), EIdent("t"), Some(EIdent("e")))`, match all three parts
-- [ ] Construct `EIf(EIdent("c"), EIdent("t"), None)`, confirm else is `None`
-- [ ] Construct `ELambda(False, [], [{ name="x", type_=None }], EIdent("x"))`, match params list
-- [ ] Construct `ETemplate([TmplLit("hello "), TmplExpr(EIdent("name"))])`, match both parts
-- [ ] Construct `ERecord(None, [{ name="x", mut_=False, value=ELit("int","1") }])`, match spread is None and fields
-- [ ] Construct `ENever`, match fires the `ENever` branch
+**Identifier and keyword tests:**
+- [ ] `kindOf("foo")` equals `Token.TkIdent`
+- [ ] `kindOf("_bar")` equals `Token.TkIdent`
+- [ ] `textOf("myVar")` equals `"myVar"`
+- [ ] `kindOf("Foo")` equals `Token.TkUpper`
+- [ ] `kindOf("True")` equals `Token.TkUpper` (NOT `Token.TkKw`)
+- [ ] `kindOf("False")` equals `Token.TkUpper` (NOT `Token.TkKw`)
+- [ ] Test each keyword tokenises as `Token.TkKw` — one test per keyword (23 tests): `as`, `fun`, `type`, `val`, `var`, `mut`, `if`, `else`, `while`, `break`, `continue`, `match`, `try`, `catch`, `throw`, `async`, `await`, `export`, `import`, `from`, `exception`, `is`, `opaque`, `extern`
 
-**Stmt construction tests:**
-- [ ] Construct `SVal("x", None, ELit("int","1"))`, match name and expr
-- [ ] Construct `SAssign(EIdent("x"), ELit("int","2"))`, match target and rhs
-- [ ] Construct `SBreak`, match fires
-- [ ] Construct `SContinue`, match fires
-- [ ] Construct `SFun(False, "f", [], [], ATPrim("Unit"), ELit("unit","()"))`, match name
+**Integer literal tests:**
+- [ ] `kindOf("42")` equals `Token.TkInt`, `textOf("42")` equals `"42"`
+- [ ] `kindOf("0")` equals `Token.TkInt`
+- [ ] `kindOf("0xff")` equals `Token.TkInt`, `textOf("0xff")` equals `"0xff"`
+- [ ] `kindOf("0b101")` equals `Token.TkInt`, `textOf("0b101")` equals `"0b101"`
+- [ ] `kindOf("0o77")` equals `Token.TkInt`
+- [ ] `kindOf("1_000_000")` equals `Token.TkInt`, `textOf("1_000_000")` equals `"1_000_000"`
 
-**ImportDecl construction tests:**
-- [ ] Construct `IDNamed("m", [{ external="foo", local="bar" }])`, match spec and importspecs
-- [ ] Construct `IDNamespace("m", "M")`, match spec and alias
-- [ ] Construct `IDSideEffect("m")`, match spec
+**Float literal tests:**
+- [ ] `kindOf("3.14")` equals `Token.TkFloat`, `textOf("3.14")` equals `"3.14"`
+- [ ] `kindOf("1e10")` equals `Token.TkFloat`
+- [ ] `kindOf("1.5e-3")` equals `Token.TkFloat`
+- [ ] `kindOf(".5")` equals `Token.TkFloat`
+- [ ] `kindOf("1E10")` equals `Token.TkFloat`
 
-**TopDecl construction tests:**
-- [ ] Construct `TDSVal("x", ELit("int","1"))`, match name and expr
-- [ ] Construct `TDExport(EIStar("m"))`, match inner spec
-- [ ] Construct `TDType(TypeDecl{ visibility="local", name="T", typeParams=[], body=TBAlias(ATPrim("Int")) })`, match fields
+**String literal tests:**
+- [ ] `kindOf("\"hello\"")` equals `Token.TkStr`
+- [ ] `textOf("\"hello\"")` equals `"\"hello\""` (raw text includes quotes)
+- [ ] `textOf("\"a\\nb\"")` equals `"\"a\\nb\""` (raw text preserves backslash)
+- [ ] Lex `"\"${x}\""` → first token kind is `Token.TkTemplate`
+- [ ] Lex `"\"${x}\""` → `Token.TkTemplate` parts contain `Token.TPInterp("x")`
+- [ ] Lex `"\"hello ${name}\""` → parts are `[Token.TPLiteral("hello "), Token.TPInterp("name")]`
+- [ ] Lex `"\"$name\""` → parts are `[Token.TPInterp("name")]` (short `$ident` form)
+- [ ] Lex `"\"a ${1 + 2} b\""` → parts are `[Token.TPLiteral("a "), Token.TPInterp("1 + 2"), Token.TPLiteral(" b")]`
+- [ ] `textOf("\"${x}\"")` equals `"\"${x}\""` (raw text of whole template token preserved)
 
-**Program construction test:**
-- [ ] Construct `{ imports = [], body = [TDSExpr(ELit("unit","()"))] }`, match imports length 0, body length 1
+**Char literal tests:**
+- [ ] `kindOf("'a'")` equals `Token.TkChar`
+- [ ] `textOf("'a'")` equals `"'a'"` (raw text includes quotes)
+- [ ] `textOf("'\\n'")` equals `"'\\n'"` (raw escape preserved)
 
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/ast.test.ks`
+**Operator tests:**
+- [ ] `kindOf("=>")` is `Token.TkOp`, text is `"=>"`
+- [ ] `kindOf(":=")` is `Token.TkOp`, text is `":="`
+- [ ] `kindOf("==")` is `Token.TkOp`, text is `"=="`
+- [ ] `kindOf("!=")` is `Token.TkOp`, text is `"!="`
+- [ ] `kindOf(">=")` is `Token.TkOp`, text is `">="`
+- [ ] `kindOf("<=")` is `Token.TkOp`, text is `"<="`
+- [ ] `kindOf("**")` is `Token.TkOp`, text is `"**"`
+- [ ] `kindOf("<|")` is `Token.TkOp`, text is `"<|"`
+- [ ] `kindOf("::")` is `Token.TkOp`, text is `"::"`
+- [ ] `kindOf("|>")` is `Token.TkOp`, text is `"|>"`
+- [ ] `kindOf("->")` is `Token.TkOp`, text is `"->"`
+- [ ] `kindOf("...")` is `Token.TkOp`, text is `"..."`
+- [ ] `kindOf("+")` is `Token.TkOp`; `kindOf("-")` is `Token.TkOp`; `kindOf("!")` is `Token.TkOp`
 
-### Phase E — Lexer (`stdlib/kestrel/dev/parser/lexer.ks`)
+**Punctuation tests:**
+- [ ] `:` vs `::` — lex `": ::"` kinds are `[Token.TkPunct, Token.TkWs, Token.TkOp, Token.TkEof]`, texts are `[":", " ", "::", ""]`
+- [ ] `kindOf("(")` is `Token.TkPunct`, text is `"("`
+- [ ] `kindOf(")")` is `Token.TkPunct`; `kindOf("{")` is `Token.TkPunct`; `kindOf("}")` is `Token.TkPunct`
+- [ ] `kindOf("[")` is `Token.TkPunct`; `kindOf("]")` is `Token.TkPunct`
+- [ ] `kindOf(",")` is `Token.TkPunct`; `kindOf(".")` is `Token.TkPunct`; `kindOf(";")` is `Token.TkPunct`
+
+**Span tracking tests:**
+- [ ] Lex `"42"`: first token `span.start == 0`, `span.end == 2`, `span.line == 1`, `span.col == 1`
+- [ ] Lex `"\nx"`: identifier `x` has `span.line == 2`, `span.col == 1`
+- [ ] Lex `"a\nb"`: second non-trivia token is `b` at `line == 2`
+
+**EOF token test:**
+- [ ] Last token of `lex("")` kind is `Token.TkEof`, text is `""`
+- [ ] `lex("x")` length is 2 (one `Token.TkIdent` plus `Token.TkEof`)
+
+- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/lexer.test.ks` → confirm compile error (`lexer.ks` not yet written — **red phase**)
+
+### Phase F — Lexer — *TDD green* (`stdlib/kestrel/dev/parser/lexer.ks`)
 
 - [ ] Create `stdlib/kestrel/dev/parser/lexer.ks` with imports:
   ```
@@ -447,109 +555,167 @@ the previous.
   - recurse (tail-recursive loop)
 - [ ] Implement `export fun lex(src: String): List<Token.Token>` — create `LexState { src, len=Str.length(src), mut pos=0, mut line=1, mut col=1 }`; create `tokens: Array<Token.Token> = Arr.new()`; call `lexSkipBom`, `lexSkipShebang`, `lexLoop`; push EOF token `{ kind=Token.TkEof, text="", span={start=ls.pos,...} }`; return `Arr.toList(tokens)`
 - [ ] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/lexer.ks`
+- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/lexer.test.ks` → confirm all tests pass (**green**)
 
-### Phase F — Lexer unit tests (`stdlib/kestrel/dev/parser/lexer.test.ks`)
+### Phase G — Parser unit tests — *TDD red* (`stdlib/kestrel/dev/parser/parser.test.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/lexer.test.ks` with imports for test harness, `lex`, and the `Token` namespace from `kestrel:dev/parser/token`
+- [ ] Create `stdlib/kestrel/dev/parser/parser.test.ks` with imports: test harness; `lex` from `kestrel:dev/parser/lexer`; `parse`, `parseExpr`, `ParseError` from `kestrel:dev/parser/parser`; all AST types from `kestrel:dev/parser/ast`
 - [ ] Add `export fun run(): Unit` entry point
-- [ ] Implement helper `fun kindOf(src: String): Token.TokenKind` — `lex(src)` then return kind of first token
-- [ ] Implement helper `fun textOf(src: String): String` — `lex(src)` then return text of first token
-- [ ] Implement helper `fun allKinds(src: String): List<Token.TokenKind>` — `lex(src)` then map `.kind`
-- [ ] Implement helper `fun joinTexts(src: String): String` — `lex(src)` then `Str.join("", Lst.map(tokens, (t) => t.text))`
+- [ ] Implement helper `fun pl(src: String): Program` — calls `parse(lex(src))`, asserts `Ok`, returns program
+- [ ] Implement helper `fun pe(src: String): Expr` — calls `parseExpr(lex(src))`, asserts `Ok`, returns expr
+- [ ] Implement helper `fun firstImport(src: String): ImportDecl` — `pl(src).imports.head`
+- [ ] Implement helper `fun firstDecl(src: String): TopDecl` — `pl(src).body.head`
 
-**Round-trip tests:**
-- [ ] `joinTexts("") == ""`
-- [ ] `joinTexts("fun main(): Unit = ()")` equals source
-- [ ] `joinTexts("  val x = 1  ")` equals `"  val x = 1  "` (whitespace preserved)
-- [ ] `joinTexts("// comment\nval x = 1")` equals original (line comment and newline preserved)
-- [ ] `joinTexts("/* block */val x = 1")` equals original (block comment preserved)
-- [ ] `joinTexts("\"hello\"")` equals `"\"hello\""` (string quotes in token text)
-- [ ] `joinTexts("'a'")` equals `"'a'"` (char quotes in token text)
-- [ ] `joinTexts("x // c\ny")` equals original (comment between two identifiers preserved)
+**Import tests:**
+- [ ] `import { foo } from "m"` → `IDNamed("m", [{external="foo",local="foo"}])`
+- [ ] `import { foo as bar } from "m"` → `IDNamed("m", [{external="foo",local="bar"}])`
+- [ ] `import { a, b } from "m"` → `IDNamed` with 2 ImportSpec entries
+- [ ] `import * as M from "m"` → `IDNamespace("m","M")`
+- [ ] `import "m"` → `IDSideEffect("m")`
+- [ ] Two import statements → `imports` list length is 2
 
-**Whitespace and comment token tests:**
-- [ ] `kindOf("  ")` equals `Token.TkWs`
-- [ ] `kindOf("\n")` equals `Token.TkWs`
-- [ ] `textOf("\t ")` equals `"\t "` (raw tabs and spaces)
-- [ ] `kindOf("// hi")` equals `Token.TkLineComment`
-- [ ] `textOf("// hi there")` equals `"// hi there"`
-- [ ] `kindOf("/* hi */")` equals `Token.TkBlockComment`
-- [ ] `textOf("/* hi */")` equals `"/* hi */"`
+**Function declaration tests:**
+- [ ] `fun f(x: Int): Int = x` → `TDFun` with `name="f"`, `exported=False`, `async_=False`, params length 1, param name `"x"`
+- [ ] `async fun f(): Task<Int> = 1` → `TDFun { async_=True }`
+- [ ] `export fun f(): Unit = ()` → `TDFun { exported=True }`
+- [ ] `fun f<A>(x: A): A = x` → `TDFun { typeParams=["A"] }`
+- [ ] `fun f(x: Int, y: Bool): String = "z"` → `TDFun` with 2 params
 
-**Identifier and keyword tests:**
-- [ ] `kindOf("foo")` equals `Token.TkIdent`
-- [ ] `kindOf("_bar")` equals `Token.TkIdent`
-- [ ] `textOf("myVar")` equals `"myVar"`
-- [ ] `kindOf("Foo")` equals `Token.TkUpper`
-- [ ] `kindOf("True")` equals `Token.TkUpper` (NOT `Token.TkKw`)
-- [ ] `kindOf("False")` equals `Token.TkUpper` (NOT `Token.TkKw`)
-- [ ] Test each keyword tokenises as `Token.TkKw` — one test per keyword (23 tests): `as`, `fun`, `type`, `val`, `var`, `mut`, `if`, `else`, `while`, `break`, `continue`, `match`, `try`, `catch`, `throw`, `async`, `await`, `export`, `import`, `from`, `exception`, `is`, `opaque`, `extern`
+**Value and variable declaration tests:**
+- [ ] `val x = 42` → `TDSVal("x", ELit("int","42"))` (no type annotation)
+- [ ] `var x = 42` → `TDSVar("x", ELit("int","42"))`
+- [ ] `export val x: Int = 42` → `TDVal("x", Some(ATPrim("Int")), ELit("int","42"))`
+- [ ] `export var x: Int = 0` → `TDVar("x", Some(ATPrim("Int")), ELit("int","0"))`
 
-**Integer literal tests:**
-- [ ] `kindOf("42")` equals `Token.TkInt`, `textOf("42")` equals `"42"`
-- [ ] `kindOf("0")` equals `Token.TkInt`
-- [ ] `kindOf("0xff")` equals `Token.TkInt`, `textOf("0xff")` equals `"0xff"`
-- [ ] `kindOf("0b101")` equals `Token.TkInt`, `textOf("0b101")` equals `"0b101"`
-- [ ] `kindOf("0o77")` equals `Token.TkInt`
-- [ ] `kindOf("1_000_000")` equals `Token.TkInt`, `textOf("1_000_000")` equals `"1_000_000"`
+**Type declaration tests:**
+- [ ] `type Alias = Int` → `TDType` with `visibility="local"`, `body=TBAlias(ATPrim("Int"))`
+- [ ] `type Color = Red | Green | Blue` → `TDType { body=TBAdt(...) }` with 3 constructors
+- [ ] `type Box<A> = Box(A)` → `TDType { typeParams=["A"] }`
+- [ ] `opaque type T = Int` → `TDType { visibility="opaque" }`
+- [ ] `exception MyError` → `TDException { exported=False, name="MyError", fields=None }`
+- [ ] `exception E { msg: String }` → `TDException { fields=Some([{name="msg",...}]) }`
+- [ ] `export exception E` → `TDException { exported=True }`
+- [ ] `export * from "m"` → `TDExport(EIStar("m"))`
+- [ ] `export { foo, bar } from "m"` → `TDExport(EINamed("m", ...))`
 
-**Float literal tests:**
-- [ ] `kindOf("3.14")` equals `Token.TkFloat`, `textOf("3.14")` equals `"3.14"`
-- [ ] `kindOf("1e10")` equals `Token.TkFloat`
-- [ ] `kindOf("1.5e-3")` equals `Token.TkFloat`
-- [ ] `kindOf(".5")` equals `Token.TkFloat`
-- [ ] `kindOf("1E10")` equals `Token.TkFloat`
+**Literal expression tests:**
+- [ ] `pe "42"` equals `ELit("int","42")`
+- [ ] `pe "0xff"` equals `ELit("int","0xff")`
+- [ ] `pe "3.14"` equals `ELit("float","3.14")`
+- [ ] `pe "\"hello\""` equals `ELit("string","hello")` (decoded, without quotes)
+- [ ] `pe "'a'"` equals `ELit("char","a")` (decoded)
+- [ ] `pe "()"` equals `ELit("unit","()")`
+- [ ] `pe "True"` equals `ELit("true","True")`
+- [ ] `pe "False"` equals `ELit("false","False")`
 
-**String literal tests:**
-- [ ] `kindOf("\"hello\"")` equals `Token.TkStr`
-- [ ] `textOf("\"hello\"")` equals `"\"hello\""` (raw text includes quotes)
-- [ ] `textOf("\"a\\nb\"")` equals `"\"a\\nb\""` (raw text preserves backslash)
-- [ ] Lex `"\"${x}\""` → first token kind is `Token.TkTemplate`
-- [ ] Lex `"\"${x}\""` → `Token.TkTemplate` parts contain `Token.TPInterp("x")`
-- [ ] Lex `"\"hello ${name}\""` → parts are `[Token.TPLiteral("hello "), Token.TPInterp("name")]`
-- [ ] Lex `"\"$name\""` → parts are `[Token.TPInterp("name")]` (short `$ident` form)
-- [ ] Lex `"\"a ${1 + 2} b\""` → parts are `[Token.TPLiteral("a "), Token.TPInterp("1 + 2"), Token.TPLiteral(" b")]`
-- [ ] `textOf("\"${x}\"")` equals `"\"${x}\""` (raw text of whole template token preserved)
+**Identifier, field access, and call tests:**
+- [ ] `pe "x"` equals `EIdent("x")`
+- [ ] `pe "Foo"` equals `EIdent("Foo")`
+- [ ] `pe "f()"` equals `ECall(EIdent("f"), [])`
+- [ ] `pe "f(1)"` equals `ECall(EIdent("f"), [ELit("int","1")])`
+- [ ] `pe "f(1, 2)"` — args list has length 2
+- [ ] `pe "a.b"` equals `EField(EIdent("a"), "b")`
+- [ ] `pe "a.b.c"` equals `EField(EField(EIdent("a"),"b"), "c")`
+- [ ] `pe "a.0"` equals `EField(EIdent("a"), "0")` (tuple index)
+- [ ] `pe "f(1)(2)"` — outer is `ECall` of `ECall` (chained call)
 
-**Char literal tests:**
-- [ ] `kindOf("'a'")` equals `Token.TkChar`
-- [ ] `textOf("'a'")` equals `"'a'"` (raw text includes quotes)
-- [ ] `textOf("'\\n'")` equals `"'\\n'"` (raw escape preserved)
+**Operator precedence tests:**
+- [ ] `pe "1 + 2"` → `EBinary("+", ELit("int","1"), ELit("int","2"))`
+- [ ] `pe "1 + 2 * 3"` → `EBinary("+", 1, EBinary("*", 2, 3))` — mul before add
+- [ ] `pe "1 * 2 + 3"` → `EBinary("+", EBinary("*",1,2), 3)` — mul before add, left side
+- [ ] `pe "2 ** 3 ** 4"` → `EBinary("**", 2, EBinary("**",3,4))` — right-associative
+- [ ] `pe "1 - 2 - 3"` → `EBinary("-", EBinary("-",1,2), 3)` — left-associative
+- [ ] `pe "1 == 2"` → `EBinary("==", ELit, ELit)`
+- [ ] `pe "1 != 2"` → `EBinary("!=", ...)`
+- [ ] `pe "a < b"` → `EBinary("<", EIdent"a", EIdent"b")`
+- [ ] `pe "a >= b"` → `EBinary(">=", ...)`
+- [ ] `pe "a | b"` → `EBinary("|", EIdent"a", EIdent"b")`
+- [ ] `pe "a & b"` → `EBinary("&", EIdent"a", EIdent"b")`
+- [ ] `pe "x |> f"` → `EPipe("|>", EIdent"x", EIdent"f")`
+- [ ] `pe "f <| x"` → `EPipe("<|", EIdent"f", EIdent"x")`
+- [ ] `pe "x :: xs"` → `ECons(EIdent"x", EIdent"xs")`
+- [ ] `pe "1 :: 2 :: []"` → `ECons(ELit, ECons(ELit, EList([])))` — right-associative
+- [ ] `pe "-1"` → `EUnary("-", ELit("int","1"))`
+- [ ] `pe "!x"` → `EUnary("!", EIdent"x")`
+- [ ] `pe "x is Int"` → `EIs(EIdent"x", ATPrim("Int"))`
 
-**Operator tests:**
-- [ ] `kindOf("=>")` is `Token.TkOp`, text is `"=>"`
-- [ ] `kindOf(":=")` is `Token.TkOp`, text is `":="`
-- [ ] `kindOf("==")` is `Token.TkOp`, text is `"=="`
-- [ ] `kindOf("!=")` is `Token.TkOp`, text is `"!="`
-- [ ] `kindOf(">=")` is `Token.TkOp`, text is `">="`
-- [ ] `kindOf("<=")` is `Token.TkOp`, text is `"<="`
-- [ ] `kindOf("**")` is `Token.TkOp`, text is `"**"`
-- [ ] `kindOf("<|")` is `Token.TkOp`, text is `"<|"`
-- [ ] `kindOf("::")` is `Token.TkOp`, text is `"::"`
-- [ ] `kindOf("|>")` is `Token.TkOp`, text is `"|>"`
-- [ ] `kindOf("->")` is `Token.TkOp`, text is `"->"`
-- [ ] `kindOf("...")` is `Token.TkOp`, text is `"..."`
-- [ ] `kindOf("+")` is `Token.TkOp`; `kindOf("-")` is `Token.TkOp`; `kindOf("!")` is `Token.TkOp`
+**Control flow tests:**
+- [ ] `pe "if (x) y else z"` → `EIf(EIdent"x", EIdent"y", Some(EIdent"z"))`
+- [ ] `pe "if (x) y"` → `EIf(EIdent"x", EIdent"y", None)`
+- [ ] `pe "while (x) { y }"` → `EWhile(EIdent"x", Block{stmts=[], result=EIdent"y"})`
+- [ ] `pe "await x"` → `EAwait(EIdent"x")`
+- [ ] `pe "throw e"` → `EThrow(EIdent"e")`
+- [ ] `pe "try { x } catch { E => 0 }"` → `ETry(Block{...}, None, [Case_{...}])`
 
-**Punctuation tests:**
-- [ ] `:` vs `::` — lex `": ::"` kinds are `[Token.TkPunct, Token.TkWs, Token.TkOp, Token.TkEof]`, texts are `[":", " ", "::", ""]`
-- [ ] `kindOf("(")` is `Token.TkPunct`, text is `"("`
-- [ ] `kindOf(")")` is `Token.TkPunct`; `kindOf("{")` is `Token.TkPunct`; `kindOf("}")` is `Token.TkPunct`
-- [ ] `kindOf("[")` is `Token.TkPunct`; `kindOf("]")` is `Token.TkPunct`
-- [ ] `kindOf(",")` is `Token.TkPunct`; `kindOf(".")` is `Token.TkPunct`; `kindOf(";")` is `Token.TkPunct`
+**Lambda tests:**
+- [ ] `pe "(x: Int) => x"` → `ELambda(False, [], [{name="x",type_=Some(ATPrim"Int")}], EIdent"x")`
+- [ ] `pe "(x) => x"` → `ELambda(False, [], [{name="x",type_=None}], EIdent"x")`
+- [ ] `pe "(x, y) => x"` → `ELambda` with 2 params
+- [ ] `pe "async (x) => x"` → `ELambda(True, [], [{name="x",...}], EIdent"x")`
+- [ ] Backtracking test — `pe "(x)"` should be `EIdent "x"` (grouping, not lambda — no `=>`)
 
-**Span tracking tests:**
-- [ ] Lex `"42"`: first token `span.start == 0`, `span.end == 2`, `span.line == 1`, `span.col == 1`
-- [ ] Lex `"\nx"`: identifier `x` has `span.line == 2`, `span.col == 1`
-- [ ] Lex `"a\nb"`: second non-trivia token is `b` at `line == 2`
+**Match tests:**
+- [ ] `pe "match (x) { 1 => 2 }"` → `EMatch(EIdent"x", [Case_{pattern=PLit("int","1"), body=ELit("int","2")}])`
+- [ ] Match with multiple cases — two `=>` clauses → cases list length 2
+- [ ] Match `_` arm → `Case_{ pattern=PWild }`
+- [ ] Match variable arm `x` → `Case_{ pattern=PVar("x") }`
+- [ ] Match constructor `Some(v)` → `Case_{ pattern=PCon("Some",[...]) }`
 
-**EOF token test:**
-- [ ] Last token of `lex("")` kind is `Token.TkEof`, text is `""`
-- [ ] `lex("x")` length is 2 (one `Token.TkIdent` plus `Token.TkEof`)
+**Collection and record tests:**
+- [ ] `pe "[1, 2, 3]"` → `EList([LElem(ELit), LElem(ELit), LElem(ELit)])`
+- [ ] `pe "[...xs, 1]"` → `EList([LSpread(EIdent"xs"), LElem(ELit)])`
+- [ ] `pe "[]"` → `EList([])`
+- [ ] `pe "{x = 1, y = 2}"` → `ERecord(None, [field"x", field"y"])`
+- [ ] `pe "{mut x = 1}"` → `ERecord(None, [{name="x",mut_=True,...}])`
+- [ ] `pe "{...r, x = 1}"` → `ERecord(Some(EIdent"r"), [...])`
+- [ ] `pe "{}"` → `ERecord(None, [])`
+- [ ] `pe "(1, 2)"` → `ETuple([ELit("int","1"), ELit("int","2")])`
+- [ ] `pe "(1, 2, 3)"` → `ETuple` with 3 elements
+- [ ] `pe "(x)"` → `EIdent "x"` (grouping, not tuple)
 
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/lexer.test.ks`
+**Block tests:**
+- [ ] `pe "{x}"` → `EBlock({stmts=[], result=EIdent"x"})`
+- [ ] `pe "{val x = 1; x}"` → `EBlock({stmts=[SVal("x",None,ELit("int","1"))], result=EIdent"x"})`
+- [ ] `pe "{var x = 1; x := 2; x}"` → `EBlock` with `SVar`, `SAssign`, and `result=EIdent"x"`
+- [ ] `pe "{1; 2}"` → `EBlock({stmts=[SExpr(ELit("int","1"))], result=ELit("int","2")})`
+- [ ] `pe "{break}"` → `EBlock({stmts=[SBreak], result=ENever})`
 
-### Phase G — Parser (`stdlib/kestrel/dev/parser/parser.ks`)
+**Template/string tests:**
+- [ ] `pe "\"${x}\""` → `ETemplate([TmplExpr(EIdent"x")])`
+- [ ] `pe "\"hello ${name}\""` → `ETemplate([TmplLit("hello "), TmplExpr(EIdent"name")])`
+- [ ] `pe "\"$name\""` → `ETemplate([TmplExpr(EIdent"name")])`
+- [ ] `pe "\"a ${1 + 2} b\""` → `ETemplate([TmplLit"a ", TmplExpr(EBinary("+",...)), TmplLit" b"])`
+
+**Type annotation tests (parsed inside declarations):**
+- [ ] `fun f(x: Int): Bool = True` — param type is `ATPrim("Int")`, return type is `ATPrim("Bool")`
+- [ ] `fun f(x: List<Int>): Unit = ()` — param type is `ATApp("List", [ATPrim("Int")])`
+- [ ] `fun f(x: Int -> Bool): Unit = ()` — param type is `ATArrow([ATPrim("Int")], ATPrim("Bool"))`
+- [ ] `fun f(x: {a: Int}): Unit = ()` — param type is `ATRecord([{name="a",...}])`
+- [ ] `fun f(x: A | B): Unit = ()` — param type is `ATUnion(ATIdent"A", ATIdent"B")`
+- [ ] `fun f(x: A * B): Unit = ()` — param type is `ATTuple([ATIdent"A", ATIdent"B"])`
+
+**Pattern tests (inside match expressions):**
+- [ ] Wildcard `_` → `PWild`
+- [ ] Variable `x` → `PVar("x")`
+- [ ] Int literal `42` → `PLit("int","42")`
+- [ ] Float literal `3.14` → `PLit("float","3.14")`
+- [ ] String literal `"s"` → `PLit("string","s")`
+- [ ] `True` → `PCon("True",[])`; `False` → `PCon("False",[])`
+- [ ] Constructor no-arg `None` → `PCon("None",[])`
+- [ ] Constructor positional `Some(x)` → `PCon("Some",[{name="__field_0",pattern=Some(PVar"x")}])`
+- [ ] Constructor record `Con{x=p}` → `PCon("Con",[{name="x",pattern=Some(PVar"p")}])`
+- [ ] Constructor record shorthand `Con{x}` → `PCon("Con",[{name="x",pattern=Some(PVar"x")}])`
+- [ ] List pattern `[a, b]` → `PList([PVar"a",PVar"b"],None)`
+- [ ] List with rest `[a, ...xs]` → `PList([PVar"a"],Some("xs"))`
+- [ ] Empty list `[]` → `PList([],None)`
+- [ ] Cons `h :: t` → `PCons(PVar"h",PVar"t")`
+- [ ] Tuple `(a,b)` → `PTuple([PVar"a",PVar"b"])`
+- [ ] Unit `()` → `PLit("unit","()")`
+
+**Final verification:**
+- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/parser.test.ks` → confirm compile error (`parser.ks` not yet written — **red phase**)
+
+### Phase H — Parser — *TDD green* (`stdlib/kestrel/dev/parser/parser.ks`)
 
 - [ ] Create `stdlib/kestrel/dev/parser/parser.ks` with all necessary imports (token types, all AST types, `lex` from lexer)
 
@@ -741,164 +907,7 @@ the previous.
   - else → `psError`, return `PWild`
 
 - [ ] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/parser.ks`
-
-### Phase H — Parser unit tests (`stdlib/kestrel/dev/parser/parser.test.ks`)
-
-- [ ] Create `stdlib/kestrel/dev/parser/parser.test.ks` with imports: test harness; `lex` from `kestrel:dev/parser/lexer`; `parse`, `parseExpr`, `ParseError` from `kestrel:dev/parser/parser`; all AST types from `kestrel:dev/parser/ast`
-- [ ] Add `export fun run(): Unit` entry point
-- [ ] Implement helper `fun pl(src: String): Program` — calls `parse(lex(src))`, asserts `Ok`, returns program
-- [ ] Implement helper `fun pe(src: String): Expr` — calls `parseExpr(lex(src))`, asserts `Ok`, returns expr
-- [ ] Implement helper `fun firstImport(src: String): ImportDecl` — `pl(src).imports.head`
-- [ ] Implement helper `fun firstDecl(src: String): TopDecl` — `pl(src).body.head`
-
-**Import tests:**
-- [ ] `import { foo } from "m"` → `IDNamed("m", [{external="foo",local="foo"}])`
-- [ ] `import { foo as bar } from "m"` → `IDNamed("m", [{external="foo",local="bar"}])`
-- [ ] `import { a, b } from "m"` → `IDNamed` with 2 ImportSpec entries
-- [ ] `import * as M from "m"` → `IDNamespace("m","M")`
-- [ ] `import "m"` → `IDSideEffect("m")`
-- [ ] Two import statements → `imports` list length is 2
-
-**Function declaration tests:**
-- [ ] `fun f(x: Int): Int = x` → `TDFun` with `name="f"`, `exported=False`, `async_=False`, params length 1, param name `"x"`
-- [ ] `async fun f(): Task<Int> = 1` → `TDFun { async_=True }`
-- [ ] `export fun f(): Unit = ()` → `TDFun { exported=True }`
-- [ ] `fun f<A>(x: A): A = x` → `TDFun { typeParams=["A"] }`
-- [ ] `fun f(x: Int, y: Bool): String = "z"` → `TDFun` with 2 params
-
-**Value and variable declaration tests:**
-- [ ] `val x = 42` → `TDSVal("x", ELit("int","42"))` (no type annotation)
-- [ ] `var x = 42` → `TDSVar("x", ELit("int","42"))`
-- [ ] `export val x: Int = 42` → `TDVal("x", Some(ATPrim("Int")), ELit("int","42"))`
-- [ ] `export var x: Int = 0` → `TDVar("x", Some(ATPrim("Int")), ELit("int","0"))`
-
-**Type declaration tests:**
-- [ ] `type Alias = Int` → `TDType` with `visibility="local"`, `body=TBAlias(ATPrim("Int"))`
-- [ ] `type Color = Red | Green | Blue` → `TDType { body=TBAdt(...) }` with 3 constructors
-- [ ] `type Box<A> = Box(A)` → `TDType { typeParams=["A"] }`
-- [ ] `opaque type T = Int` → `TDType { visibility="opaque" }`
-- [ ] `exception MyError` → `TDException { exported=False, name="MyError", fields=None }`
-- [ ] `exception E { msg: String }` → `TDException { fields=Some([{name="msg",...}]) }`
-- [ ] `export exception E` → `TDException { exported=True }`
-- [ ] `export * from "m"` → `TDExport(EIStar("m"))`
-- [ ] `export { foo, bar } from "m"` → `TDExport(EINamed("m", ...))`
-
-**Literal expression tests:**
-- [ ] `pe "42"` equals `ELit("int","42")`
-- [ ] `pe "0xff"` equals `ELit("int","0xff")`
-- [ ] `pe "3.14"` equals `ELit("float","3.14")`
-- [ ] `pe "\"hello\""` equals `ELit("string","hello")` (decoded, without quotes)
-- [ ] `pe "'a'"` equals `ELit("char","a")` (decoded)
-- [ ] `pe "()"` equals `ELit("unit","()")`
-- [ ] `pe "True"` equals `ELit("true","True")`
-- [ ] `pe "False"` equals `ELit("false","False")`
-
-**Identifier, field access, and call tests:**
-- [ ] `pe "x"` equals `EIdent("x")`
-- [ ] `pe "Foo"` equals `EIdent("Foo")`
-- [ ] `pe "f()"` equals `ECall(EIdent("f"), [])`
-- [ ] `pe "f(1)"` equals `ECall(EIdent("f"), [ELit("int","1")])`
-- [ ] `pe "f(1, 2)"` — args list has length 2
-- [ ] `pe "a.b"` equals `EField(EIdent("a"), "b")`
-- [ ] `pe "a.b.c"` equals `EField(EField(EIdent("a"),"b"), "c")`
-- [ ] `pe "a.0"` equals `EField(EIdent("a"), "0")` (tuple index)
-- [ ] `pe "f(1)(2)"` — outer is `ECall` of `ECall` (chained call)
-
-**Operator precedence tests:**
-- [ ] `pe "1 + 2"` → `EBinary("+", ELit("int","1"), ELit("int","2"))`
-- [ ] `pe "1 + 2 * 3"` → `EBinary("+", 1, EBinary("*", 2, 3))` — mul before add
-- [ ] `pe "1 * 2 + 3"` → `EBinary("+", EBinary("*",1,2), 3)` — mul before add, left side
-- [ ] `pe "2 ** 3 ** 4"` → `EBinary("**", 2, EBinary("**",3,4))` — right-associative
-- [ ] `pe "1 - 2 - 3"` → `EBinary("-", EBinary("-",1,2), 3)` — left-associative
-- [ ] `pe "1 == 2"` → `EBinary("==", ELit, ELit)`
-- [ ] `pe "1 != 2"` → `EBinary("!=", ...)`
-- [ ] `pe "a < b"` → `EBinary("<", EIdent"a", EIdent"b")`
-- [ ] `pe "a >= b"` → `EBinary(">=", ...)`
-- [ ] `pe "a | b"` → `EBinary("|", EIdent"a", EIdent"b")`
-- [ ] `pe "a & b"` → `EBinary("&", EIdent"a", EIdent"b")`
-- [ ] `pe "x |> f"` → `EPipe("|>", EIdent"x", EIdent"f")`
-- [ ] `pe "f <| x"` → `EPipe("<|", EIdent"f", EIdent"x")`
-- [ ] `pe "x :: xs"` → `ECons(EIdent"x", EIdent"xs")`
-- [ ] `pe "1 :: 2 :: []"` → `ECons(ELit, ECons(ELit, EList([])))` — right-associative
-- [ ] `pe "-1"` → `EUnary("-", ELit("int","1"))`
-- [ ] `pe "!x"` → `EUnary("!", EIdent"x")`
-- [ ] `pe "x is Int"` → `EIs(EIdent"x", ATPrim("Int"))`
-
-**Control flow tests:**
-- [ ] `pe "if (x) y else z"` → `EIf(EIdent"x", EIdent"y", Some(EIdent"z"))`
-- [ ] `pe "if (x) y"` → `EIf(EIdent"x", EIdent"y", None)`
-- [ ] `pe "while (x) { y }"` → `EWhile(EIdent"x", Block{stmts=[], result=EIdent"y"})`
-- [ ] `pe "await x"` → `EAwait(EIdent"x")`
-- [ ] `pe "throw e"` → `EThrow(EIdent"e")`
-- [ ] `pe "try { x } catch { E => 0 }"` → `ETry(Block{...}, None, [Case_{...}])`
-
-**Lambda tests:**
-- [ ] `pe "(x: Int) => x"` → `ELambda(False, [], [{name="x",type_=Some(ATPrim"Int")}], EIdent"x")`
-- [ ] `pe "(x) => x"` → `ELambda(False, [], [{name="x",type_=None}], EIdent"x")`
-- [ ] `pe "(x, y) => x"` → `ELambda` with 2 params
-- [ ] `pe "async (x) => x"` → `ELambda(True, [], [{name="x",...}], EIdent"x")`
-- [ ] Backtracking test — `pe "(x)"` should be `EIdent "x"` (grouping, not lambda — no `=>`)
-
-**Match tests:**
-- [ ] `pe "match (x) { 1 => 2 }"` → `EMatch(EIdent"x", [Case_{pattern=PLit("int","1"), body=ELit("int","2")}])`
-- [ ] Match with multiple cases — two `=>` clauses → cases list length 2
-- [ ] Match `_` arm → `Case_{ pattern=PWild }`
-- [ ] Match variable arm `x` → `Case_{ pattern=PVar("x") }`
-- [ ] Match constructor `Some(v)` → `Case_{ pattern=PCon("Some",[...]) }`
-
-**Collection and record tests:**
-- [ ] `pe "[1, 2, 3]"` → `EList([LElem(ELit), LElem(ELit), LElem(ELit)])`
-- [ ] `pe "[...xs, 1]"` → `EList([LSpread(EIdent"xs"), LElem(ELit)])`
-- [ ] `pe "[]"` → `EList([])`
-- [ ] `pe "{x = 1, y = 2}"` → `ERecord(None, [field"x", field"y"])`
-- [ ] `pe "{mut x = 1}"` → `ERecord(None, [{name="x",mut_=True,...}])`
-- [ ] `pe "{...r, x = 1}"` → `ERecord(Some(EIdent"r"), [...])`
-- [ ] `pe "{}"` → `ERecord(None, [])`
-- [ ] `pe "(1, 2)"` → `ETuple([ELit("int","1"), ELit("int","2")])`
-- [ ] `pe "(1, 2, 3)"` → `ETuple` with 3 elements
-- [ ] `pe "(x)"` → `EIdent "x"` (grouping, not tuple)
-
-**Block tests:**
-- [ ] `pe "{x}"` → `EBlock({stmts=[], result=EIdent"x"})`
-- [ ] `pe "{val x = 1; x}"` → `EBlock({stmts=[SVal("x",None,ELit("int","1"))], result=EIdent"x"})`
-- [ ] `pe "{var x = 1; x := 2; x}"` → `EBlock` with `SVar`, `SAssign`, and `result=EIdent"x"`
-- [ ] `pe "{1; 2}"` → `EBlock({stmts=[SExpr(ELit("int","1"))], result=ELit("int","2")})`
-- [ ] `pe "{break}"` → `EBlock({stmts=[SBreak], result=ENever})`
-
-**Template/string tests:**
-- [ ] `pe "\"${x}\""` → `ETemplate([TmplExpr(EIdent"x")])`
-- [ ] `pe "\"hello ${name}\""` → `ETemplate([TmplLit("hello "), TmplExpr(EIdent"name")])`
-- [ ] `pe "\"$name\""` → `ETemplate([TmplExpr(EIdent"name")])`
-- [ ] `pe "\"a ${1 + 2} b\""` → `ETemplate([TmplLit"a ", TmplExpr(EBinary("+",...)), TmplLit" b"])`
-
-**Type annotation tests (parsed inside declarations):**
-- [ ] `fun f(x: Int): Bool = True` — param type is `ATPrim("Int")`, return type is `ATPrim("Bool")`
-- [ ] `fun f(x: List<Int>): Unit = ()` — param type is `ATApp("List", [ATPrim("Int")])`
-- [ ] `fun f(x: Int -> Bool): Unit = ()` — param type is `ATArrow([ATPrim("Int")], ATPrim("Bool"))`
-- [ ] `fun f(x: {a: Int}): Unit = ()` — param type is `ATRecord([{name="a",...}])`
-- [ ] `fun f(x: A | B): Unit = ()` — param type is `ATUnion(ATIdent"A", ATIdent"B")`
-- [ ] `fun f(x: A * B): Unit = ()` — param type is `ATTuple([ATIdent"A", ATIdent"B"])`
-
-**Pattern tests (inside match expressions):**
-- [ ] Wildcard `_` → `PWild`
-- [ ] Variable `x` → `PVar("x")`
-- [ ] Int literal `42` → `PLit("int","42")`
-- [ ] Float literal `3.14` → `PLit("float","3.14")`
-- [ ] String literal `"s"` → `PLit("string","s")`
-- [ ] `True` → `PCon("True",[])`; `False` → `PCon("False",[])`
-- [ ] Constructor no-arg `None` → `PCon("None",[])`
-- [ ] Constructor positional `Some(x)` → `PCon("Some",[{name="__field_0",pattern=Some(PVar"x")}])`
-- [ ] Constructor record `Con{x=p}` → `PCon("Con",[{name="x",pattern=Some(PVar"p")}])`
-- [ ] Constructor record shorthand `Con{x}` → `PCon("Con",[{name="x",pattern=Some(PVar"x")}])`
-- [ ] List pattern `[a, b]` → `PList([PVar"a",PVar"b"],None)`
-- [ ] List with rest `[a, ...xs]` → `PList([PVar"a"],Some("xs"))`
-- [ ] Empty list `[]` → `PList([],None)`
-- [ ] Cons `h :: t` → `PCons(PVar"h",PVar"t")`
-- [ ] Tuple `(a,b)` → `PTuple([PVar"a",PVar"b"])`
-- [ ] Unit `()` → `PLit("unit","()")`
-
-**Final verification:**
-- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/parser.test.ks`
+- [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/parser.test.ks` → confirm all parser tests pass (**green**)
 - [ ] Run all stdlib tests: `./kestrel test --summary`
 - [ ] Run compiler tests: `cd compiler && npm test`
 
