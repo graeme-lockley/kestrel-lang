@@ -397,6 +397,89 @@ Stack traces and basic I/O formatting. This module is for stack-trace and format
 
 ---
 
+## kestrel:dev/parser/token
+
+Token types for the Kestrel lexer. Consumers import this module directly (`import * as Token from "kestrel:dev/parser/token"`).
+
+**Types:**
+
+| Type | Definition |
+|------|-----------|
+| `Span` | Record `{ start: Int, end: Int, line: Int, col: Int }`. Byte offsets into the source string (`start` inclusive, `end` exclusive); `line` and `col` are 1-based. |
+| `TemplatePart` | ADT: `TPLiteral(String)` — a decoded literal segment; `TPInterp(String)` — raw source of an interpolated `${…}` or `$ident` expression. |
+| `TokenKind` | ADT with 14 variants: `TkInt`, `TkFloat`, `TkStr`, `TkTemplate(List<TemplatePart>)`, `TkChar`, `TkIdent`, `TkUpper`, `TkKw`, `TkOp`, `TkPunct`, `TkWs`, `TkLineComment`, `TkBlockComment`, `TkEof`. |
+| `Token` | Record `{ kind: TokenKind, text: String, span: Span }`. `token.text` is always the raw source text — concatenating all token texts reconstructs the original source exactly (round-trip property). `True`/`False` are `TkUpper`, not `TkKw`. |
+
+**Functions:**
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `spanZero` | `() -> Span` | Returns `{ start=0, end=0, line=1, col=1 }`. |
+| `isTrivia` | `(Token) -> Bool` | Returns `True` for `TkWs`, `TkLineComment`, `TkBlockComment`; `False` for all other kinds. |
+
+---
+
+## kestrel:dev/parser/ast
+
+AST node types for the Kestrel parser. Mirrors the TypeScript `compiler/src/ast/nodes.ts` structure. Consumers import directly (`import * as Ast from "kestrel:dev/parser/ast"`).
+
+**Type-level types:** `AstType` with variants `ATIdent(String)`, `ATQualified(String, String)`, `ATPrim(String)`, `ATArrow(List<AstType>, AstType)`, `ATRecord(List<TypeField>)`, `ATRowVar(String)`, `ATApp(String, List<AstType>)`, `ATUnion(AstType, AstType)`, `ATInter(AstType, AstType)`, `ATTuple(List<AstType>)`. `TypeField = { name: String, mut_: Bool, type_: AstType }`. `Param = { name: String, type_: Option<AstType> }`.
+
+**Pattern types:** `Pattern` with variants `PWild`, `PVar(String)`, `PLit(String, String)`, `PCon(String, List<ConField>)`, `PList(List<Pattern>, Option<String>)`, `PCons(Pattern, Pattern)`, `PTuple(List<Pattern>)`. `ConField = { name: String, pattern: Option<Pattern> }`.
+
+**Expression types:** `Expr` with 22 variants: `ELit(String, String)`, `EIdent(String)`, `ECall(Expr, List<Expr>)`, `EField(Expr, String)`, `EAwait(Expr)`, `EUnary(String, Expr)`, `EBinary(String, Expr, Expr)`, `ECons(Expr, Expr)`, `EPipe(String, Expr, Expr)`, `EIf(Expr, Expr, Option<Expr>)`, `EWhile(Expr, Block)`, `EMatch(Expr, List<Case_>)`, `ELambda(Bool, List<String>, List<Param>, Expr)`, `ETemplate(List<TmplPart>)`, `EList(List<ListElem>)`, `ERecord(Option<Expr>, List<RecField>)`, `ETuple(List<Expr>)`, `EThrow(Expr)`, `ETry(Block, Option<String>, List<Case_>)`, `EBlock(Block)`, `EIs(Expr, AstType)`, `ENever`. Supporting types: `RecField`, `ListElem` (`LElem`/`LSpread`), `TmplPart` (`TmplLit`/`TmplExpr`), `Case_`, `Block`.
+
+**Statement types:** `Stmt` with variants `SVal(String, Option<AstType>, Expr)`, `SVar(String, Option<AstType>, Expr)`, `SAssign(Expr, Expr)`, `SExpr(Expr)`, `SFun(Bool, String, List<String>, List<Param>, AstType, Expr)`, `SBreak`, `SContinue`.
+
+**Declaration types:** `FunDecl`, `ExternFunDecl`, `ExternImportDecl`, `ExternTypeDecl`, `TypeDecl`, `ExceptionDecl`, `CtorDef`, `TypeBody` (`TBAdt`/`TBAlias`).
+
+**Import / export / program types:** `ImportSpec`, `ImportDecl` (`IDNamed`/`IDNamespace`/`IDSideEffect`), `ExportInner` (`EIStar`/`EINamed`/`EIDecl`), `TopDecl` (13 variants: `TDFun`, `TDExternFun`, `TDExternImport`, `TDExternType`, `TDType`, `TDException`, `TDExport`, `TDVal`, `TDVar`, `TDSVal`, `TDSVar`, `TDSAssign`, `TDSExpr`), `Program = { imports: List<ImportDecl>, body: List<TopDecl> }`.
+
+---
+
+## kestrel:dev/parser/lexer
+
+Kestrel lexer written in Kestrel. Emits all tokens including whitespace and comments for full source round-trip fidelity.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `lex` | `(String) -> List<Token.Token>` | Tokenise a Kestrel source string. Always succeeds; unknown characters are emitted as single-character `TkPunct` tokens. The last token is always `TkEof`. Concatenating `t.text` for every token exactly reconstructs the input. BOM (`U+FEFF`) and shebang lines (`#!…`) are consumed as leading whitespace. |
+
+**Lexer notes:**
+- Keywords (23): `as fun type val var mut if else while break continue match try catch throw async await export import from exception is opaque extern`.
+- `True` and `False` tokenise as `TkUpper`, not `TkKw`.
+- Multi-character operators use longest-match: `=> := == != >= <= ** <| :: |> -> ...`.
+- `:` alone is `TkPunct`; `::` is `TkOp`.
+- String template literals (`"…${expr}…"`) produce a single `TkTemplate(parts)` token where `parts` separates literal and interpolation segments. The `token.text` is the full raw source.
+- Span tracking: `span.line` and `span.col` are 1-based; `span.start`/`span.end` are byte offsets.
+
+---
+
+## kestrel:dev/parser/parser
+
+Recursive-descent Kestrel parser written in Kestrel. Parses a token list (from the lexer) into an AST. No error recovery — the first error is returned.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `parse` | `(List<Token.Token>) -> Result<Program, ParseError>` | Parse a complete Kestrel program. Trivia tokens (whitespace, comments) are filtered before parsing. Returns `Err(ParseError)` on the first syntax error. |
+| `parseExpr` | `(List<Token.Token>) -> Result<Expr, ParseError>` | Parse a single expression from a token list. Useful for interactive tools and template interpolation. |
+
+**Types:**
+
+| Type | Definition |
+|------|-----------|
+| `ParseError` | ADT: `ParseError(String, Int, Int, Int)` — (message, byte-offset, line, col). All fields 1-based for line/col. |
+
+**Parser notes:**
+- Trivia (whitespace, line comments, block comments) is filtered from the token list before parsing begins.
+- Template string interpolations are parsed recursively: each `TPInterp` segment is re-lexed and parsed as an expression.
+- `tryParseParenLambda` uses speculative parsing (saves and restores `pos` and `errors`) to disambiguate `(x) => …` lambdas from grouped expressions and tuples.
+- Operator precedence (low → high): pipe (`|>`, `<|`) → cons (`::`) → or (`|`) → and (`&`) → is → relational (`==`, `!=`, `<`, `>`, `<=`, `>=`) → additive (`+`, `-`) → multiplicative (`*`, `/`, `%`) → power (`**`, right-assoc) → unary (`-`, `+`, `!`).
+- `**` is right-associative; all other binary operators are left-associative.
+- Records vs blocks disambiguation: `{` followed by `val`/`var`/`fun`/`async` → block; `{` followed by `}` or `mut ident` or `ident =` → record.
+
+---
+
 ## kestrel:io/http
 
 HTTP server and client. Provides an HTTP GET client and an HTTP server that dispatches incoming requests to a Kestrel handler function.
