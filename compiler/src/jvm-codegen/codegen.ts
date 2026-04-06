@@ -1689,6 +1689,9 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
           mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(KRECORD, '<init>', '()V'));
           mb.emit1b(JvmOp.ASTORE, recordSlot);
         }
+        // Sync nextLocal to slot after recordSlot allocation so that AssignStmt/VarStmt
+        // temp slots don't overlap with the KRecord closure-record slot.
+        nextLocal = slot;
         for (const stmt of expr.stmts) {
           for (const [k, v] of blockEnv) env.set(k, v);
           if (stmt.kind === 'ValStmt') {
