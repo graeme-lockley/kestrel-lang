@@ -141,29 +141,28 @@ the previous.
 - [ ] Create `stdlib/kestrel/dev/parser/token.test.ks` with imports:
   ```
   import { run as testRun, group, test, assertEqual, assertTrue, assertFalse } from "kestrel:tools/test"
-  import { isTrivia, spanZero, Token, TkWs, TkLineComment, TkBlockComment,
-           TkIdent, TkKw, TkEof, TkTemplate, TPLiteral, TPInterp } from "kestrel:dev/parser/token"
+  import * as Token from "kestrel:dev/parser/token"
   ```
 - [ ] Add `export fun run(): Unit` entry point calling `testRun` with all groups
 
-**`spanZero` tests:**
-- [ ] Assert `spanZero().start == 0`
-- [ ] Assert `spanZero().end == 0`
-- [ ] Assert `spanZero().line == 1`
-- [ ] Assert `spanZero().col == 1`
+**`Token.spanZero` tests:**
+- [ ] Assert `Token.spanZero().start == 0`
+- [ ] Assert `Token.spanZero().end == 0`
+- [ ] Assert `Token.spanZero().line == 1`
+- [ ] Assert `Token.spanZero().col == 1`
 
-**`isTrivia` tests:**
-- [ ] Assert `isTrivia({ kind = TkWs, text = " ", span = spanZero() }) == True`
-- [ ] Assert `isTrivia({ kind = TkLineComment, text = "// x", span = spanZero() }) == True`
-- [ ] Assert `isTrivia({ kind = TkBlockComment, text = "/* */", span = spanZero() }) == True`
-- [ ] Assert `isTrivia({ kind = TkIdent, text = "x", span = spanZero() }) == False`
-- [ ] Assert `isTrivia({ kind = TkKw, text = "fun", span = spanZero() }) == False`
-- [ ] Assert `isTrivia({ kind = TkEof, text = "", span = spanZero() }) == False`
+**`Token.isTrivia` tests:**
+- [ ] Assert `Token.isTrivia({ kind = Token.TkWs, text = " ", span = Token.spanZero() }) == True`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkLineComment, text = "// x", span = Token.spanZero() }) == True`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkBlockComment, text = "/* */", span = Token.spanZero() }) == True`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkIdent, text = "x", span = Token.spanZero() }) == False`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkKw, text = "fun", span = Token.spanZero() }) == False`
+- [ ] Assert `Token.isTrivia({ kind = Token.TkEof, text = "", span = Token.spanZero() }) == False`
 
-**`TemplatePart` construction tests:**
-- [ ] Construct `TPLiteral("hello")`, match to extract string, assert equals `"hello"`
-- [ ] Construct `TPInterp("x + 1")`, match to extract string, assert equals `"x + 1"`
-- [ ] Construct `TkTemplate([TPLiteral("a"), TPInterp("x")])`, match to verify list length is 2
+**`Token.TemplatePart` construction tests:**
+- [ ] Construct `Token.TPLiteral("hello")`, match to extract string, assert equals `"hello"`
+- [ ] Construct `Token.TPInterp("x + 1")`, match to extract string, assert equals `"x + 1"`
+- [ ] Construct `Token.TkTemplate([Token.TPLiteral("a"), Token.TPInterp("x")])`, match to verify list length is 2
 
 - [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/token.test.ks`
 
@@ -172,7 +171,7 @@ the previous.
 - [ ] Create `stdlib/kestrel/dev/parser/ast.ks` with imports:
   ```
   import * as Lst from "kestrel:data/list"
-  import { Span } from "kestrel:dev/parser/token"
+  import * as Token from "kestrel:dev/parser/token"
   ```
   Naming conventions: field/type names clashing with reserved words get a trailing underscore (`type_`, `mut_`, `async_`).
 
@@ -349,11 +348,7 @@ the previous.
   import * as Lst from "kestrel:data/list"
   import * as Arr from "kestrel:array"
   import * as Chr from "kestrel:data/char"
-  import { Token, TokenKind, Span, TemplatePart,
-           TkInt, TkFloat, TkStr, TkTemplate, TkChar,
-           TkIdent, TkUpper, TkKw, TkOp, TkPunct,
-           TkWs, TkLineComment, TkBlockComment, TkEof,
-           TPLiteral, TPInterp } from "kestrel:dev/parser/token"
+  import * as Token from "kestrel:dev/parser/token"
   ```
 
 **LexState and primitive helpers:**
@@ -371,8 +366,8 @@ the previous.
 - [ ] Implement `fun lsCp(ls: LexState): Int` — returns `Str.codePointAt(ls.src, ls.pos)` or `-1` when `lsEof`
 - [ ] Implement `fun lsCp1(ls: LexState): Int` — returns code point at `ls.pos + 1`, or `-1` if out of bounds
 - [ ] Implement `fun lsTake(ls: LexState): Int` — read `lsCp`, increment `ls.line` and reset `ls.col := 1` on LF (code point 10), else increment `ls.col`; then `ls.pos := ls.pos + 1`; return the code point read
-- [ ] Implement `fun lsMakeSpan(ls: LexState, start: Int, startLine: Int, startCol: Int): Span` — `{ start = start, end = ls.pos, line = startLine, col = startCol }`
-- [ ] Implement `fun lsMakeTok(ls: LexState, kind: TokenKind, text: String, start: Int, sl: Int, sc: Int): Token` — `{ kind = kind, text = text, span = lsMakeSpan(ls, start, sl, sc) }`
+- [ ] Implement `fun lsMakeSpan(ls: LexState, start: Int, startLine: Int, startCol: Int): Token.Span` — `{ start = start, end = ls.pos, line = startLine, col = startCol }`
+- [ ] Implement `fun lsMakeTok(ls: LexState, kind: Token.TokenKind, text: String, start: Int, sl: Int, sc: Int): Token.Token` — `{ kind = kind, text = text, span = lsMakeSpan(ls, start, sl, sc) }`
 
 **Skip helpers:**
 - [ ] Implement `fun lexSkipToEndOfLine(ls: LexState): Unit` — consume chars until LF (10) or EOF
@@ -381,10 +376,10 @@ the previous.
 
 **Whitespace and comment tokenisers:**
 - [ ] Implement `fun lexWsLoop(ls: LexState): Unit` — call `lsTake` while current code point is space (32), tab (9), CR (13), or LF (10)
-- [ ] Implement `fun lexWs(ls: LexState, tokens: Array<Token>): Unit` — record start/line/col; call `lexWsLoop`; push `TkWs` token with `Str.slice(ls.src, start, ls.pos)`
-- [ ] Implement `fun lexLineComment(ls: LexState, tokens: Array<Token>): Unit` — record start; consume `//` with two `lsTake` calls; call `lexSkipToEndOfLine`; push `TkLineComment` with raw slice
+- [ ] Implement `fun lexWs(ls: LexState, tokens: Array<Token.Token>): Unit` — record start/line/col; call `lexWsLoop`; push `Token.TkWs` token with `Str.slice(ls.src, start, ls.pos)`
+- [ ] Implement `fun lexLineComment(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume `//` with two `lsTake` calls; call `lexSkipToEndOfLine`; push `Token.TkLineComment` with raw slice
 - [ ] Implement `fun lexBlockCommentBody(ls: LexState): Unit` — consume chars until `*/` (code points 42 then 47) or EOF; consume both chars of `*/`
-- [ ] Implement `fun lexBlockComment(ls: LexState, tokens: Array<Token>): Unit` — record start; consume `/*`; call `lexBlockCommentBody`; push `TkBlockComment` with raw slice
+- [ ] Implement `fun lexBlockComment(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume `/*`; call `lexBlockCommentBody`; push `Token.TkBlockComment` with raw slice
 
 **Identifier/keyword tokeniser:**
 - [ ] Implement `fun isIdentStart(cp: Int): Bool` — true for A–Z (65–90), a–z (97–122), `_` (95)
@@ -392,7 +387,7 @@ the previous.
 - [ ] Define `val keywords: List<String>` — the 23 keywords: `["as","fun","type","val","var","mut","if","else","while","break","continue","match","try","catch","throw","async","await","export","import","from","exception","is","opaque","extern"]`
 - [ ] Implement `fun isKeyword(s: String): Bool` — uses `Lst.any(keywords, (kw) => Str.equals(kw, s))`
 - [ ] Implement `fun lexIdentLoop(ls: LexState): Unit` — call `lsTake` while `isIdentContinue(lsCp(ls))`
-- [ ] Implement `fun lexIdent(ls: LexState, tokens: Array<Token>): Unit` — record start; call `lexIdentLoop`; slice text; check: if `isKeyword` → `TkKw`; else if first code point A–Z (65–90) → `TkUpper`; else → `TkIdent`; push token with raw text. Note: `True` and `False` start uppercase so become `TkUpper`.
+- [ ] Implement `fun lexIdent(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; call `lexIdentLoop`; slice text; check: if `isKeyword` → `Token.TkKw`; else if first code point A–Z (65–90) → `Token.TkUpper`; else → `Token.TkIdent`; push token with raw text. Note: `True` and `False` start uppercase so become `Token.TkUpper`.
 
 **Number tokeniser:**
 - [ ] Implement `fun isDigit(cp: Int): Bool` — true for 48–57
@@ -408,7 +403,7 @@ the previous.
   - `0o`/`0O` → `lsTake` twice, `lexOctDigits`, return `False`
   - `.` followed by digit → `lsTake`, `lexDecDigits`, `lexExponent`, return `True`
   - otherwise → `lexDecDigits`; if `.` then digit: `lsTake`, `lexDecDigits`, `lexExponent`, return `True`; else if `e`/`E`: `lexExponent`, return `True`; else return `False`
-- [ ] Implement `fun lexNumber(ls: LexState, tokens: Array<Token>): Unit` — record start; call `lexNumberBody` (returns isFloat); slice text; push `TkFloat` or `TkInt`
+- [ ] Implement `fun lexNumber(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; call `lexNumberBody` (returns isFloat); slice text; push `Token.TkFloat` or `Token.TkInt`
 
 **String and char tokenisers:**
 - [ ] Implement `fun hexToIntLoop(hex: String, i: Int, acc: Int): Int` — recursive; each hex char: subtract 48 for `0–9`, 55 for `A–F`, 87 for `a–f`; multiply acc by 16 and add digit
@@ -422,24 +417,24 @@ the previous.
   - 117 `u` when next is `{` (123) → consume `u{`, call `lexHexDigits`, slice hex, consume `}`, return `Chr.charToString(Chr.fromCode(hexToInt(hex)))`
   - else → consume, return `""` (unknown escape — skip)
 - [ ] Implement `fun lexInterpBody(ls: LexState, depth: Int): Unit` — scan tracking brace depth: `{` (123) → recurse with `depth + 1`; `}` (125) → if depth is 1 consume and return, else recurse with `depth - 1`; else consume and recurse
-- [ ] Implement `fun lexStringBody(ls: LexState, parts: Array<TemplatePart>, litAcc: String): Unit` — state machine loop:
+- [ ] Implement `fun lexStringBody(ls: LexState, parts: Array<Token.TemplatePart>, litAcc: String): Unit` — state machine loop:
   - EOF or LF → stop (unterminated string)
   - `"` (34) → `lsTake`, stop (closing quote)
   - `\` (92) → `lsTake`; call `lexEscape`; append decoded char to `litAcc`; recurse
-  - `${` (36 then 123) → flush `litAcc` to `parts` as `TPLiteral` if non-empty; consume `${`; record `interpStart = ls.pos`; call `lexInterpBody(ls, 1)`; slice from `interpStart` to `ls.pos - 1` (excludes closing `}`); push `TPInterp(src)`; recurse with empty acc
-  - `$ident` (36 then `isIdentStart`) → flush `litAcc`; consume `$`; record identStart; call `lexIdentLoop`; push `TPInterp` of sliced ident; recurse with empty acc
+  - `${` (36 then 123) → flush `litAcc` to `parts` as `Token.TPLiteral` if non-empty; consume `${`; record `interpStart = ls.pos`; call `lexInterpBody(ls, 1)`; slice from `interpStart` to `ls.pos - 1` (excludes closing `}`); push `Token.TPInterp(src)`; recurse with empty acc
+  - `$ident` (36 then `isIdentStart`) → flush `litAcc`; consume `$`; record identStart; call `lexIdentLoop`; push `Token.TPInterp` of sliced ident; recurse with empty acc
   - else → consume char, append to `litAcc`; recurse
-  - At end (either stop condition): if `litAcc` is non-empty and template parts exist, push final `TPLiteral(litAcc)`
-- [ ] Implement `fun lexString(ls: LexState, tokens: Array<Token>): Unit` — record start; consume opening `"`; create `parts: Array<TemplatePart> = Arr.new()`; call `lexStringBody(ls, parts, "")`; slice `rawText = Str.slice(ls.src, start, ls.pos)`; if `Arr.length(parts) == 0` push `TkStr` else push `TkTemplate(Arr.toList(parts))`; both with `rawText` as token text
-- [ ] Implement `fun lexChar(ls: LexState, tokens: Array<Token>): Unit` — record start; consume `'`; if `\` consume `\` then call `lexEscape` (decoded content for AST use, but raw text for token); else consume one char; consume closing `'`; push `TkChar` with `rawText = Str.slice(ls.src, start, ls.pos)` (includes surrounding `'` delimiters)
+  - At end (either stop condition): if `litAcc` is non-empty and template parts exist, push final `Token.TPLiteral(litAcc)`
+- [ ] Implement `fun lexString(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume opening `"`; create `parts: Array<Token.TemplatePart> = Arr.new()`; call `lexStringBody(ls, parts, "")`; slice `rawText = Str.slice(ls.src, start, ls.pos)`; if `Arr.length(parts) == 0` push `Token.TkStr` else push `Token.TkTemplate(Arr.toList(parts))`; both with `rawText` as token text
+- [ ] Implement `fun lexChar(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; consume `'`; if `\` consume `\` then call `lexEscape` (decoded content for AST use, but raw text for token); else consume one char; consume closing `'`; push `Token.TkChar` with `rawText = Str.slice(ls.src, start, ls.pos)` (includes surrounding `'` delimiters)
 
 **Operator/punctuation tokeniser:**
 - [ ] Define `val multiOps: List<String>` — `["=>",":=","==","!=",">=","<=","**","<|","::","|>","->","..."]` (order matters — longer first)
 - [ ] Implement `fun tryMatchMultiOp(ls: LexState, ops: List<String>): String` — for each op, compare `Str.slice(ls.src, ls.pos, ls.pos + Str.length(op))` with op using `Str.equals`; on match, advance pos by `Str.length(op)` (loop with `lsTake`), return the matched op; if list exhausted return `""`
-- [ ] Implement `fun lexOpOrPunct(ls: LexState, tokens: Array<Token>): Unit` — record start; call `tryMatchMultiOp`; if matched push `TkOp` with matched text; else consume one char with `lsTake` and push: if char is in `"+-*/%|&<>=!"` → `TkOp`, else → `TkPunct`
+- [ ] Implement `fun lexOpOrPunct(ls: LexState, tokens: Array<Token.Token>): Unit` — record start; call `tryMatchMultiOp`; if matched push `Token.TkOp` with matched text; else consume one char with `lsTake` and push: if char is in `"+-*/%|&<>=!"` → `Token.TkOp`, else → `Token.TkPunct`
 
 **Main lex loop:**
-- [ ] Implement `fun lexLoop(ls: LexState, tokens: Array<Token>): Unit` — while not `lsEof`:
+- [ ] Implement `fun lexLoop(ls: LexState, tokens: Array<Token.Token>): Unit` — while not `lsEof`:
   - Code point 32/9/13/10 (whitespace) → `lexWs`
   - Code points 47+47 (`//`) → `lexLineComment`
   - Code points 47+42 (`/*`) → `lexBlockComment`
@@ -450,16 +445,16 @@ the previous.
   - Code point 39 (`'`) → `lexChar`
   - else → `lexOpOrPunct`
   - recurse (tail-recursive loop)
-- [ ] Implement `export fun lex(src: String): List<Token>` — create `LexState { src, len=Str.length(src), mut pos=0, mut line=1, mut col=1 }`; create `tokens: Array<Token> = Arr.new()`; call `lexSkipBom`, `lexSkipShebang`, `lexLoop`; push EOF token `{ kind=TkEof, text="", span={start=ls.pos,...} }`; return `Arr.toList(tokens)`
+- [ ] Implement `export fun lex(src: String): List<Token.Token>` — create `LexState { src, len=Str.length(src), mut pos=0, mut line=1, mut col=1 }`; create `tokens: Array<Token.Token> = Arr.new()`; call `lexSkipBom`, `lexSkipShebang`, `lexLoop`; push EOF token `{ kind=Token.TkEof, text="", span={start=ls.pos,...} }`; return `Arr.toList(tokens)`
 - [ ] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/lexer.ks`
 
 ### Phase F — Lexer unit tests (`stdlib/kestrel/dev/parser/lexer.test.ks`)
 
-- [ ] Create `stdlib/kestrel/dev/parser/lexer.test.ks` with imports for test harness, `lex`, and all `TokenKind` constructors from `kestrel:dev/parser/token`
+- [ ] Create `stdlib/kestrel/dev/parser/lexer.test.ks` with imports for test harness, `lex`, and the `Token` namespace from `kestrel:dev/parser/token`
 - [ ] Add `export fun run(): Unit` entry point
-- [ ] Implement helper `fun kindOf(src: String): TokenKind` — `lex(src)` then return kind of first token
+- [ ] Implement helper `fun kindOf(src: String): Token.TokenKind` — `lex(src)` then return kind of first token
 - [ ] Implement helper `fun textOf(src: String): String` — `lex(src)` then return text of first token
-- [ ] Implement helper `fun allKinds(src: String): List<TokenKind>` — `lex(src)` then map `.kind`
+- [ ] Implement helper `fun allKinds(src: String): List<Token.TokenKind>` — `lex(src)` then map `.kind`
 - [ ] Implement helper `fun joinTexts(src: String): String` — `lex(src)` then `Str.join("", Lst.map(tokens, (t) => t.text))`
 
 **Round-trip tests:**
@@ -473,75 +468,75 @@ the previous.
 - [ ] `joinTexts("x // c\ny")` equals original (comment between two identifiers preserved)
 
 **Whitespace and comment token tests:**
-- [ ] `kindOf("  ")` equals `TkWs`
-- [ ] `kindOf("\n")` equals `TkWs`
+- [ ] `kindOf("  ")` equals `Token.TkWs`
+- [ ] `kindOf("\n")` equals `Token.TkWs`
 - [ ] `textOf("\t ")` equals `"\t "` (raw tabs and spaces)
-- [ ] `kindOf("// hi")` equals `TkLineComment`
+- [ ] `kindOf("// hi")` equals `Token.TkLineComment`
 - [ ] `textOf("// hi there")` equals `"// hi there"`
-- [ ] `kindOf("/* hi */")` equals `TkBlockComment`
+- [ ] `kindOf("/* hi */")` equals `Token.TkBlockComment`
 - [ ] `textOf("/* hi */")` equals `"/* hi */"`
 
 **Identifier and keyword tests:**
-- [ ] `kindOf("foo")` equals `TkIdent`
-- [ ] `kindOf("_bar")` equals `TkIdent`
+- [ ] `kindOf("foo")` equals `Token.TkIdent`
+- [ ] `kindOf("_bar")` equals `Token.TkIdent`
 - [ ] `textOf("myVar")` equals `"myVar"`
-- [ ] `kindOf("Foo")` equals `TkUpper`
-- [ ] `kindOf("True")` equals `TkUpper` (NOT `TkKw`)
-- [ ] `kindOf("False")` equals `TkUpper` (NOT `TkKw`)
-- [ ] Test each keyword tokenises as `TkKw` — one test per keyword (23 tests): `as`, `fun`, `type`, `val`, `var`, `mut`, `if`, `else`, `while`, `break`, `continue`, `match`, `try`, `catch`, `throw`, `async`, `await`, `export`, `import`, `from`, `exception`, `is`, `opaque`, `extern`
+- [ ] `kindOf("Foo")` equals `Token.TkUpper`
+- [ ] `kindOf("True")` equals `Token.TkUpper` (NOT `Token.TkKw`)
+- [ ] `kindOf("False")` equals `Token.TkUpper` (NOT `Token.TkKw`)
+- [ ] Test each keyword tokenises as `Token.TkKw` — one test per keyword (23 tests): `as`, `fun`, `type`, `val`, `var`, `mut`, `if`, `else`, `while`, `break`, `continue`, `match`, `try`, `catch`, `throw`, `async`, `await`, `export`, `import`, `from`, `exception`, `is`, `opaque`, `extern`
 
 **Integer literal tests:**
-- [ ] `kindOf("42")` equals `TkInt`, `textOf("42")` equals `"42"`
-- [ ] `kindOf("0")` equals `TkInt`
-- [ ] `kindOf("0xff")` equals `TkInt`, `textOf("0xff")` equals `"0xff"`
-- [ ] `kindOf("0b101")` equals `TkInt`, `textOf("0b101")` equals `"0b101"`
-- [ ] `kindOf("0o77")` equals `TkInt`
-- [ ] `kindOf("1_000_000")` equals `TkInt`, `textOf("1_000_000")` equals `"1_000_000"`
+- [ ] `kindOf("42")` equals `Token.TkInt`, `textOf("42")` equals `"42"`
+- [ ] `kindOf("0")` equals `Token.TkInt`
+- [ ] `kindOf("0xff")` equals `Token.TkInt`, `textOf("0xff")` equals `"0xff"`
+- [ ] `kindOf("0b101")` equals `Token.TkInt`, `textOf("0b101")` equals `"0b101"`
+- [ ] `kindOf("0o77")` equals `Token.TkInt`
+- [ ] `kindOf("1_000_000")` equals `Token.TkInt`, `textOf("1_000_000")` equals `"1_000_000"`
 
 **Float literal tests:**
-- [ ] `kindOf("3.14")` equals `TkFloat`, `textOf("3.14")` equals `"3.14"`
-- [ ] `kindOf("1e10")` equals `TkFloat`
-- [ ] `kindOf("1.5e-3")` equals `TkFloat`
-- [ ] `kindOf(".5")` equals `TkFloat`
-- [ ] `kindOf("1E10")` equals `TkFloat`
+- [ ] `kindOf("3.14")` equals `Token.TkFloat`, `textOf("3.14")` equals `"3.14"`
+- [ ] `kindOf("1e10")` equals `Token.TkFloat`
+- [ ] `kindOf("1.5e-3")` equals `Token.TkFloat`
+- [ ] `kindOf(".5")` equals `Token.TkFloat`
+- [ ] `kindOf("1E10")` equals `Token.TkFloat`
 
 **String literal tests:**
-- [ ] `kindOf("\"hello\"")` equals `TkStr`
+- [ ] `kindOf("\"hello\"")` equals `Token.TkStr`
 - [ ] `textOf("\"hello\"")` equals `"\"hello\""` (raw text includes quotes)
 - [ ] `textOf("\"a\\nb\"")` equals `"\"a\\nb\""` (raw text preserves backslash)
-- [ ] Lex `"\"${x}\""` → first token kind is `TkTemplate`
-- [ ] Lex `"\"${x}\""` → `TkTemplate` parts contain `TPInterp("x")`
-- [ ] Lex `"\"hello ${name}\""` → parts are `[TPLiteral("hello "), TPInterp("name")]`
-- [ ] Lex `"\"$name\""` → parts are `[TPInterp("name")]` (short `$ident` form)
-- [ ] Lex `"\"a ${1 + 2} b\""` → parts are `[TPLiteral("a "), TPInterp("1 + 2"), TPLiteral(" b")]`
+- [ ] Lex `"\"${x}\""` → first token kind is `Token.TkTemplate`
+- [ ] Lex `"\"${x}\""` → `Token.TkTemplate` parts contain `Token.TPInterp("x")`
+- [ ] Lex `"\"hello ${name}\""` → parts are `[Token.TPLiteral("hello "), Token.TPInterp("name")]`
+- [ ] Lex `"\"$name\""` → parts are `[Token.TPInterp("name")]` (short `$ident` form)
+- [ ] Lex `"\"a ${1 + 2} b\""` → parts are `[Token.TPLiteral("a "), Token.TPInterp("1 + 2"), Token.TPLiteral(" b")]`
 - [ ] `textOf("\"${x}\"")` equals `"\"${x}\""` (raw text of whole template token preserved)
 
 **Char literal tests:**
-- [ ] `kindOf("'a'")` equals `TkChar`
+- [ ] `kindOf("'a'")` equals `Token.TkChar`
 - [ ] `textOf("'a'")` equals `"'a'"` (raw text includes quotes)
 - [ ] `textOf("'\\n'")` equals `"'\\n'"` (raw escape preserved)
 
 **Operator tests:**
-- [ ] `kindOf("=>")` is `TkOp`, text is `"=>"`
-- [ ] `kindOf(":=")` is `TkOp`, text is `":="`
-- [ ] `kindOf("==")` is `TkOp`, text is `"=="`
-- [ ] `kindOf("!=")` is `TkOp`, text is `"!="`
-- [ ] `kindOf(">=")` is `TkOp`, text is `">="`
-- [ ] `kindOf("<=")` is `TkOp`, text is `"<="`
-- [ ] `kindOf("**")` is `TkOp`, text is `"**"`
-- [ ] `kindOf("<|")` is `TkOp`, text is `"<|"`
-- [ ] `kindOf("::")` is `TkOp`, text is `"::"`
-- [ ] `kindOf("|>")` is `TkOp`, text is `"|>"`
-- [ ] `kindOf("->")` is `TkOp`, text is `"->"`
-- [ ] `kindOf("...")` is `TkOp`, text is `"..."`
-- [ ] `kindOf("+")` is `TkOp`; `kindOf("-")` is `TkOp`; `kindOf("!")` is `TkOp`
+- [ ] `kindOf("=>")` is `Token.TkOp`, text is `"=>"`
+- [ ] `kindOf(":=")` is `Token.TkOp`, text is `":="`
+- [ ] `kindOf("==")` is `Token.TkOp`, text is `"=="`
+- [ ] `kindOf("!=")` is `Token.TkOp`, text is `"!="`
+- [ ] `kindOf(">=")` is `Token.TkOp`, text is `">="`
+- [ ] `kindOf("<=")` is `Token.TkOp`, text is `"<="`
+- [ ] `kindOf("**")` is `Token.TkOp`, text is `"**"`
+- [ ] `kindOf("<|")` is `Token.TkOp`, text is `"<|"`
+- [ ] `kindOf("::")` is `Token.TkOp`, text is `"::"`
+- [ ] `kindOf("|>")` is `Token.TkOp`, text is `"|>"`
+- [ ] `kindOf("->")` is `Token.TkOp`, text is `"->"`
+- [ ] `kindOf("...")` is `Token.TkOp`, text is `"..."`
+- [ ] `kindOf("+")` is `Token.TkOp`; `kindOf("-")` is `Token.TkOp`; `kindOf("!")` is `Token.TkOp`
 
 **Punctuation tests:**
-- [ ] `:` vs `::` — lex `": ::"` kinds are `[TkPunct, TkWs, TkOp, TkEof]`, texts are `[":", " ", "::", ""]`
-- [ ] `kindOf("(")` is `TkPunct`, text is `"("`
-- [ ] `kindOf(")")` is `TkPunct`; `kindOf("{")` is `TkPunct`; `kindOf("}")` is `TkPunct`
-- [ ] `kindOf("[")` is `TkPunct`; `kindOf("]")` is `TkPunct`
-- [ ] `kindOf(",")` is `TkPunct`; `kindOf(".")` is `TkPunct`; `kindOf(";")` is `TkPunct`
+- [ ] `:` vs `::` — lex `": ::"` kinds are `[Token.TkPunct, Token.TkWs, Token.TkOp, Token.TkEof]`, texts are `[":", " ", "::", ""]`
+- [ ] `kindOf("(")` is `Token.TkPunct`, text is `"("`
+- [ ] `kindOf(")")` is `Token.TkPunct`; `kindOf("{")` is `Token.TkPunct`; `kindOf("}")` is `Token.TkPunct`
+- [ ] `kindOf("[")` is `Token.TkPunct`; `kindOf("]")` is `Token.TkPunct`
+- [ ] `kindOf(",")` is `Token.TkPunct`; `kindOf(".")` is `Token.TkPunct`; `kindOf(";")` is `Token.TkPunct`
 
 **Span tracking tests:**
 - [ ] Lex `"42"`: first token `span.start == 0`, `span.end == 2`, `span.line == 1`, `span.col == 1`
@@ -549,8 +544,8 @@ the previous.
 - [ ] Lex `"a\nb"`: second non-trivia token is `b` at `line == 2`
 
 **EOF token test:**
-- [ ] Last token of `lex("")` kind is `TkEof`, text is `""`
-- [ ] `lex("x")` length is 2 (one `TkIdent` plus `TkEof`)
+- [ ] Last token of `lex("")` kind is `Token.TkEof`, text is `""`
+- [ ] `lex("x")` length is 2 (one `Token.TkIdent` plus `Token.TkEof`)
 
 - [ ] Run: `./kestrel test stdlib/kestrel/dev/parser/lexer.test.ks`
 
@@ -563,7 +558,7 @@ the previous.
 - [ ] Define `ParseState` mutable record:
   ```
   type ParseState = {
-    tokens: Array<Token>,   // trivia-filtered (whitespace and comments removed)
+    tokens: Array<Token.Token>,   // trivia-filtered (whitespace and comments removed)
     count: Int,             // Arr.length(tokens), cached
     mut pos: Int,           // current position in filtered array
     mut errors: List<ParseError>
@@ -571,11 +566,11 @@ the previous.
   ```
 
 **ParseState construction and navigation helpers:**
-- [ ] Implement `fun buildFiltered(toks: List<Token>, arr: Array<Token>): Unit` — append each non-trivia token to `arr` (match on kind, skip `TkWs`, `TkLineComment`, `TkBlockComment`)
-- [ ] Implement `fun makePs(allTokens: List<Token>): ParseState` — create array, call `buildFiltered`, return `{ tokens=arr, count=Arr.length(arr), mut pos=0, mut errors=[] }`
-- [ ] Implement `fun psCurrent(ps: ParseState): Token` — `Arr.get(ps.tokens, min(ps.pos, ps.count - 1))`
-- [ ] Implement `fun psPeek(ps: ParseState, offset: Int): Token` — `Arr.get(ps.tokens, min(ps.pos + offset, ps.count - 1))`
-- [ ] Implement `fun psAdvance(ps: ParseState): Token` — return `psCurrent`; if not EOF increment `ps.pos`
+- [ ] Implement `fun buildFiltered(toks: List<Token.Token>, arr: Array<Token.Token>): Unit` — append each non-trivia token to `arr` (match on kind, skip `Token.TkWs`, `Token.TkLineComment`, `Token.TkBlockComment`)
+- [ ] Implement `fun makePs(allTokens: List<Token.Token>): ParseState` — create array, call `buildFiltered`, return `{ tokens=arr, count=Arr.length(arr), mut pos=0, mut errors=[] }`
+- [ ] Implement `fun psCurrent(ps: ParseState): Token.Token` — `Arr.get(ps.tokens, min(ps.pos, ps.count - 1))`
+- [ ] Implement `fun psPeek(ps: ParseState, offset: Int): Token.Token` — `Arr.get(ps.tokens, min(ps.pos + offset, ps.count - 1))`
+- [ ] Implement `fun psAdvance(ps: ParseState): Token.Token` — return `psCurrent`; if not EOF increment `ps.pos`
 - [ ] Implement `fun psAtKw(ps: ParseState, kw: String): Bool`
 - [ ] Implement `fun psAtOp(ps: ParseState, op: String): Bool`
 - [ ] Implement `fun psAtPunct(ps: ParseState, ch: String): Bool`
@@ -583,24 +578,24 @@ the previous.
 - [ ] Implement `fun psAtUpper(ps: ParseState): Bool`
 - [ ] Implement `fun psAtEof(ps: ParseState): Bool`
 - [ ] Implement `fun psError(ps: ParseState, msg: String): ParseError` — construct `ParseError(msg, span.start, span.line, span.col)` from current token's span; prepend to `ps.errors`; return the error
-- [ ] Implement `fun psExpectIdent(ps: ParseState): Result<String, ParseError>` — if `TkIdent` advance and return `Ok(text)`, else `Err(psError(...))`
+- [ ] Implement `fun psExpectIdent(ps: ParseState): Result<String, ParseError>` — if `Token.TkIdent` advance and return `Ok(text)`, else `Err(psError(...))`
 - [ ] Implement `fun psExpectUpper(ps: ParseState): Result<String, ParseError>`
-- [ ] Implement `fun psExpectKw(ps: ParseState, kw: String): Result<Token, ParseError>`
-- [ ] Implement `fun psExpectOp(ps: ParseState, op: String): Result<Token, ParseError>`
-- [ ] Implement `fun psExpectPunct(ps: ParseState, ch: String): Result<Token, ParseError>`
-- [ ] Implement `fun psExpectStr(ps: ParseState): Result<String, ParseError>` — if `TkStr` advance and return `Ok(rawText)`, else error
-- [ ] Implement `fun isExprStart(ps: ParseState): Bool` — returns True if current token can start an expression: `TkInt`, `TkFloat`, `TkStr`, `TkTemplate`, `TkChar`, `TkIdent`, `TkUpper`, or kw/punct `( [ { if while match try throw -` `+ ! await async`
+- [ ] Implement `fun psExpectKw(ps: ParseState, kw: String): Result<Token.Token, ParseError>`
+- [ ] Implement `fun psExpectOp(ps: ParseState, op: String): Result<Token.Token, ParseError>`
+- [ ] Implement `fun psExpectPunct(ps: ParseState, ch: String): Result<Token.Token, ParseError>`
+- [ ] Implement `fun psExpectStr(ps: ParseState): Result<String, ParseError>` — if `Token.TkStr` advance and return `Ok(rawText)`, else error
+- [ ] Implement `fun isExprStart(ps: ParseState): Bool` — returns True if current token can start an expression: `Token.TkInt`, `Token.TkFloat`, `Token.TkStr`, `Token.TkTemplate`, `Token.TkChar`, `Token.TkIdent`, `Token.TkUpper`, or kw/punct `( [ { if while match try throw -` `+ ! await async`
 
 **Entry points:**
-- [ ] Implement `export fun parse(tokens: List<Token>): Result<Program, ParseError>` — `makePs`, call `parseProgram`, return `Err(head errors)` if errors non-empty, else `Ok(prog)`
-- [ ] Implement `export fun parseExpr(tokens: List<Token>): Result<Expr, ParseError>` — `makePs`, call `parsePipeExpr(ps, "expr")`, return as above
+- [ ] Implement `export fun parse(tokens: List<Token.Token>): Result<Program, ParseError>` — `makePs`, call `parseProgram`, return `Err(head errors)` if errors non-empty, else `Ok(prog)`
+- [ ] Implement `export fun parseExpr(tokens: List<Token.Token>): Result<Expr, ParseError>` — `makePs`, call `parsePipeExpr(ps, "expr")`, return as above
 
 **Program-level parsing:**
 - [ ] Implement `fun parseProgram(ps: ParseState): Program` — call `parseImports`, then `parseTopBody`, return `{ imports, body }`
 - [ ] Implement `fun parseImports(ps: ParseState): List<ImportDecl>` — loop while `psAtKw(ps, "import")`: advance past `import`, call `parseImport1`, collect results
 - [ ] Implement `fun parseImport1(ps: ParseState): ImportDecl` — three forms:
   - `* as Name from "spec"` → advance `*`, `as`, ident (alias), `from`, str → `IDNamespace(spec, alias)`
-  - `"spec"` (TkStr immediately) → advance → `IDSideEffect(spec)`
+  - `"spec"` (Token.TkStr immediately) → advance → `IDSideEffect(spec)`
   - `{ specs } from "spec"` → advance `{`, call `parseImportSpecList`, `from`, str → `IDNamed(spec, specs)`
 - [ ] Implement `fun parseImportSpecList(ps: ParseState): List<ImportSpec>` — comma-separated `name` or `name as alias`; consume `}`
 - [ ] Implement `fun parseTopBody(ps: ParseState): List<TopDecl>` — loop until EOF; dispatch:
@@ -625,13 +620,13 @@ the previous.
 - [ ] Implement `fun parseTopStmt(ps: ParseState): TopDecl` — if `val`: consume, ident, `=`, expr → `TDSVal` (NO type); if `var`: same → `TDSVar`; else parse expr; if `:=` follows → consume, parse rhs → `TDSAssign`; else → `TDSExpr`
 
 **Declaration helpers:**
-- [ ] Implement `fun parseTypeParams(ps: ParseState): List<String>` — if `<` (op), consume, comma-separated TkIdent names, consume `>`; else return `[]`
+- [ ] Implement `fun parseTypeParams(ps: ParseState): List<String>` — if `<` (op), consume, comma-separated Token.TkIdent names, consume `>`; else return `[]`
 - [ ] Implement `fun parseSingleParam(ps: ParseState): Param` — `psExpectIdent`; if `:` (punct) follows, consume and parse type → `{ name, type_=Some(t) }`; else `{ name, type_=None }`
 - [ ] Implement `fun parseParamList(ps: ParseState): List<Param>` — consume `(`; comma-separated `parseSingleParam`; consume `)`
 - [ ] Implement `fun parseFunDecl(ps: ParseState, exported: Bool): TopDecl` — consume optional `async` (record flag), consume `fun`, `psExpectIdent` (name), `parseTypeParams`, `parseParamList`, consume `:`, `parseTypeExpr` (retType), consume `=`, `parsePipeExpr` (body) → `TDFun(FunDecl{exported, async_, name, typeParams, params, retType, body})`
 - [ ] Implement `fun parseSingleCtor(ps: ParseState): CtorDef` — `psExpectUpper` (name); if `(` optionally parse comma-separated types until `)` → `{ name, params=types }`; else `{ name, params=[] }`
 - [ ] Implement `fun parseCtorList(ps: ParseState): List<CtorDef>` — parse `parseSingleCtor`; while `|` (op) follows consume and parse another; return list
-- [ ] Implement `fun parseTypeDecl(ps: ParseState, exported: Bool): TopDecl` — consume `opaque`? then `type`; name; `parseTypeParams`; consume `=`; decide body: peek — if `TkUpper` and next peek is `(` or `|` → `TBAdt(parseCtorList(ps))`; else `TBAlias(parseTypeExpr(ps))` → `TDType(TypeDecl{visibility, name, typeParams, body})`
+- [ ] Implement `fun parseTypeDecl(ps: ParseState, exported: Bool): TopDecl` — consume `opaque`? then `type`; name; `parseTypeParams`; consume `=`; decide body: peek — if `Token.TkUpper` and next peek is `(` or `|` → `TBAdt(parseCtorList(ps))`; else `TBAlias(parseTypeExpr(ps))` → `TDType(TypeDecl{visibility, name, typeParams, body})`
 - [ ] Implement `fun parseExceptionDecl(ps: ParseState, exported: Bool): TopDecl` — consume `exception`; name; if `{` follows parse comma-separated `mut? name: T` fields until `}`; return `TDException(ExceptionDecl{exported, name, fields})`
 - [ ] Implement `fun parseExternFun(ps: ParseState, exported: Bool): TopDecl` — consume `extern fun`; name; typeParams; paramList; `:` retType; `=` `jvm("desc")` → `TDExternFun`
 - [ ] Implement `fun parseExternType(ps: ParseState): TopDecl` — handle `extern opaque export type` / `extern opaque type` / `extern type`; name; typeParams; `=` `jvm("class")` → `TDExternType`
@@ -643,7 +638,7 @@ the previous.
 - [ ] Implement `fun parseAndType(ps: ParseState): AstType` — parse `parseArrowType`; while `&` left-associate into `ATInter`
 - [ ] Implement `fun parseArrowType(ps: ParseState): AstType` — parse `parseAppType`; if `->` (op) right-associate into `ATArrow([lhs], rhs)` (if lhs was a tuple product, use its list as param types)
 - [ ] Implement `fun parseAppType(ps: ParseState): AstType` — parse `parseAtomType`; if `<` try consuming generic args list → `ATApp(name, args)`; while `*` (op) left-associate into `ATTuple`
-- [ ] Implement `fun parseAtomType(ps: ParseState): AstType` — dispatch: `(` `)` → `ATPrim "Unit"`; `(T)` → `T` (grouping); `{ }` → `ATRecord([])`; `{ ...r }` → `ATRowVar(r)`; `{ fields }` → `ATRecord(parseRecordTypeFields)`; `TkIdent`/`TkUpper` → `ATPrim` or `ATIdent`; `TkIdent.TkUpper` (qualified) → `ATQualified`
+- [ ] Implement `fun parseAtomType(ps: ParseState): AstType` — dispatch: `(` `)` → `ATPrim "Unit"`; `(T)` → `T` (grouping); `{ }` → `ATRecord([])`; `{ ...r }` → `ATRowVar(r)`; `{ fields }` → `ATRecord(parseRecordTypeFields)`; `Token.TkIdent`/`Token.TkUpper` → `ATPrim` or `ATIdent`; `Token.TkIdent` `.` `Token.TkUpper` (qualified) → `ATQualified`
 - [ ] Implement `fun parseRecordTypeFields(ps: ParseState): List<TypeField>` — comma-separated `mut? name: T` fields until `}`; consume `}`
 
 **Expression parsing — precedence levels:**
@@ -660,20 +655,20 @@ the previous.
 - [ ] Implement `fun exprMayBeCallCallee(e: Expr): Bool` — returns `True` for `EIdent`, `EField`, `ECall`, `ELambda`, `EAwait(inner)` where `exprMayBeCallCallee(inner)` is also True; returns `False` for all literal/collection/block forms
 - [ ] Implement `fun parsePrimary(ps: ParseState, ctx: String): Expr` — check for `await` prefix (consume if present); call `parseAtom`; postfix loop:
   - `(` and `exprMayBeCallCallee(expr)` → consume `(`; `parseArgList`; consume `)` → `ECall(expr, args)`; loop
-  - `.` punct → consume; if `TkIdent` consume field name → `EField(expr, name)`; if `TkInt` consume index → `EField(expr, text)`; loop
-  - `TkFloat` where text starts with `.` (tuple index `.0`) → extract decimal part; `EField(expr, idx)`; loop
+  - `.` punct → consume; if `Token.TkIdent` consume field name → `EField(expr, name)`; if `Token.TkInt` consume index → `EField(expr, text)`; loop
+  - `Token.TkFloat` where text starts with `.` (tuple index `.0`) → extract decimal part; `EField(expr, idx)`; loop
   - wrap in `EAwait` if prefix was set; return
 - [ ] Implement `fun parseArgList(ps: ParseState): List<Expr>` — comma-separated `parsePipeExpr` until `)`; do NOT consume `)`
 - [ ] Implement `fun parseAtom(ps: ParseState, ctx: String): Expr` — dispatch on current token:
-  - `TkInt` → `ELit("int", text)`, advance
-  - `TkFloat` → `ELit("float", text)`, advance
-  - `TkStr` → `ELit("string", decodeString(rawText))`, advance
-  - `TkChar` → `ELit("char", decodeChar(rawText))`, advance
-  - `TkTemplate(parts)` → call `parseTemplateExpr(ps, parts)`, advance
-  - `TkUpper "True"` → `ELit("true","True")`, advance
-  - `TkUpper "False"` → `ELit("false","False")`, advance
-  - `TkUpper` (other) → `EIdent(text)`, advance
-  - `TkIdent` → `EIdent(text)`, advance
+  - `Token.TkInt` → `ELit("int", text)`, advance
+  - `Token.TkFloat` → `ELit("float", text)`, advance
+  - `Token.TkStr` → `ELit("string", decodeString(rawText))`, advance
+  - `Token.TkChar` → `ELit("char", decodeChar(rawText))`, advance
+  - `Token.TkTemplate(parts)` → call `parseTemplateExpr(ps, parts)`, advance
+  - `Token.TkUpper "True"` → `ELit("true","True")`, advance
+  - `Token.TkUpper "False"` → `ELit("false","False")`, advance
+  - `Token.TkUpper` (other) → `EIdent(text)`, advance
+  - `Token.TkIdent` → `EIdent(text)`, advance
   - `(` → try `tryParseParenLambda(ps, False)`; if `None`: if `)` → `ELit("unit","()")`, else parse expr; if `,` → collect more → `ETuple`
   - `[` → `parseListLiteral`
   - `{` → `parseRecordOrBlock`
@@ -689,12 +684,12 @@ the previous.
 - [ ] Implement `fun decodeChar(raw: String): String` — strip `'` delimiters; decode single escape or return the single character
 
 **Template parsing:**
-- [ ] Implement `fun parseTemplateExpr(ps: ParseState, parts: List<TemplatePart>): Expr` — map over parts: `TPLiteral(s)` → `TmplLit(s)`; `TPInterp(src)` → call `lex(src)` then `parseExpr` from this file, extract expr → `TmplExpr(expr)`; return `ETemplate(mappedParts)`
+- [ ] Implement `fun parseTemplateExpr(ps: ParseState, parts: List<Token.TemplatePart>): Expr` — map over parts: `Token.TPLiteral(s)` → `TmplLit(s)`; `Token.TPInterp(src)` → call `lex(src)` then `parseExpr` from this file, extract expr → `TmplExpr(expr)`; return `ETemplate(mappedParts)`
 
 **Lambda backtracking:**
-- [ ] Implement `fun tryParseParamListOnly(ps: ParseState): Option<List<Param>>` — speculative parse: save `ps.pos` and `ps.errors`; attempt to parse comma-separated params where each is `TkIdent` optionally followed by `: type`; if any element fails or unexpected token found, restore `ps.pos := savedPos` and `ps.errors := savedErrors`, return `None`; on success return `Some(params)`
+- [ ] Implement `fun tryParseParamListOnly(ps: ParseState): Option<List<Param>>` — speculative parse: save `ps.pos` and `ps.errors`; attempt to parse comma-separated params where each is `Token.TkIdent` optionally followed by `: type`; if any element fails or unexpected token found, restore `ps.pos := savedPos` and `ps.errors := savedErrors`, return `None`; on success return `Some(params)`
 - [ ] Implement `fun tryParseParenLambda(ps: ParseState, async_: Bool): Option<Expr>` — save `ps.pos` and `ps.errors`; advance past `(`; if immediately `)` restore and return `None`; call `tryParseParamListOnly`; on `None` restore and return `None`; if not `)` restore and return `None`; advance past `)`; if not `=>` restore and return `None`; advance past `=>`; parse body with `parsePipeExpr`; return `Some(ELambda(async_, [], params, body))`
-- [ ] Implement `fun isGenericLambdaHead(ps: ParseState): Bool` — save pos; try consuming `<`, comma-separated TkIdent, `>`; check for `(`; restore pos; return whether all steps matched
+- [ ] Implement `fun isGenericLambdaHead(ps: ParseState): Bool` — save pos; try consuming `<`, comma-separated Token.TkIdent, `>`; check for `(`; restore pos; return whether all steps matched
 - [ ] Implement `fun parseGenericLambda(ps: ParseState, async_: Bool): Expr` — consume `<`, typeParams, `>`, `(`, paramList, `)`, `=>`, body; return `ELambda(async_, typeParams, params, body)`
 
 **Block parsing:**
@@ -703,7 +698,7 @@ the previous.
   - kw `val`/`var`/`fun`/`async` → `EBlock(parseBlock(ps, ctx))`
   - op `...` → `ERecord(parseRecordExpr(ps))`... actually: parse as record
   - kw `mut` → record
-  - `TkIdent` and psPeek+2 is op `=` → record
+  - `Token.TkIdent` and psPeek+2 is op `=` → record
   - else → block
 - [ ] Implement `fun parseRecordExpr(ps: ParseState): Expr` — consume `{`; optional `...expr ,`; comma-separated `mut? name = expr` fields; consume `}`; return `ERecord(spread, fields)`
 - [ ] Implement `fun parseBlock(ps: ParseState, ctx: String): Block` — consume `{`; accumulate stmts:
@@ -729,20 +724,20 @@ the previous.
 - [ ] Implement `fun parsePattern(ps: ParseState): Pattern` — call `parsePatternPrimary`; if `::` (op) follows consume and recurse → `PCons(lhs, parsePattern(ps))`
 - [ ] Implement `fun parseConPatternFields(ps: ParseState): List<ConField>` — consume `(`; comma-separated patterns, naming them `"__field_0"`, `"__field_1"`, …; consume `)`; return list
 - [ ] Implement `fun parseConRecordFields(ps: ParseState): List<ConField>` — consume `{`; comma-separated: `name = pattern` → `{name, pattern=Some(p)}`; bare `name` → `{name, pattern=Some(PVar(name))}` (shorthand binding); consume `}`; return list
-- [ ] Implement `fun parseListPattern(ps: ParseState): Pattern` — consume `[`; comma-separated patterns; optional `...rest` at end (TkIdent after `...` op); consume `]`; return `PList(patterns, optRest)`
+- [ ] Implement `fun parseListPattern(ps: ParseState): Pattern` — consume `[`; comma-separated patterns; optional `...rest` at end (Token.TkIdent after `...` op); consume `]`; return `PList(patterns, optRest)`
 - [ ] Implement `fun parsePatternPrimary(ps: ParseState): Pattern` — dispatch:
-  - `TkIdent "_"` → `PWild`, advance
-  - `TkIdent` (other) → `PVar(name)`, advance
-  - `TkUpper "True"` → `PCon("True",[])`, advance
-  - `TkUpper "False"` → `PCon("False",[])`, advance
-  - `TkUpper` → advance; if `(` → `PCon(name, parseConPatternFields)`; if `{` → `PCon(name, parseConRecordFields)`; else `PCon(name, [])`
+  - `Token.TkIdent "_"` → `PWild`, advance
+  - `Token.TkIdent` (other) → `PVar(name)`, advance
+  - `Token.TkUpper "True"` → `PCon("True",[])`, advance
+  - `Token.TkUpper "False"` → `PCon("False",[])`, advance
+  - `Token.TkUpper` → advance; if `(` → `PCon(name, parseConPatternFields)`; if `{` → `PCon(name, parseConRecordFields)`; else `PCon(name, [])`
   - `[` → `parseListPattern`
   - `(` `)` → `PLit("unit","()")`, advance twice
   - `(` → consume; parse first pattern; if `,` → collect more → `PTuple`; else that pattern (drop parens)
-  - `TkInt` → `PLit("int", text)`, advance
-  - `TkFloat` → `PLit("float", text)`, advance
-  - `TkStr` → `PLit("string", decodeString(text))`, advance
-  - `TkChar` → `PLit("char", decodeChar(text))`, advance
+  - `Token.TkInt` → `PLit("int", text)`, advance
+  - `Token.TkFloat` → `PLit("float", text)`, advance
+  - `Token.TkStr` → `PLit("string", decodeString(text))`, advance
+  - `Token.TkChar` → `PLit("char", decodeChar(text))`, advance
   - else → `psError`, return `PWild`
 
 - [ ] Verify file compiles: `./kestrel build stdlib/kestrel/dev/parser/parser.ks`
@@ -913,7 +908,7 @@ the previous.
 
 | Layer | Path | Intent |
 |-------|------|--------|
-| Kestrel unit harness | `stdlib/kestrel/dev/parser/token.test.ks` | Token type construction and `isTrivia`/`spanZero` |
+| Kestrel unit harness | `stdlib/kestrel/dev/parser/token.test.ks` | Token type construction and `Token.isTrivia`/`Token.spanZero` |
 | Kestrel unit harness | `stdlib/kestrel/dev/parser/ast.test.ks` | AST type construction and matching for all variants |
 | Kestrel unit harness | `stdlib/kestrel/dev/parser/lexer.test.ks` | Round-trip, all token kinds, spans, operator longest-match |
 | Kestrel unit harness | `stdlib/kestrel/dev/parser/parser.test.ks` | Full parse coverage: imports, decls, exprs, patterns, types |
