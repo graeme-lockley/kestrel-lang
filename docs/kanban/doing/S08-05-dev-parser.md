@@ -927,3 +927,9 @@ Do NOT skip ahead or implement before writing the corresponding tests.
 ## Documentation and specs to update
 
 - [ ] `docs/specs/02-stdlib.md` — add `kestrel:dev/parser/token`, `kestrel:dev/parser/ast`, `kestrel:dev/parser/lexer`, and `kestrel:dev/parser/parser` module entries documenting their public APIs.
+
+---
+
+## Build notes
+
+- 2026-04-06: Started implementation. TDD structure: test file written and red-confirmed before each impl phase. Story restructured so test phases (A/C/E/G) precede their matching impl phases (B/D/F/H).
