@@ -23,6 +23,7 @@ usage() {
   echo "  dis   [--verbose|--code-only] <script[.ks]>  Compile if needed, then disassemble JVM bytecode" >&2
   echo "  build [script.ks]  Build compiler and JVM runtime; optionally compile script" >&2
   echo "  test  [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]   Run unit tests on JVM (default: compact output)" >&2
+  echo "  fmt   [--check] [--stdin] [files...]  Format Kestrel source files" >&2
   exit 1
 }
 
@@ -427,11 +428,21 @@ cmd_test() {
   _run_unit_tests "$@"
 }
 
+cmd_fmt() {
+  ensure_tools
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
+    build_compiler_jvm
+  fi
+  local fmt_script="$ROOT/stdlib/kestrel/tools/format.ks"
+  exec "$ROOT/kestrel" run "$fmt_script" "$@"
+}
+
 # Main
 case "${1:-}" in
   run)   shift; cmd_run "$@" ;;
   dis)   shift; cmd_dis "$@" ;;
   build) shift; cmd_build "$@" ;;
   test)       shift; cmd_test "$@" ;;
+  fmt)   shift; cmd_fmt "$@" ;;
   *)     usage ;;
 esac
