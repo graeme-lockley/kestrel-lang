@@ -23,7 +23,7 @@ usage() {
   echo "  dis   [--verbose|--code-only] <script[.ks]>  Compile if needed, then disassemble JVM bytecode" >&2
   echo "  build [script.ks]  Build compiler and JVM runtime; optionally compile script" >&2
   echo "  test  [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]   Run unit tests on JVM (default: compact output)" >&2
-  echo "  fmt   [--check] [--stdin] [files...]  Format Kestrel source files" >&2
+  echo "  fmt   [--check] [--stdin] [files-or-dirs...]  Format Kestrel source files (default: all .ks files in current dir)" >&2
   exit 1
 }
 

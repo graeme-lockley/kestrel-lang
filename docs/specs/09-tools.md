@@ -92,16 +92,21 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 ### 2.5 fmt
 
 ```
-kestrel fmt [--check] [--stdin] [files...]
+kestrel fmt [--check] [--stdin] [files-or-dirs...]
 ```
 
 Formats one or more Kestrel source files in-place using the opinionated formatter (`stdlib/kestrel/tools/format.ks`). The formatter renders at 120 columns with 2-space indentation.
+
+**File/directory arguments:**
+
+- If no positional arguments are provided (and `--stdin` is not set), `fmt` recursively collects all `*.ks` files under the current working directory, skipping hidden directories (those whose name starts with `.`) and `node_modules`.
+- If one or more arguments are provided, each is treated as either a file path (passed through directly) or a directory path (recursed into to find all `*.ks` files). Shell glob expansion (e.g. `stdlib/**/*.ks` in zsh with `globstar`) works naturally since the shell expands patterns before passing them to `fmt`.
 
 **Flags:**
 
 | Flag | Long | Description |
 |------|------|-------------|
-| `-c` | `--check` | Check-only mode: exit non-zero if any file is not formatted; do not modify files |
+| `-c` | `--check` | Check-only mode: print each non-conforming file path and exit non-zero if any file is not formatted; do not modify files |
 | | `--stdin` | Read source from stdin, write formatted output to stdout |
 | `-h` | `--help` | Print usage and exit 0 |
 | `-V` | `--version` | Print `kestrel fmt v0.1.0` and exit 0 |
@@ -110,7 +115,7 @@ Formats one or more Kestrel source files in-place using the opinionated formatte
 
 | Code | Meaning |
 |------|---------|
-| 0 | All files formatted successfully (or already formatted in `--check` mode) |
+| 0 | All files formatted successfully (or all files already formatted in `--check` mode) |
 | 1 | One or more files failed to format, or one or more files are not formatted (`--check` mode) |
 
 **Formatting rules (summary):**

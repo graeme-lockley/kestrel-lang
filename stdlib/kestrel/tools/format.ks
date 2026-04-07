@@ -1,12 +1,13 @@
 // kestrel:tools/format — opinionated Kestrel source code formatter.
-// Usage: kestrel fmt [--check] [--stdin] [files...]
+// Usage: kestrel fmt [--check] [--stdin] [files-or-dirs...]
 
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
 import * as Opt from "kestrel:data/option"
 import * as Res from "kestrel:data/result"
 import * as Dict from "kestrel:data/dict"
-import { readText, writeText, readStdin } from "kestrel:io/fs"
+import { readText, writeText, readStdin, listDir, DirEntry, File, Dir } from "kestrel:io/fs"
+import { all } from "kestrel:sys/task"
 import * as PP from "kestrel:dev/text/prettyprinter"
 import { Doc } from "kestrel:dev/text/prettyprinter"
 import * as Cli from "kestrel:dev/cli"
@@ -809,13 +810,64 @@ export async fun checkFile(path: String): Task<Result<Bool, FormatError>> = {
   }
 }
 
+// ─── Recursive file collection ──────────────────────────────────────────────
+
+fun pathBaseName(path: String): String =
+  Lst.foldl(Str.split(path, "/"), "", (acc: String, s: String) => if (Str.isEmpty(s)) acc else s)
+
+fun isIgnoreDir(path: String): Bool = {
+  val base = pathBaseName(path)
+  Str.startsWith(".", base) | Str.equals(base, "node_modules")
+}
+
+fun isKsFile(path: String): Bool =
+  Str.endsWith(".ks", path)
+
+fun getKsFiles(entries: List<DirEntry>, acc: List<String>): List<String> =
+  match (entries) {
+    [] => acc
+    hd :: tl => match (hd) {
+      Dir(_) => getKsFiles(tl, acc)
+      File(p) => if (isKsFile(p)) getKsFiles(tl, p :: acc) else getKsFiles(tl, acc)
+    }
+  }
+
+fun getSubDirs(entries: List<DirEntry>, acc: List<String>): List<String> =
+  match (entries) {
+    [] => acc
+    hd :: tl => match (hd) {
+      Dir(p) => if (isIgnoreDir(p)) getSubDirs(tl, acc) else getSubDirs(tl, p :: acc)
+      File(_) => getSubDirs(tl, acc)
+    }
+  }
+
+async fun collectKsFiles(dir: String): Task<List<String>> =
+  match (await listDir(dir)) {
+    Err(_) => []
+    Ok(entries) => {
+      val files = getKsFiles(entries, [])
+      val subDirs = getSubDirs(entries, [])
+      val subLists = await all(Lst.map(subDirs, (d: String) => collectKsFiles(d)))
+      Lst.append(files, Lst.concat(subLists))
+    }
+  }
+
+async fun resolveInput(path: String): Task<List<String>> =
+  if (isKsFile(path)) [path]
+  else await collectKsFiles(path)
+
+async fun resolveInputs(paths: List<String>): Task<List<String>> = {
+  val lists = await all(Lst.map(paths, (p: String) => resolveInput(p)))
+  Lst.concat(lists)
+}
+
 // ─── CLI entry point ─────────────────────────────────────────────────────────
 
 val cliSpec = {
   name = "kestrel fmt",
   version = "0.1.0",
   description = "Opinionated Kestrel source code formatter",
-  usage = "kestrel fmt [--check] [--stdin] [files...]",
+  usage = "kestrel fmt [--check] [--stdin] [files-or-dirs...]",
   options = [
     {
       short = Some("-c"),
@@ -833,7 +885,7 @@ val cliSpec = {
   args = [
     {
       name = "files",
-      description = "Kestrel source files to format",
+      description = "Kestrel source files or directories to format (default: current directory)",
       variadic = True
     }
   ]
@@ -866,49 +918,51 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
         0
       }
     }
-  } else if (Lst.isEmpty(parsed.positional)) {
-    println(Cli.help(cliSpec));
-    1
-  } else if (checkMode) {
-    async fun checkAll(files: List<String>, anyFail: Bool): Task<Int> =
-      match (files) {
-        [] => if (anyFail) 1 else 0
-        path :: rest => {
-          val result = await checkFile(path)
-          match (result) {
-            Err(e) => {
-              println("error: ${path}: ${fmtError(e)}");
-              await checkAll(rest, True)
-            }
-            Ok(alreadyFmt) =>
-              if (alreadyFmt) await checkAll(rest, anyFail)
-              else {
-                println("NOT OK ${path}");
+  } else {
+    val proc = getProcess()
+    val targets =
+      if (Lst.isEmpty(parsed.positional))
+        await resolveInputs([proc.cwd])
+      else
+        await resolveInputs(parsed.positional)
+    if (checkMode) {
+      async fun checkAll(files: List<String>, anyFail: Bool): Task<Int> =
+        match (files) {
+          [] => if (anyFail) 1 else 0
+          path :: rest => {
+            val result = await checkFile(path)
+            match (result) {
+              Err(e) => {
+                println("error: ${path}: ${fmtError(e)}");
                 await checkAll(rest, True)
               }
-          }
-        }
-      }
-    await checkAll(parsed.positional, False)
-  } else {
-    async fun formatAll(files: List<String>, anyFail: Bool): Task<Int> =
-      match (files) {
-        [] => if (anyFail) 1 else 0
-        path :: rest => {
-          val result = await formatFile(path)
-          match (result) {
-            Err(e) => {
-              println("error: ${path}: ${fmtError(e)}");
-              await formatAll(rest, True)
-            }
-            Ok(_) => {
-              println("formatted: ${path}");
-              await formatAll(rest, anyFail)
+              Ok(alreadyFmt) =>
+                if (alreadyFmt) await checkAll(rest, anyFail)
+                else {
+                  println("not formatted: ${path}");
+                  await checkAll(rest, True)
+                }
             }
           }
         }
-      }
-    await formatAll(parsed.positional, False)
+      await checkAll(targets, False)
+    } else {
+      async fun formatAll(files: List<String>, anyFail: Bool): Task<Int> =
+        match (files) {
+          [] => if (anyFail) 1 else 0
+          path :: rest => {
+            val result = await formatFile(path)
+            match (result) {
+              Err(e) => {
+                println("error: ${path}: ${fmtError(e)}");
+                await formatAll(rest, True)
+              }
+              Ok(_) => await formatAll(rest, anyFail)
+            }
+          }
+        }
+      await formatAll(targets, False)
+    }
   }
 }
 
