@@ -176,8 +176,8 @@ fun fmtPattern(p: Ast.Pattern): Doc =
       if (Str.equals(kind, "unit")) PP.text("()")
       else if (Str.equals(kind, "true")) PP.text("True")
       else if (Str.equals(kind, "false")) PP.text("False")
-      else if (Str.equals(kind, "string")) PP.text(encodeString(v))
-      else if (Str.equals(kind, "char")) PP.text(encodeChar(v))
+      else if (Str.equals(kind, "string")) PP.text("\"${v}\"")
+      else if (Str.equals(kind, "char")) PP.text("'${v}'")
       else PP.text(v)
     PCon(n, fields) =>
       if (Lst.isEmpty(fields)) PP.text(n)
@@ -263,8 +263,8 @@ fun fmtExprInCtx(prec: Int, isRight: Bool, e: Ast.Expr): Doc =
     fmtExpr(e)
 
 fun fmtLit(kind: String, value: String): Doc =
-  if (Str.equals(kind, "string")) PP.text(encodeString(value))
-  else if (Str.equals(kind, "char")) PP.text(encodeChar(value))
+  if (Str.equals(kind, "string")) PP.text("\"${value}\"")
+  else if (Str.equals(kind, "char")) PP.text("'${value}'")
   else if (Str.equals(kind, "unit")) PP.text("()")
   else if (Str.equals(kind, "true")) PP.text("True")
   else if (Str.equals(kind, "false")) PP.text("False")
