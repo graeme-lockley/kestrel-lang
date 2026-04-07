@@ -43,3 +43,9 @@ export async fun writeText(path: String, content: String): Task<Result<Unit, FsE
 	val result = await writeTextAsync(path, content)
 	Res.mapError(result, mapFsError)
 }
+
+extern fun readAllStdinAsync(): Task<String> =
+    jvm("kestrel.runtime.KRuntime#readAllStdin()")
+
+export async fun readStdin(): Task<String> =
+    await readAllStdinAsync()

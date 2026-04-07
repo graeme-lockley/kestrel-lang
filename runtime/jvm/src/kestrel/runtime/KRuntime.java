@@ -828,6 +828,38 @@ public final class KRuntime {
         return KTask.fromFuture(future);
     }
 
+    public static KTask readAllStdin() {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+        asyncTasksInFlight.incrementAndGet();
+        try {
+            executor.submit(() -> {
+                try {
+                    java.io.BufferedReader reader = new java.io.BufferedReader(
+                            new InputStreamReader(System.in, StandardCharsets.UTF_8));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line).append('\n');
+                    }
+                    future.complete(sb.toString());
+                } catch (Throwable t) {
+                    future.complete("");
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            asyncTasksInFlight.decrementAndGet();
+            future.complete("");
+        }
+        return KTask.fromFuture(future);
+    }
+
     public static Long nowMs() {
         return Long.valueOf(System.currentTimeMillis());
     }
