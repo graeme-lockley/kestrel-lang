@@ -571,6 +571,22 @@ JSON parsing and serialisation implemented **in Kestrel** (no host JSON primitiv
 
 ---
 
+## kestrel:tools/format
+
+Opinionated source code formatter for Kestrel. Parses source with `kestrel:dev/parser`, converts the AST to a `Doc` IR using `kestrel:dev/text/prettyprinter`, and renders at 120-column width with 2-space indentation. The CLI entry point is `kestrel fmt` (via `scripts/kestrel`).
+
+### Exported API
+
+| Symbol | Type | Description |
+|--------|------|-------------|
+| `FormatError` | `type` | `FmtParseError(String, Int, Int, Int)` — parse error with message, offset, line, col; `FmtIoError(String)` — I/O error message |
+| `format` | `(String) -> Result<String, FormatError>` | Format source text; returns formatted string or error |
+| `formatFile` | `(String) -> Task<Result<Unit, FormatError>>` | Read file, format in-place, write back |
+| `checkFile` | `(String) -> Task<Result<Bool, FormatError>>` | Return `Ok(True)` if already formatted, `Ok(False)` if not, `Err` on I/O or parse error |
+| `main` | `(List<String>) -> Task<Unit>` | CLI entry point — delegates to `Cli.run` with `cliSpec` and exits |
+
+**Known limitations:** Comments inside expressions or function bodies are not preserved; only `//` or `/* */` comments on the line(s) immediately before a top-level declaration are re-attached in the output.
+
 ## kestrel:tools/test
 
 Assertions and reporting for the Kestrel unit-test harness (`kestrel test`). Imports from `kestrel:data/basics` (`nowMs`), `kestrel:io/console`, `kestrel:data/list`, `kestrel:dev/stack` (`format`), `kestrel:data/string`, and `kestrel:sys/task` (`asyncTasksInFlight`) for implementation; styled output uses console ANSI constants (✓/✗, colours, default-weight group names, dim for secondary text such as timing and verbose footers).

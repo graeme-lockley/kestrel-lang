@@ -89,7 +89,45 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Output:** While compiling, the compiler may print short "Compiling …" lines. Test output comes from **`kestrel:tools/test`**: **compact** (default) prints each top-level suite name first, then silent sub-group `name (N✓ Tms)` summaries, then a dim count footer; **`--verbose`** prints per-assertion ✓ lines inside each group plus timing footers; **`--summary`** prints one `name (N✓ Tms)` compact line per top-level suite with no assertion detail. Any mode ends with a blank line and a total line such as green `N passed (…ms)` or red `M failed, N passed (…ms)` from `printSummary`.
 - **Exit code:** 0 if all tests passed; 1 if any test failed or did not compile.
 
-### 2.5 (reserved)
+### 2.5 fmt
+
+```
+kestrel fmt [--check] [--stdin] [files...]
+```
+
+Formats one or more Kestrel source files in-place using the opinionated formatter (`stdlib/kestrel/tools/format.ks`). The formatter renders at 120 columns with 2-space indentation.
+
+**Flags:**
+
+| Flag | Long | Description |
+|------|------|-------------|
+| `-c` | `--check` | Check-only mode: exit non-zero if any file is not formatted; do not modify files |
+| | `--stdin` | Read source from stdin, write formatted output to stdout |
+| `-h` | `--help` | Print usage and exit 0 |
+| `-V` | `--version` | Print `kestrel fmt v0.1.0` and exit 0 |
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| 0 | All files formatted successfully (or already formatted in `--check` mode) |
+| 1 | One or more files failed to format, or one or more files are not formatted (`--check` mode) |
+
+**Formatting rules (summary):**
+
+- Line width: 120 characters
+- Indent unit: 2 spaces
+- `fun` body always breaks after `=`; body indented by 2
+- `match` arms: pattern and `=>` on one line, body on next line indented by 2
+- Chained `if/else`: `else` keyword at same column as `if`; block `{` stays on the same line
+- Pipelines (`|>`) always break: each step on its own line indented by 2
+- ADT type with ≥2 constructors: each constructor on its own line with `| ` prefix
+- Blank line between each top-level declaration
+- Always exactly one trailing newline
+
+**Known limitations:**
+
+- Comments that appear inside expressions or function bodies are not preserved; only leading comments immediately before a top-level declaration are re-attached in the output.
 
 ### 2.6 Compiler options (diagnostics)
 
