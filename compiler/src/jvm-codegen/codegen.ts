@@ -3,7 +3,7 @@
  * Uses same Program + getInferredType pipeline as the main compiler.
  */
 import type { Program, Expr, TopLevelStmt, TopLevelDecl, TuplePattern, Pattern } from '../ast/nodes.js';
-import type { FunDecl, ExternFunDecl, ValDecl, VarDecl, BlockExpr, LambdaExpr, FunStmt, TypeDecl, Type } from '../ast/nodes.js';
+import type { FunDecl, ExternFunDecl, ValDecl, VarDecl, BlockExpr, LambdaExpr, FunStmt, TypeDecl, ExceptionDecl, Type } from '../ast/nodes.js';
 import { getInferredType } from '../typecheck/check.js';
 import type { InternalType } from '../types/internal.js';
 import { ClassFileBuilder, type MethodBuilder, type StackMapFrameState, paramOnlyFrame } from './classfile.js';
@@ -774,13 +774,15 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
     }
   }
 
-    // Also generate inner classes + register exception declarations as nullary ADT constructors
+    // Also generate inner classes + register exception declarations (with actual field arity)
     for (const node of program.body) {
       if (!node || node.kind !== 'ExceptionDecl') continue;
-      const excClass = className + '$' + (node as { name: string }).name;
-      adtClassByConstructor.set((node as { name: string }).name, excClass);
-      adtConstructorArity.set((node as { name: string }).name, 0);
-      innerClasses.set(excClass, buildAdtClass(excClass, 0, 0));
+      const excNode = node as ExceptionDecl;
+      const excClass = className + '$' + excNode.name;
+      const excArity = excNode.fields?.length ?? 0;
+      adtClassByConstructor.set(excNode.name, excClass);
+      adtConstructorArity.set(excNode.name, excArity);
+      innerClasses.set(excClass, buildAdtClass(excClass, excArity, 0));
     }
 
     // Seed adtClassByConstructor from imported ADT/exception names (for catch patterns + IdentExpr)
