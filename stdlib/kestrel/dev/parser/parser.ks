@@ -15,12 +15,13 @@ import {
   TmplLit, TmplExpr, LElem, LSpread,
   SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue,
   TDFun, TDSVal, TDSVar, TDSExpr, TDSAssign, TDType, TDException, TDExport, TDVal, TDVar,
+  TDExternFun, TDExternImport, TDExternType,
   IDNamed, IDNamespace, IDSideEffect, EIStar, EINamed, EIDecl,
   ATPrim, ATIdent, ATApp, ATArrow, ATRecord, ATTuple, ATUnion, ATInter, ATRowVar, ATQualified,
   PWild, PVar, PLit, PCon, PList, PCons, PTuple,
   TBAdt, TBAlias,
   Case_, Block, Param, TypeField, CtorDef, ConField, RecField, ListElem, TmplPart,
-  FunDecl, ExceptionDecl, ImportSpec, Program
+  FunDecl, ExceptionDecl, ImportSpec, Program, ExternOverride
 } from "kestrel:dev/parser/ast"
 
 export exception ParseError { message: String, offset: Int, line: Int, col: Int }
@@ -979,11 +980,94 @@ fun parseExport_(ps: ParseState): Ast.TopDecl = {
   }
 }
 
+fun parseOneExternOverride_(ps: ParseState): ExternOverride = {
+  adv(ps); // consume 'fun'
+  var oname = expectIdent(ps).text
+  expectPunct(ps, "(");
+  var oparams = parseParamList(ps)
+  expectPunct(ps, ")");
+  expectPunct(ps, ":");
+  var oret = parseTypeH(ps)
+  { name=oname, params=oparams, retType=oret }
+}
+
+fun parseExternOverrides_(ps: ParseState, overrides: Array<ExternOverride>): Unit = {
+  while (!atPunct(ps, "}") & !atEof(ps)) {
+    while (atPunct(ps, ";")) { adv(ps); () };
+    if (atKw(ps, "fun")) {
+      Arr.push(overrides, parseOneExternOverride_(ps));
+      ()
+    } else if (!atPunct(ps, "}")) {
+      adv(ps); // skip unexpected token
+      ()
+    }
+  }
+}
+
+fun parseExternImport_(ps: ParseState): Ast.TopDecl = {
+  adv(ps); // consume 'import'
+  var target = expectStrVal(ps)
+  expectKw(ps, "as");
+  var alias = expectIdent(ps).text
+  val overrides = Arr.new()
+  if (atPunct(ps, "{")) {
+    adv(ps);
+    parseExternOverrides_(ps, overrides);
+    expectPunct(ps, "}");
+    ()
+  };
+  TDExternImport({ target=target, alias=alias, overrides=Arr.toList(overrides) })
+}
+
+fun parseExternFun_(ps: ParseState, exported: Bool): Ast.TopDecl = {
+  adv(ps); // consume 'fun'
+  var ename = expectIdent(ps).text
+  var etypeParams = parseTypeParamList(ps)
+  expectPunct(ps, "(");
+  var eparams = parseParamList(ps)
+  expectPunct(ps, ")");
+  expectPunct(ps, ":");
+  var eretType = parseTypeH(ps)
+  expectOp(ps, "=");
+  val _jvmFunId = expectIdent(ps);
+  expectPunct(ps, "(");
+  var jvmDesc = expectStrVal(ps)
+  expectPunct(ps, ")");
+  TDExternFun({ exported=exported, name=ename, typeParams=etypeParams, params=eparams, retType=eretType, jvmDesc=jvmDesc })
+}
+
+fun parseExternType_(ps: ParseState, exported: Bool): Ast.TopDecl = {
+  var isOpaque = if (atKw(ps, "opaque")) { adv(ps); True } else False
+  var vis = if (isOpaque) "opaque" else if (exported) "export" else "local"
+  expectKw(ps, "type");
+  var tname = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
+  var ttypeParams = parseTypeParamList(ps)
+  expectOp(ps, "=");
+  val _jvmTypeId = expectIdent(ps);
+  expectPunct(ps, "(");
+  var jvmClass = expectStrVal(ps)
+  expectPunct(ps, ")");
+  TDExternType({ visibility=vis, name=tname, typeParams=ttypeParams, jvmClass=jvmClass })
+}
+
+fun parseExternDecl_(ps: ParseState, exported: Bool): Ast.TopDecl = {
+  expectKw(ps, "extern");
+  if (atKw(ps, "import")) {
+    parseExternImport_(ps)
+  } else if (atKw(ps, "fun")) {
+    parseExternFun_(ps, exported)
+  } else {
+    parseExternType_(ps, exported)
+  }
+}
+
 fun parseTopDecl_(ps: ParseState, exported: Bool): Ast.TopDecl = {
   if (atKw(ps, "fun") | atKw(ps, "async")) {
     parseFunDecl_(ps, exported)
   } else if (atKw(ps, "type") | atKw(ps, "opaque")) {
     parseTypeDecl_(ps, exported)
+  } else if (atKw(ps, "extern")) {
+    parseExternDecl_(ps, exported)
   } else if (atKw(ps, "exception")) {
     adv(ps);
     var name = expectUpper(ps).text
