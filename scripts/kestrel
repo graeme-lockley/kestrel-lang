@@ -61,13 +61,16 @@ build_compiler_jvm() {
 }
 
 # Return 0 (true) if the compiler or runtime needs to be (re)built.
-# Triggers when dist/cli.js or the runtime jar is missing, or when any
-# TypeScript source file is newer than the compiled output.
+# Triggers when dist/cli.js or the runtime jar is missing, when any
+# TypeScript source file is newer than the compiled output, or when any
+# Java source file (or build.sh) is newer than the runtime jar.
 compiler_build_needed() {
   [ ! -f "$COMPILER_CLI" ] && return 0
   [ ! -f "$RUNTIME_JAR" ] && return 0
   find "$COMPILER/src" -name "*.ts" -newer "$COMPILER_CLI" -print -quit 2>/dev/null | grep -q . && return 0
   [ "$COMPILER/cli.ts" -nt "$COMPILER_CLI" ] && return 0
+  find "$ROOT/runtime/jvm/src" -name "*.java" -newer "$RUNTIME_JAR" -print -quit 2>/dev/null | grep -q . && return 0
+  [ "$ROOT/runtime/jvm/build.sh" -nt "$RUNTIME_JAR" ] && return 0
   return 1
 }
 
