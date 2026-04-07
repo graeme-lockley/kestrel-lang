@@ -61,6 +61,20 @@ build_compiler_jvm() {
   }
 }
 
+# Return 0 (true) if the compiler or runtime needs to be (re)built.
+# Triggers when dist/cli.js or the runtime jar is missing, when any
+# TypeScript source file is newer than the compiled output, or when any
+# Java source file (or build.sh) is newer than the runtime jar.
+compiler_build_needed() {
+  [ ! -f "$COMPILER_CLI" ] && return 0
+  [ ! -f "$RUNTIME_JAR" ] && return 0
+  find "$COMPILER/src" -name "*.ts" -newer "$COMPILER_CLI" -print -quit 2>/dev/null | grep -q . && return 0
+  [ "$COMPILER/cli.ts" -nt "$COMPILER_CLI" ] && return 0
+  find "$ROOT/runtime/jvm/src" -name "*.java" -newer "$RUNTIME_JAR" -print -quit 2>/dev/null | grep -q . && return 0
+  [ "$ROOT/runtime/jvm/build.sh" -nt "$RUNTIME_JAR" ] && return 0
+  return 1
+}
+
 resolve_script() {
   local arg="$1"
   if [ -f "$arg" ]; then
@@ -320,7 +334,7 @@ cmd_run() {
     usage
   fi
   ensure_tools
-  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
+  if compiler_build_needed; then
     build_compiler_jvm
   fi
   local resolved class_dir main_class
@@ -385,11 +399,8 @@ cmd_dis() {
     echo "kestrel: javap not found" >&2
     exit 1
   fi
-  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
-    cd "$COMPILER" && npm run build >/dev/null 2>&1 && cd "$ROOT" || {
-      echo "kestrel: compiler build failed" >&2
-      exit 1
-    }
+  if compiler_build_needed; then
+    build_compiler_jvm
   fi
   local resolved
   resolved=$(resolve_script "$script")
@@ -422,7 +433,7 @@ cmd_dis() {
 
 cmd_test() {
   ensure_tools
-  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
+  if compiler_build_needed; then
     build_compiler_jvm
   fi
   _run_unit_tests "$@"
