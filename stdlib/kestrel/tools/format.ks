@@ -6,6 +6,7 @@ import * as Str from "kestrel:data/string"
 import * as Opt from "kestrel:data/option"
 import * as Res from "kestrel:data/result"
 import * as Dict from "kestrel:data/dict"
+import * as Arr from "kestrel:array"
 import { readText, writeText, readStdin, listDir, DirEntry, File, Dir } from "kestrel:io/fs"
 import { all } from "kestrel:sys/task"
 import * as PP from "kestrel:dev/text/prettyprinter"
@@ -735,28 +736,27 @@ fun fmtCommentBlock(lines: List<String>): Doc =
 // ─── Program formatter and core API ──────────────────────────────────────────
 
 fun fmtProgramDoc(prog: Ast.Program, allToks: List<Token.Token>): Doc = {
-  val commentMap = buildDeclComments(allToks)
-  val positions = declPositions(allToks)
+  val commentList = buildDeclComments(allToks)
+  val commentDict = Lst.foldl(commentList, Dict.emptyIntDict(), (d: Dict<Int, List<String>>, entry: (Int, List<String>)) =>
+    Dict.insert(d, entry.0, entry.1))
+  val posArr = Arr.fromList(declPositions(allToks))
   val importCount = Lst.length(prog.imports)
-  val bodyPositions = Lst.drop(positions, importCount)
-
-  val importPositions = Lst.take(positions, importCount)
 
   val importDocs = Lst.indexedMap(prog.imports, (idx: Int, d: Ast.ImportDecl) => {
-    val pos = match (Lst.head(Lst.drop(importPositions, idx))) {
-      None => -1
-      Some(p) => p
-    }
-    val commentDoc = fmtCommentBlock(lookupComments(commentMap, pos))
+    val pos = if (idx < Arr.length(posArr)) Arr.get(posArr, idx) else -1
+    val commentDoc = fmtCommentBlock(match (Dict.get(commentDict, pos)) {
+      None => []
+      Some(ls) => ls
+    })
     PP.hcat([commentDoc, fmtImportDecl(d)])
   })
 
   val bodyDocs = Lst.indexedMap(prog.body, (idx: Int, d: Ast.TopDecl) => {
-    val pos = match (Lst.head(Lst.drop(bodyPositions, idx))) {
-      None => -1
-      Some(p) => p
-    }
-    val commentDoc = fmtCommentBlock(lookupComments(commentMap, pos))
+    val pos = if (importCount + idx < Arr.length(posArr)) Arr.get(posArr, importCount + idx) else -1
+    val commentDoc = fmtCommentBlock(match (Dict.get(commentDict, pos)) {
+      None => []
+      Some(ls) => ls
+    })
     PP.hcat([commentDoc, fmtTopDecl(d)])
   })
 

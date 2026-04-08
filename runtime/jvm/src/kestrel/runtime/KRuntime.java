@@ -544,6 +544,31 @@ public final class KRuntime {
         return Long.valueOf(((String) s).codePointCount(0, ((String) s).length()));
     }
 
+    // ── Lexer fast-path helpers (code-unit / char positions, O(1) per call) ──────────────────
+
+    /** O(1) char value at code-unit position i. Safe for ASCII/BMP source text. */
+    public static Long lexCharAt(Object s, Object i) {
+        String str = (String) s;
+        int idx = intFrom(i);
+        if (idx < 0 || idx >= str.length()) return Long.valueOf(-1L);
+        return Long.valueOf((long) str.charAt(idx));
+    }
+
+    /** O(1) code-unit count (str.length()). For ASCII/BMP source, equals code point count. */
+    public static Long lexLength(Object s) {
+        return Long.valueOf((long) ((String) s).length());
+    }
+
+    /** O(end-start) substring using code-unit (char) positions. */
+    public static String lexSlice(Object s, Object start, Object end) {
+        String str = (String) s;
+        int si = Math.max(0, intFrom(start));
+        int ei = Math.min(str.length(), Math.max(si, intFrom(end)));
+        return str.substring(si, ei);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────────────
+
     public static String stringSlice(Object s, Object start, Object end) {
         if (!(s instanceof String)) throw new IllegalArgumentException("stringSlice expects String");
         String str = (String) s;
