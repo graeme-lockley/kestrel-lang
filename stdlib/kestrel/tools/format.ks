@@ -31,7 +31,7 @@ import {
 import { lex } from "kestrel:dev/parser/lexer"
 import { parse, ParseError } from "kestrel:dev/parser/parser"
 import { getProcess } from "kestrel:sys/process"
-import { GREEN, RED, DIM, RESET } from "kestrel:io/console"
+import { GREEN, RED, DIM, RESET, CHECK, CROSS } from "kestrel:io/console"
 import { nowMs } from "kestrel:data/basics"
 
 // ─── Error type ───────────────────────────────────────────────────────────────
@@ -940,12 +940,12 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
         match (files) {
           [] => {
             val elapsed = nowMs() - startMs
-            val total = passCount + failCount + errorCount
-            val ok = !anyFail
-            val summaryColor = if (ok) GREEN else RED
-            val detail = if (ok) "all conforming" else "${failCount + errorCount} not conforming"
+            val bad = failCount + errorCount
             if (!summaryMode) println("${DIM}───${RESET}") else ();
-            println("${summaryColor}fmt: ${total} files checked — ${detail} (${elapsed}ms)${RESET}");
+            if (bad > 0)
+              println("${GREEN}${passCount} ${CHECK}${RESET}  ${RED}${bad} ${CROSS}${RESET}  ${DIM}(${elapsed}ms)${RESET}")
+            else
+              println("${GREEN}${passCount} ${CHECK}${RESET}  ${DIM}(${elapsed}ms)${RESET}");
             if (anyFail) 1 else 0
           }
           path :: rest => {
@@ -954,15 +954,15 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
             val elapsed = nowMs() - t0
             match (result) {
               Err(e) => {
-                if (!summaryMode) println("${RED}✗${RESET} ${path} (${elapsed}ms) — error: ${fmtError(e)}") else ();
+                if (!summaryMode) println("${RED}${CROSS}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET} — error: ${fmtError(e)}") else ();
                 await checkAll(rest, True, passCount, failCount, errorCount + 1)
               }
               Ok(alreadyFmt) =>
                 if (alreadyFmt) {
-                  if (!summaryMode) println("${GREEN}✓${RESET} ${path} (${elapsed}ms)") else ();
+                  if (!summaryMode) println("${GREEN}${CHECK}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET}") else ();
                   await checkAll(rest, anyFail, passCount + 1, failCount, errorCount)
                 } else {
-                  if (!summaryMode) println("${RED}✗${RESET} ${path} (${elapsed}ms) — not formatted") else ();
+                  if (!summaryMode) println("${RED}${CROSS}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET} — not formatted") else ();
                   await checkAll(rest, True, passCount, failCount + 1, errorCount)
                 }
             }
@@ -974,12 +974,11 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
         match (files) {
           [] => {
             val elapsed = nowMs() - startMs
-            val total = passCount + failCount
-            val ok = !anyFail
-            val summaryColor = if (ok) GREEN else RED
-            val detail = if (ok) "all formatted" else "${failCount} errors"
             if (!summaryMode) println("${DIM}───${RESET}") else ();
-            println("${summaryColor}fmt: ${total} files — ${detail} (${elapsed}ms)${RESET}");
+            if (failCount > 0)
+              println("${GREEN}${passCount} ${CHECK}${RESET}  ${RED}${failCount} ${CROSS}${RESET}  ${DIM}(${elapsed}ms)${RESET}")
+            else
+              println("${GREEN}${passCount} ${CHECK}${RESET}  ${DIM}(${elapsed}ms)${RESET}");
             if (anyFail) 1 else 0
           }
           path :: rest => {
@@ -988,11 +987,11 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
             val elapsed = nowMs() - t0
             match (result) {
               Err(e) => {
-                if (!summaryMode) println("${RED}✗${RESET} ${path} (${elapsed}ms) — error: ${fmtError(e)}") else ();
+                if (!summaryMode) println("${RED}${CROSS}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET} — error: ${fmtError(e)}") else ();
                 await formatAll(rest, True, passCount, failCount + 1)
               }
               Ok(_) => {
-                if (!summaryMode) println("${GREEN}✓${RESET} ${path} (${elapsed}ms)") else ();
+                if (!summaryMode) println("${GREEN}${CHECK}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET}") else ();
                 await formatAll(rest, anyFail, passCount + 1, failCount)
               }
             }
