@@ -524,6 +524,12 @@ export fun lex(src: String): List<Token.Token> = {
   var line = 1
   var col = 1
 
+  // Skip shebang line if present (#! at position 0)
+  if (pos + 1 < len & cpOf(src, pos) == 35 & cpOf(src, pos + 1) == 33) {
+    while (pos < len & cpOf(src, pos) != 10) { pos := pos + 1 };
+    if (pos < len) { pos := pos + 1; () } else ()
+  } else ();
+
   while (pos < len) {
     val cp = cpOf(src, pos)
     if (isWs(cp)) {

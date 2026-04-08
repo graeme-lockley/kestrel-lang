@@ -31,6 +31,8 @@ import {
 import { lex } from "kestrel:dev/parser/lexer"
 import { parse, ParseError } from "kestrel:dev/parser/parser"
 import { getProcess } from "kestrel:sys/process"
+import { GREEN, RED, DIM, RESET } from "kestrel:io/console"
+import { nowMs } from "kestrel:data/basics"
 
 // ─── Error type ───────────────────────────────────────────────────────────────
 
@@ -867,7 +869,7 @@ val cliSpec = {
   name = "kestrel fmt",
   version = "0.1.0",
   description = "Opinionated Kestrel source code formatter",
-  usage = "kestrel fmt [--check] [--stdin] [files-or-dirs...]",
+  usage = "kestrel fmt [--check] [--stdin] [--summary] [files-or-dirs...]",
   options = [
     {
       short = Some("-c"),
@@ -880,6 +882,12 @@ val cliSpec = {
       long = "--stdin",
       kind = Flag,
       description = "Read from stdin, write formatted output to stdout"
+    },
+    {
+      short = Some("-s"),
+      long = "--summary",
+      kind = Flag,
+      description = "Print only the summary line; suppress per-file output"
     }
   ],
   args = [
@@ -906,6 +914,7 @@ fun flagSet(parsed: ParsedArgs, name: String): Bool =
 async fun handler(parsed: ParsedArgs): Task<Int> = {
   val useStdin = flagSet(parsed, "stdin")
   val checkMode = flagSet(parsed, "check")
+  val summaryMode = flagSet(parsed, "summary")
   if (useStdin) {
     val src = await readStdin()
     match (format(src)) {
@@ -925,43 +934,71 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
         await resolveInputs([proc.cwd])
       else
         await resolveInputs(parsed.positional)
+    val startMs = nowMs()
     if (checkMode) {
-      async fun checkAll(files: List<String>, anyFail: Bool): Task<Int> =
+      async fun checkAll(files: List<String>, anyFail: Bool, passCount: Int, failCount: Int, errorCount: Int): Task<Int> =
         match (files) {
-          [] => if (anyFail) 1 else 0
+          [] => {
+            val elapsed = nowMs() - startMs
+            val total = passCount + failCount + errorCount
+            val ok = !anyFail
+            val summaryColor = if (ok) GREEN else RED
+            val detail = if (ok) "all conforming" else "${failCount + errorCount} not conforming"
+            if (!summaryMode) println("${DIM}───${RESET}") else ();
+            println("${summaryColor}fmt: ${total} files checked — ${detail} (${elapsed}ms)${RESET}");
+            if (anyFail) 1 else 0
+          }
           path :: rest => {
+            val t0 = nowMs()
             val result = await checkFile(path)
+            val elapsed = nowMs() - t0
             match (result) {
               Err(e) => {
-                println("error: ${path}: ${fmtError(e)}");
-                await checkAll(rest, True)
+                if (!summaryMode) println("${RED}✗${RESET} ${path} (${elapsed}ms) — error: ${fmtError(e)}") else ();
+                await checkAll(rest, True, passCount, failCount, errorCount + 1)
               }
               Ok(alreadyFmt) =>
-                if (alreadyFmt) await checkAll(rest, anyFail)
-                else {
-                  println("not formatted: ${path}");
-                  await checkAll(rest, True)
+                if (alreadyFmt) {
+                  if (!summaryMode) println("${GREEN}✓${RESET} ${path} (${elapsed}ms)") else ();
+                  await checkAll(rest, anyFail, passCount + 1, failCount, errorCount)
+                } else {
+                  if (!summaryMode) println("${RED}✗${RESET} ${path} (${elapsed}ms) — not formatted") else ();
+                  await checkAll(rest, True, passCount, failCount + 1, errorCount)
                 }
             }
           }
         }
-      await checkAll(targets, False)
+      await checkAll(targets, False, 0, 0, 0)
     } else {
-      async fun formatAll(files: List<String>, anyFail: Bool): Task<Int> =
+      async fun formatAll(files: List<String>, anyFail: Bool, passCount: Int, failCount: Int): Task<Int> =
         match (files) {
-          [] => if (anyFail) 1 else 0
+          [] => {
+            val elapsed = nowMs() - startMs
+            val total = passCount + failCount
+            val ok = !anyFail
+            val summaryColor = if (ok) GREEN else RED
+            val detail = if (ok) "all formatted" else "${failCount} errors"
+            if (!summaryMode) println("${DIM}───${RESET}") else ();
+            println("${summaryColor}fmt: ${total} files — ${detail} (${elapsed}ms)${RESET}");
+            if (anyFail) 1 else 0
+          }
           path :: rest => {
+            val t0 = nowMs()
             val result = await formatFile(path)
+            val elapsed = nowMs() - t0
             match (result) {
               Err(e) => {
-                println("error: ${path}: ${fmtError(e)}");
-                await formatAll(rest, True)
+                if (!summaryMode) println("${RED}✗${RESET} ${path} (${elapsed}ms) — error: ${fmtError(e)}") else ();
+                await formatAll(rest, True, passCount, failCount + 1)
               }
-              Ok(_) => await formatAll(rest, anyFail)
+              Ok(_) => {
+                if (!summaryMode) println("${GREEN}✓${RESET} ${path} (${elapsed}ms)") else ();
+                await formatAll(rest, anyFail, passCount + 1, failCount)
+              }
             }
           }
         }
-      await formatAll(targets, False)
+      await formatAll(targets, False, 0, 0)
     }
   }
 }

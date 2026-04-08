@@ -275,9 +275,10 @@ fun parseAtomType(ps: ParseState): Ast.AstType = {
 fun parseTypeFieldList(ps: ParseState): List<TypeField> = {
   val arr = Arr.new()
   while (!atPunct(ps, "}") & !atEof(ps)) {
-    val isMut = if (atKw(ps, "mut")) { adv(ps); True } else False
+    var isMut = if (atKw(ps, "mut")) { adv(ps); True } else False
     val name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
     expectPunct(ps, ":");
+    if (atKw(ps, "mut")) { adv(ps); isMut := True } else ()
     val typ = parseTypeH(ps)
     Arr.push(arr, { name=name, mut_=isMut, type_=typ });
     if (atPunct(ps, ",")) { adv(ps); () }
@@ -321,6 +322,50 @@ fun parseTypeParamList(ps: ParseState): List<String> = {
 
 // Detects whether the token stream from the current `(` closes with `)` followed by `=>`.
 // This avoids exception-based backtracking, which can trigger JVM verifier issues.
+fun looksLikeGenericLambda(ps: ParseState): Bool = {
+  if (!atOp(ps, "<")) False
+  else {
+    val probe = { tokens = ps.tokens, mut pos = ps.pos }
+    adv(probe);
+    if (!atIdent(probe) & !atUpper(probe)) False
+    else {
+      adv(probe);
+      while (atPunct(probe, ",") & !atEof(probe)) {
+        adv(probe);
+        if (atIdent(probe) | atUpper(probe)) { adv(probe); () } else ()
+      };
+      if (!atOp(probe, ">")) False
+      else {
+        adv(probe);
+        if (!atPunct(probe, "(")) False
+        else {
+          var depth = 0
+          var found = False
+          var done = False
+          while (!done & !atEof(probe)) {
+            if (atPunct(probe, "(")) {
+              depth := depth + 1;
+              adv(probe);
+              ()
+            } else if (atPunct(probe, ")")) {
+              depth := depth - 1;
+              adv(probe);
+              if (depth == 0) {
+                found := atOp(probe, "=>");
+                done := True
+              } else ()
+            } else {
+              adv(probe);
+              ()
+            }
+          };
+          found
+        }
+      }
+    }
+  }
+}
+
 fun looksLikeLambdaHead(ps: ParseState): Bool = {
   if (!atPunct(ps, "(")) False
   else {
@@ -349,8 +394,26 @@ fun looksLikeLambdaHead(ps: ParseState): Bool = {
   }
 }
 
+fun parseGenericLambda_(ps: ParseState, async_: Bool): Ast.Expr = {
+  adv(ps); // <
+  val tpArr = Arr.new()
+  Arr.push(tpArr, adv(ps).text);
+  while (atPunct(ps, ",")) {
+    adv(ps);
+    Arr.push(tpArr, adv(ps).text)
+  };
+  expectOp(ps, ">");
+  expectPunct(ps, "(");
+  val params = parseParamList(ps)
+  expectPunct(ps, ")");
+  expectOp(ps, "=>");
+  val body = parseExprH(ps)
+  ELambda(async_, Arr.toList(tpArr), params, body)
+}
+
 fun tryLambda(ps: ParseState, async_: Bool): Option<Ast.Expr> = {
-  if (!looksLikeLambdaHead(ps)) None
+  if (looksLikeGenericLambda(ps)) Some(parseGenericLambda_(ps, async_))
+  else if (!looksLikeLambdaHead(ps)) None
   else {
     expectPunct(ps, "(");
     var params = parseParamList(ps)
@@ -480,9 +543,25 @@ fun parseBlockH(ps: ParseState): Block = {
   extractResult(Arr.toList(stmts))
 }
 
+fun parseLocalAsyncFun_(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
+  adv(ps); // async
+  adv(ps); // fun
+  var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
+  var typeParams = parseTypeParamList(ps)
+  expectPunct(ps, "(");
+  var params = parseParamList(ps)
+  expectPunct(ps, ")");
+  expectPunct(ps, ":");
+  var retType = parseTypeH(ps)
+  expectOp(ps, "=");
+  var body = parseExprH(ps)
+  Arr.push(stmts, SFun(True, name, typeParams, params, retType, body));
+  ()
+}
+
 fun parseValStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
   adv(ps);
-  var name = expectIdent(ps).text
+  var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
   var typ: Option<Ast.AstType> = None
   if (atPunct(ps, ":")) {
     adv(ps);
@@ -497,7 +576,7 @@ fun parseValStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
 
 fun parseVarStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
   adv(ps);
-  var name = expectIdent(ps).text
+  var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
   var typ: Option<Ast.AstType> = None
   if (atPunct(ps, ":")) {
     adv(ps);
@@ -545,6 +624,8 @@ fun parseAndAddStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
     parseVarStmt(ps, stmts)
   } else if (atKw(ps, "fun")) {
     parseLocalFunStmt(ps, stmts)
+  } else if (atKw(ps, "async") & tokIsKw(pk1(ps), "fun")) {
+    parseLocalAsyncFun_(ps, stmts)
   } else if (atKw(ps, "break")) {
     adv(ps);
     Arr.push(stmts, SBreak);
@@ -650,7 +731,7 @@ fun parsePowExpr(ps: ParseState): Ast.Expr = {
 }
 
 fun parseUnaryExpr(ps: ParseState): Ast.Expr = {
-  if (atOp(ps, "-") | atOp(ps, "!")) {
+  if (atOp(ps, "-") | atOp(ps, "!") | atOp(ps, "+")) {
     var op = adv(ps).text
     var operand = parseUnaryExpr(ps)
     EUnary(op, operand)
@@ -754,6 +835,12 @@ fun parseTryExpr(ps: ParseState): Ast.Expr = {
   adv(ps);
   var body = parseBlockH(ps)
   expectKw(ps, "catch");
+  if (atPunct(ps, "(")) {
+    adv(ps);
+    adv(ps); // skip binding variable
+    expectPunct(ps, ")");
+    ()
+  } else ()
   ETry(body, None, parseCases(ps))
 }
 
@@ -1008,7 +1095,7 @@ fun parseExternImport_(ps: ParseState): Ast.TopDecl = {
   adv(ps); // consume 'import'
   var target = expectStrVal(ps)
   expectKw(ps, "as");
-  var alias = expectIdent(ps).text
+  var alias = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
   val overrides = Arr.new()
   if (atPunct(ps, "{")) {
     adv(ps);
@@ -1080,14 +1167,14 @@ fun parseTopDecl_(ps: ParseState, exported: Bool): Ast.TopDecl = {
     TDException({ exported=exported, name=name, fields=fields })
   } else if (atKw(ps, "val")) {
     adv(ps);
-    var name = expectIdent(ps).text
+    var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
     var typ = if (atPunct(ps, ":")) { adv(ps); Some(parseTypeH(ps)) } else None
     expectOp(ps, "=");
     var expr = parseExprH(ps)
     if (exported) TDVal(name, typ, expr) else TDSVal(name, expr)
   } else if (atKw(ps, "var")) {
     adv(ps);
-    var name = expectIdent(ps).text
+    var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
     var typ = if (atPunct(ps, ":")) { adv(ps); Some(parseTypeH(ps)) } else None
     expectOp(ps, "=");
     var expr = parseExprH(ps)
@@ -1172,9 +1259,12 @@ fun parseProgram_(ps: ParseState): Program = {
   while (atKw(ps, "import")) {
     Arr.push(imports, parseImport_(ps))
   };
-  // Parse top-level declarations
+  // Parse top-level declarations; skip bare semicolons
   while (!atEof(ps)) {
-    if (atKw(ps, "export")) {
+    if (atPunct(ps, ";")) {
+      adv(ps);
+      ()
+    } else if (atKw(ps, "export")) {
       Arr.push(body, parseExport_(ps))
     } else {
       Arr.push(body, parseTopDecl_(ps, False))
