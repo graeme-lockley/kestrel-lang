@@ -142,18 +142,8 @@ fun splitWithDelimsLoop(s: String, delims: List<String>, idx: Int, tokenStart: I
 export fun splitWithDelimiters(s: String, delims: List<String>): List<String> =
   splitWithDelimsLoop(s, delims, 0, 0)
 
-export fun join(sep: String, parts: List<String>): String =
-  match (parts) {
-    [] =>
-      "",
-    h :: t =>
-      match (t) {
-        [] =>
-          h,
-        _ =>
-          "${h}${sep}${join(sep, t)}"
-      }
-  }
+export extern fun join(sep: String, parts: List<String>): String =
+  jvm("kestrel.runtime.KRuntime#stringJoin(java.lang.Object,java.lang.Object)")
 
 export extern fun append(a: String, b: String): String =
   jvm("kestrel.runtime.KRuntime#concat(java.lang.Object,java.lang.Object)")

@@ -1881,5 +1881,21 @@ public final class KRuntime {
         }
         return result;
     }
+
+    /** O(total-length) string join using StringBuilder — replaces the O(N²) recursive Kestrel impl. */
+    public static String stringJoin(Object sep, Object parts) {
+        String sepStr = (String) sep;
+        StringBuilder sb = new StringBuilder();
+        boolean first = true;
+        Object node = parts;
+        while (node instanceof KCons) {
+            if (!first) sb.append(sepStr);
+            sb.append((String) ((KCons) node).head);
+            node = ((KCons) node).tail;
+            first = false;
+        }
+        return sb.toString();
+    }
 }
+
 

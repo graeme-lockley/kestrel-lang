@@ -6,7 +6,7 @@ import {
   TkInt, TkFloat, TkStr, TkChar, TkTemplate, TkIdent, TkUpper, TkKw, TkOp, TkPunct, TkEof,
   TPLiteral, TPInterp
 } from "kestrel:dev/parser/token"
-import { lex } from "kestrel:dev/parser/lexer"
+import * as Lex from "kestrel:dev/parser/lexer"
 import * as Ast from "kestrel:dev/parser/ast"
 import {
   ELit, EIdent, ECall, EField, EAwait, EUnary, EBinary, ECons, EPipe,
@@ -28,41 +28,69 @@ export exception ParseError { message: String, offset: Int, line: Int, col: Int 
 
 val PRIMS = ["Int", "Float", "Bool", "String", "Unit", "Char", "Rune"]
 
-type ParseState = { tokens: Array<Token.Token>, pos: mut Int }
+type ParseState = { lex: Lex.LexState, buf: Array<Token.Token>, pos: mut Int }
 
-fun makePs(tokenList: List<Token.Token>): ParseState = {
-  val filtered = Lst.filter(tokenList, (t: Token.Token) => !Token.isTrivia(t))
-  { tokens = Arr.fromList(filtered), mut pos = 0 }
+fun makePs(ls: Lex.LexState): ParseState = {
+  { lex = ls, buf = Arr.new(), mut pos = 0 }
+}
+
+// Build ParseState from a pre-lexed token list — iterative filter, no recursion.
+fun makePsFromList(tokenList: List<Token.Token>): ParseState = {
+  val dummy = Lex.create("")
+  val buf: Array<Token.Token> = Arr.new()
+  val src = Arr.fromList(tokenList)
+  val n = Arr.length(src)
+  var i = 0
+  while (i < n) {
+    val t = Arr.get(src, i)
+    if (!Token.isTrivia(t)) Arr.push(buf, t) else ();
+    i := i + 1
+  };
+  { lex = dummy, buf = buf, mut pos = 0 }
+}
+
+// ─── Lazy token buffer ──────────────────────────────────────────────────────
+// Ensures ps.buf has at least ps.pos+ahead+1 elements by pulling non-trivia
+// tokens from ps.lex on demand. TkEof is sticky: once EOF lands in buf it is
+// duplicated rather than re-lexing (nextToken is idempotent at EOF anyway).
+
+fun fillBuf(ps: ParseState, ahead: Int): Unit = {
+  while (Arr.length(ps.buf) <= ps.pos + ahead) {
+    val n = Arr.length(ps.buf);
+    if (n > 0 & Arr.get(ps.buf, n - 1).kind == TkEof) {
+      Arr.push(ps.buf, Arr.get(ps.buf, n - 1))
+    } else {
+      var tok = Lex.nextToken(ps.lex);
+      while (Token.isTrivia(tok)) { tok := Lex.nextToken(ps.lex) };
+      Arr.push(ps.buf, tok)
+    }
+  }
 }
 
 // ─── Token accessors ────────────────────────────────────────────────────────
 
 fun cur(ps: ParseState): Token.Token = {
-  val len = Arr.length(ps.tokens)
-  val safeIdx = if (ps.pos < len) ps.pos else len - 1
-  Arr.get(ps.tokens, safeIdx)
+  fillBuf(ps, 0);
+  Arr.get(ps.buf, ps.pos)
 }
 
 fun pk1(ps: ParseState): Token.Token = {
-  val len = Arr.length(ps.tokens)
+  fillBuf(ps, 1);
   val nxt = ps.pos + 1
-  val safeIdx = if (nxt < len) nxt else len - 1
-  Arr.get(ps.tokens, safeIdx)
+  val len = Arr.length(ps.buf)
+  Arr.get(ps.buf, if (nxt < len) nxt else len - 1)
 }
 
 fun pk2(ps: ParseState): Token.Token = {
-  val len = Arr.length(ps.tokens)
+  fillBuf(ps, 2);
   val nxt = ps.pos + 2
-  val safeIdx = if (nxt < len) nxt else len - 1
-  Arr.get(ps.tokens, safeIdx)
+  val len = Arr.length(ps.buf)
+  Arr.get(ps.buf, if (nxt < len) nxt else len - 1)
 }
 
 fun adv(ps: ParseState): Token.Token = {
   val t = cur(ps)
-  val newPos = ps.pos + 1
-  val maxPos = Arr.length(ps.tokens) - 1
-  val nextPos = if (newPos <= maxPos) newPos else maxPos
-  ps.pos := nextPos
+  ps.pos := ps.pos + 1
   t
 }
 
@@ -325,7 +353,7 @@ fun parseTypeParamList(ps: ParseState): List<String> = {
 fun looksLikeGenericLambda(ps: ParseState): Bool = {
   if (!atOp(ps, "<")) False
   else {
-    val probe = { tokens = ps.tokens, mut pos = ps.pos }
+    val probe = { lex = ps.lex, buf = ps.buf, mut pos = ps.pos }
     adv(probe);
     if (!atIdent(probe) & !atUpper(probe)) False
     else {
@@ -369,7 +397,7 @@ fun looksLikeGenericLambda(ps: ParseState): Bool = {
 fun looksLikeLambdaHead(ps: ParseState): Bool = {
   if (!atPunct(ps, "(")) False
   else {
-    val probe = { tokens = ps.tokens, mut pos = ps.pos }
+    val probe = { lex = ps.lex, buf = ps.buf, mut pos = ps.pos }
     var depth = 0
     var found = False
     var done = False
@@ -747,7 +775,7 @@ fun tmplInterpResult(res: Result<Ast.Expr, ParseError>, fallback: String): TmplP
 fun parseTmplPart(tp: Token.TemplatePart): TmplPart =
   match (tp) {
     TPLiteral(s) => TmplLit(s),
-    TPInterp(s) => tmplInterpResult(parseExpr(lex(s)), s)
+    TPInterp(s) => tmplInterpResult(parseExpr(Lex.create(s)), s)
   }
 
 fun exprOkAsCallee(expr: Ast.Expr): Bool =
@@ -1275,17 +1303,33 @@ fun parseProgram_(ps: ParseState): Program = {
 
 // ─── Entry points ────────────────────────────────────────────────────────────
 
-export fun parse(tokenList: List<Token.Token>): Result<Program, ParseError> =
+export fun parse(ls: Lex.LexState): Result<Program, ParseError> =
   try {
-    val ps = makePs(tokenList)
+    val ps = makePs(ls)
     Ok(parseProgram_(ps))
   } catch {
     e => Err(e)
   }
 
-export fun parseExpr(tokenList: List<Token.Token>): Result<Ast.Expr, ParseError> =
+export fun parseExpr(ls: Lex.LexState): Result<Ast.Expr, ParseError> =
   try {
-    val ps = makePs(tokenList)
+    val ps = makePs(ls)
+    Ok(parseExprH(ps))
+  } catch {
+    e => Err(e)
+  }
+
+export fun parseFromList(tokens: List<Token.Token>): Result<Program, ParseError> =
+  try {
+    val ps = makePsFromList(tokens)
+    Ok(parseProgram_(ps))
+  } catch {
+    e => Err(e)
+  }
+
+export fun parseExprFromList(tokens: List<Token.Token>): Result<Ast.Expr, ParseError> =
+  try {
+    val ps = makePsFromList(tokens)
     Ok(parseExprH(ps))
   } catch {
     e => Err(e)

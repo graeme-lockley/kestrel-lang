@@ -28,8 +28,8 @@ import {
   PWild, PVar, PLit, PCon, PList, PCons, PTuple,
   TBAdt, TBAlias
 } from "kestrel:dev/parser/ast"
-import { lex } from "kestrel:dev/parser/lexer"
-import { parse, ParseError } from "kestrel:dev/parser/parser"
+import * as Lex from "kestrel:dev/parser/lexer"
+import { parse, parseFromList, ParseError } from "kestrel:dev/parser/parser"
 import { getProcess } from "kestrel:sys/process"
 import { GREEN, RED, DIM, RESET, CHECK, CROSS } from "kestrel:io/console"
 import { nowMs } from "kestrel:data/basics"
@@ -770,8 +770,8 @@ fun fmtProgramDoc(prog: Ast.Program, allToks: List<Token.Token>): Doc = {
 }
 
 export fun format(src: String): Result<String, FormatError> = {
-  val allToks = lex(src)
-  match (parse(allToks)) {
+  val allToks = Lex.lex(src)
+  match (parseFromList(allToks)) {
     Err(e) => match (e) {
       ParseError(msg, off, ln, col) => Err(FmtParseError(msg, off, ln, col))
     }

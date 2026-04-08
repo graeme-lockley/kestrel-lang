@@ -2,8 +2,8 @@ import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
 import * as Str from "kestrel:data/string"
-import { lex } from "kestrel:dev/parser/lexer"
-import { parse, parseExpr } from "kestrel:dev/parser/parser"
+import * as Lex from "kestrel:dev/parser/lexer"
+import { parseFromList, parseExprFromList } from "kestrel:dev/parser/parser"
 import * as Ast from "kestrel:dev/parser/ast"
 import {
   ELit, EIdent, ECall, EField, EAwait, EUnary, EBinary, ECons, EPipe,
@@ -21,13 +21,13 @@ import {
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
 fun pl(src: String): Ast.Program =
-  match (parse(lex(src))) {
+  match (parseFromList(Lex.lex(src))) {
     Ok(prog) => prog,
     Err(e) => throw e
   }
 
 fun pe(src: String): Ast.Expr =
-  match (parseExpr(lex(src))) {
+  match (parseExprFromList(Lex.lex(src))) {
     Ok(expr) => expr,
     Err(e) => throw e
   }

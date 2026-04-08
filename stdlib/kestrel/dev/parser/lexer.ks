@@ -517,6 +517,52 @@ fun pushOpOrPunctTok(tokens: Array<Token.Token>, src: String, pos: Int, line: In
   }
 }
 
+export type LexState = { src: String, len: Int, pos: mut Int, line: mut Int, col: mut Int }
+
+// Create a LexState positioned at the start of src (skipping any shebang line).
+export fun create(src: String): LexState = {
+  val ls = { src = src, len = Str.length(src), mut pos = 0, mut line = 1, mut col = 1 }
+  if (ls.pos + 1 < ls.len & cpOf(ls.src, ls.pos) == 35 & cpOf(ls.src, ls.pos + 1) == 33) {
+    while (ls.pos < ls.len & cpOf(ls.src, ls.pos) != 10) { ls.pos := ls.pos + 1 };
+    if (ls.pos < ls.len) { ls.pos := ls.pos + 1; () } else ()
+  } else ();
+  ls
+}
+
+// Return the next token from ls, advancing ls.pos/line/col.
+// Returns TkEof (idempotently) once the source is exhausted.
+export fun nextToken(ls: LexState): Token.Token = {
+  if (ls.pos >= ls.len)
+    makeTok(TkEof, "", makeSpan(ls.len, ls.len, ls.line, ls.col))
+  else {
+    val tmp: Array<Token.Token> = Arr.new()
+    val cp = cpOf(ls.src, ls.pos)
+    val r: (Int, Int, Int) =
+      if (isWs(cp))
+        pushWsTok(tmp, ls.src, ls.pos, ls.line, ls.col)
+      else if (cp == 47 & ls.pos + 1 < ls.len & cpOf(ls.src, ls.pos + 1) == 47)
+        pushLineCmtTok(tmp, ls.src, ls.pos, ls.line, ls.col)
+      else if (cp == 47 & ls.pos + 1 < ls.len & cpOf(ls.src, ls.pos + 1) == 42)
+        pushBlockCmtTok(tmp, ls.src, ls.pos, ls.line, ls.col)
+      else if (isAlpha(cp) | cp == 95)
+        pushIdentTok(tmp, ls.src, ls.pos, ls.line, ls.col)
+      else if (cp == 46 & ls.pos + 1 < ls.len & isDigit(cpOf(ls.src, ls.pos + 1)))
+        pushDotFloatTok(tmp, ls.src, ls.pos, ls.line, ls.col)
+      else if (isDigit(cp))
+        pushNumTok(tmp, ls.src, ls.pos, cp, ls.line, ls.col)
+      else if (cp == 34)
+        pushStrTok(tmp, ls.src, ls.pos, ls.line, ls.col)
+      else if (cp == 39)
+        pushCharTok(tmp, ls.src, ls.pos, ls.line, ls.col)
+      else
+        pushOpOrPunctTok(tmp, ls.src, ls.pos, ls.line, ls.col)
+    ls.pos := r.0;
+    ls.line := r.1;
+    ls.col := r.2;
+    Arr.get(tmp, 0)
+  }
+}
+
 export fun lex(src: String): List<Token.Token> = {
   val tokens: Array<Token.Token> = Arr.new()
   val len = Str.length(src)
