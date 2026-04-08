@@ -1,10 +1,21 @@
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
 import * as Arr from "kestrel:array"
+import * as Dict from "kestrel:data/dict"
 import * as Token from "kestrel:dev/parser/token"
 import { TPLiteral, TPInterp, TkInt, TkFloat, TkStr, TkTemplate, TkChar,
          TkIdent, TkUpper, TkKw, TkOp, TkPunct, TkWs,
          TkLineComment, TkBlockComment, TkEof } from "kestrel:dev/parser/token"
+
+// Fast O(1) lexer helpers: treat positions as code-unit (char) indices.
+// Kestrel source files are ASCII/BMP so code units == code points.
+// Declared before the computed module-level vals that call lexLen at init time.
+extern fun cpOf(src: String, pos: Int): Int =
+  jvm("kestrel.runtime.KRuntime#lexCharAt(java.lang.Object,java.lang.Object)")
+extern fun lexLen(src: String): Int =
+  jvm("kestrel.runtime.KRuntime#lexLength(java.lang.Object)")
+extern fun lexSlice(src: String, start: Int, end: Int): String =
+  jvm("kestrel.runtime.KRuntime#lexSlice(java.lang.Object,java.lang.Object,java.lang.Object)")
 
 val KEYWORDS = [
   "exception", "continue", "opaque", "extern", "export", "import",
@@ -12,22 +23,21 @@ val KEYWORDS = [
   "else", "from", "type", "fun", "mut", "try", "val", "var", "as", "if", "is"
 ]
 
+// O(1) keyword lookup: HashMap.containsKey instead of 24-deep recursive list scan.
+val KEYWORD_SET = Dict.fromList(Dict.hashString, Dict.eqString,
+  Lst.map(KEYWORDS, (kw: String) => (kw, True)))
+
 val MULTI_OPS = [
   "=>", ":=", "==", "!=", ">=", "<=", "**", "<|", "::", "|>", "->", "..."
 ]
 
+// Precomputed arrays so matchMultiOp pays no lexLen(op) cost per invocation.
+val MULTI_OPS_ARR = Arr.fromList(MULTI_OPS)
+val MULTI_OPS_LENS = Arr.fromList(Lst.map(MULTI_OPS, (op: String) => lexLen(op)))
+
 val SINGLE_OPS = "+-*/%|&<>=!"
 
 val PUNCT_CHARS = "(){}[],:.;"
-
-// Fast O(1) lexer helpers: treat positions as code-unit (char) indices.
-// Kestrel source files are ASCII/BMP so code units == code points.
-extern fun cpOf(src: String, pos: Int): Int =
-  jvm("kestrel.runtime.KRuntime#lexCharAt(java.lang.Object,java.lang.Object)")
-extern fun lexLen(src: String): Int =
-  jvm("kestrel.runtime.KRuntime#lexLength(java.lang.Object)")
-extern fun lexSlice(src: String, start: Int, end: Int): String =
-  jvm("kestrel.runtime.KRuntime#lexSlice(java.lang.Object,java.lang.Object,java.lang.Object)")
 
 fun isAlpha(cp: Int): Bool =
   (cp >= 65 & cp <= 90) | (cp >= 97 & cp <= 122)
@@ -50,6 +60,22 @@ fun isOctDigit(cp: Int): Bool = cp >= 48 & cp <= 55
 
 fun isWs(cp: Int): Bool =
   cp == 32 | cp == 9 | cp == 13 | cp == 10
+
+// Code-point predicates — integer comparisons, no substring or string search.
+// SINGLE_OPS = "+-*/%|&<>=!"
+fun isSingleOp(cp: Int): Bool =
+  cp == 43 | cp == 45 | cp == 42 | cp == 37 | cp == 47 |
+  cp == 124 | cp == 38 | cp == 60 | cp == 62 | cp == 61 | cp == 33
+
+// PUNCT_CHARS = "(){}[],:.;"
+fun isPunct(cp: Int): Bool =
+  cp == 40 | cp == 41 | cp == 123 | cp == 125 | cp == 91 | cp == 93 |
+  cp == 44 | cp == 58 | cp == 46 | cp == 59
+
+// First chars of MULTI_OPS: = : ! > < * | - .
+fun canBeMultiOp(cp: Int): Bool =
+  cp == 61 | cp == 58 | cp == 33 | cp == 62 | cp == 60 |
+  cp == 42 | cp == 124 | cp == 45 | cp == 46
 
 fun chrAt(src: String, pos: Int): String =
   if (pos >= lexLen(src)) "" else lexSlice(src, pos, pos + 1)
@@ -299,14 +325,21 @@ fun lexStringFrom(src: String, pos: Int): StringResult = {
 
 fun matchMultiOp(src: String, pos: Int): String = {
   val len = lexLen(src)
-  fun tryOps(ops: List<String>): String =
-    match (ops) {
-      [] => "",
-      op :: tail =>
-        if (pos + lexLen(op) <= len & lexSlice(src, pos, pos + lexLen(op)) == op) op
-        else tryOps(tail)
+  val n = Arr.length(MULTI_OPS_ARR)
+  var i = 0
+  var result = ""
+  var done = False
+  while (i < n & !done) {
+    val opLen = Arr.get(MULTI_OPS_LENS, i)
+    val op = Arr.get(MULTI_OPS_ARR, i)
+    if (pos + opLen <= len & lexSlice(src, pos, pos + opLen) == op) {
+      result := op
+      done := True
+    } else {
+      i := i + 1
     }
-  tryOps(MULTI_OPS)
+  }
+  result
 }
 
 fun advanceLc(src: String, start: Int, end: Int, line0: Int, col0: Int): (Int, Int) = {
@@ -376,7 +409,7 @@ fun pushIdentTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, c
   val text = lexSlice(src, pos, endPos)
   val span = makeSpan(pos, endPos, line, col)
   val kind =
-    if (Lst.member(KEYWORDS, text)) TkKw
+    if (Dict.member(KEYWORD_SET, text)) TkKw
     else if (isUpper(cpOf(text, 0))) TkUpper
     else TkIdent
   Arr.push(tokens, makeTok(kind, text, span));
@@ -500,25 +533,34 @@ fun pushCharTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, co
 }
 
 fun pushOpOrPunctTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
-  val mop = matchMultiOp(src, pos)
-  if (lexLen(mop) > 0) {
-    val endPos = pos + lexLen(mop)
-    val span = makeSpan(pos, endPos, line, col)
-    Arr.push(tokens, makeTok(TkOp, mop, span));
-    (endPos, line, col + lexLen(mop))
-  } else {
-    val ch = lexSlice(src, pos, pos + 1)
-    if (Str.contains(ch, SINGLE_OPS)) {
-      val span = makeSpan(pos, pos + 1, line, col)
-      Arr.push(tokens, makeTok(TkOp, ch, span));
-      (pos + 1, line, col + 1)
-    } else if (Str.contains(ch, PUNCT_CHARS)) {
-      val span = makeSpan(pos, pos + 1, line, col)
-      Arr.push(tokens, makeTok(TkPunct, ch, span));
-      (pos + 1, line, col + 1)
+  val cp = cpOf(src, pos)
+  if (canBeMultiOp(cp)) {
+    val mop = matchMultiOp(src, pos)
+    val mlen = lexLen(mop)
+    if (mlen > 0) {
+      val endPos = pos + mlen
+      val span = makeSpan(pos, endPos, line, col)
+      Arr.push(tokens, makeTok(TkOp, mop, span));
+      (endPos, line, col + mlen)
     } else {
+      val ch = lexSlice(src, pos, pos + 1)
+      val span = makeSpan(pos, pos + 1, line, col)
+      val kind = if (isSingleOp(cp)) TkOp else TkPunct
+      Arr.push(tokens, makeTok(kind, ch, span));
       (pos + 1, line, col + 1)
     }
+  } else if (isSingleOp(cp)) {
+    val ch = lexSlice(src, pos, pos + 1)
+    val span = makeSpan(pos, pos + 1, line, col)
+    Arr.push(tokens, makeTok(TkOp, ch, span));
+    (pos + 1, line, col + 1)
+  } else if (isPunct(cp)) {
+    val ch = lexSlice(src, pos, pos + 1)
+    val span = makeSpan(pos, pos + 1, line, col)
+    Arr.push(tokens, makeTok(TkPunct, ch, span));
+    (pos + 1, line, col + 1)
+  } else {
+    (pos + 1, line, col + 1)
   }
 }
 
@@ -634,4 +676,73 @@ export fun lex(src: String): List<Token.Token> = {
   val eofSpan = makeSpan(len, len, line, col)
   Arr.push(tokens, makeTok(TkEof, "", eofSpan))
   Arr.toList(tokens)
+}
+
+// Like lex() but returns the Array directly — avoids 8000 KCons allocs per file.
+// Use this when the caller only needs Array access (e.g. format, parseFromArr).
+export fun lexArr(src: String): Array<Token.Token> = {
+  val tokens: Array<Token.Token> = Arr.new()
+  val len = lexLen(src)
+  var pos = 0
+  var line = 1
+  var col = 1
+
+  if (pos + 1 < len & cpOf(src, pos) == 35 & cpOf(src, pos + 1) == 33) {
+    while (pos < len & cpOf(src, pos) != 10) { pos := pos + 1 };
+    if (pos < len) { pos := pos + 1; () } else ()
+  } else ();
+
+  while (pos < len) {
+    val cp = cpOf(src, pos)
+    if (isWs(cp)) {
+      val r = pushWsTok(tokens, src, pos, line, col)
+      pos := r.0
+      line := r.1
+      col := r.2
+    } else if (cp == 47 & pos + 1 < len & cpOf(src, pos + 1) == 47) {
+      val r = pushLineCmtTok(tokens, src, pos, line, col)
+      pos := r.0
+      line := r.1
+      col := r.2
+    } else if (cp == 47 & pos + 1 < len & cpOf(src, pos + 1) == 42) {
+      val r = pushBlockCmtTok(tokens, src, pos, line, col)
+      pos := r.0
+      line := r.1
+      col := r.2
+    } else if (isAlpha(cp) | cp == 95) {
+      val r = pushIdentTok(tokens, src, pos, line, col)
+      pos := r.0
+      line := r.1
+      col := r.2
+    } else if (cp == 46 & pos + 1 < len & isDigit(cpOf(src, pos + 1))) {
+      val r = pushDotFloatTok(tokens, src, pos, line, col)
+      pos := r.0
+      line := r.1
+      col := r.2
+    } else if (isDigit(cp)) {
+      val r = pushNumTok(tokens, src, pos, cp, line, col)
+      pos := r.0
+      line := r.1
+      col := r.2
+    } else if (cp == 34) {
+      val r = pushStrTok(tokens, src, pos, line, col)
+      pos := r.0
+      line := r.1
+      col := r.2
+    } else if (cp == 39) {
+      val r = pushCharTok(tokens, src, pos, line, col)
+      pos := r.0
+      line := r.1
+      col := r.2
+    } else {
+      val r = pushOpOrPunctTok(tokens, src, pos, line, col)
+      pos := r.0
+      line := r.1
+      col := r.2
+    }
+  }
+
+  val eofSpan = makeSpan(len, len, line, col)
+  Arr.push(tokens, makeTok(TkEof, "", eofSpan))
+  tokens
 }

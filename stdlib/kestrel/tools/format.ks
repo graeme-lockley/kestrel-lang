@@ -30,7 +30,7 @@ import {
   TBAdt, TBAlias
 } from "kestrel:dev/parser/ast"
 import * as Lex from "kestrel:dev/parser/lexer"
-import { parse, parseFromList, ParseError } from "kestrel:dev/parser/parser"
+import { parse, parseFromList, parseFromArr, ParseError } from "kestrel:dev/parser/parser"
 import { getProcess } from "kestrel:sys/process"
 import { GREEN, RED, DIM, RESET, CHECK, CROSS } from "kestrel:io/console"
 import { nowMs } from "kestrel:data/basics"
@@ -687,37 +687,33 @@ fun countNewlines(s: String): Int =
 // Forward-pass comment association:
 // accumulate comment lines; when a non-trivia token at col=1 is seen,
 // associate current pending comments with that token's span.start.
-// A whitespace token containing more than 1 newline (blank line) clears pending.
-fun buildDeclComments(allToks: List<Token.Token>): List<(Int, List<String>)> = {
-  val init: (List<String>, List<(Int, List<String>)>) = ([], [])
-  val result = Lst.foldl(allToks, init, (state: (List<String>, List<(Int, List<String>)>), t: Token.Token) => {
-    val pending = state.0
-    val acc = state.1
-    if (isCommentToken(t))
-      (Lst.append(pending, [t.text]), acc)
-    else if (isTriviaToken(t))
-      (pending, acc)
-    else if (t.kind == TkPunct | t.kind == TkOp)
-      (pending, acc)
-    else {
-      val newAcc = if (t.span.col == 1 & !Lst.isEmpty(pending))
-        (t.span.start, pending) :: acc
-      else acc;
-      ([], newAcc)
-    }
-  })
-  Lst.reverse(result.1)
-}
-
-// Collect span.start of every col-1 non-trivia token (declaration positions).
-fun declPositions(allToks: List<Token.Token>): List<Int> = {
-  val acc = Lst.foldl(allToks, [], (acc: List<Int>, t: Token.Token) =>
-    if (t.span.col == 1 & !isTriviaToken(t) & t.kind != TkPunct & t.kind != TkOp)
-      t.span.start :: acc
-    else
-      acc
-  )
-  Lst.reverse(acc)
+// Single indexed-loop pass over an Array<Token.Token> — no KList traversal.
+fun buildDeclInfo(allToks: Array<Token.Token>): (List<(Int, List<String>)>, Array<Int>) = {
+  val commentsBuf: Array<(Int, List<String>)> = Arr.new()
+  val posBuf: Array<Int> = Arr.new()
+  // pending built in reverse via cons; Lst.reverse only on flush (~once per decl).
+  var pending: List<String> = []
+  val n = Arr.length(allToks)
+  var i = 0
+  while (i < n) {
+    val tok = Arr.get(allToks, i)
+    if (isCommentToken(tok)) {
+      pending := tok.text :: pending
+    } else if (isTriviaToken(tok) | tok.kind == TkPunct | tok.kind == TkOp) {
+      ()
+    } else {
+      if (tok.span.col == 1) {
+        if (!Lst.isEmpty(pending)) {
+          Arr.push(commentsBuf, (tok.span.start, Lst.reverse(pending)));
+          ()
+        } else ();
+        Arr.push(posBuf, tok.span.start)
+      } else ();
+      pending := []
+    };
+    i := i + 1
+  };
+  (Arr.toList(commentsBuf), posBuf)
 }
 
 fun lookupComments(map_: List<(Int, List<String>)>, spanStart: Int): List<String> =
@@ -735,11 +731,12 @@ fun fmtCommentBlock(lines: List<String>): Doc =
 
 // ─── Program formatter and core API ──────────────────────────────────────────
 
-fun fmtProgramDoc(prog: Ast.Program, allToks: List<Token.Token>): Doc = {
-  val commentList = buildDeclComments(allToks)
+fun fmtProgramDoc(prog: Ast.Program, allToks: Array<Token.Token>): Doc = {
+  val info = buildDeclInfo(allToks)
+  val commentList = info.0
+  val posArr = info.1
   val commentDict = Lst.foldl(commentList, Dict.emptyIntDict(), (d: Dict<Int, List<String>>, entry: (Int, List<String>)) =>
     Dict.insert(d, entry.0, entry.1))
-  val posArr = Arr.fromList(declPositions(allToks))
   val importCount = Lst.length(prog.imports)
 
   val importDocs = Lst.indexedMap(prog.imports, (idx: Int, d: Ast.ImportDecl) => {
@@ -770,8 +767,8 @@ fun fmtProgramDoc(prog: Ast.Program, allToks: List<Token.Token>): Doc = {
 }
 
 export fun format(src: String): Result<String, FormatError> = {
-  val allToks = Lex.lex(src)
-  match (parseFromList(allToks)) {
+  val allToks = Lex.lexArr(src)
+  match (parseFromArr(allToks)) {
     Err(e) => match (e) {
       ParseError(msg, off, ln, col) => Err(FmtParseError(msg, off, ln, col))
     }

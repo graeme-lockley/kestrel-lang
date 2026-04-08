@@ -2,6 +2,11 @@
 // Based on "A prettier printer" (Wadler 1998) / Lindig (2000) bounded variant.
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
+import * as Arr from "kestrel:array"
+
+// Direct ArrayList join — avoids Arr.toList KList allocation.
+extern fun joinArr(sep: String, parts: Array<String>): String =
+  jvm("kestrel.runtime.KRuntime#stringJoinArr(java.lang.Object,java.lang.Object)")
 
 // ─── Doc ADT ──────────────────────────────────────────────────────────────────
 
@@ -58,50 +63,61 @@ fun fitsQ(rem: Int, q: List<(Int, Bool, Doc)>): Bool =
       }
   }
 
-// formatQ(width, col, queue, acc): produce output tokens (reversed).
-fun formatQ(w: Int, k: Int, q: List<(Int, Bool, Doc)>, acc: List<String>): String =
+// formatQArr(width, col, queue, out): push output strings into out in order.
+// Uses Array<String> output instead of a reversed acc list — eliminates Lst.reverse
+// and all intermediate KCons allocations from the output-assembly path.
+fun formatQArr(w: Int, k: Int, q: List<(Int, Bool, Doc)>, out: Array<String>): Unit =
   match (q) {
-    [] => Str.concat(Lst.reverse(acc))
+    [] => ()
     item :: rest =>
       match (item.2) {
-        Empty     => formatQ(w, k, rest, acc)
-        Text(s)   => formatQ(w, k + Str.length(s), rest, s :: acc)
+        Empty     => formatQArr(w, k, rest, out)
+        Text(s)   => {
+          Arr.push(out, s);
+          formatQArr(w, k + Str.length(s), rest, out)
+        }
         Concat(x, y) =>
-          formatQ(w, k, (item.0, item.1, x) :: (item.0, item.1, y) :: rest, acc)
+          formatQArr(w, k, (item.0, item.1, x) :: (item.0, item.1, y) :: rest, out)
         Nest(j, d) =>
-          formatQ(w, k, (item.0 + j, item.1, d) :: rest, acc)
+          formatQArr(w, k, (item.0 + j, item.1, d) :: rest, out)
         Line =>
-          if (item.1)
-            formatQ(w, k + 1, rest, " " :: acc)
-          else {
+          if (item.1) {
+            Arr.push(out, " ");
+            formatQArr(w, k + 1, rest, out)
+          } else {
             val nl = "\n${spaces(item.0)}";
-            formatQ(w, item.0, rest, nl :: acc)
+            Arr.push(out, nl);
+            formatQArr(w, item.0, rest, out)
           }
         LineBreak =>
           if (item.1)
-            formatQ(w, k, rest, acc)
+            formatQArr(w, k, rest, out)
           else {
             val nl = "\n${spaces(item.0)}";
-            formatQ(w, item.0, rest, nl :: acc)
+            Arr.push(out, nl);
+            formatQArr(w, item.0, rest, out)
           }
         Group(d) =>
           if (fitsQ(w - k, (item.0, True, d) :: rest))
-            formatQ(w, k, (item.0, True, d) :: rest, acc)
+            formatQArr(w, k, (item.0, True, d) :: rest, out)
           else
-            formatQ(w, k, (item.0, False, d) :: rest, acc)
+            formatQArr(w, k, (item.0, False, d) :: rest, out)
         FlatAlt(bd, fd) =>
           if (item.1)
-            formatQ(w, k, (item.0, True, fd) :: rest, acc)
+            formatQArr(w, k, (item.0, True, fd) :: rest, out)
           else
-            formatQ(w, k, (item.0, False, bd) :: rest, acc)
+            formatQArr(w, k, (item.0, False, bd) :: rest, out)
       }
   }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /** Render a document to a string at the given column width. */
-export fun pretty(width: Int, doc: Doc): String =
-  formatQ(width, 0, [(0, False, doc)], [])
+export fun pretty(width: Int, doc: Doc): String = {
+  val out: Array<String> = Arr.new()
+  formatQArr(width, 0, [(0, False, doc)], out);
+  joinArr("", out)
+}
 
 // ─── Primitive combinators ────────────────────────────────────────────────────
 

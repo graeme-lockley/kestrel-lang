@@ -1921,6 +1921,19 @@ public final class KRuntime {
         }
         return sb.toString();
     }
+
+    /** O(total-length) string join directly from an Array<String> (ArrayList) — no KList allocation. */
+    @SuppressWarnings("unchecked")
+    public static String stringJoinArr(Object sep, Object arr) {
+        String sepStr = (String) sep;
+        java.util.ArrayList<Object> list = (java.util.ArrayList<Object>) arr;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < list.size(); i++) {
+            if (i > 0) sb.append(sepStr);
+            sb.append((String) list.get(i));
+        }
+        return sb.toString();
+    }
 }
 
 
