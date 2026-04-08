@@ -54,12 +54,13 @@ val text = Str.concat([
 
 // ── pipeline ─────────────────────────────────────────────────────────────
 
-val freq =
-  Str.words(Str.toLower(text))
+val freq = text
+  |> Str.toLower
+  |> Str.words
   |> Lst.foldl(Dct.empty(), tally)
 
-val top15 =
-  Dct.toList(freq)
+val top15 = freq
+  |> Dct.toList
   |> sortDesc
   |> Lst.take(15)
 
