@@ -1,6 +1,6 @@
-// Tests for kestrel:socket TCP and TLS socket library (S03-02).
+// Tests for kestrel:io/socket TCP and TLS socket library (S03-02).
 import { Suite, group, asyncGroup, eq, isTrue } from "kestrel:tools/test"
-import * as Socket from "kestrel:socket"
+import * as Socket from "kestrel:io/socket"
 import * as Task from "kestrel:sys/task"
 import * as Str from "kestrel:data/string"
 
@@ -31,7 +31,7 @@ async fun requestOnce(host: String, port: Int, request: String): Task<String> = 
 // ---------------------------------------------------------------------------
 
 export async fun run(s: Suite): Task<Unit> = {
-  await asyncGroup(s, "kestrel:socket", async (s1: Suite) => {
+  await asyncGroup(s, "kestrel:io/socket", async (s1: Suite) => {
     // Raw loopback: client sends, server reads all (EOF from client close), echoes back
     await asyncGroup(s1, "TCP loopback round-trip", async (sg: Suite) => {
       val ss = await Socket.listen("127.0.0.1", 0);

@@ -1,5 +1,5 @@
 import * as Lst from "kestrel:data/list"
-import * as Arr from "kestrel:array"
+import * as Arr from "kestrel:data/array"
 import * as Token from "kestrel:dev/parser/token"
 import {
   TkInt, TkFloat, TkStr, TkChar, TkTemplate, TkIdent, TkUpper, TkKw, TkOp, TkPunct, TkEof

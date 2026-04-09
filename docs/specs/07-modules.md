@@ -132,15 +132,15 @@ For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashM
   | `kestrel:sys/task` | `stdlib/kestrel/sys/task.ks` | Async tasks |
   | `kestrel:sys/runtime` | `stdlib/kestrel/sys/runtime.ks` | Runtime errors |
   | `kestrel:dev/stack` | `stdlib/kestrel/dev/stack.ks` | Stack traces (debug) |
-  | `kestrel:array` | `stdlib/kestrel/array.ks` | Array built-in type |
-  | `kestrel:socket` | `stdlib/kestrel/socket.ks` | TCP/TLS sockets |
-  | `kestrel:web` | `stdlib/kestrel/web.ks` | Lightweight routing |
+  | `kestrel:data/array` | `stdlib/kestrel/data/array.ks` | Array built-in type |
+  | `kestrel:io/socket` | `stdlib/kestrel/io/socket.ks` | TCP/TLS sockets |
+  | `kestrel:io/web` | `stdlib/kestrel/io/web.ks` | Lightweight routing |
 
   **Note for `kestrel:io/http`:** The module exports three opaque types — `Server`, `Request`, and `Response` — backed by JDK classes (`com.sun.net.httpserver.HttpServer`, `com.sun.net.httpserver.HttpExchange`, and an implementation-defined response representation respectively). These types are not constructible by user code; they are produced exclusively by the `kestrel:io/http` module functions (`createServer`, `get`, `makeResponse`). See 02 §`kestrel:io/http` and 05 §2 for the concurrency model.
 
-  **Note for `kestrel:web`:** A lightweight routing framework built on `kestrel:io/http` and implemented entirely in Kestrel. See 02 §`kestrel:web` for the `Router` type, pattern syntax, and `serve`. Depends on `kestrel:io/http`, `kestrel:data/list`, `kestrel:data/dict`, and `kestrel:data/string`.
+  **Note for `kestrel:io/web`:** A lightweight routing framework built on `kestrel:io/http` and implemented entirely in Kestrel. See 02 §`kestrel:io/web` for the `Router` type, pattern syntax, and `serve`. Depends on `kestrel:io/http`, `kestrel:data/list`, `kestrel:data/dict`, and `kestrel:data/string`.
 
-  **Note for `kestrel:socket`:** TCP and TLS socket library backed by `java.net.Socket` / `javax.net.ssl.SSLSocket` via `extern type`/`extern fun`. No maven dependencies — JDK-only. See 02 §`kestrel:socket` for types (`Socket`, `ServerSocket`), client functions (`tcpConnect`, `tlsConnect`), I/O functions (`sendText`, `readAll`, `readLine`, `close`), and server functions (`listen`, `accept`, `serverPort`, `serverClose`).
+  **Note for `kestrel:io/socket`:** TCP and TLS socket library backed by `java.net.Socket` / `javax.net.ssl.SSLSocket` via `extern type`/`extern fun`. No maven dependencies — JDK-only. See 02 §`kestrel:io/socket` for types (`Socket`, `ServerSocket`), client functions (`tcpConnect`, `tlsConnect`), I/O functions (`sendText`, `readAll`, `readLine`, `close`), and server functions (`listen`, `accept`, `serverPort`, `serverClose`).
 - **URL:** If the specifier is a valid URL (e.g. starts with `https://` or `http://`, or implementation-defined URL scheme), it is a **URL specifier**. On first encounter the source is fetched, content-hashed (SHA-256), and cached under `~/.kestrel/cache/` (see §7); subsequent resolutions use the cached copy. Resolution is deterministic for a given cache state (see §7).
 - **Path (from a local module):** If the importing module is a local file, a path specifier is resolved relative to the importing file's directory on the local filesystem. Extension rules (`.ks` auto-append) are implementation-defined but deterministic.
 - **Path (from a URL-fetched module):** If the importing module was fetched from a URL, a relative path specifier (e.g. `"./dir/mary.ks"` or `"../util.ks"`) is resolved relative to the **base URL** of the importing module using standard URL resolution rules (RFC 3986). The result is a new absolute URL that is itself fetched and cached as a URL specifier. This applies recursively: the entire transitive dependency tree of a remote module is downloaded into the cache. A relative path from a URL module can never resolve to a local filesystem path. Path traversal (`../`) is bounded to the same origin: a resolved URL that changes the scheme or host from the importing module's URL is a **compile error** with the import span.

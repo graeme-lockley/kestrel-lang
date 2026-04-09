@@ -1,6 +1,6 @@
 // E2E test: TCP server socket loopback round-trip (S03-02).
 // Binds a server socket, accepts one connection, reads the message, and verifies it.
-import * as Socket from "kestrel:socket"
+import * as Socket from "kestrel:io/socket"
 
 async fun acceptOnce(ss: Socket.ServerSocket): Task<String> = {
   val conn = await Socket.accept(ss);

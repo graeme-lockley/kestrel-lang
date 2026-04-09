@@ -1,6 +1,6 @@
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
-import * as Arr from "kestrel:array"
+import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Token from "kestrel:dev/parser/token"
 import { TPLiteral, TPInterp, TkInt, TkFloat, TkStr, TkTemplate, TkChar,

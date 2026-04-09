@@ -1,5 +1,5 @@
 import { Suite, group, eq, isTrue } from "kestrel:tools/test"
-import { new as newArr, get, set, push, length, fromList, toList } from "kestrel:array"
+import { new as newArr, get, set, push, length, fromList, toList } from "kestrel:data/array"
 import { map } from "kestrel:data/list"
 
 export async fun run(s: Suite): Task<Unit> =

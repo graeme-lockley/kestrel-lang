@@ -1,8 +1,8 @@
-// Tests for kestrel:web routing framework (S03-04).
+// Tests for kestrel:io/web routing framework (S03-04).
 // Tests cover route matching, method dispatch, path parameters, 404/405 defaults.
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
 import * as Http from "kestrel:io/http"
-import * as Web from "kestrel:web"
+import * as Web from "kestrel:io/web"
 import * as Dict from "kestrel:data/dict"
 import * as Str from "kestrel:data/string"
 
@@ -77,7 +77,7 @@ export async fun run(s: Suite): Task<Unit> = {
 
   await Http.serverStop(server);
 
-  group(s, "kestrel:web routing", (s1: Suite) => {
+  group(s, "kestrel:io/web routing", (s1: Suite) => {
     group(s1, "GET route matches exact path", (sg: Suite) => {
       eq(sg, "status 200", Http.statusCode(rGet), 200);
       eq(sg, "body Hello", Http.bodyText(rGet), "Hello")

@@ -8,6 +8,20 @@ This document defines the standard library modules that a Kestrel implementation
 
 ---
 
+## Namespace Taxonomy
+
+Standard library modules are organised under five namespaces. Each namespace has a distinct concern:
+
+| Namespace | Purpose |
+|-----------|---------|
+| `kestrel:data/` | Pure data structures and type-safe transformations — no side effects, no I/O. Examples: `string`, `list`, `dict`, `set`, `option`, `result`, `json`, `array`. |
+| `kestrel:io/` | Side-effecting I/O channels to external systems: filesystem, network, terminal. Examples: `fs`, `http`, `console`, `socket`, `web`. |
+| `kestrel:sys/` | OS and JVM runtime interface: process management, task scheduling, runtime error types. Examples: `process`, `task`, `runtime`. |
+| `kestrel:dev/` | Developer tooling libraries for building tools — CLI argument parsing, pretty-printing, stack-trace capture, parser infrastructure. Examples: `cli`, `text/prettyprinter`, `stack`, `parser/*`. |
+| `kestrel:tools/` | Executable Kestrel tools (invoked via `kestrel run` or CLI aliases). Not general-purpose import targets. Examples: `format`, `test`. |
+
+---
+
 ## kestrel:data/string
 
 String operations. All functions take the string as an explicit argument (no member-call syntax). Strings are UTF-8. **Character** means Unicode code point: `length` returns the number of code points; `slice` and `indexOf` use code-point indices (not byte offsets).
@@ -264,7 +278,7 @@ Sets as the **opaque** type `Set<E>` (defined in the module as an alias of `Dict
 
 ---
 
-## kestrel:array
+## kestrel:data/array
 
 Mutable, O(1)-indexed sequences exposed as the **opaque** type `Array<T>`. Backed by `java.util.ArrayList<Object>` via `KRuntime` static helpers. `Array<T>` is **mutable in place**: `set` and `push` mutate the same array object; there is no copy-on-write. Use `fromList` / `toList` to bridge between `Array<T>` and the immutable `List<T>`.
 
@@ -645,7 +659,7 @@ Passing assertions increment `passed`. In **verbose** and expanded compact, they
 
 ---
 
-## kestrel:socket
+## kestrel:io/socket
 
 TCP and TLS socket library. Provides plain TCP and TLS (HTTPS-style) client/server sockets backed by `java.net.Socket` and `javax.net.ssl.SSLSocket` via `extern type`/`extern fun` bindings. Implemented without JVM-specific transport stacks — all socket classes are part of the standard JDK (Java 21+). All I/O operations are `Task`-shaped and run on virtual threads.
 
@@ -741,9 +755,9 @@ async fun run(): Task<Unit> = {
 
 ---
 
-## kestrel:web
+## kestrel:io/web
 
-Lightweight routing framework built on top of `kestrel:http`. Provides Sinatra-style route registration (pattern matching, path parameters, wildcard segments) and automatic 404/405 responses. Implemented entirely in Kestrel — no additional JVM primitives.
+Lightweight routing framework built on top of `kestrel:io/http`. Provides Sinatra-style route registration (pattern matching, path parameters, wildcard segments) and automatic 404/405 responses. Implemented entirely in Kestrel — no additional JVM primitives.
 
 ### Overview
 

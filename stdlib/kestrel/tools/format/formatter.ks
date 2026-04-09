@@ -4,7 +4,7 @@
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
 import * as Dict from "kestrel:data/dict"
-import * as Arr from "kestrel:array"
+import * as Arr from "kestrel:data/array"
 import { readText, writeText } from "kestrel:io/fs"
 import * as PP from "kestrel:dev/text/prettyprinter"
 import { Doc } from "kestrel:dev/text/prettyprinter"

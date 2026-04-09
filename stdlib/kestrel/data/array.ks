@@ -1,4 +1,4 @@
-// kestrel:array — mutable, O(1)-indexed sequence backed by java.util.ArrayList.
+// kestrel:data/array — mutable, O(1)-indexed sequence backed by java.util.ArrayList.
 // Array<T> is mutable in place: set and push operate on the same object.
 // Use fromList / toList to convert between Array<T> and the immutable List<T>.
 

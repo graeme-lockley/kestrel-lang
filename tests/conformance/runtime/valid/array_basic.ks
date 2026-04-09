@@ -1,5 +1,5 @@
 // Runtime conformance: basic Array<T> create/push/get/length at runtime.
-import { new as newArr, push, get, length, set, fromList, toList } from "kestrel:array"
+import { new as newArr, push, get, length, set, fromList, toList } from "kestrel:data/array"
 
 val a = newArr()
 push(a, 10)

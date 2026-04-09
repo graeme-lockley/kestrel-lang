@@ -1,10 +1,10 @@
-// kestrel:socket — TCP and TLS socket library (S03-02).
+// kestrel:io/socket — TCP and TLS socket library (S03-02).
 // Provides plain TCP and TLS client/server sockets backed by JDK
 // java.net.Socket / javax.net.ssl.SSLSocket via extern type / extern fun.
 // All I/O operations return Task<T> and run on virtual threads.
 //
 // Usage (TCP client):
-//   import * as Socket from "kestrel:socket"
+//   import * as Socket from "kestrel:io/socket"
 //   val sock = await Socket.tcpConnect("example.com", 80)
 //   await Socket.sendText(sock, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n")
 //   val resp = await Socket.readAll(sock)

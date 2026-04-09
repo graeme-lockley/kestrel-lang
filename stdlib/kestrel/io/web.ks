@@ -1,9 +1,9 @@
-// kestrel:web — Lightweight routing framework (S03-04).
+// kestrel:io/web — Lightweight routing framework (S03-04).
 // Sinatra-style multi-route HTTP server built on top of kestrel:http.
 // Pure Kestrel implementation — no new JVM primitives.
 //
 // Usage:
-//   import * as Web from "kestrel:web"
+//   import * as Web from "kestrel:io/web"
 //   import * as Http from "kestrel:io/http"
 //
 //   val router =

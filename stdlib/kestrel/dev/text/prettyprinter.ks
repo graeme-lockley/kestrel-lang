@@ -2,7 +2,7 @@
 // Based on "A prettier printer" (Wadler 1998) / Lindig (2000) bounded variant.
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
-import * as Arr from "kestrel:array"
+import * as Arr from "kestrel:data/array"
 
 // Direct ArrayList join — avoids Arr.toList KList allocation.
 extern fun joinArr(sep: String, parts: Array<String>): String =

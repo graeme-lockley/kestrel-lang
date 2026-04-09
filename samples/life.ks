@@ -5,7 +5,7 @@
 // mutating the current one.  Prints several generations so you can
 // watch patterns evolve.
 
-import * as Arr from "kestrel:array"
+import * as Arr from "kestrel:data/array"
 import * as Str from "kestrel:data/string"
 
 val width  = 40
