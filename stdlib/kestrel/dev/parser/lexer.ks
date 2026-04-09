@@ -378,114 +378,102 @@ fun lexNumEnd(src: String, pos: Int): (Int, Bool) = {
   (afterExp, isFloat)
 }
 
-fun pushWsTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeWsTok(src: String, pos: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val endPos = lexWsEnd(src, pos)
   val text = lexSlice(src, pos, endPos)
   val span = makeSpan(pos, endPos, line, col)
-  Arr.push(tokens, makeTok(TkWs, text, span));
   val lc = advanceLc(src, pos, endPos, line, col);
-  (endPos, lc.0, lc.1)
+  (makeTok(TkWs, text, span), endPos, lc.0, lc.1)
 }
 
-fun pushLineCmtTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeLineCmtTok(src: String, pos: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val endPos = lexLineEnd(src, pos + 2)
   val text = lexSlice(src, pos, endPos)
-  val span = makeSpan(pos, endPos, line, col)
-  Arr.push(tokens, makeTok(TkLineComment, text, span));
-  (endPos, line, col + (endPos - pos))
+  val span = makeSpan(pos, endPos, line, col);
+  (makeTok(TkLineComment, text, span), endPos, line, col + (endPos - pos))
 }
 
-fun pushBlockCmtTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeBlockCmtTok(src: String, pos: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val endPos = lexBlockEnd(src, pos + 2)
   val text = lexSlice(src, pos, endPos)
   val span = makeSpan(pos, endPos, line, col)
-  Arr.push(tokens, makeTok(TkBlockComment, text, span));
   val lc = advanceLc(src, pos, endPos, line, col);
-  (endPos, lc.0, lc.1)
+  (makeTok(TkBlockComment, text, span), endPos, lc.0, lc.1)
 }
 
-fun pushIdentTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeIdentTok(src: String, pos: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val endPos = lexIdentEnd(src, pos)
   val text = lexSlice(src, pos, endPos)
   val span = makeSpan(pos, endPos, line, col)
   val kind =
     if (Dict.member(KEYWORD_SET, text)) TkKw
     else if (isUpper(cpOf(text, 0))) TkUpper
-    else TkIdent
-  Arr.push(tokens, makeTok(kind, text, span));
-  (endPos, line, col + (endPos - pos))
+    else TkIdent;
+  (makeTok(kind, text, span), endPos, line, col + (endPos - pos))
 }
 
-fun pushDotFloatTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeDotFloatTok(src: String, pos: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val afterDot = lexDecEnd(src, pos + 1)
   val endPos = lexExpEnd(src, afterDot)
   val text = lexSlice(src, pos, endPos)
-  val span = makeSpan(pos, endPos, line, col)
-  Arr.push(tokens, makeTok(TkFloat, text, span));
-  (endPos, line, col + (endPos - pos))
+  val span = makeSpan(pos, endPos, line, col);
+  (makeTok(TkFloat, text, span), endPos, line, col + (endPos - pos))
 }
 
-fun pushZeroNumTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeZeroNumTok(src: String, pos: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val len = lexLen(src)
   val nextCp = if (pos + 1 < len) cpOf(src, pos + 1) else -1
   if (nextCp == 120 | nextCp == 88) {
     val endPos = lexHexEnd(src, pos + 2)
     val text = lexSlice(src, pos, endPos)
-    val span = makeSpan(pos, endPos, line, col)
-    Arr.push(tokens, makeTok(TkInt, text, span));
-    (endPos, line, col + (endPos - pos))
+    val span = makeSpan(pos, endPos, line, col);
+    (makeTok(TkInt, text, span), endPos, line, col + (endPos - pos))
   } else if (nextCp == 98 | nextCp == 66) {
     val endPos = lexBinEnd(src, pos + 2)
     val text = lexSlice(src, pos, endPos)
-    val span = makeSpan(pos, endPos, line, col)
-    Arr.push(tokens, makeTok(TkInt, text, span));
-    (endPos, line, col + (endPos - pos))
+    val span = makeSpan(pos, endPos, line, col);
+    (makeTok(TkInt, text, span), endPos, line, col + (endPos - pos))
   } else if (nextCp == 111 | nextCp == 79) {
     val endPos = lexOctEnd(src, pos + 2)
     val text = lexSlice(src, pos, endPos)
-    val span = makeSpan(pos, endPos, line, col)
-    Arr.push(tokens, makeTok(TkInt, text, span));
-    (endPos, line, col + (endPos - pos))
+    val span = makeSpan(pos, endPos, line, col);
+    (makeTok(TkInt, text, span), endPos, line, col + (endPos - pos))
   } else {
     val r = lexNumEnd(src, pos)
     val endPos = r.0
     val text = lexSlice(src, pos, endPos)
     val span = makeSpan(pos, endPos, line, col)
-    val kind = if (r.1) TkFloat else TkInt
-    Arr.push(tokens, makeTok(kind, text, span));
-    (endPos, line, col + (endPos - pos))
+    val kind = if (r.1) TkFloat else TkInt;
+    (makeTok(kind, text, span), endPos, line, col + (endPos - pos))
   }
 }
 
-fun pushNumTok(tokens: Array<Token.Token>, src: String, pos: Int, cp: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeNumTok(src: String, pos: Int, cp: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val len = lexLen(src)
   if (cp == 48 & pos + 1 < len) {
-    pushZeroNumTok(tokens, src, pos, line, col)
+    makeZeroNumTok(src, pos, line, col)
   } else {
     val r = lexNumEnd(src, pos)
     val endPos = r.0
     val text = lexSlice(src, pos, endPos)
     val span = makeSpan(pos, endPos, line, col)
-    val kind = if (r.1) TkFloat else TkInt
-    Arr.push(tokens, makeTok(kind, text, span));
-    (endPos, line, col + (endPos - pos))
+    val kind = if (r.1) TkFloat else TkInt;
+    (makeTok(kind, text, span), endPos, line, col + (endPos - pos))
   }
 }
 
-fun pushStrTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeStrTok(src: String, pos: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val strResult = lexStringFrom(src, pos + 1)
   match (strResult) {
     SROk(strEnd, strKind) => {
       val text = lexSlice(src, pos, strEnd)
-      val span = makeSpan(pos, strEnd, line, col)
-      Arr.push(tokens, makeTok(strKind, text, span));
-      (strEnd, line, col + (strEnd - pos))
+      val span = makeSpan(pos, strEnd, line, col);
+      (makeTok(strKind, text, span), strEnd, line, col + (strEnd - pos))
     },
     SRError => {
       val errText = lexSlice(src, pos, pos + 1)
-      val span = makeSpan(pos, pos + 1, line, col)
-      Arr.push(tokens, makeTok(TkStr, errText, span));
-      (pos + 1, line, col + 1)
+      val span = makeSpan(pos, pos + 1, line, col);
+      (makeTok(TkStr, errText, span), pos + 1, line, col + 1)
     }
   }
 }
@@ -524,225 +512,135 @@ fun charLiteralEnd(src: String, pos: Int): Int = {
   else charPlainEnd(src, chrPos)
 }
 
-fun pushCharTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeCharTok(src: String, pos: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val endPos = charLiteralEnd(src, pos)
   val text = lexSlice(src, pos, endPos)
-  val span = makeSpan(pos, endPos, line, col)
-  Arr.push(tokens, makeTok(TkChar, text, span));
-  (endPos, line, col + (endPos - pos))
+  val span = makeSpan(pos, endPos, line, col);
+  (makeTok(TkChar, text, span), endPos, line, col + (endPos - pos))
 }
 
-fun pushOpOrPunctTok(tokens: Array<Token.Token>, src: String, pos: Int, line: Int, col: Int): (Int, Int, Int) = {
+fun makeOpOrPunctTok(src: String, pos: Int, line: Int, col: Int): (Token.Token, Int, Int, Int) = {
   val cp = cpOf(src, pos)
   if (canBeMultiOp(cp)) {
     val mop = matchMultiOp(src, pos)
     val mlen = lexLen(mop)
     if (mlen > 0) {
       val endPos = pos + mlen
-      val span = makeSpan(pos, endPos, line, col)
-      Arr.push(tokens, makeTok(TkOp, mop, span));
-      (endPos, line, col + mlen)
+      val span = makeSpan(pos, endPos, line, col);
+      (makeTok(TkOp, mop, span), endPos, line, col + mlen)
     } else {
       val ch = lexSlice(src, pos, pos + 1)
       val span = makeSpan(pos, pos + 1, line, col)
-      val kind = if (isSingleOp(cp)) TkOp else TkPunct
-      Arr.push(tokens, makeTok(kind, ch, span));
-      (pos + 1, line, col + 1)
+      val kind = if (isSingleOp(cp)) TkOp else TkPunct;
+      (makeTok(kind, ch, span), pos + 1, line, col + 1)
     }
   } else if (isSingleOp(cp)) {
     val ch = lexSlice(src, pos, pos + 1)
-    val span = makeSpan(pos, pos + 1, line, col)
-    Arr.push(tokens, makeTok(TkOp, ch, span));
-    (pos + 1, line, col + 1)
+    val span = makeSpan(pos, pos + 1, line, col);
+    (makeTok(TkOp, ch, span), pos + 1, line, col + 1)
   } else if (isPunct(cp)) {
     val ch = lexSlice(src, pos, pos + 1)
-    val span = makeSpan(pos, pos + 1, line, col)
-    Arr.push(tokens, makeTok(TkPunct, ch, span));
-    (pos + 1, line, col + 1)
+    val span = makeSpan(pos, pos + 1, line, col);
+    (makeTok(TkPunct, ch, span), pos + 1, line, col + 1)
   } else {
-    (pos + 1, line, col + 1)
+    val ch = lexSlice(src, pos, pos + 1)
+    val span = makeSpan(pos, pos + 1, line, col);
+    (makeTok(TkPunct, ch, span), pos + 1, line, col + 1)
   }
 }
 
-export type LexState = { src: String, len: Int, pos: mut Int, line: mut Int, col: mut Int }
+export type LexState = {
+  src: String, len: Int, pos: mut Int, line: mut Int, col: mut Int,
+  // Inline accumulators for buildDeclInfo — populated by nextToken so callers
+  // (e.g. the formatter) can obtain comment/position data in a single pass.
+  commentsBuf: Array<(Int, List<String>)>, posBuf: Array<Int>, pending: mut List<String>
+}
 
 // Create a LexState positioned at the start of src (skipping any shebang line).
 export fun create(src: String): LexState = {
-  val ls = { src = src, len = lexLen(src), mut pos = 0, mut line = 1, mut col = 1 }
+  val ls = {
+    src = src, len = lexLen(src), mut pos = 0, mut line = 1, mut col = 1,
+    commentsBuf = Arr.new(), posBuf = Arr.new(), mut pending = []
+  }
   if (ls.pos + 1 < ls.len & cpOf(ls.src, ls.pos) == 35 & cpOf(ls.src, ls.pos + 1) == 33) {
-    while (ls.pos < ls.len & cpOf(ls.src, ls.pos) != 10) { ls.pos := ls.pos + 1 };
-    if (ls.pos < ls.len) { ls.pos := ls.pos + 1; () } else ()
-  } else ();
+    while (ls.pos < ls.len & cpOf(ls.src, ls.pos) != 10) { ls.pos := ls.pos + 1 }
+    if (ls.pos < ls.len) { ls.pos := ls.pos + 1; () }
+  }
   ls
 }
 
 // Return the next token from ls, advancing ls.pos/line/col.
 // Returns TkEof (idempotently) once the source is exhausted.
+// Also accumulates comment and declaration-start data into ls.commentsBuf /
+// ls.posBuf / ls.pending so that getDeclInfo() can be called after parsing
+// without a second scan of the source.
 export fun nextToken(ls: LexState): Token.Token = {
-  if (ls.pos >= ls.len)
-    makeTok(TkEof, "", makeSpan(ls.len, ls.len, ls.line, ls.col))
-  else {
-    val tmp: Array<Token.Token> = Arr.new()
-    val cp = cpOf(ls.src, ls.pos)
-    val r: (Int, Int, Int) =
-      if (isWs(cp))
-        pushWsTok(tmp, ls.src, ls.pos, ls.line, ls.col)
-      else if (cp == 47 & ls.pos + 1 < ls.len & cpOf(ls.src, ls.pos + 1) == 47)
-        pushLineCmtTok(tmp, ls.src, ls.pos, ls.line, ls.col)
-      else if (cp == 47 & ls.pos + 1 < ls.len & cpOf(ls.src, ls.pos + 1) == 42)
-        pushBlockCmtTok(tmp, ls.src, ls.pos, ls.line, ls.col)
-      else if (isAlpha(cp) | cp == 95)
-        pushIdentTok(tmp, ls.src, ls.pos, ls.line, ls.col)
-      else if (cp == 46 & ls.pos + 1 < ls.len & isDigit(cpOf(ls.src, ls.pos + 1)))
-        pushDotFloatTok(tmp, ls.src, ls.pos, ls.line, ls.col)
-      else if (isDigit(cp))
-        pushNumTok(tmp, ls.src, ls.pos, cp, ls.line, ls.col)
-      else if (cp == 34)
-        pushStrTok(tmp, ls.src, ls.pos, ls.line, ls.col)
-      else if (cp == 39)
-        pushCharTok(tmp, ls.src, ls.pos, ls.line, ls.col)
-      else
-        pushOpOrPunctTok(tmp, ls.src, ls.pos, ls.line, ls.col)
-    ls.pos := r.0;
-    ls.line := r.1;
-    ls.col := r.2;
-    Arr.get(tmp, 0)
+  val tok =
+    if (ls.pos >= ls.len)
+      makeTok(TkEof, "", makeSpan(ls.len, ls.len, ls.line, ls.col))
+    else {
+      val cp = cpOf(ls.src, ls.pos)
+      val r =
+        if (isWs(cp))
+          makeWsTok(ls.src, ls.pos, ls.line, ls.col)
+        else if (cp == 47 & ls.pos + 1 < ls.len & cpOf(ls.src, ls.pos + 1) == 47)
+          makeLineCmtTok(ls.src, ls.pos, ls.line, ls.col)
+        else if (cp == 47 & ls.pos + 1 < ls.len & cpOf(ls.src, ls.pos + 1) == 42)
+          makeBlockCmtTok(ls.src, ls.pos, ls.line, ls.col)
+        else if (isAlpha(cp) | cp == 95)
+          makeIdentTok(ls.src, ls.pos, ls.line, ls.col)
+        else if (cp == 46 & ls.pos + 1 < ls.len & isDigit(cpOf(ls.src, ls.pos + 1)))
+          makeDotFloatTok(ls.src, ls.pos, ls.line, ls.col)
+        else if (isDigit(cp))
+          makeNumTok(ls.src, ls.pos, cp, ls.line, ls.col)
+        else if (cp == 34)
+          makeStrTok(ls.src, ls.pos, ls.line, ls.col)
+        else if (cp == 39)
+          makeCharTok(ls.src, ls.pos, ls.line, ls.col)
+        else
+          makeOpOrPunctTok(ls.src, ls.pos, ls.line, ls.col)
+      ls.pos := r.1
+      ls.line := r.2
+      ls.col := r.3
+      r.0
+    }
+  val k = tok.kind
+  if (k == TkLineComment | k == TkBlockComment) {
+    ls.pending := tok.text :: ls.pending;
+    ()
+  } else if (k == TkWs | k == TkPunct | k == TkOp) {
+    ()
+  } else {
+    if (tok.span.col == 1) {
+      if (!Lst.isEmpty(ls.pending)) {
+        Arr.push(ls.commentsBuf, (tok.span.start, Lst.reverse(ls.pending)))
+      }
+      Arr.push(ls.posBuf, tok.span.start)
+    }
+    ls.pending := [];
+    ()
   }
+  tok
 }
+
+// Return the (commentsBuf, posBuf) accumulated during a parse/lex pass.
+// Call after parse(ls) completes to obtain comment-association data without
+// a second scan.  The List form of commentsBuf is returned so callers can
+// use Lst.foldl / Dict directly.
+export fun getDeclInfo(ls: LexState): (List<(Int, List<String>)>, Array<Int>) =
+  (Arr.toList(ls.commentsBuf), ls.posBuf)
 
 export fun lex(src: String): List<Token.Token> = {
+  val ls = create(src)
   val tokens: Array<Token.Token> = Arr.new()
-  val len = lexLen(src)
-  var pos = 0
-  var line = 1
-  var col = 1
 
-  // Skip shebang line if present (#! at position 0)
-  if (pos + 1 < len & cpOf(src, pos) == 35 & cpOf(src, pos + 1) == 33) {
-    while (pos < len & cpOf(src, pos) != 10) { pos := pos + 1 };
-    if (pos < len) { pos := pos + 1; () } else ()
-  } else ();
-
-  while (pos < len) {
-    val cp = cpOf(src, pos)
-    if (isWs(cp)) {
-      val r = pushWsTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 47 & pos + 1 < len & cpOf(src, pos + 1) == 47) {
-      val r = pushLineCmtTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 47 & pos + 1 < len & cpOf(src, pos + 1) == 42) {
-      val r = pushBlockCmtTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (isAlpha(cp) | cp == 95) {
-      val r = pushIdentTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 46 & pos + 1 < len & isDigit(cpOf(src, pos + 1))) {
-      val r = pushDotFloatTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (isDigit(cp)) {
-      val r = pushNumTok(tokens, src, pos, cp, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 34) {
-      val r = pushStrTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 39) {
-      val r = pushCharTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else {
-      val r = pushOpOrPunctTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
+  while (True) {
+    val tok = nextToken(ls)
+    Arr.push(tokens, tok)
+    if (tok.kind == TkEof) {
+      break
     }
   }
 
-  val eofSpan = makeSpan(len, len, line, col)
-  Arr.push(tokens, makeTok(TkEof, "", eofSpan))
   Arr.toList(tokens)
-}
-
-// Like lex() but returns the Array directly — avoids 8000 KCons allocs per file.
-// Use this when the caller only needs Array access (e.g. format, parseFromArr).
-export fun lexArr(src: String): Array<Token.Token> = {
-  val tokens: Array<Token.Token> = Arr.new()
-  val len = lexLen(src)
-  var pos = 0
-  var line = 1
-  var col = 1
-
-  if (pos + 1 < len & cpOf(src, pos) == 35 & cpOf(src, pos + 1) == 33) {
-    while (pos < len & cpOf(src, pos) != 10) { pos := pos + 1 };
-    if (pos < len) { pos := pos + 1; () } else ()
-  } else ();
-
-  while (pos < len) {
-    val cp = cpOf(src, pos)
-    if (isWs(cp)) {
-      val r = pushWsTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 47 & pos + 1 < len & cpOf(src, pos + 1) == 47) {
-      val r = pushLineCmtTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 47 & pos + 1 < len & cpOf(src, pos + 1) == 42) {
-      val r = pushBlockCmtTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (isAlpha(cp) | cp == 95) {
-      val r = pushIdentTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 46 & pos + 1 < len & isDigit(cpOf(src, pos + 1))) {
-      val r = pushDotFloatTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (isDigit(cp)) {
-      val r = pushNumTok(tokens, src, pos, cp, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 34) {
-      val r = pushStrTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else if (cp == 39) {
-      val r = pushCharTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    } else {
-      val r = pushOpOrPunctTok(tokens, src, pos, line, col)
-      pos := r.0
-      line := r.1
-      col := r.2
-    }
-  }
-
-  val eofSpan = makeSpan(len, len, line, col)
-  Arr.push(tokens, makeTok(TkEof, "", eofSpan))
-  tokens
 }

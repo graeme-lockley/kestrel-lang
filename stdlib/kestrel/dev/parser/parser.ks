@@ -1332,28 +1332,6 @@ export fun parseFromList(tokens: List<Token.Token>): Result<Program, ParseError>
     e => Err(e)
   }
 
-// Like parseFromList but takes an Array<Token.Token> — avoids KList traversal.
-fun makePsFromArr(tokens: Array<Token.Token>): ParseState = {
-  val dummy = Lex.create("")
-  val buf: Array<Token.Token> = Arr.new()
-  val n = Arr.length(tokens)
-  var i = 0
-  while (i < n) {
-    val t = Arr.get(tokens, i)
-    if (!Token.isTrivia(t)) Arr.push(buf, t) else ();
-    i := i + 1
-  };
-  { lex = dummy, buf = buf, mut pos = 0 }
-}
-
-export fun parseFromArr(tokens: Array<Token.Token>): Result<Program, ParseError> =
-  try {
-    val ps = makePsFromArr(tokens)
-    Ok(parseProgram_(ps))
-  } catch {
-    e => Err(e)
-  }
-
 export fun parseExprFromList(tokens: List<Token.Token>): Result<Ast.Expr, ParseError> =
   try {
     val ps = makePsFromList(tokens)

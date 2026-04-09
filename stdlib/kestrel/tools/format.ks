@@ -30,7 +30,7 @@ import {
   TBAdt, TBAlias
 } from "kestrel:dev/parser/ast"
 import * as Lex from "kestrel:dev/parser/lexer"
-import { parse, parseFromList, parseFromArr, ParseError } from "kestrel:dev/parser/parser"
+import { parse, ParseError } from "kestrel:dev/parser/parser"
 import { getProcess } from "kestrel:sys/process"
 import { GREEN, RED, DIM, RESET, CHECK, CROSS } from "kestrel:io/console"
 import { nowMs } from "kestrel:data/basics"
@@ -704,15 +704,18 @@ fun buildDeclInfo(allToks: Array<Token.Token>): (List<(Int, List<String>)>, Arra
     } else {
       if (tok.span.col == 1) {
         if (!Lst.isEmpty(pending)) {
-          Arr.push(commentsBuf, (tok.span.start, Lst.reverse(pending)));
-          ()
-        } else ();
+          Arr.push(commentsBuf, (tok.span.start, Lst.reverse(pending)))
+        }
+
         Arr.push(posBuf, tok.span.start)
-      } else ();
+      }
+
       pending := []
-    };
+    }
+    
     i := i + 1
-  };
+  }
+
   (Arr.toList(commentsBuf), posBuf)
 }
 
@@ -731,10 +734,9 @@ fun fmtCommentBlock(lines: List<String>): Doc =
 
 // ─── Program formatter and core API ──────────────────────────────────────────
 
-fun fmtProgramDoc(prog: Ast.Program, allToks: Array<Token.Token>): Doc = {
-  val info = buildDeclInfo(allToks)
-  val commentList = info.0
-  val posArr = info.1
+fun fmtProgramDoc(prog: Ast.Program, declInfo: (List<(Int, List<String>)>, Array<Int>)): Doc = {
+  val commentList = declInfo.0
+  val posArr = declInfo.1
   val commentDict = Lst.foldl(commentList, Dict.emptyIntDict(), (d: Dict<Int, List<String>>, entry: (Int, List<String>)) =>
     Dict.insert(d, entry.0, entry.1))
   val importCount = Lst.length(prog.imports)
@@ -767,13 +769,13 @@ fun fmtProgramDoc(prog: Ast.Program, allToks: Array<Token.Token>): Doc = {
 }
 
 export fun format(src: String): Result<String, FormatError> = {
-  val allToks = Lex.lexArr(src)
-  match (parseFromArr(allToks)) {
+  val ls = Lex.create(src)
+  match (parse(ls)) {
     Err(e) => match (e) {
       ParseError(msg, off, ln, col) => Err(FmtParseError(msg, off, ln, col))
     }
     Ok(prog) => {
-      val doc = fmtProgramDoc(prog, allToks)
+      val doc = fmtProgramDoc(prog, Lex.getDeclInfo(ls))
       val rendered = PP.pretty(fmtWidth, doc)
       if (Str.endsWith("\n", rendered)) Ok(rendered)
       else Ok("${rendered}\n")
