@@ -430,6 +430,58 @@ fun fmtExpr(e: Ast.Expr): Doc =
 
 // ─── Statement and Block Doc ─────────────────────────────────────────────────
 
+// exprTailNeedsGuard returns True when an expression's final rendered token is
+// an identifier, field name, or ')' (call result) — i.e. something that the
+// parser would treat as a call callee if the very next token were '('.  When
+// such a stmt is immediately followed in a block by an item whose text starts
+// with '(' (a tuple or unit literal), we must emit a trailing ';' to prevent
+// the second format pass from fusing them into a function call.
+fun exprTailNeedsGuard(e: Ast.Expr): Bool =
+  match (e) {
+    EIdent(_)              => True
+    EField(_, _)           => True
+    ECall(_, _)            => True
+    EBinary(_, _, r)       => exprTailNeedsGuard(r)
+    ECons(_, r)            => exprTailNeedsGuard(r)
+    EPipe(_, _, r)         => exprTailNeedsGuard(r)
+    EIf(_, t, elseBr)      =>
+      match (elseBr) {
+        None     => exprTailNeedsGuard(t)
+        Some(el) => exprTailNeedsGuard(el)
+      }
+    EUnary(_, inner)       => exprTailNeedsGuard(inner)
+    EAwait(inner)          => exprTailNeedsGuard(inner)
+    EThrow(inner)          => exprTailNeedsGuard(inner)
+    ELambda(_, _, _, body) => exprTailNeedsGuard(body)
+    _                      => False
+  }
+
+fun stmtTailNeedsGuard(s: Ast.Stmt): Bool =
+  match (s) {
+    SVal(_, _, e)        => exprTailNeedsGuard(e)
+    SVar(_, _, e)        => exprTailNeedsGuard(e)
+    SExpr(e)             => exprTailNeedsGuard(e)
+    SAssign(_, rhs)      => exprTailNeedsGuard(rhs)
+    SFun(_, _, _, _, _, body) => exprTailNeedsGuard(body)
+    _                    => False
+  }
+
+// Returns True when an expression, when formatted, starts with '('.
+fun exprStartsWithParen(e: Ast.Expr): Bool =
+  match (e) {
+    ETuple(_)   => True
+    ELit(k, _) => Str.equals(k, "unit")
+    _           => False
+  }
+
+// Returns True when a statement, when formatted, starts with '('.
+fun stmtStartsWithParen(s: Ast.Stmt): Bool =
+  match (s) {
+    SExpr(e)        => exprStartsWithParen(e)
+    SAssign(lhs, _) => exprStartsWithParen(lhs)
+    _               => False
+  }
+
 fun fmtStmt(s: Ast.Stmt): Doc =
   match (s) {
     SVal(name, typeAnn, e) =>
@@ -450,6 +502,24 @@ fun fmtStmt(s: Ast.Stmt): Doc =
     SContinue => PP.text("continue")
   }
 
+// Returns the stmt docs for a block, appending ';' where necessary to prevent
+// the parser from fusing a callee-tailed stmt with a following '('-started item.
+fun buildGuardedStmtDocs(stmts: List<Ast.Stmt>, nextParen: Bool): List<Doc> =
+  match (stmts) {
+    [] => []
+    s :: rest => {
+      val thisNextParen = match (Lst.head(rest)) {
+        None    => nextParen
+        Some(n) => stmtStartsWithParen(n)
+      }
+      val doc = fmtStmt(s)
+      val guarded =
+        if (thisNextParen & stmtTailNeedsGuard(s)) PP.hcat([doc, PP.text(";")])
+        else doc
+      guarded :: buildGuardedStmtDocs(rest, nextParen)
+    }
+  }
+
 fun fmtBlock(b: Ast.Block): Doc = {
   val isUnitResult = match (b.result) {
     ELit(k, _) => Str.equals(k, "unit")
@@ -459,7 +529,12 @@ fun fmtBlock(b: Ast.Block): Doc = {
     ENever => True
     _ => False
   }
-  val stmtDocs = Lst.map(b.stmts, fmtStmt)
+  // When the result starts with '(', the last stmt before it may need a ';'
+  // guard so it isn't fused with the '(' on a subsequent format pass.
+  val resultNextParen =
+    if (isNeverResult | isUnitResult) False
+    else exprStartsWithParen(b.result)
+  val stmtDocs = buildGuardedStmtDocs(b.stmts, resultNextParen)
   val items =
     if (isNeverResult) stmtDocs
     else if (isUnitResult & !Lst.isEmpty(b.stmts)) stmtDocs
@@ -608,7 +683,7 @@ fun fmtExternTypeDecl(d: Ast.ExternTypeDecl): Doc = {
 }
 
 fun fmtExternOverride(o: Ast.ExternOverride): Doc =
-  PP.hcat([PP.text(o.name), fmtParamList(o.params), PP.text(": "), fmtType(o.retType)])
+  PP.hcat([PP.text("fun "), PP.text(o.name), fmtParamList(o.params), PP.text(": "), fmtType(o.retType)])
 
 fun fmtExternImportDecl(d: Ast.ExternImportDecl): Doc = {
   val header = PP.text("extern import \"${d.target}\" as ${d.alias} {")
