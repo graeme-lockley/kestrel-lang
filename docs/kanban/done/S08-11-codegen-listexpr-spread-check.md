@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/unplanned/E08-source-formatter.md)
+- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/done/E08-source-formatter.md)
 - Discovered while implementing: S08-05 (Phase C — ast.test.ks)
 
 ## Summary

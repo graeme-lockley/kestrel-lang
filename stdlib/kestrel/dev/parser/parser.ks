@@ -449,10 +449,10 @@ fun tryLambda(ps: ParseState, async_: Bool): Option<Ast.Expr> = {
   else if (!looksLikeLambdaHead(ps)) None
   else {
     expectPunct(ps, "(");
-    var params = parseParamList(ps)
+    val params = parseParamList(ps)
     expectPunct(ps, ")");
     expectOp(ps, "=>");
-    var body = parseExprH(ps)
+    val body = parseExprH(ps)
     Some(ELambda(async_, [], params, body))
   }
 }
@@ -478,7 +478,7 @@ fun parsePatternPrimary(ps: ParseState): Ast.Pattern = {
       adv(ps);
       PLit("unit","()")
     } else {
-      var first = parsePattern(ps)
+      val first = parsePattern(ps)
       if (atPunct(ps, ",")) {
         val elems = Arr.new()
         Arr.push(elems, first);
@@ -509,25 +509,25 @@ fun parsePatternPrimary(ps: ParseState): Ast.Pattern = {
     expectPunct(ps, "]");
     PList(Arr.toList(elems), rest)
   } else if (cur(ps).kind == TkInt) {
-    var t = adv(ps)
+    val t = adv(ps)
     PLit("int", t.text)
   } else if (cur(ps).kind == TkFloat) {
-    var t = adv(ps)
+    val t = adv(ps)
     PLit("float", t.text)
   } else if (cur(ps).kind == TkStr) {
-    var t = adv(ps)
+    val t = adv(ps)
     PLit("string", stripQuotes(t.text))
   } else if (cur(ps).kind == TkChar) {
-    var t = adv(ps)
+    val t = adv(ps)
     PLit("char", stripQuotes(t.text))
   } else if (atUpper(ps)) {
-    var name = adv(ps).text
+    val name = adv(ps).text
     if (atPunct(ps, "(")) {
       adv(ps);
       val fields = Arr.new()
       var idx = 0
       while (!atPunct(ps, ")") & !atEof(ps)) {
-        var p = parsePattern(ps)
+        val p = parsePattern(ps)
         Arr.push(fields, { name = "__field_${idx}", pattern = Some(p) });
         idx := idx + 1;
         if (atPunct(ps, ",")) { adv(ps); () }
@@ -555,7 +555,7 @@ fun parseCase_(ps: ParseState): Case_ = {
 // ─── Block parsing ───────────────────────────────────────────────────────────
 
 fun extractResult(stmtList: List<Ast.Stmt>): Block = {
-  var rev = Lst.reverse(stmtList)
+  val rev = Lst.reverse(stmtList)
   match (Lst.head(rev)) {
     Some(SExpr(e)) => { stmts=Lst.reverse(Lst.tail(rev)), result=e },
     Some(SBreak) => { stmts=stmtList, result=ENever },
@@ -579,22 +579,22 @@ fun parseBlockH(ps: ParseState): Block = {
 fun parseLocalAsyncFun_(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
   adv(ps); // async
   adv(ps); // fun
-  var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
-  var typeParams = parseTypeParamList(ps)
+  val name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
+  val typeParams = parseTypeParamList(ps)
   expectPunct(ps, "(");
-  var params = parseParamList(ps)
+  val params = parseParamList(ps)
   expectPunct(ps, ")");
   expectPunct(ps, ":");
-  var retType = parseTypeH(ps)
+  val retType = parseTypeH(ps)
   expectOp(ps, "=");
-  var body = parseExprH(ps)
+  val body = parseExprH(ps)
   Arr.push(stmts, SFun(True, name, typeParams, params, retType, body));
   ()
 }
 
 fun parseValStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
   adv(ps);
-  var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
+  val name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
   var typ: Option<Ast.AstType> = None
   if (atPunct(ps, ":")) {
     adv(ps);
@@ -609,7 +609,7 @@ fun parseValStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
 
 fun parseVarStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
   adv(ps);
-  var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
+  val name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
   var typ: Option<Ast.AstType> = None
   if (atPunct(ps, ":")) {
     adv(ps);
@@ -624,15 +624,15 @@ fun parseVarStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
 
 fun parseLocalFunStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
   adv(ps);
-  var name = expectIdent(ps).text
-  var typeParams = parseTypeParamList(ps)
+  val name = expectIdent(ps).text
+  val typeParams = parseTypeParamList(ps)
   expectPunct(ps, "(");
-  var params = parseParamList(ps)
+  val params = parseParamList(ps)
   expectPunct(ps, ")");
   expectPunct(ps, ":");
-  var retType = parseTypeH(ps)
+  val retType = parseTypeH(ps)
   expectOp(ps, "=");
-  var body = parseExprH(ps)
+  val body = parseExprH(ps)
   Arr.push(stmts, SFun(False, name, typeParams, params, retType, body));
   ()
 }
@@ -641,7 +641,7 @@ fun parseExprOrAssignStmt(ps: ParseState, stmts: Array<Ast.Stmt>): Unit = {
   var expr = parseExprH(ps)
   if (atOp(ps, ":=")) {
     adv(ps);
-    var rhs = parseExprH(ps)
+    val rhs = parseExprH(ps)
     Arr.push(stmts, SAssign(expr, rhs));
     ()
   } else {
@@ -679,8 +679,8 @@ fun parseExprH(ps: ParseState): Ast.Expr = parsePipeExpr(ps)
 fun parsePipeExpr(ps: ParseState): Ast.Expr = {
   var left = parseConsExpr(ps)
   while (atOp(ps, "|>") | atOp(ps, "<|")) {
-    var op = adv(ps).text
-    var right = parseConsExpr(ps)
+    val op = adv(ps).text
+    val right = parseConsExpr(ps)
     left := EPipe(op, left, right)
   }
   left
@@ -699,7 +699,7 @@ fun parseOrExpr(ps: ParseState): Ast.Expr = {
   var left = parseAndExpr(ps)
   while (atOp(ps, "|")) {
     adv(ps);
-    var right = parseAndExpr(ps)
+    val right = parseAndExpr(ps)
     left := EBinary("|", left, right)
   }
   left
@@ -709,7 +709,7 @@ fun parseAndExpr(ps: ParseState): Ast.Expr = {
   var left = parseIsExpr(ps)
   while (atOp(ps, "&")) {
     adv(ps);
-    var right = parseIsExpr(ps)
+    val right = parseIsExpr(ps)
     left := EBinary("&", left, right)
   }
   left
@@ -727,8 +727,8 @@ fun parseIsExpr(ps: ParseState): Ast.Expr = {
 fun parseRelExpr(ps: ParseState): Ast.Expr = {
   var left = parseAddExpr(ps)
   while (atOp(ps, "==") | atOp(ps, "!=") | atOp(ps, "<") | atOp(ps, "<=") | atOp(ps, ">") | atOp(ps, ">=")) {
-    var op = adv(ps).text
-    var right = parseAddExpr(ps)
+    val op = adv(ps).text
+    val right = parseAddExpr(ps)
     left := EBinary(op, left, right)
   }
   left
@@ -737,8 +737,8 @@ fun parseRelExpr(ps: ParseState): Ast.Expr = {
 fun parseAddExpr(ps: ParseState): Ast.Expr = {
   var left = parseMulExpr(ps)
   while (atOp(ps, "+") | atOp(ps, "-") | atOp(ps, "++")) {
-    var op = adv(ps).text
-    var right = parseMulExpr(ps)
+    val op = adv(ps).text
+    val right = parseMulExpr(ps)
     left := EBinary(op, left, right)
   }
   left
@@ -747,8 +747,8 @@ fun parseAddExpr(ps: ParseState): Ast.Expr = {
 fun parseMulExpr(ps: ParseState): Ast.Expr = {
   var left = parsePowExpr(ps)
   while (atOp(ps, "*") | atOp(ps, "/") | atOp(ps, "%")) {
-    var op = adv(ps).text
-    var right = parsePowExpr(ps)
+    val op = adv(ps).text
+    val right = parsePowExpr(ps)
     left := EBinary(op, left, right)
   }
   left
@@ -765,8 +765,8 @@ fun parsePowExpr(ps: ParseState): Ast.Expr = {
 
 fun parseUnaryExpr(ps: ParseState): Ast.Expr = {
   if (atOp(ps, "-") | atOp(ps, "!") | atOp(ps, "+")) {
-    var op = adv(ps).text
-    var operand = parseUnaryExpr(ps)
+    val op = adv(ps).text
+    val operand = parseUnaryExpr(ps)
     EUnary(op, operand)
   } else parsePrimaryExpr(ps)
 }
@@ -797,7 +797,7 @@ fun parsePrimaryExpr(ps: ParseState): Ast.Expr = {
   while (go) {
     if (atPunct(ps, ".")) {
       adv(ps);
-      var field = adv(ps).text
+      val field = adv(ps).text
       expr := EField(expr, field)
     } else if (cur(ps).kind == TkFloat & Str.slice(cur(ps).text, 0, 1) == ".") {
       // Tuple index access: a.0, a.1 etc. are lexed as TkFloat ".0", ".1"
@@ -824,9 +824,9 @@ fun parsePrimaryExpr(ps: ParseState): Ast.Expr = {
 fun parseIfExpr(ps: ParseState): Ast.Expr = {
   adv(ps);
   expectPunct(ps, "(");
-  var cond = parseExprH(ps)
+  val cond = parseExprH(ps)
   expectPunct(ps, ")");
-  var thenBranch = parseExprH(ps)
+  val thenBranch = parseExprH(ps)
   var elseBranch: Option<Ast.Expr> = None
   if (atKw(ps, "else")) {
     adv(ps);
@@ -839,9 +839,9 @@ fun parseIfExpr(ps: ParseState): Ast.Expr = {
 fun parseWhileExpr(ps: ParseState): Ast.Expr = {
   adv(ps);
   expectPunct(ps, "(");
-  var cond = parseExprH(ps)
+  val cond = parseExprH(ps)
   expectPunct(ps, ")");
-  var body = parseBlockH(ps)
+  val body = parseBlockH(ps)
   EWhile(cond, body)
 }
 
@@ -859,14 +859,14 @@ fun parseCases(ps: ParseState): List<Case_> = {
 fun parseMatchExpr(ps: ParseState): Ast.Expr = {
   adv(ps);
   expectPunct(ps, "(");
-  var scrutinee = parseExprH(ps)
+  val scrutinee = parseExprH(ps)
   expectPunct(ps, ")");
   EMatch(scrutinee, parseCases(ps))
 }
 
 fun parseTryExpr(ps: ParseState): Ast.Expr = {
   adv(ps);
-  var body = parseBlockH(ps)
+  val body = parseBlockH(ps)
   expectKw(ps, "catch");
   if (atPunct(ps, "(")) {
     adv(ps);
@@ -887,7 +887,7 @@ fun parseParenOrLambdaExpr(ps: ParseState): Ast.Expr = {
       Some(lam) => lam,
       None => {
         adv(ps);
-        var first = parseExprH(ps)
+        val first = parseExprH(ps)
         if (atPunct(ps, ",")) {
           val elems = Arr.new()
           Arr.push(elems, first);
@@ -944,20 +944,20 @@ fun parseAtomExpr0(ps: ParseState): Ast.Expr = {
 
 fun parseAtomExpr1(ps: ParseState): Ast.Expr = {
   if (cur(ps).kind == TkInt) {
-    var t = adv(ps)
+    val t = adv(ps)
     ELit("int", t.text)
   } else if (cur(ps).kind == TkFloat) {
-    var t = adv(ps)
+    val t = adv(ps)
     ELit("float", t.text)
   } else if (cur(ps).kind == TkStr) {
-    var t = adv(ps)
+    val t = adv(ps)
     ELit("string", stripQuotes(t.text))
   } else if (cur(ps).kind == TkChar) {
-    var t = adv(ps)
+    val t = adv(ps)
     ELit("char", stripQuotes(t.text))
   } else if (match (cur(ps).kind) { TkTemplate(_) => True, _ => False }) {
-    var t = adv(ps)
-    var parts = match (t.kind) {
+    val t = adv(ps)
+    val parts = match (t.kind) {
       TkTemplate(tps) => Lst.map(tps, parseTmplPart),
       _ => []
     }
@@ -1015,7 +1015,7 @@ fun parseRecordOrBlock(ps: ParseState): Ast.Expr = {
   } else {
     // It's a block expression
     ps.pos := saved;
-    var blk = parseBlockH(ps)
+    val blk = parseBlockH(ps)
     EBlock(blk)
   }
 }
@@ -1031,9 +1031,9 @@ fun parseRecord(ps: ParseState): Ast.Expr = {
   };
   while (!atPunct(ps, "}") & !atEof(ps)) {
     var isMut = if (atKw(ps, "mut")) { adv(ps); True } else False
-    var name = expectIdent(ps).text
+    val name = expectIdent(ps).text
     expectOp(ps, "=");
-    var value = parseExprH(ps)
+    val value = parseExprH(ps)
     Arr.push(fields, { name=name, mut_=isMut, value=value });
     if (atPunct(ps, ",")) { adv(ps); () }
   };
@@ -1044,8 +1044,8 @@ fun parseRecord(ps: ParseState): Ast.Expr = {
 // ─── Import parsing ──────────────────────────────────────────────────────────
 
 fun parseOneImportSpec(ps: ParseState): ImportSpec = {
-  var external = adv(ps).text
-  var local = if (atKw(ps, "as")) { adv(ps); adv(ps).text } else external
+  val external = adv(ps).text
+  val local = if (atKw(ps, "as")) { adv(ps); adv(ps).text } else external
   { external=external, local=local }
 }
 
@@ -1060,17 +1060,17 @@ fun parseImport_(ps: ParseState): Ast.ImportDecl = {
     };
     expectPunct(ps, "}");
     expectKw(ps, "from");
-    var spec = expectStrVal(ps)
+    val spec = expectStrVal(ps)
     IDNamed(spec, Arr.toList(specs))
   } else if (atOp(ps, "*")) {
     adv(ps);
     expectKw(ps, "as");
-    var alias = adv(ps).text
+    val alias = adv(ps).text
     expectKw(ps, "from");
-    var spec = expectStrVal(ps)
+    val spec = expectStrVal(ps)
     IDNamespace(spec, alias)
   } else {
-    var spec = expectStrVal(ps)
+    val spec = expectStrVal(ps)
     IDSideEffect(spec)
   }
 }
@@ -1082,7 +1082,7 @@ fun parseExport_(ps: ParseState): Ast.TopDecl = {
   if (atOp(ps, "*")) {
     adv(ps);
     expectKw(ps, "from");
-    var spec = expectStrVal(ps)
+    val spec = expectStrVal(ps)
     TDExport(EIStar(spec))
   } else if (atPunct(ps, "{")) {
     adv(ps);
@@ -1093,7 +1093,7 @@ fun parseExport_(ps: ParseState): Ast.TopDecl = {
     };
     expectPunct(ps, "}");
     expectKw(ps, "from");
-    var spec = expectStrVal(ps)
+    val spec = expectStrVal(ps)
     TDExport(EINamed(spec, Arr.toList(specs)))
   } else {
     parseTopDecl_(ps, True)
@@ -1102,12 +1102,12 @@ fun parseExport_(ps: ParseState): Ast.TopDecl = {
 
 fun parseOneExternOverride_(ps: ParseState): ExternOverride = {
   adv(ps); // consume 'fun'
-  var oname = expectIdent(ps).text
+  val oname = expectIdent(ps).text
   expectPunct(ps, "(");
-  var oparams = parseParamList(ps)
+  val oparams = parseParamList(ps)
   expectPunct(ps, ")");
   expectPunct(ps, ":");
-  var oret = parseTypeH(ps)
+  val oret = parseTypeH(ps)
   { name=oname, params=oparams, retType=oret }
 }
 
@@ -1126,9 +1126,9 @@ fun parseExternOverrides_(ps: ParseState, overrides: Array<ExternOverride>): Uni
 
 fun parseExternImport_(ps: ParseState): Ast.TopDecl = {
   adv(ps); // consume 'import'
-  var target = expectStrVal(ps)
+  val target = expectStrVal(ps)
   expectKw(ps, "as");
-  var alias = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
+  val alias = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
   val overrides = Arr.new()
   if (atPunct(ps, "{")) {
     adv(ps);
@@ -1141,31 +1141,31 @@ fun parseExternImport_(ps: ParseState): Ast.TopDecl = {
 
 fun parseExternFun_(ps: ParseState, exported: Bool): Ast.TopDecl = {
   adv(ps); // consume 'fun'
-  var ename = expectIdent(ps).text
-  var etypeParams = parseTypeParamList(ps)
+  val ename = expectIdent(ps).text
+  val etypeParams = parseTypeParamList(ps)
   expectPunct(ps, "(");
-  var eparams = parseParamList(ps)
+  val eparams = parseParamList(ps)
   expectPunct(ps, ")");
   expectPunct(ps, ":");
-  var eretType = parseTypeH(ps)
+  val eretType = parseTypeH(ps)
   expectOp(ps, "=");
   val _jvmFunId = expectIdent(ps);
   expectPunct(ps, "(");
-  var jvmDesc = expectStrVal(ps)
+  val jvmDesc = expectStrVal(ps)
   expectPunct(ps, ")");
   TDExternFun({ exported=exported, name=ename, typeParams=etypeParams, params=eparams, retType=eretType, jvmDesc=jvmDesc })
 }
 
 fun parseExternType_(ps: ParseState, exported: Bool): Ast.TopDecl = {
-  var isOpaque = if (atKw(ps, "opaque")) { adv(ps); True } else False
-  var vis = if (isOpaque) "opaque" else if (exported) "export" else "local"
+  val isOpaque = if (atKw(ps, "opaque")) { adv(ps); True } else False
+  val vis = if (isOpaque) "opaque" else if (exported) "export" else "local"
   expectKw(ps, "type");
-  var tname = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
-  var ttypeParams = parseTypeParamList(ps)
+  val tname = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
+  val ttypeParams = parseTypeParamList(ps)
   expectOp(ps, "=");
   val _jvmTypeId = expectIdent(ps);
   expectPunct(ps, "(");
-  var jvmClass = expectStrVal(ps)
+  val jvmClass = expectStrVal(ps)
   expectPunct(ps, ")");
   TDExternType({ visibility=vis, name=tname, typeParams=ttypeParams, jvmClass=jvmClass })
 }
@@ -1190,24 +1190,24 @@ fun parseTopDecl_(ps: ParseState, exported: Bool): Ast.TopDecl = {
     parseExternDecl_(ps, exported)
   } else if (atKw(ps, "exception")) {
     adv(ps);
-    var name = expectUpper(ps).text
-    var fields = if (atPunct(ps, "{")) {
+    val name = expectUpper(ps).text
+    val fields = if (atPunct(ps, "{")) {
       adv(ps);
-      var fs = parseTypeFieldList(ps)
+      val fs = parseTypeFieldList(ps)
       expectPunct(ps, "}");
       Some(fs)
     } else None
     TDException({ exported=exported, name=name, fields=fields })
   } else if (atKw(ps, "val")) {
     adv(ps);
-    var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
+    val name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
     var typ = if (atPunct(ps, ":")) { adv(ps); Some(parseTypeH(ps)) } else None
     expectOp(ps, "=");
     var expr = parseExprH(ps)
     if (exported) TDVal(name, typ, expr) else TDSVal(name, expr)
   } else if (atKw(ps, "var")) {
     adv(ps);
-    var name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
+    val name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
     var typ = if (atPunct(ps, ":")) { adv(ps); Some(parseTypeH(ps)) } else None
     expectOp(ps, "=");
     var expr = parseExprH(ps)
@@ -1216,34 +1216,34 @@ fun parseTopDecl_(ps: ParseState, exported: Bool): Ast.TopDecl = {
     var expr = parseExprH(ps)
     if (atOp(ps, ":=")) {
       adv(ps);
-      var rhs = parseExprH(ps)
+      val rhs = parseExprH(ps)
       TDSAssign(expr, rhs)
     } else TDSExpr(expr)
   }
 }
 
 fun parseFunDecl_(ps: ParseState, exported: Bool): Ast.TopDecl = {
-  var isAsync = if (atKw(ps, "async")) { adv(ps); True } else False
+  val isAsync = if (atKw(ps, "async")) { adv(ps); True } else False
   expectKw(ps, "fun");
-  var name = expectIdent(ps).text
-  var typeParams = parseTypeParamList(ps)
+  val name = expectIdent(ps).text
+  val typeParams = parseTypeParamList(ps)
   expectPunct(ps, "(");
-  var params = parseParamList(ps)
+  val params = parseParamList(ps)
   expectPunct(ps, ")");
   expectPunct(ps, ":");
-  var retType = parseTypeH(ps)
+  val retType = parseTypeH(ps)
   expectOp(ps, "=");
-  var body = parseExprH(ps)
+  val body = parseExprH(ps)
   TDFun({ exported=exported, async_=isAsync, name=name, typeParams=typeParams, params=params, retType=retType, body=body })
 }
 
 fun parseTypeDecl_(ps: ParseState, exported: Bool): Ast.TopDecl = {
-  var visibility = if (atKw(ps, "opaque")) { adv(ps); "opaque" }
+  val visibility = if (atKw(ps, "opaque")) { adv(ps); "opaque" }
     else if (exported) "export"
     else "local"
   expectKw(ps, "type");
-  var name = adv(ps).text
-  var typeParams = parseTypeParamList(ps)
+  val name = adv(ps).text
+  val typeParams = parseTypeParamList(ps)
   expectOp(ps, "=");
   // ADT: starts with an uppercase identifier or is a sequence of Ctor | Ctor | ...
   if (atUpper(ps) & (tokIsPunct(pk1(ps), "(") | tokIsOp(pk1(ps), "|"))) {
@@ -1271,8 +1271,8 @@ fun parseTypeDecl_(ps: ParseState, exported: Bool): Ast.TopDecl = {
 }
 
 fun parseCtor(ps: ParseState): CtorDef = {
-  var name = expectUpper(ps).text
-  var params = if (atPunct(ps, "(")) {
+  val name = expectUpper(ps).text
+  val params = if (atPunct(ps, "(")) {
     adv(ps);
     val arr = Arr.new()
     while (!atPunct(ps, ")") & !atEof(ps)) {

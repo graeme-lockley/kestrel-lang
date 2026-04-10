@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/unplanned/E08-source-formatter.md)
+- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/done/E08-source-formatter.md)
 - Discovered while implementing: S08-05
 
 ## Summary
@@ -65,7 +65,7 @@ the `try` body.
 
 ## Acceptance Criteria
 
-- [ ] The following minimal program compiles and runs without VerifyError:
+- [x] The following minimal program compiles and runs without VerifyError:
   ```kestrel
   fun safeDiv(a: Int, b: Int): Int =
     try {
@@ -75,9 +75,9 @@ the `try` body.
       _ => -1
     }
   ```
-- [ ] No regression in the 420+ compiler tests (`cd compiler && npm test`).
-- [ ] No regression in Kestrel unit tests (`./kestrel test`).
-- [ ] The structural workaround in `tryLambda` is reverted to the natural form.
+- [x] No regression in the 420+ compiler tests (`cd compiler && npm test`).
+- [x] No regression in Kestrel unit tests (`./kestrel test`).
+- [x] The structural workaround in `tryLambda` is reverted to the natural form. (`tryLambda` was redesigned to use `looksLikeLambdaHead` lookahead speculation instead of try/catch entirely — no `var saved` pattern remains; the workaround is gone.)
 
 ## Spec References
 

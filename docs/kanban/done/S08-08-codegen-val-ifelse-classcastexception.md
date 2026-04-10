@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/unplanned/E08-source-formatter.md)
+- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/done/E08-source-formatter.md)
 - Discovered while implementing: S08-05
 
 ## Summary
@@ -57,16 +57,16 @@ ClassCastException but interacts badly with Bug S08-09 (var-in-while VerifyError
 
 ## Acceptance Criteria
 
-- [ ] The following minimal program compiles and runs without ClassCastException:
+- [x] The following minimal program compiles and runs without ClassCastException:
   ```kestrel
   fun f(b: Bool): Int = {
     val x = 42
     if (b) x + 1 else x
   }
   ```
-- [ ] No regression in the 420+ compiler tests (`cd compiler && npm test`).
-- [ ] No regression in Kestrel unit tests (`./kestrel test`).
-- [ ] The `val`→`var` workarounds introduced in `parser.ks` for this bug are reverted.
+- [x] No regression in the 420+ compiler tests (`cd compiler && npm test`).
+- [x] No regression in Kestrel unit tests (`./kestrel test`).
+- [x] The `val`→`var` workarounds introduced in `parser.ks` for this bug are reverted. (92 declarations changed back to `val` on 2026-04-10; 1459/1459 Kestrel + 420/420 compiler tests pass.)
 
 ## Spec References
 

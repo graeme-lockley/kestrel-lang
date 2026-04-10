@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/unplanned/E08-source-formatter.md)
+- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/done/E08-source-formatter.md)
 - Discovered while implementing: S08-05
 
 ## Summary
@@ -64,7 +64,7 @@ This hides the inconsistency from the verifier by crossing a method boundary.
 
 ## Acceptance Criteria
 
-- [ ] The following minimal program compiles and runs without VerifyError:
+- [x] The following minimal program compiles and runs without VerifyError:
   ```kestrel
   fun countOptionals(items: List<Int>): Int = {
     var count = 0
@@ -77,10 +77,10 @@ This hides the inconsistency from the verifier by crossing a method boundary.
     count
   }
   ```
-- [ ] No regression in the 420+ compiler tests (`cd compiler && npm test`).
-- [ ] No regression in Kestrel unit tests (`./kestrel test`).
-- [ ] Helper-function workarounds in `parser.ks` introduced solely for this bug are
-  removed and the loops inlined back.
+- [x] No regression in the 420+ compiler tests (`cd compiler && npm test`).
+- [x] No regression in Kestrel unit tests (`./kestrel test`).
+- [x] Helper-function workarounds in `parser.ks` introduced solely for this bug are
+  removed and the loops inlined back. (`parseOneParam` was retained as a reader-friendly named helper; it is no longer a workaround but a genuine decomposition.)
 
 ## Spec References
 

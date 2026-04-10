@@ -2,7 +2,7 @@
 
 ## Status
 
-Unplanned
+Done
 
 ## Summary
 
@@ -12,17 +12,17 @@ Because the formatter is the first major developer tool, this epic begins with e
 
 ## Stories (ordered — implement sequentially)
 
-1. [S08-01-stdlib-namespace-restructure.md](../../unplanned/S08-01-stdlib-namespace-restructure.md) — Move flat `kestrel:X` stdlib to `data/*`, `io/*`, `sys/*`, `dev/stack`; update all import sites
-2. [S08-02-kestrel-run-module-specifier.md](../../unplanned/S08-02-kestrel-run-module-specifier.md) — Extend `kestrel run` to accept `kestrel:X/Y` module specifiers (bash change only)
-3. [S08-03-dev-cli-library.md](../../unplanned/S08-03-dev-cli-library.md) — Create `kestrel:dev/cli`: declarative CLI arg parser with auto `--help`/`--version`
-4. [S08-04-dev-text-prettyprinter.md](../../unplanned/S08-04-dev-text-prettyprinter.md) — Create `kestrel:dev/text/prettyprinter`: Wadler–Lindig Doc IR and renderer
-5. [S08-05-dev-parser.md](../../unplanned/S08-05-dev-parser.md) — Create `kestrel:dev/parser`: full Kestrel lexer + AST + parser written in Kestrel
-6. [S08-06-tools-test-and-alias.md](../../unplanned/S08-06-tools-test-and-alias.md) — Move `kestrel:test` → `kestrel:tools/test`; wire `kestrel test` via module-specifier
-7. [S08-07-tools-format-and-fmt-command.md](../../unplanned/S08-07-tools-format-and-fmt-command.md) — Create `kestrel:tools/format` formatter; add `kestrel fmt` CLI alias
-8. [S08-08-codegen-val-ifelse-classcastexception.md](../../unplanned/S08-08-codegen-val-ifelse-classcastexception.md) — Fix JVM codegen: `val` across `if`/`else` branches causes ClassCastException
-9. [S08-09-codegen-var-while-verifyerror.md](../../unplanned/S08-09-codegen-var-while-verifyerror.md) — Fix JVM codegen: `var`/`val` inside `while` loop body causes VerifyError (inconsistent stackmap)
-10. [S08-10-codegen-var-try-verifyerror.md](../../unplanned/S08-10-codegen-var-try-verifyerror.md) — Fix JVM codegen: `var` inside `try` block causes VerifyError (stack map mismatch)
-11. [S08-11-codegen-listexpr-spread-check.md](../../done/S08-11-codegen-listexpr-spread-check.md) — **DONE** Fix JVM codegen: ListExpr spread-element check incorrectly matched RecordExpr (fixed in commit 63ccd25)
+1. [x] [S08-01-stdlib-namespace-restructure.md](../../done/S08-01-stdlib-namespace-restructure.md) — Move flat `kestrel:X` stdlib to `data/*`, `io/*`, `sys/*`, `dev/stack`; update all import sites
+2. [x] [S08-02-kestrel-run-module-specifier.md](../../done/S08-02-kestrel-run-module-specifier.md) — Extend `kestrel run` to accept `kestrel:X/Y` module specifiers (bash change only)
+3. [x] [S08-03-dev-cli-library.md](../../done/S08-03-dev-cli-library.md) — Create `kestrel:dev/cli`: declarative CLI arg parser with auto `--help`/`--version`
+4. [x] [S08-04-dev-text-prettyprinter.md](../../done/S08-04-dev-text-prettyprinter.md) — Create `kestrel:dev/text/prettyprinter`: Wadler–Lindig Doc IR and renderer
+5. [x] [S08-05-dev-parser.md](../../done/S08-05-dev-parser.md) — Create `kestrel:dev/parser`: full Kestrel lexer + AST + parser written in Kestrel
+6. [x] [S08-06-tools-test-and-alias.md](../../done/S08-06-tools-test-and-alias.md) — Move `kestrel:test` → `kestrel:tools/test`; wire `kestrel test` via module-specifier
+7. [x] [S08-07-tools-format-and-fmt-command.md](../../done/S08-07-tools-format-and-fmt-command.md) — Create `kestrel:tools/format` formatter; add `kestrel fmt` CLI alias
+8. [x] [S08-08-codegen-val-ifelse-classcastexception.md](../../done/S08-08-codegen-val-ifelse-classcastexception.md) — Fix JVM codegen: `val` across `if`/`else` branches causes ClassCastException
+9. [x] [S08-09-codegen-var-while-verifyerror.md](../../done/S08-09-codegen-var-while-verifyerror.md) — Fix JVM codegen: `var`/`val` inside `while` loop body causes VerifyError (inconsistent stackmap)
+10. [x] [S08-10-codegen-var-try-verifyerror.md](../../done/S08-10-codegen-var-try-verifyerror.md) — Fix JVM codegen: `var` inside `try` block causes VerifyError (stack map mismatch)
+11. [x] [S08-11-codegen-listexpr-spread-check.md](../../done/S08-11-codegen-listexpr-spread-check.md) — Fix JVM codegen: ListExpr spread-element check incorrectly matched RecordExpr (fixed in commit 63ccd25)
 
 Notes:
 - S08-01 must go first (all later stories import from the new paths).

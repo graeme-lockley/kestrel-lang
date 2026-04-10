@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/unplanned/E08-source-formatter.md)
+- Epic: [E08 Source Formatter (`kestrel fmt`)](../epics/done/E08-source-formatter.md)
 - Companion stories: S08-02, S08-03, S08-04, S08-05, S08-06, S08-07
 
 ## Summary
