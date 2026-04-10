@@ -738,90 +738,195 @@ fun fmtTopDecl(d: Ast.TopDecl): Doc =
 
 // ─── Comment extraction ───────────────────────────────────────────────────────
 
-fun isCommentToken(t: Token.Token): Bool =
-  match (t.kind) {
-    TkLineComment => True
-    TkBlockComment => True
-    _ => False
-  }
+// ─── Comment re-attachment ─────────────────────────────────────────────────
+// After AST-based formatting strips all trivia, this pass re-weaves the
+// original comments back into the formatted output.
+//
+// A comment token in the original source is either:
+//   trailing — it is on the same source line as the preceding significant
+//               token  →  append to the end of that token's formatted line.
+//   leading  — it is on its own line before the next significant token
+//               →  insert (with matching indent) before that token's line.
+//
+// "Significant" = non-trivia AND not a formatter-added semicolon guard.
+// The formatter is strictly order-preserving for significant tokens, so
+// original sig-token[i] and formatted sig-token[i] are the same thing.
 
-fun isTriviaToken(t: Token.Token): Bool =
-  Token.isTrivia(t)
+fun isCommentTok_(t: Token.Token): Bool =
+  t.kind == TkLineComment | t.kind == TkBlockComment
 
-fun countNewlines(s: String): Int =
-  Lst.length(Str.lines(s)) - 1
+fun isSigTok_(t: Token.Token): Bool =
+  !Token.isTrivia(t) & !(t.kind == TkPunct & (Str.equals(t.text, ";") | Str.equals(t.text, ",")))
 
-// Forward-pass comment association:
-// accumulate comment lines; when a non-trivia token at col=1 is seen,
-// associate current pending comments with that token's span.start.
-// Single indexed-loop pass over an Array<Token.Token> — no KList traversal.
-fun buildDeclInfo(allToks: Array<Token.Token>): (List<(Int, List<String>)>, Array<Int>) = {
-  val commentsBuf: Array<(Int, List<String>)> = Arr.new()
-  val posBuf: Array<Int> = Arr.new()
-  // pending built in reverse via cons; Lst.reverse only on flush (~once per decl).
-  var pending: List<String> = []
-  val n = Arr.length(allToks)
+// Count leading spaces on a string line.
+fun lineIndent_(line: String): Int = {
+  val len = Str.length(line)
   var i = 0
-  while (i < n) {
-    val tok = Arr.get(allToks, i)
-    if (isCommentToken(tok)) {
-      pending := tok.text :: pending
-    } else if (isTriviaToken(tok) | tok.kind == TkPunct | tok.kind == TkOp) {
-      ()
-    } else {
-      if (tok.span.col == 1) {
-        if (!Lst.isEmpty(pending)) {
-          Arr.push(commentsBuf, (tok.span.start, Lst.reverse(pending)))
-        }
-
-        Arr.push(posBuf, tok.span.start)
-      }
-
-      pending := []
-    }
-    
+  while (i < len & Str.slice(line, i, i + 1) == " ") {
     i := i + 1
   }
-
-  (Arr.toList(commentsBuf), posBuf)
+  i
 }
 
-fun fmtCommentBlock(lines: List<String>): Doc =
-  match (lines) {
-    [] => PP.empty
-    _ => PP.hcat(Lst.map(lines, (l: String) => PP.hcat([PP.text(l), PP.lineBreak])))
+// Walk original tokens and produce (isTrailing, sigIdx, text) associations.
+//   isTrailing=True  → comment trails sig token #sigIdx (same line)
+//   isTrailing=False → comment leads sig token #sigIdx (precedes it)
+//                      (sigIdx = total-sig-count means end-of-file)
+fun extractCommentAssocs_(tokens: List<Token.Token>): List<(Bool, Int, String)> = {
+  val result: Array<(Bool, Int, String)> = Arr.new()
+  val tokArr = Arr.fromList(tokens)
+  val n = Arr.length(tokArr)
+  var pending: Array<String> = Arr.new()
+  var sigIdx = 0
+  var prevSigLine = 0
+  var i = 0
+  while (i < n) {
+    val t = Arr.get(tokArr, i)
+    i := i + 1
+    if (isCommentTok_(t)) {
+      if (prevSigLine > 0 & t.span.line == prevSigLine) {
+        Arr.push(result, (True, sigIdx - 1, t.text))
+      } else {
+        Arr.push(pending, t.text)
+      }
+    } else if (isSigTok_(t)) {
+      val np = Arr.length(pending)
+      var j = 0
+      while (j < np) {
+        Arr.push(result, (False, sigIdx, Arr.get(pending, j)))
+        j := j + 1
+      }
+      pending := Arr.new()
+      prevSigLine := t.span.line
+      sigIdx := sigIdx + 1
+    }
   }
+  // Any remaining pending comments come after all sig tokens.
+  val nrem = Arr.length(pending)
+  var k = 0
+  while (k < nrem) {
+    Arr.push(result, (False, sigIdx, Arr.get(pending, k)))
+    k := k + 1
+  }
+  Arr.toList(result)
+}
+
+// Re-lex the formatted text and record (0-based lineIdx, 1-based col) for
+// each significant token.  The i-th entry corresponds to original sig-tok i.
+fun buildSigLineArr_(formattedText: String): Array<(Int, Int)> = {
+  val result: Array<(Int, Int)> = Arr.new()
+  val tokArr = Arr.fromList(Lex.lex(formattedText))
+  val n = Arr.length(tokArr)
+  var i = 0
+  while (i < n) {
+    val t = Arr.get(tokArr, i)
+    i := i + 1
+    if (isSigTok_(t)) {
+      Arr.push(result, (t.span.line - 1, t.span.col))
+    }
+  }
+  result
+}
+
+// Re-weave original comments into the formatted source text.
+fun reattachComments_(origSrc: String, formattedText: String): String = {
+  val origToks = Lex.lex(origSrc)
+  val assocs = extractCommentAssocs_(origToks)
+  if (Lst.isEmpty(assocs)) formattedText
+  else {
+    val sigLineArr = buildSigLineArr_(formattedText)
+    val numSig = Arr.length(sigLineArr)
+    // Split into content lines; discard the extra empty string that results
+    // from the trailing "\n" at the end of the formatted text.
+    val allLines = Str.lines(formattedText)
+    val numRealLines =
+      if (Str.endsWith("\n", formattedText)) Lst.length(allLines) - 1
+      else Lst.length(allLines)
+    val linesArr = Arr.fromList(allLines)
+    // Build per-line comment maps:
+    //   trailingMap: lineIdx → single trailing comment text
+    //   leadingMap:  lineIdx → ordered list of leading comment texts
+    //   (lineIdx = numRealLines means "after last line")
+    var trailingMap: Dict<Int, String> = Dict.emptyIntDict()
+    var leadingMap: Dict<Int, List<String>> = Dict.emptyIntDict()
+    val assocsArr = Arr.fromList(assocs)
+    val na = Arr.length(assocsArr)
+    var ai = 0
+    while (ai < na) {
+      val a = Arr.get(assocsArr, ai)
+      ai := ai + 1
+      val isTrailing = a.0
+      val idx = a.1
+      val text = a.2
+      if (isTrailing) {
+        if (idx < numSig) {
+          val lineIdx = Arr.get(sigLineArr, idx).0
+          if (!Dict.member(trailingMap, lineIdx)) {
+            trailingMap := Dict.insert(trailingMap, lineIdx, text)
+          }
+        }
+      } else {
+        val lineIdx =
+          if (idx < numSig) Arr.get(sigLineArr, idx).0
+          else numRealLines
+        val existing = match (Dict.get(leadingMap, lineIdx)) {
+          None => []
+          Some(ls) => ls
+        }
+        leadingMap := Dict.insert(leadingMap, lineIdx, Lst.append(existing, [text]))
+      }
+    }
+    // Reconstruct output line by line.
+    val out: Array<String> = Arr.new()
+    var i = 0
+    while (i < numRealLines) {
+      val line = Arr.get(linesArr, i)
+      val indent = Str.repeat(lineIndent_(line), " ")
+      // Insert leading comments before this line (with matching indentation).
+      match (Dict.get(leadingMap, i)) {
+        None => ()
+        Some(cmts) => {
+          val cmtsArr = Arr.fromList(cmts)
+          val nc = Arr.length(cmtsArr)
+          var ci = 0
+          while (ci < nc) {
+            Arr.push(out, "${indent}${Arr.get(cmtsArr, ci)}\n")
+            ci := ci + 1
+          }
+        }
+      }
+      // Emit this line, appending any trailing comment.
+      val lineOut = match (Dict.get(trailingMap, i)) {
+        None => line
+        Some(cmt) => "${line}  ${cmt}"
+      }
+      Arr.push(out, "${lineOut}\n")
+      i := i + 1
+    }
+    // Post-last-line leading comments (e.g. trailing comment block at EOF).
+    match (Dict.get(leadingMap, numRealLines)) {
+      None => ()
+      Some(cmts) => {
+        val cmtsArr = Arr.fromList(cmts)
+        val nc = Arr.length(cmtsArr)
+        var ci = 0
+        while (ci < nc) {
+          Arr.push(out, "${Arr.get(cmtsArr, ci)}\n")
+          ci := ci + 1
+        }
+      }
+    }
+    Str.concat(Arr.toList(out))
+  }
+}
 
 // ─── Program formatter ───────────────────────────────────────────────────────
 
-fun fmtProgramDoc(prog: Ast.Program, declInfo: (List<(Int, List<String>)>, Array<Int>)): Doc = {
-  val commentList = declInfo.0
-  val posArr = declInfo.1
-  val commentDict = Lst.foldl(commentList, Dict.emptyIntDict(), (d: Dict<Int, List<String>>, entry: (Int, List<String>)) =>
-    Dict.insert(d, entry.0, entry.1))
-  val importCount = Lst.length(prog.imports)
-
-  val importDocs = Lst.indexedMap(prog.imports, (idx: Int, d: Ast.ImportDecl) => {
-    val pos = if (idx < Arr.length(posArr)) Arr.get(posArr, idx) else -1
-    val commentDoc = fmtCommentBlock(match (Dict.get(commentDict, pos)) {
-      None => []
-      Some(ls) => ls
-    })
-    PP.hcat([commentDoc, fmtImportDecl(d)])
-  })
-
-  val bodyDocs = Lst.indexedMap(prog.body, (idx: Int, d: Ast.TopDecl) => {
-    val pos = if (importCount + idx < Arr.length(posArr)) Arr.get(posArr, importCount + idx) else -1
-    val commentDoc = fmtCommentBlock(match (Dict.get(commentDict, pos)) {
-      None => []
-      Some(ls) => ls
-    })
-    PP.hcat([commentDoc, fmtTopDecl(d)])
-  })
-
+fun fmtProgramDoc(prog: Ast.Program): Doc = {
+  val importDocs = Lst.map(prog.imports, fmtImportDecl)
+  val bodyDocs = Lst.map(prog.body, fmtTopDecl)
   val importSection = PP.hcat(PP.punctuate(PP.lineBreak, importDocs))
   val bodySection = PP.hcat(PP.punctuate(PP.concat(PP.lineBreak, PP.lineBreak), bodyDocs))
-
   if (Lst.isEmpty(importDocs) & Lst.isEmpty(bodyDocs)) PP.empty
   else if (Lst.isEmpty(importDocs)) bodySection
   else if (Lst.isEmpty(bodyDocs)) importSection
@@ -837,10 +942,12 @@ export fun format(src: String): Result<String, FormatError> = {
       ParseError(msg, off, ln, col) => Err(FmtParseError(msg, off, ln, col))
     }
     Ok(prog) => {
-      val doc = fmtProgramDoc(prog, Lex.getDeclInfo(ls))
+      val doc = fmtProgramDoc(prog)
       val rendered = PP.pretty(fmtWidth, doc)
-      if (Str.endsWith("\n", rendered)) Ok(rendered)
-      else Ok("${rendered}\n")
+      if (Str.endsWith("\n", rendered))
+        Ok(reattachComments_(src, rendered))
+      else
+        Ok(reattachComments_(src, "${rendered}\n"))
     }
   }
 }
