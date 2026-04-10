@@ -43,3 +43,35 @@ Replace `_run_unit_tests()` and the current `cmd_test()` implementation in `scri
 ## Risks / Notes
 
 - All compiler flags (`--clean`, `--refresh`, `--allow-http`) are now passed directly to `./kestrel run`, which handles them in `cmd_run`. `test-runner.ks` reads them from `proc.args` and re-passes them to the inner subprocess.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| CLI scripts | Replace `_run_unit_tests()` and current `cmd_test()` in `scripts/kestrel` with 3-line form |
+| Scripts | Set `KESTREL_BIN="$ROOT/kestrel"` before `exec` |
+| Tests | `./scripts/kestrel test --summary` must produce 1459 passed |
+| Docs | Update `docs/specs/09-tools.md` cmd_test description if needed |
+
+## Tasks
+
+- [x] `scripts/kestrel`: delete `_run_unit_tests()` function
+- [x] `scripts/kestrel`: replace `cmd_test()` with 3-line form (ensure_tools, build check, `KESTREL_BIN exec`)
+- [x] `./scripts/kestrel test --summary` — verify all tests pass
+- [x] `./scripts/kestrel test --verbose tests/unit/arithmetic.test.ks` — verify flag forwarding
+- [x] `./scripts/kestrel test --generate` — verify --generate flag works
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| System test | `./scripts/kestrel test --summary` | All tests pass with new bash cmd_test |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/09-tools.md` — confirm cmd_test section is current (already updated in S11-03)
+
+## Build notes
+
+- 2026-04-10: Started implementation.
+- 2026-04-10: Deleted `_run_unit_tests()` (~40 lines of bash) and replaced `cmd_test()` with the 3-line form. Wall-clock timing on warm cache: ~1.56s total (420ms test execution). The old system was slightly faster (~0.6s) because it launched java directly without going through `./kestrel run kestrel:tools/test-runner`; the extra ~0.13s overhead is one additional JVM invocation for test-runner.ks itself. Test count is unchanged at 1459 passed.
