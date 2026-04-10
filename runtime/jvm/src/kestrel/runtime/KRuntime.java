@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -850,6 +851,93 @@ public final class KRuntime {
             throw e;
         }
 
+        return KTask.fromFuture(future);
+    }
+
+    public static KTask fileExistsAsync(Object path) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(path instanceof String)) {
+            future.complete(Boolean.FALSE);
+            return KTask.fromFuture(future);
+        }
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) { executor = asyncExecutor; }
+        asyncTasksInFlight.incrementAndGet();
+        final String resolvedPath = (String) path;
+        try {
+            executor.submit(() -> {
+                try {
+                    future.complete(Boolean.valueOf(Files.exists(Paths.get(resolvedPath))));
+                } catch (Throwable t) {
+                    future.complete(Boolean.FALSE);
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
+
+    public static KTask deleteFileAsync(Object path) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(path instanceof String)) {
+            future.complete(new KErr("not_found"));
+            return KTask.fromFuture(future);
+        }
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) { executor = asyncExecutor; }
+        asyncTasksInFlight.incrementAndGet();
+        final String resolvedPath = (String) path;
+        try {
+            executor.submit(() -> {
+                try {
+                    Files.deleteIfExists(Paths.get(resolvedPath));
+                    future.complete(new KOk(KUnit.INSTANCE));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
+
+    public static KTask renameFileAsync(Object src, Object dest) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(src instanceof String) || !(dest instanceof String)) {
+            future.complete(new KErr("not_found"));
+            return KTask.fromFuture(future);
+        }
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) { executor = asyncExecutor; }
+        asyncTasksInFlight.incrementAndGet();
+        final String resolvedSrc = (String) src;
+        final String resolvedDest = (String) dest;
+        try {
+            executor.submit(() -> {
+                try {
+                    Files.move(Paths.get(resolvedSrc), Paths.get(resolvedDest), StandardCopyOption.REPLACE_EXISTING);
+                    future.complete(new KOk(KUnit.INSTANCE));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
         return KTask.fromFuture(future);
     }
 

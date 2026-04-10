@@ -51,6 +51,28 @@ extern fun readAllStdinAsync(): Task<String> =
 export async fun readStdin(): Task<String> =
     await readAllStdinAsync()
 
+extern fun fileExistsAsyncImpl(path: String): Task<Bool> =
+	jvm("kestrel.runtime.KRuntime#fileExistsAsync(java.lang.Object)")
+
+extern fun deleteFileAsyncImpl(path: String): Task<Result<Unit, String>> =
+	jvm("kestrel.runtime.KRuntime#deleteFileAsync(java.lang.Object)")
+
+extern fun renameFileAsyncImpl(src: String, dest: String): Task<Result<Unit, String>> =
+	jvm("kestrel.runtime.KRuntime#renameFileAsync(java.lang.Object,java.lang.Object)")
+
+export async fun fileExists(path: String): Task<Bool> =
+	await fileExistsAsyncImpl(path)
+
+export async fun deleteFile(path: String): Task<Result<Unit, FsError>> = {
+	val result = await deleteFileAsyncImpl(path)
+	Res.mapError(result, mapFsError)
+}
+
+export async fun renameFile(src: String, dest: String): Task<Result<Unit, FsError>> = {
+	val result = await renameFileAsyncImpl(src, dest)
+	Res.mapError(result, mapFsError)
+}
+
 // ─── Path utilities ──────────────────────────────────────────────────────────
 
 export fun pathBaseName(path: String): String =

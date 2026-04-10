@@ -178,6 +178,9 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 | `readText` | `(String) -> Task<Result<String, FsError>>` | Read file contents as UTF-8 text. Returns `Ok(contents)` on success. |
 | `writeText` | `(String, String) -> Task<Result<Unit, FsError>>` | Write UTF-8 text to a path (creates or truncates the file per host semantics). Returns `Ok(())` on success. |
 | `listDir` | `(String) -> Task<Result<List<DirEntry>, FsError>>` | Non-recursive directory listing. `Ok(entries)` on success where each entry is `File(fullPath)` or `Dir(fullPath)`; missing paths return `Err(NotFound)` and permission failures return `Err(PermissionDenied)`. Symlinks are resolved: if the target is a directory, `Dir` is returned, otherwise `File`. |
+| `fileExists` | `(String) -> Task<Bool>` | Returns `True` if a file or directory exists at the given path, `False` otherwise. Never errors. |
+| `deleteFile` | `(String) -> Task<Result<Unit, FsError>>` | Deletes the file at the given path. Succeeds silently if the file does not exist (`Files.deleteIfExists`). Returns `Err(PermissionDenied)` on permission errors. |
+| `renameFile` | `(String, String) -> Task<Result<Unit, FsError>>` | Atomically moves a file from source to destination, replacing the destination if it exists (`Files.move` with `REPLACE_EXISTING`). Cross-device moves fall back to copy+delete on JVM. |
 
 ---
 

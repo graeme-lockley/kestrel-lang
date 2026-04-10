@@ -42,3 +42,36 @@ Add three file-management operations to `kestrel:io/fs`: `fileExists`, `deleteFi
 ## Risks / Notes
 
 - `renameFile` uses `Files.move(src, dest, REPLACE_EXISTING)` which is atomic on most POSIX systems (same filesystem). Cross-device moves fall back to copy+delete on JVM; document this.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| JVM runtime | Add `fileExistsAsync`, `deleteFileAsync`, `renameFileAsync` to `KRuntime.java` |
+| Stdlib | Add `fileExists`, `deleteFile`, `renameFile` to `stdlib/kestrel/io/fs.ks` and export them |
+| Tests | New conformance runtime test `tests/conformance/runtime/valid/fs_file_ops.ks` |
+| Docs | Add three functions to `docs/specs/02-stdlib.md` io/fs section |
+
+## Tasks
+
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `fileExistsAsync(Object)`, `deleteFileAsync(Object)`, `renameFileAsync(Object, Object)`
+- [x] `stdlib/kestrel/io/fs.ks`: add extern funs + wrappers for `fileExists`, `deleteFile`, `renameFile`; export all three
+- [x] `tests/conformance/runtime/valid/fs_file_ops.ks`: test all three operations
+- [x] `cd runtime/jvm && bash build.sh`
+- [x] `cd compiler && npm run build && npm test`
+- [x] `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Conformance runtime | `tests/conformance/runtime/valid/fs_file_ops.ks` | `fileExists` true/false; `deleteFile` removes a file; `renameFile` moves a file |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/02-stdlib.md` — add `fileExists`, `deleteFile`, `renameFile` to the io/fs section
+
+## Build notes
+
+- 2026-04-10: Started implementation.
+- 2026-04-10: Used `StandardCopyOption.REPLACE_EXISTING` for renameFile (no `ATOMIC_MOVE` since it throws on cross-device moves). `deleteFileAsync` uses `Files.deleteIfExists` so missing-file is not an error. `fileExistsAsync` is synchronous-semantically but wrapped in the async executor for consistency with other io/fs ops.
