@@ -47,3 +47,38 @@ Rewrite `stdlib/kestrel/tools/test-runner.ks` as a proper `kestrel:dev/cli` entr
 ## Risks / Notes
 
 - The inner subprocess invocation style changes from `exec java -cp $cp MainClass "" "" "$ROOT"` to `"$KESTREL_BIN" run .kestrel_test_runner.ks`, so args layout changes; test-runner.ks handles this by no longer passing `"" ""` positional preambles.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib | Rewrite `stdlib/kestrel/tools/test-runner.ks` using `kestrel:dev/cli`, `getEnv`, `renameFile`/`deleteFile` |
+| Tests | Run `./scripts/kestrel test --summary` as acceptance; existing Kestrel test suite is the coverage |
+| Docs | Update `docs/specs/09-tools.md` to document new arg layout and env var |
+
+## Tasks
+
+- [x] Rewrite `stdlib/kestrel/tools/test-runner.ks` with `kestrel:dev/cli` CLI spec for all flags
+- [x] Use `getEnv("KESTREL_BIN")` → fallback to `${proc.cwd}/kestrel` for binary path
+- [x] Use `getProcess().cwd` as project root (remove `getRootDir`/positional rootDir hack)
+- [x] Replace `sh -c "cmp -s ... || mv ..."` with `readText` + compare + `renameFile`/`deleteFile`
+- [x] Forward `--clean`, `--refresh`, `--allow-http` to inner `kestrelBin run` subprocess
+- [x] `cd compiler && npm run build && npm test`
+- [x] `./scripts/kestrel test --summary`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| System test | `./scripts/kestrel test --summary` | Full suite passes with new runner |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/09-tools.md` — update `kestrel test` section to document `KESTREL_BIN` env var and new arg layout (no project-root positional)
+
+## Build notes
+
+- 2026-04-10: Started implementation.
+- 2026-04-10: `Opt.withDefault(option, default)` - arg order is (option, default), not (default, option). Fixed type error.
+- 2026-04-10: The old bash invocation passes `["", "", rootDir, ...]` as mainArgs; the new test-runner.ks expects `["--flag", "paths..."]` via `kestrel:dev/cli`. Verified correct operation with `KESTREL_BIN=$PWD/kestrel ./kestrel run kestrel:tools/test-runner --summary` → 1459 passed.
+- 2026-04-10: Replaced `sh -c "cmp -s ... || mv ..."` subprocess with in-process `readText` + `Str.equals` comparison + `renameFile`/`deleteFile` — eliminates the external shell subprocess for this operation.

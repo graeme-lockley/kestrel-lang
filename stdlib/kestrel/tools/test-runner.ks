@@ -1,14 +1,73 @@
+// kestrel:tools/test-runner — discover and run Kestrel unit tests.
+// Usage: kestrel test [--verbose|--summary] [--generate] [--clean] [--refresh] [--allow-http] [files...]
+
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
 import * as Str from "kestrel:data/string"
-import { getProcess, runProcess, runProcessStream, ProcessSpawnError } from "kestrel:sys/process"
-import { listDir, writeText, NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:io/fs"
+import * as Dict from "kestrel:data/dict"
+import * as Cli from "kestrel:dev/cli"
+import { CliSpec, ParsedArgs, Flag } from "kestrel:dev/cli"
+import { getProcess, getEnv, runProcessStream, ProcessSpawnError } from "kestrel:sys/process"
+import { listDir, writeText, readText, renameFile, deleteFile, NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:io/fs"
 import { all } from "kestrel:sys/task"
 
-fun hasSuffix(s: String, suffix: String): Bool = Str.endsWith(suffix, s)
+// ─── CLI spec ─────────────────────────────────────────────────────────────────
 
-fun hasFlag(args: List<String>, flag: String): Bool =
-  Lst.any(args, (hd: String) => Str.equals(hd, flag))
+val cliSpec = {
+  name = "kestrel test",
+  version = "0.1.0",
+  description = "Discover and run Kestrel unit tests",
+  usage = "kestrel test [--verbose|--summary] [--generate] [--clean] [--refresh] [--allow-http] [files...]",
+  options = [
+    {
+      short = Some("-v"),
+      long = "--verbose",
+      kind = Flag,
+      description = "Print each test result"
+    },
+    {
+      short = Some("-s"),
+      long = "--summary",
+      kind = Flag,
+      description = "Print only the final summary line"
+    },
+    {
+      short = None,
+      long = "--generate",
+      kind = Flag,
+      description = "Write the generated runner file and exit without running tests"
+    },
+    {
+      short = None,
+      long = "--clean",
+      kind = Flag,
+      description = "Delete compiler cache before compiling the generated runner"
+    },
+    {
+      short = None,
+      long = "--refresh",
+      kind = Flag,
+      description = "Re-fetch all remote dependencies"
+    },
+    {
+      short = None,
+      long = "--allow-http",
+      kind = Flag,
+      description = "Allow plain http:// imports"
+    }
+  ],
+  args = [
+    {
+      name = "paths",
+      description = "Test files or directories (default: tests/unit/ and stdlib/kestrel/ up to 3 levels)",
+      variadic = True
+    }
+  ]
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+fun hasSuffix(s: String, suffix: String): Bool = Str.endsWith(suffix, s)
 
 fun isAbsolute(path: String): Bool =
   if (Str.length(path) > 0) Str.equals(Str.slice(path, 0, 1), "/") else False
@@ -22,19 +81,6 @@ fun resolvePaths(base: String, paths: List<String>): List<String> =
 fun filterToTestFiles(paths: List<String>): List<String> =
   Lst.filter(paths, (p: String) => hasSuffix(p, ".test.ks"))
 
-fun excludeOutputFlags(args: List<String>): List<String> =
-  Lst.filter(
-    args,
-    (hd: String) => !(Str.equals(hd, "--summary") | Str.equals(hd, "--verbose") | Str.equals(hd, "--generate"))
-  )
-
-// argv layout (when invoked by scripts/kestrel): [exe, script/module, project-root, ...paths]
-// JVM entry pads with "" "". Third element (index 2) is root dir when set.
-fun getPathArgs(allArgs: List<String>): List<String> = excludeOutputFlags(Lst.drop(allArgs, 3))
-
-fun getRootDir(args: List<String>, fallback: String): String =
-  args |> Lst.drop(2) |> Lst.head |> Opt.withDefault(fallback)
-
 async fun listDirOrExit(path: String): Task<List<DirEntry>> =
   match (await listDir(path)) {
     Ok(entries) => entries,
@@ -47,7 +93,8 @@ async fun listDirOrExit(path: String): Task<List<DirEntry>> =
         };
       println("kestrel test: listDir failed for ${path}: ${message}");
       exit(1);
-      []    }
+      []
+    }
   }
 
 fun getTestFilePaths(entries: List<DirEntry>, acc: List<String>): List<String> =
@@ -69,7 +116,7 @@ fun getDirPaths(entries: List<DirEntry>, acc: List<String>): List<String> =
     }
   }
 
-async fun writeTextOrExit(path: String, content: String): Task<Unit> = {
+async fun writeTextOrExit(path: String, content: String): Task<Unit> =
   match (await writeText(path, content)) {
     Ok(_) => (),
     Err(err) => {
@@ -83,23 +130,8 @@ async fun writeTextOrExit(path: String, content: String): Task<Unit> = {
       exit(1)
     }
   }
-}
 
-async fun runProcessOrExit(program: String, args: List<String>): Task<Int> = {
-  match (await runProcess(program, args)) {
-    Ok(r) => {
-      print(r.stdout);
-      r.exitCode
-    },
-    Err(ProcessSpawnError(_)) => {
-      println("kestrel test: runProcess failed for ${program}: process error");
-      exit(1);
-      1
-    }
-  }
-}
-
-async fun runProcessStreamOrExit(program: String, args: List<String>): Task<Int> = {
+async fun runProcessStreamOrExit(program: String, args: List<String>): Task<Int> =
   match (await runProcessStream(program, args)) {
     Ok(exitCode) => exitCode,
     Err(ProcessSpawnError(_)) => {
@@ -108,7 +140,6 @@ async fun runProcessStreamOrExit(program: String, args: List<String>): Task<Int>
       1
     }
   }
-}
 
 fun buildImports(tests: List<String>, idx: Int): String =
   match (tests) {
@@ -123,23 +154,42 @@ fun buildCalls(count: Int, idx: Int): String =
   else
     "  await run${Str.fromInt(idx)}(root)\n${buildCalls(count, idx + 1)}"
 
-/** Entry point for `kestrel:tools/test-runner` (invoked by `kestrel test`).
- *  argv: [exe, script/module, project-root, ...paths-or-flags]
- *  Flags: --verbose, --summary, --generate */
-async fun main(): Task<Unit> = {
+fun collectFlag(parsed: ParsedArgs, flag: String): List<String> =
+  match (Dict.get(parsed.options, Str.dropLeft(flag, 2))) {
+    Some(_) => [flag]
+    None => []
+  }
+
+fun buildCompilerFlags(parsed: ParsedArgs): List<String> =
+  Lst.concat([
+    collectFlag(parsed, "--clean"),
+    collectFlag(parsed, "--refresh"),
+    collectFlag(parsed, "--allow-http")
+  ])
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
+/** Entry point for `kestrel:tools/test-runner` (invoked via `./kestrel run kestrel:tools/test-runner`).
+ *  proc.cwd is the project root. KESTREL_BIN env var identifies the kestrel binary. */
+async fun handler(parsed: ParsedArgs): Task<Int> = {
   val proc = getProcess()
-  val rootDir = getRootDir(proc.args, proc.cwd)
-  val pathArgs = getPathArgs(proc.args)
+  val rootDir = proc.cwd
+  val kestrelBin = Opt.withDefault(getEnv("KESTREL_BIN"), "${rootDir}/kestrel")
   val outputModeStr =
-    if (hasFlag(proc.args, "--summary")) "outputSummary"
-    else if (hasFlag(proc.args, "--verbose")) "outputVerbose"
-    else "outputCompact"
+    match (Dict.get(parsed.options, "summary")) {
+      Some(_) => "outputSummary"
+      None =>
+        match (Dict.get(parsed.options, "verbose")) {
+          Some(_) => "outputVerbose"
+          None => "outputCompact"
+        }
+    }
 
   val unitDir = "${rootDir}/tests/unit"
   val stdlibDir = "${rootDir}/stdlib/kestrel"
 
   val tests =
-    if (Lst.length(pathArgs) == 0) {
+    if (Lst.isEmpty(parsed.positional)) {
       val unitEntries = await listDirOrExit(unitDir)
       val unitTests = getTestFilePaths(unitEntries, [])
       val stdlibEntries = await listDirOrExit(stdlibDir)
@@ -155,7 +205,7 @@ async fun main(): Task<Unit> = {
       val stdlibTests = Lst.append(stdlibTopFiles, Lst.append(level1Files, level2Files))
       Lst.append(unitTests, stdlibTests)
     } else
-      resolvePaths(rootDir, filterToTestFiles(pathArgs))
+      resolvePaths(rootDir, filterToTestFiles(parsed.positional))
 
   val testCount = Lst.length(tests)
   val impLines = buildImports(tests, 0)
@@ -173,14 +223,37 @@ async fun main(): Task<Unit> = {
   val generatedPath = "${rootDir}/.kestrel_test_runner.ks"
   val tmpPath = "${generatedPath}.new"
   await writeTextOrExit(tmpPath, generatedSource)
-  val _cmp = await runProcessOrExit("sh", ["-c", "cmp -s '${tmpPath}' '${generatedPath}' 2>/dev/null && rm '${tmpPath}' || mv '${tmpPath}' '${generatedPath}'"])
 
-  if (hasFlag(proc.args, "--generate")) {
-    exit(0)
+  val existing = await readText(generatedPath)
+  val needsUpdate =
+    match (existing) {
+      Ok(content) => !Str.equals(content, generatedSource)
+      Err(_) => True
+    }
+
+  if (needsUpdate) {
+    val _ = await renameFile(tmpPath, generatedPath);
+    ()
   } else {
-    val exitCode = await runProcessStreamOrExit("./scripts/kestrel", ["run", generatedPath])
-    exit(exitCode)
+    val _ = await deleteFile(tmpPath);
+    ()
+  };
+
+  match (Dict.get(parsed.options, "generate")) {
+    Some(_) => 0
+    None => {
+      val compilerFlags = buildCompilerFlags(parsed)
+      val innerArgs = Lst.append(["run"], Lst.append(compilerFlags, [generatedPath]))
+      await runProcessStreamOrExit(kestrelBin, innerArgs)
+    }
   }
 }
 
-main()
+// ─── Entry point ─────────────────────────────────────────────────────────────
+
+export async fun main(allArgs: List<String>): Task<Unit> = {
+  val code = await Cli.run(cliSpec, handler, allArgs)
+  exit(code)
+}
+
+main(getProcess().args)
