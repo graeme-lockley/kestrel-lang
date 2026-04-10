@@ -973,6 +973,13 @@ public final class KRuntime {
         return System.getProperty("user.dir", "");
     }
 
+    /** Returns Some(value) if the named environment variable is set, None otherwise. */
+    public static Object getEnv(Object name) {
+        if (!(name instanceof String)) return KNone.INSTANCE;
+        String value = System.getenv((String) name);
+        return value != null ? new KSome(value) : KNone.INSTANCE;
+    }
+
     public static KTask runProcessAsync(Object program, Object argsObj) {
         CompletableFuture<Object> future = new CompletableFuture<>();
         if (!(program instanceof String)) {

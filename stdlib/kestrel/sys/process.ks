@@ -15,6 +15,9 @@ extern fun getArgs(): List<String> =
 extern fun getCwd(): String =
   jvm("kestrel.runtime.KRuntime#getCwd()")
 
+export extern fun getEnv(name: String): Option<String> =
+  jvm("kestrel.runtime.KRuntime#getEnv(java.lang.Object)")
+
 extern fun runProcessAsync(program: String, args: List<String>): Task<Result<ProcessResult, String>> =
   jvm("kestrel.runtime.KRuntime#runProcessAsync(java.lang.Object,java.lang.Object)")
 
