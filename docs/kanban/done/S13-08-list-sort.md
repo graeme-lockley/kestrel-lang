@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E13 Stdlib Compiler Readiness](../epics/unplanned/E13-stdlib-compiler-readiness.md)
+- Epic: [E13 Stdlib Compiler Readiness](../epics/done/E13-stdlib-compiler-readiness.md)
 
 ## Summary
 
