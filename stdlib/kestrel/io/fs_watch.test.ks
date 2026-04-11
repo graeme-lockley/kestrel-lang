@@ -1,5 +1,5 @@
 // Tests for the file-watching primitive in kestrel:io/fs
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
+import { Suite, asyncGroup, eq, isTrue, isFalse } from "kestrel:dev/test"
 import * as Fs from "kestrel:io/fs"
 import * as Str from "kestrel:data/string"
 import * as List from "kestrel:data/list"
@@ -10,22 +10,22 @@ val subDir = "${tmpDir}/sub"
 val subFile = "${subDir}/child.ks"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "kestrel:io/fs Watcher", (sg: Suite) => {
+  await asyncGroup(s, "kestrel:io/fs Watcher", async (sg: Suite) => {
 
     // ── Setup ─────────────────────────────────────────────────────────────────
-    group(sg, "setup temp directory", (g: Suite) => {
+    await asyncGroup(sg, "setup temp directory", async (g: Suite) => {
       val r = await Fs.mkdirAll(tmpDir);
       isTrue(g, "mkdirAll ok", match (r) { Ok(_) => True, Err(_) => False })
     });
 
     // ── watchDir on missing path returns Err ──────────────────────────────────
-    group(sg, "watchDir missing path returns Err", (g: Suite) => {
+    await asyncGroup(sg, "watchDir missing path returns Err", async (g: Suite) => {
       val r = await Fs.watchDir("/tmp/no_such_dir_kestrel_12345", 200);
       isFalse(g, "is Err", match (r) { Ok(_) => True, Err(_) => False })
     });
 
     // ── watchDir on existing dir returns Ok ───────────────────────────────────
-    group(sg, "watchDir existing dir returns Ok(Watcher)", (g: Suite) => {
+    await asyncGroup(sg, "watchDir existing dir returns Ok(Watcher)", async (g: Suite) => {
       val r = await Fs.watchDir(tmpDir, 300);
       isTrue(g, "is Ok", match (r) { Ok(_) => True, Err(_) => False });
       match (r) {
@@ -38,7 +38,7 @@ export async fun run(s: Suite): Task<Unit> =
     });
 
     // ── watcherNext returns changed path ──────────────────────────────────────
-    group(sg, "watcherNext detects file write", (g: Suite) => {
+    await asyncGroup(sg, "watcherNext detects file write", async (g: Suite) => {
       val wr = await Fs.watchDir(tmpDir, 300);
       match (wr) {
         Err(_) => isTrue(g, "watcher should open", False)
@@ -47,13 +47,13 @@ export async fun run(s: Suite): Task<Unit> =
           val paths = await Fs.watcherNext(w);
           val _ = await Fs.watcherClose(w);
           isTrue(g, "paths non-empty", !List.isEmpty(paths));
-          isTrue(g, "contains watch file path", List.any(paths, (p: String) => Str.contains("test.ks", p)))
+          isTrue(g, "contains test.ks", List.any(paths, (p: String) => Str.contains("test.ks", p)))
         }
       }
     });
 
     // ── watcherNext detects sub-directory creation ────────────────────────────
-    group(sg, "watcherNext detects child in new subdirectory", (g: Suite) => {
+    await asyncGroup(sg, "watcherNext detects child in new subdirectory", async (g: Suite) => {
       val wr = await Fs.watchDir(tmpDir, 300);
       match (wr) {
         Err(_) => isTrue(g, "watcher should open", False)
@@ -68,7 +68,7 @@ export async fun run(s: Suite): Task<Unit> =
     });
 
     // ── watcherClose: subsequent next returns empty ───────────────────────────
-    group(sg, "watcherClose causes next to return empty", (g: Suite) => {
+    await asyncGroup(sg, "watcherClose causes next to return empty", async (g: Suite) => {
       val wr = await Fs.watchDir(tmpDir, 100);
       match (wr) {
         Err(_) => isTrue(g, "watcher should open", False)

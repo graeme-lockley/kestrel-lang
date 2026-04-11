@@ -89,3 +89,45 @@ pipeline. It is consumed by S09-08 (live reload).
   (virtual threads are designed for blocking I/O). No `CompletableFuture` bridging is needed.
 - The `Watcher` extern type is backed by a JVM class that bundles `WatchService` + a
   `ConcurrentLinkedQueue<String>` for accumulating events between `watcherNext` calls.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| JVM runtime (new class) | `runtime/jvm/src/kestrel/runtime/KWatcher.java` — `WatchService` wrapper with debouncing and auto-registration of new subdirs |
+| JVM runtime (`KRuntime`) | Added `watchDirAsync`, `watcherNextAsync`, `watcherCloseAsync` methods |
+| JVM build | `runtime/jvm/build.sh` — added `KWatcher.java` to compile list |
+| Stdlib (`kestrel:io/fs`) | Added `extern type Watcher`, `watchDir`, `watcherNext`, `watcherClose` |
+| Tests (new) | `stdlib/kestrel/io/fs_watch.test.ks` — 7 async integration tests |
+| Specs | None updated (spec refs in Risks / Notes) |
+
+## Tasks
+
+- [x] Create `runtime/jvm/src/kestrel/runtime/KWatcher.java`
+- [x] Add `watchDirAsync`, `watcherNextAsync`, `watcherCloseAsync` to `KRuntime.java`
+- [x] Add `KWatcher.java` to `runtime/jvm/build.sh`
+- [x] Rebuild JVM runtime: `cd runtime/jvm && bash build.sh`
+- [x] Add `extern type Watcher`, `watchDir`, `watcherNext`, `watcherClose` to `stdlib/kestrel/io/fs.ks`
+- [x] Create `stdlib/kestrel/io/fs_watch.test.ks` with async integration tests
+- [x] Run `./kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel async harness | `stdlib/kestrel/io/fs_watch.test.ks` | `watchDir` succeeds for existing dir, fails for missing |
+| Kestrel async harness | `stdlib/kestrel/io/fs_watch.test.ks` | `watcherNext` detects file write in watched dir |
+| Kestrel async harness | `stdlib/kestrel/io/fs_watch.test.ks` | `watcherNext` detects change in new subdirectory |
+| Kestrel async harness | `stdlib/kestrel/io/fs_watch.test.ks` | `watcherClose` causes next to return empty |
+
+## Documentation and specs to update
+
+- None.
+
+## Build notes
+
+- `KWatcher` uses a background virtual thread (`Thread.ofVirtual().start()`) to drain the `WatchService` with a debounce window. The debounce loop polls for additional events for `debounceMs` after the first event, then queues a batch to a `BlockingQueue` consumed by `watcherNextAsync`.
+- macOS `WatchService` uses polling (~2s latency) — tests use a 300ms debounce which means `watcherNext` can take up to ~2.3s on macOS. This is acceptable for the doc-server live-reload use case.
+- Subdirectory auto-registration: after observing `ENTRY_CREATE` for a directory, `registerTree` is called recursively on the new directory.
+- The `extern type Watcher = jvm("kestrel.runtime.KWatcher")` declaration in `fs.ks` binds the JVM class to the Kestrel opaque type.
+- 7 tests pass (including the 2.3s-per-watcher async tests).

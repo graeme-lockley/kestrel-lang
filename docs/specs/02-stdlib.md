@@ -164,6 +164,10 @@ Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on 
 | `sort` | `(List<Int>) -> List<Int>` | Insertion sort |
 | `sortWith` | `((A, A) -> Int, List<A>) -> List<A>` | Sort by a comparator function (negative/zero/positive). Comparator first, list second. Stable insertion sort. |
 | `sortBy` | `((A) -> Int, List<A>) -> List<A>` | Sort by a key function returning an ordinal `Int`. Key function first, list second. Implemented via `sortWith`. |
+| `find` | `((A) -> Bool, List<A>) -> Option<A>` | First element matching predicate, or `None`. Predicate first, list second. |
+| `findIndex` | `((A) -> Bool, List<A>) -> Option<Int>` | Zero-based index of first matching element, or `None`. |
+| `findMap` | `((A) -> Option<B>, List<A>) -> Option<B>` | Returns first `Some(b)` returned by `f`, or `None`. Short-circuits on first `Some`. |
+| `last` | `(List<A>) -> Option<A>` | Last element of the list, or `None` for empty. |
 | `head` / `tail` | `List<A> -> Option<…>` | |
 
 ---

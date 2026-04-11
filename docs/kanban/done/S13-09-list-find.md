@@ -42,3 +42,15 @@ Add four commonly-needed list search/access functions to `kestrel:data/list`. Th
 - Pure Kestrel implementation; no JVM runtime changes needed.
 - `findMap` can short-circuit (return as soon as `f` returns `Some`).
 - Independent of all other E13 stories.
+
+## Tasks
+
+- [x] `stdlib/kestrel/data/list.ks`: add `find`, `findIndex` (via `findIndexAcc`), `findMap`, `last`
+- [x] `tests/conformance/runtime/valid/list_find.ks`: conformance test (7 cases)
+- [x] Compiler tests pass (`cd compiler && npm test`)
+- [x] `docs/specs/02-stdlib.md`: add four functions to data/list table
+
+## Build notes
+
+- 2025-01-01: All pure recursive Kestrel. `findIndex` uses a tail-recursive accumulator helper `findIndexAcc`. `findMap` short-circuits by returning `Some(b)` immediately.
+- No JVM runtime changes needed.

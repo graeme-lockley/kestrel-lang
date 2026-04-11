@@ -281,3 +281,31 @@ export fun sortWith<A>(cmp: (A, A) -> Int, xs: List<A>): List<A> = match (xs) {
 
 export fun sortBy<A>(f: (A) -> Int, xs: List<A>): List<A> =
   sortWith((a: A, b: A) => f(a) - f(b), xs)
+
+export fun find<A>(pred: (A) -> Bool, xs: List<A>): Option<A> = match (xs) {
+  [] => None
+  h :: t => if (pred(h)) Some(h) else find(pred, t)
+}
+
+fun findIndexAcc<A>(pred: (A) -> Bool, xs: List<A>, i: Int): Option<Int> = match (xs) {
+  [] => None
+  h :: t => if (pred(h)) Some(i) else findIndexAcc(pred, t, i + 1)
+}
+
+export fun findIndex<A>(pred: (A) -> Bool, xs: List<A>): Option<Int> =
+  findIndexAcc(pred, xs, 0)
+
+export fun findMap<A, B>(f: (A) -> Option<B>, xs: List<A>): Option<B> = match (xs) {
+  [] => None
+  h :: t =>
+    match (f(h)) {
+      None => findMap(f, t)
+      Some(b) => Some(b)
+    }
+}
+
+export fun last<A>(xs: List<A>): Option<A> = match (xs) {
+  [] => None
+  h :: [] => Some(h)
+  _ :: t => last(t)
+}
