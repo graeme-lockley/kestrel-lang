@@ -8,7 +8,7 @@ import * as List from "kestrel:data/list"
 import * as Dict from "kestrel:data/dict"
 
 extern fun structKey<A>(v: A): String =
-  jvm("kestrel.runtime.KRuntime#structKey(java.lang.Object)")
+  jvm("kestrel.runtime.KRuntime#formatOne(java.lang.Object)")
 
 // Backing: a pair (vals: Dict<String, V>, origKeys: Dict<String, K>)
 // origKeys preserves the original key so keys()/toList() can return K not String.

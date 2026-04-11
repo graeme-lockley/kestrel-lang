@@ -2,6 +2,8 @@ import * as Res from "kestrel:data/result"
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
 import { all } from "kestrel:sys/task"
+import { nowMs } from "kestrel:data/basics"
+import { random } from "kestrel:data/int"
 
 export type FsError = NotFound | PermissionDenied | IoError(String)
 
@@ -265,12 +267,10 @@ export async fun watcherNext(w: Watcher): Task<List<String>> =
 export async fun watcherClose(w: Watcher): Task<Unit> =
   await watcherCloseAsyncImpl(w)
 
-extern fun tempPathImpl(path: String): String =
-  jvm("kestrel.runtime.KRuntime#tempPath(java.lang.Object)")
-
 /// Returns a sibling temporary path for `path` suitable for atomic write patterns.
 /// The path is in the same directory so a rename is on the same filesystem.
-export fun tempPath(path: String): String = tempPathImpl(path)
+export fun tempPath(path: String): String =
+  "${path}.tmp.${Str.fromInt(nowMs())}${Str.fromInt(random(1000000))}"
 
 /// Write `content` to `path` atomically: writes to a sibling temp file then renames.
 /// If the write fails, `path` is not modified.

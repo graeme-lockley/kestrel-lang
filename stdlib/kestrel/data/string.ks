@@ -344,14 +344,16 @@ export fun indexOfChar(c: Char, s: String): Option<Int> =
     if (i < 0) None else Some(i)
   }
 
-extern fun toHexStringImpl(n: Int): String =
-  jvm("kestrel.runtime.KRuntime#toHexString(java.lang.Object)")
-extern fun toBinaryStringImpl(n: Int): String =
-  jvm("kestrel.runtime.KRuntime#toBinaryString(java.lang.Object)")
-extern fun toOctalStringImpl(n: Int): String =
-  jvm("kestrel.runtime.KRuntime#toOctalString(java.lang.Object)")
+val baseDigits = "0123456789abcdef"
 
-export fun toHexString(n: Int): String = toHexStringImpl(n)
-export fun toBinaryString(n: Int): String = toBinaryStringImpl(n)
-export fun toOctalString(n: Int): String = toOctalStringImpl(n)
+fun toBaseLoop(base: Int, n: Int, acc: String): String =
+  if (n == 0) acc
+  else toBaseLoop(base, n / base, "${slice(baseDigits, n % base, n % base + 1)}${acc}")
+
+fun toBaseString(base: Int, n: Int): String =
+  if (n == 0) "0" else toBaseLoop(base, n, "")
+
+export fun toHexString(n: Int): String = toBaseString(16, n)
+export fun toBinaryString(n: Int): String = toBaseString(2, n)
+export fun toOctalString(n: Int): String = toBaseString(8, n)
 export fun toHexStringPadded(width: Int, n: Int): String = padLeft(width, "0", toHexString(n))

@@ -1017,11 +1017,6 @@ public final class KRuntime {
         return KTask.fromFuture(future);
     }
 
-    public static String tempPath(Object path) {
-        long id = System.currentTimeMillis() * 1000 + Thread.currentThread().threadId() % 1000;
-        return ((String) path) + ".tmp." + id;
-    }
-
     public static KTask readAllStdin() {
         CompletableFuture<Object> future = new CompletableFuture<>();
         initAsyncRuntime();
@@ -1369,11 +1364,6 @@ public final class KRuntime {
             result = new KCons(v, result);
         }
         return result;
-    }
-
-    /** Produce a canonical structural key string for any Kestrel value. Uses formatOne. */
-    public static String structKey(Object v) {
-        return formatOne(v);
     }
 
     // ── HTTP client helpers for kestrel:http (S03-05) ────────────────────────
@@ -2583,17 +2573,7 @@ public final class KRuntime {
         }
     }
 
-    public static String toHexString(Object n) {
-        return Long.toHexString((Long) n);
-    }
 
-    public static String toBinaryString(Object n) {
-        return Long.toBinaryString((Long) n);
-    }
-
-    public static String toOctalString(Object n) {
-        return Long.toOctalString((Long) n);
-    }
 
     // ── File watching — kestrel:io/fs Watcher ———————————————————————————
 
