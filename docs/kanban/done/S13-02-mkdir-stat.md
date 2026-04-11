@@ -36,10 +36,21 @@ Add directory creation (`mkdirAll`), file metadata (`stat`), and file-timestamp 
 
 - `docs/specs/02-stdlib.md` (io/fs section)
 
-## Risks / Notes
+## Tasks
 
-- `mtimeMs` is a 64-bit epoch millisecond value — fits in Kestrel `Int` (also 64-bit).
-- `size` in bytes — also `Int`.
-- `createDirectories` is idempotent on existing dirs; no special-case needed.
-- Depends on nothing else in E13; independent of S13-01.
-- S13-11 (recursive listDir) depends on this story (for the `isDir` check).
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `mkdirAllAsync`, `statAsync`, `touchFileAsync`
+- [x] `stdlib/kestrel/io/fs.ks`: add `FileStat` record type, extern bindings, `mkdirAll`, `stat`, `touchFile` exports
+- [x] `tests/conformance/runtime/valid/fs_mkdir_stat.ks`: test mkdirAll idempotency, stat fields, touchFile, stat NotFound
+- [x] `cd runtime/jvm && bash build.sh`
+- [x] `cd compiler && npm test`
+- [x] `./scripts/kestrel test`
+
+## Documentation and specs to update
+
+- [x] `docs/specs/02-stdlib.md` — add `FileStat` type and mkdirAll/stat/touchFile functions to io/fs section
+
+## Build notes
+
+`statAsync` returns a `KRecord` with fields `mtimeMs`, `size`, `isDir`, `isFile`. The `FileStat` record type on the Kestrel side matches this by structural typing. The pattern is validated by the existing `ProcessResult` record return from `runProcessAsync`.
+
+Async pattern in KRuntime uses: `initAsyncRuntime()` + `synchronized (KRuntime.class) { exec = asyncExecutor; }` + `asyncTasksInFlight.incrementAndGet()` (not `incrementAsyncTasksInFlight()` which does not exist).

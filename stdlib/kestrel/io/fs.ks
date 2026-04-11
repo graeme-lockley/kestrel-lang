@@ -132,6 +132,32 @@ export async fun appendBytes(path: String, bytes: ByteArray): Task<Result<Unit, 
   Res.mapError(result, mapFsError)
 }
 
+// ─── Directory creation and file metadata ────────────────────────────────────
+
+export type FileStat = { mtimeMs: Int, size: Int, isDir: Bool, isFile: Bool }
+
+extern fun mkdirAllAsyncImpl(path: String): Task<Result<Unit, String>> =
+  jvm("kestrel.runtime.KRuntime#mkdirAllAsync(java.lang.Object)")
+extern fun statAsyncImpl(path: String): Task<Result<FileStat, String>> =
+  jvm("kestrel.runtime.KRuntime#statAsync(java.lang.Object)")
+extern fun touchFileAsyncImpl(path: String): Task<Result<Unit, String>> =
+  jvm("kestrel.runtime.KRuntime#touchFileAsync(java.lang.Object)")
+
+export async fun mkdirAll(path: String): Task<Result<Unit, FsError>> = {
+  val result = await mkdirAllAsyncImpl(path)
+  Res.mapError(result, mapFsError)
+}
+
+export async fun stat(path: String): Task<Result<FileStat, FsError>> = {
+  val result = await statAsyncImpl(path)
+  Res.mapError(result, mapFsError)
+}
+
+export async fun touchFile(path: String): Task<Result<Unit, FsError>> = {
+  val result = await touchFileAsyncImpl(path)
+  Res.mapError(result, mapFsError)
+}
+
 // ─── Recursive file collection ───────────────────────────────────────────────
 
 fun getFiles(entries: List<DirEntry>, include: String -> Bool, acc: List<String>): List<String> =

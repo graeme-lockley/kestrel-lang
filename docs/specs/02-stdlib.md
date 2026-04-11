@@ -173,6 +173,7 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 | `FsError` | `NotFound | PermissionDenied | IoError(String)` |
 | `DirEntry` | `File(String) | Dir(String)` — typed directory entry where the `String` payload is the full path |
 | `ByteArray` | Opaque type backed by Java `byte[]`. Byte values are `Int` in range 0–255. |
+| `FileStat` | `{ mtimeMs: Int, size: Int, isDir: Bool, isFile: Bool }` — file metadata returned by `stat`. `mtimeMs` is milliseconds since epoch. |
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -193,6 +194,9 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 | `byteArrayToList` | `(ByteArray) -> List<Int>` | Convert a `ByteArray` to a list of unsigned byte values (0–255). |
 | `byteArrayConcat` | `(ByteArray, ByteArray) -> ByteArray` | Concatenate two byte arrays into a new one. |
 | `byteArraySlice` | `(ByteArray, Int, Int) -> ByteArray` | Return a new `ByteArray` with bytes in the half-open range `[start, end)`. |
+| `mkdirAll` | `(String) -> Task<Result<Unit, FsError>>` | Create a directory and all missing parents (`Files.createDirectories`). No-ops if the directory already exists. |
+| `stat` | `(String) -> Task<Result<FileStat, FsError>>` | Return file metadata. `Err(NotFound)` if the path does not exist. |
+| `touchFile` | `(String) -> Task<Result<Unit, FsError>>` | Set the file's last-modified time to now. Creates an empty file if it doesn't exist. |
 
 ---
 

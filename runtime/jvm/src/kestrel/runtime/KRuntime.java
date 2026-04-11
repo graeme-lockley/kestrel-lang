@@ -2268,6 +2268,102 @@ public final class KRuntime {
         }
         return KTask.fromFuture(future);
     }
+
+    // ── Directory / metadata helpers for kestrel:io/fs ───────────────────────
+
+    public static KTask mkdirAllAsync(Object path) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        ExecutorService exec;
+        synchronized (KRuntime.class) { exec = asyncExecutor; }
+        asyncTasksInFlight.incrementAndGet();
+        final String resolvedPath = (String) path;
+        try {
+            exec.submit(() -> {
+                try {
+                    Files.createDirectories(Paths.get(resolvedPath));
+                    future.complete(new KOk(KUnit.INSTANCE));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
+
+    public static KTask statAsync(Object path) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        ExecutorService exec;
+        synchronized (KRuntime.class) { exec = asyncExecutor; }
+        asyncTasksInFlight.incrementAndGet();
+        final String resolvedPath = (String) path;
+        try {
+            exec.submit(() -> {
+                try {
+                    java.nio.file.Path p = Paths.get(resolvedPath);
+                    java.nio.file.attribute.BasicFileAttributes attrs =
+                        Files.readAttributes(p, java.nio.file.attribute.BasicFileAttributes.class);
+                    long mtimeMs = attrs.lastModifiedTime().toMillis();
+                    long size    = attrs.size();
+                    boolean isDir  = attrs.isDirectory();
+                    boolean isFile = attrs.isRegularFile();
+                    var rec = new KRecord();
+                    rec.set("mtimeMs", mtimeMs);
+                    rec.set("size", size);
+                    rec.set("isDir", isDir);
+                    rec.set("isFile", isFile);
+                    future.complete(new KOk(rec));
+                } catch (java.nio.file.NoSuchFileException e) {
+                    future.complete(new KErr("not_found"));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
+
+    public static KTask touchFileAsync(Object path) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        initAsyncRuntime();
+        ExecutorService exec;
+        synchronized (KRuntime.class) { exec = asyncExecutor; }
+        asyncTasksInFlight.incrementAndGet();
+        final String resolvedPath = (String) path;
+        try {
+            exec.submit(() -> {
+                try {
+                    java.nio.file.Path p = Paths.get(resolvedPath);
+                    if (Files.exists(p)) {
+                        Files.setLastModifiedTime(p,
+                            java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis()));
+                    } else {
+                        Files.createFile(p);
+                    }
+                    future.complete(new KOk(KUnit.INSTANCE));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
 }
 
 
