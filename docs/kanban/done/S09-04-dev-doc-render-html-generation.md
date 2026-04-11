@@ -122,3 +122,10 @@ defined here.
 ## Documentation and specs to update
 
 - None.
+
+## Build notes
+
+- **JVM VerifyError**: `if` expressions placed directly inside list literals passed to `Str.join([..., if (...) a else b, ...])` cause inconsistent JVM stackmap frames. Fixed by extracting all conditionals to `val` variables before using them in list construction.
+- **`./kestrel test --verbose`**: Without `--verbose`, runtime errors (including `java.lang.VerifyError`) are silently swallowed. Always use `--verbose` when debugging test failures.
+- 28 tests pass across 11 groups covering all five exported functions.
+- `renderDeclaration` returns a "not found" HTML fragment (rather than crashing) when the named entry does not exist in the module.

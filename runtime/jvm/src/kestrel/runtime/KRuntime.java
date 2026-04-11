@@ -266,6 +266,15 @@ public final class KRuntime {
         System.out.print(sb.toString());
     }
 
+    public static void printErr(Object... args) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < args.length; i++) {
+            if (i > 0) sb.append(' ');
+            sb.append(formatOne(args[i]));
+        }
+        System.err.println(sb.toString());
+    }
+
     public static void exit(Object code) {
         int c = 0;
         if (code instanceof Long) {
