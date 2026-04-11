@@ -208,6 +208,9 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 | `mkdirAll` | `(String) -> Task<Result<Unit, FsError>>` | Create a directory and all missing parents (`Files.createDirectories`). No-ops if the directory already exists. |
 | `stat` | `(String) -> Task<Result<FileStat, FsError>>` | Return file metadata. `Err(NotFound)` if the path does not exist. |
 | `touchFile` | `(String) -> Task<Result<Unit, FsError>>` | Set the file's last-modified time to now. Creates an empty file if it doesn't exist. |
+| `listDirAll` | `(String) -> Task<Result<List<DirEntry>, FsError>>` | Recursively lists all files and directories under `path`, returning `DirEntry` values. Does not include the root itself. Returns `Err(NotFound)` if the path does not exist. |
+| `collectFilesByExtension` | `(String, String) -> Task<Result<List<String>, FsError>>` | Returns absolute paths of all files under `path` whose name ends with `ext` (e.g. `".kti"`). Directories are excluded. Returns `Err(NotFound)` if the path does not exist. |
+| `collectFiles` | `(String, (String) -> Bool, (String) -> Bool) -> Task<List<String>>` | Recursively collect files with a custom include predicate and a directory-skip predicate. Errors silently on inaccessible directories. |
 
 ---
 

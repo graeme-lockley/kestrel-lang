@@ -39,6 +39,7 @@ fun countNeighbours(g: Array<Int>, x: Int, y: Int): Int = {
     while (dx <= 1) {
       if (!(dx == 0 & dy == 0) & alive(g, x + dx, y + dy)) {
         n := n + 1
+        ()
       }
       dx := dx + 1
     }
@@ -62,10 +63,10 @@ fun stepGrid(g: Array<Int>): Array<Int> = {
     }
     y := y + 1
   }
+  // ── rendering ────────────────────────────────────────────────────────────
   next
 }
 
-// ── rendering ────────────────────────────────────────────────────────────
 fun printGrid(g: Array<Int>): Unit = {
   var y = 0
   while (y < height) {
@@ -85,27 +86,27 @@ fun printGrid(g: Array<Int>): Unit = {
 fun showGen(g: Array<Int>, gen: Int): Unit = {
   println("┌── Generation ${Str.fromInt(gen)} ${Str.repeat(width - 14, "─")}┐")
   printGrid(g)
+  // ── seeds ────────────────────────────────────────────────────────────────
+  // Seed cells as (x, y) coordinate pairs.
+  // Glider — moves diagonally down-right
   println("└${Str.repeat(width + 2, "─")}┘")
 }
 
-// ── seeds ────────────────────────────────────────────────────────────────
-// Seed cells as (x, y) coordinate pairs.
-// Glider — moves diagonally down-right
+// Blinker — period-2 oscillator, starts horizontal
 val gliderCells = [(3, 1), (4, 2), (2, 3), (3, 3), (4, 3)]
 
-// Blinker — period-2 oscillator, starts horizontal
+// Beacon — period-2 oscillator (two overlapping 2×2 blocks)
 val blinkerCells = [(13, 10), (14, 10), (15, 10)]
 
-// Beacon — period-2 oscillator (two overlapping 2×2 blocks)
+// Toad — period-2 oscillator
 val beaconCells = [(24, 7), (25, 7), (24, 8), (27, 9), (26, 9), (27, 8)]
 
-// Toad — period-2 oscillator
+// Still life: Block — stable 2×2 square
 val toadCells = [(31, 13), (32, 13), (33, 13), (30, 14), (31, 14), (32, 14)]
 
-// Still life: Block — stable 2×2 square
+// ── initialise ───────────────────────────────────────────────────────────
 val blockCells = [(36, 17), (37, 17), (36, 18), (37, 18)]
 
-// ── initialise ───────────────────────────────────────────────────────────
 fun plantCells(g: Array<Int>, cells: List<Int * Int>): Unit =
   match (cells) {
     [] =>
@@ -123,10 +124,10 @@ fun initGrid(): Array<Int> = {
   plantCells(g, beaconCells)
   plantCells(g, toadCells)
   plantCells(g, blockCells)
+  // ── run ──────────────────────────────────────────────────────────────────
   g
 }
 
-// ── run ──────────────────────────────────────────────────────────────────
 fun run(g: Array<Int>, gen: Int, limit: Int): Unit =
   if (gen > limit)
     ()

@@ -37,3 +37,17 @@ Add `listDirAll` (recursive directory listing) and `collectFilesByExtension` to 
 - **Depends on S13-02** for the `isDir` field on `DirEntry` used to distinguish file vs directory entries during walk.
 - Actually, S13-02 adds `stat`; `listDirAll` can use `Files.walk()` in Java directly and encode dir vs file in the entries — no dependency on S13-02 needed. `Files.walk` returns `Stream<Path>` with attributes. Revise: independent of S13-02 except for consistency.
 - `Files.walk` follows symlinks by default on some JVMs; use `FileVisitOption` set carefully. Default (no follow) is safer.
+
+## Tasks
+
+- [x] `stdlib/kestrel/io/fs.ks`: add `dirPaths` helper, `listDirAllLoop`, `listDirAll`, `collectExt`, `collectFilesByExtension`
+- [x] `tests/conformance/runtime/valid/fs_recursive_listdir.ks`: conformance test (11 checks: membership, counts, NotFound, empty dir)
+- [x] Compiler tests pass (`cd compiler && npm test`)
+- [x] `docs/specs/02-stdlib.md`: add `listDirAll`, `collectFilesByExtension`, `collectFiles` rows to io/fs table
+
+## Build notes
+
+- 2026-04-11: Implemented entirely in pure Kestrel on top of existing `listDir`. `listDirAllLoop` processes directories breadth-first using a pending list; no JVM changes needed.
+- `listDirAll` propagates the first `Err(FsError)` encountered in any subdirectory, matching the spirit of the acceptance criteria.
+- `collectFilesByExtension` uses `Str.endsWith` to match the extension suffix.
+- The existing `collectFiles` (used by the test runner internally) was NOT changed — it has different semantics (no error propagation, custom predicates). Both are now documented in the spec.
