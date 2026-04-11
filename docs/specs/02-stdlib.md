@@ -172,6 +172,7 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 |------|------------|
 | `FsError` | `NotFound | PermissionDenied | IoError(String)` |
 | `DirEntry` | `File(String) | Dir(String)` — typed directory entry where the `String` payload is the full path |
+| `ByteArray` | Opaque type backed by Java `byte[]`. Byte values are `Int` in range 0–255. |
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
@@ -181,6 +182,17 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 | `fileExists` | `(String) -> Task<Bool>` | Returns `True` if a file or directory exists at the given path, `False` otherwise. Never errors. |
 | `deleteFile` | `(String) -> Task<Result<Unit, FsError>>` | Deletes the file at the given path. Succeeds silently if the file does not exist (`Files.deleteIfExists`). Returns `Err(PermissionDenied)` on permission errors. |
 | `renameFile` | `(String, String) -> Task<Result<Unit, FsError>>` | Atomically moves a file from source to destination, replacing the destination if it exists (`Files.move` with `REPLACE_EXISTING`). Cross-device moves fall back to copy+delete on JVM. |
+| `readBytes` | `(String) -> Task<Result<ByteArray, FsError>>` | Read file contents as raw bytes. Returns `Ok(bytes)` on success. |
+| `writeBytes` | `(String, ByteArray) -> Task<Result<Unit, FsError>>` | Write raw bytes to a path, creating or overwriting. Returns `Ok(())` on success. |
+| `appendBytes` | `(String, ByteArray) -> Task<Result<Unit, FsError>>` | Append raw bytes to a file, creating if needed. Returns `Ok(())` on success. |
+| `byteArrayNew` | `(Int) -> ByteArray` | Create a zeroed `ByteArray` of the given length. |
+| `byteArrayLength` | `(ByteArray) -> Int` | Number of bytes in the array. |
+| `byteArrayGet` | `(ByteArray, Int) -> Int` | Get byte at index as an unsigned value (0–255). |
+| `byteArraySet` | `(ByteArray, Int, Int) -> Unit` | Set byte at index (value is taken modulo 256). |
+| `byteArrayFromList` | `(List<Int>) -> ByteArray` | Create a `ByteArray` from a list of ints (each taken modulo 256). |
+| `byteArrayToList` | `(ByteArray) -> List<Int>` | Convert a `ByteArray` to a list of unsigned byte values (0–255). |
+| `byteArrayConcat` | `(ByteArray, ByteArray) -> ByteArray` | Concatenate two byte arrays into a new one. |
+| `byteArraySlice` | `(ByteArray, Int, Int) -> ByteArray` | Return a new `ByteArray` with bytes in the half-open range `[start, end)`. |
 
 ---
 

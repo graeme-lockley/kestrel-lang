@@ -52,13 +52,13 @@ Add a `ByteArray` opaque type and three binary-I/O operations (`readBytes`, `wri
 
 ## Tasks
 
-- [ ] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `byteArrayNew`, `byteArrayGet`, `byteArraySet`, `byteArrayLength`, `byteArrayFromList`, `byteArrayToList`
-- [ ] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `readBytesAsync`, `writeBytesAsync`, `appendBytesAsync`
-- [ ] `stdlib/kestrel/io/fs.ks`: add `extern type JByteArray`, extern bindings, `opaque type ByteArray`, and export all functions
-- [ ] `tests/conformance/runtime/valid/fs_bytes.ks`: test round-trip readBytes/writeBytes, get/set, fromList/toList
-- [ ] `cd runtime/jvm && bash build.sh`
-- [ ] `cd compiler && npm run build && npm test`
-- [ ] `./scripts/kestrel test`
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `byteArrayNew`, `byteArrayGet`, `byteArraySet`, `byteArrayLength`, `byteArrayFromList`, `byteArrayToList`
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `readBytesAsync`, `writeBytesAsync`, `appendBytesAsync`
+- [x] `stdlib/kestrel/io/fs.ks`: add `extern type JByteArray`, extern bindings, `opaque type ByteArray`, and export all functions
+- [x] `tests/conformance/runtime/valid/fs_bytes.ks`: test round-trip readBytes/writeBytes, get/set, fromList/toList
+- [x] `cd runtime/jvm && bash build.sh`
+- [x] `cd compiler && npm run build && npm test`
+- [x] `./scripts/kestrel test`
 
 ## Tests to add
 
@@ -68,7 +68,15 @@ Add a `ByteArray` opaque type and three binary-I/O operations (`readBytes`, `wri
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/02-stdlib.md` — add `ByteArray` opaque type and all byte I/O functions to io/fs section
+- [x] `docs/specs/02-stdlib.md` — add `ByteArray` opaque type and all byte I/O functions to io/fs section
+
+## Build notes
+
+**2025:** Implemented `ByteArray` as `extern type JByteArray = jvm("java.lang.Object")` — **not** `jvm("byte[]")`. The JVM descriptor for `byte[]` is `[B`; wrapping it in `L[B;` is not valid. Using `java.lang.Object` as the declared type works because `byte[]` IS-A `java.lang.Object` at runtime, and all KRuntime methods that accept or return `byte[]` are declared with `Object` return/param types so the generated `invokestatic` descriptors match.
+
+**Key lesson:** `byte[]` return type in Java methods causes `NoSuchMethodError` at runtime. The generated code uses `Ljava/lang/Object;` as the descriptor for any `JByteArray` return, so the Java method must also declare `Object` (not `byte[]`) as its return type. Fixed by changing `byteArrayNew`, `byteArrayFromList`, `byteArrayConcat`, `byteArraySlice` to return `Object` (which is assignment-compatible with `byte[]` in Java).
+
+**Key lesson:** `()` as a trailing expression in a block does NOT work unless the preceding expression ends with a semicolon. Without semicolons, the parser reads `expr\n()` as `expr()` (function application). Use a `println` call as the trailing expression, or add a `;` after the last statement if needed.
 
 ## Risks / Notes
 

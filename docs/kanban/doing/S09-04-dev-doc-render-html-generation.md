@@ -86,3 +86,39 @@ defined here.
   — about 30 lines of vanilla JS. No frameworks.
 - This story does not implement cross-reference link resolution for backtick names inside doc
   bodies (e.g. `` `List.map` `` → link). That is an Optional V2 enhancement.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib (new module) | `stdlib/kestrel/dev/doc/render.ks` — `renderModuleList`, `renderModule`, `renderDeclaration`, `staticCss`, `staticJs` |
+| Tests (new) | `stdlib/kestrel/dev/doc/render.test.ks` — unit tests |
+| Specs | None required |
+
+## Tasks
+
+- [ ] Create `stdlib/kestrel/dev/doc/render.ks` with all five exported functions
+- [ ] Implement `renderModuleList(modules: List<DocModule>): String`
+- [ ] Implement `renderModule(mod: DocModule): String`
+- [ ] Implement `renderDeclaration(mod: DocModule, name: String): String`
+- [ ] Implement `staticCss(): String` and `staticJs(): String`
+- [ ] Create `stdlib/kestrel/dev/doc/render.test.ks` with unit tests
+- [ ] Run `./kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/dev/doc/render.test.ks` | `renderModuleList([])` → valid HTML, no crash |
+| Kestrel harness | `stdlib/kestrel/dev/doc/render.test.ks` | `renderModuleList([mod])` → contains module link |
+| Kestrel harness | `stdlib/kestrel/dev/doc/render.test.ks` | `renderModule(mod)` → contains entry headings |
+| Kestrel harness | `stdlib/kestrel/dev/doc/render.test.ks` | `renderModule(mod)` → contains signature code block |
+| Kestrel harness | `stdlib/kestrel/dev/doc/render.test.ks` | `renderModule(mod)` → renders doc prose as HTML |
+| Kestrel harness | `stdlib/kestrel/dev/doc/render.test.ks` | `renderDeclaration` for existing entry |
+| Kestrel harness | `stdlib/kestrel/dev/doc/render.test.ks` | `renderDeclaration` for missing entry returns 404 fragment |
+| Kestrel harness | `stdlib/kestrel/dev/doc/render.test.ks` | `staticCss()` returns non-empty string |
+| Kestrel harness | `stdlib/kestrel/dev/doc/render.test.ks` | `staticJs()` returns non-empty string |
+
+## Documentation and specs to update
+
+- None.
