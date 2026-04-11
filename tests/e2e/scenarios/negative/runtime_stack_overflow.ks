@@ -1,4 +1,4 @@
-// Expected phase: runtime — non-tail self-recursion exceeds VM call-frame limit (8192 frames in reference VM).
+// Expected phase: runtime — non-tail self-recursion exceeds JVM call-frame limit (-Xss8m stack).
 
 fun boom(n: Int): Int =
   if (n <= 0) {
@@ -7,4 +7,4 @@ fun boom(n: Int): Int =
     boom(n - 1) + 1
   }
 
-boom(10000)
+boom(100000)
