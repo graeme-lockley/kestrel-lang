@@ -18,10 +18,10 @@ and retire the TypeScript compiler as the primary build tool.
 ## Stories (ordered — implement sequentially)
 
 1. [S14-01-compiler-diagnostics-module.md](../../done/S14-01-compiler-diagnostics-module.md) — ✅ Diagnostics types and reporter (`kestrel:compiler/diagnostics`)
-2. [S14-02-internal-type-representation.md](../../unplanned/S14-02-internal-type-representation.md) — InternalType ADT, fresh vars, generalize/instantiate (`kestrel:compiler/types`)
+2. [S14-02-internal-type-representation.md](../../done/S14-02-internal-type-representation.md) — ✅ InternalType ADT, fresh vars, generalize/instantiate (`kestrel:compiler/types`)
 3. [S14-03-type-unification-engine.md](../../unplanned/S14-03-type-unification-engine.md) — Unify, applySubst, astTypeToInternal
 4. [S14-04-hindley-milner-type-checker.md](../../unplanned/S14-04-hindley-milner-type-checker.md) — Full HM type checker with row polymorphism (`kestrel:compiler/typecheck`)
-5. [S14-05-jvm-opcode-table.md](../../unplanned/S14-05-jvm-opcode-table.md) — JVM opcode constants and descriptor helpers (`kestrel:compiler/opcodes`)
+5. [S14-05-jvm-opcode-table.md](../../done/S14-05-jvm-opcode-table.md) — ✅ JVM opcode constants and descriptor helpers (`kestrel:compiler/opcodes`)
 6. [S14-06-jvm-classfile-binary-writer.md](../../unplanned/S14-06-jvm-classfile-binary-writer.md) — ClassFileBuilder and MethodBuilder binary emitter (`kestrel:compiler/classfile`)
 7. [S14-07-codegen-expressions-patterns.md](../../unplanned/S14-07-codegen-expressions-patterns.md) — Code generator: expressions, patterns, lambdas, match
 8. [S14-08-codegen-declarations-toplevel.md](../../unplanned/S14-08-codegen-declarations-toplevel.md) — Code generator: declarations, tail-call optimisation, async/await

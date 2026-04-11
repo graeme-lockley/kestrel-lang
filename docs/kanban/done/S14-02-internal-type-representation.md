@@ -74,15 +74,15 @@ It also provides `freshVar`, `resetVarId`, `prim` helpers, shorthand constructor
 
 ## Tasks
 
-- [ ] Create `stdlib/kestrel/compiler/types.ks` with exported `InternalType` ADT (`Var`, `Prim`, `Arrow`, `Record`, `App`, `Tuple`) and `TypeField` helper record.
-- [ ] Implement primitive helpers (`prim`, `tInt`, `tFloat`, `tBool`, `tString`, `tUnit`, `tChar`) and mutable fresh-id state (`freshVar`, `resetVarId`).
-- [ ] Implement `freeVars` and a simple integer-set representation for free variable collection.
-- [ ] Implement `applySubst(subst, t)` with recursive traversal across all InternalType constructors.
-- [ ] Implement `generalize(env, t)` and `instantiate(t)` using a ForAll wrapper constructor in `InternalType`.
-- [ ] Implement `typeToString(t)` for deterministic debug rendering.
-- [ ] Add `stdlib/kestrel/compiler/types.test.ks` covering fresh var ids, reset semantics, substitution, and generalize/instantiate behaviour.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test stdlib/kestrel/compiler/types.test.ks`.
+- [x] Create `stdlib/kestrel/compiler/types.ks` with exported `InternalType` ADT (`Var`, `Prim`, `Arrow`, `Record`, `App`, `Tuple`) and `TypeField` helper record.
+- [x] Implement primitive helpers (`prim`, `tInt`, `tFloat`, `tBool`, `tString`, `tUnit`, `tChar`) and mutable fresh-id state (`freshVar`, `resetVarId`).
+- [x] Implement `freeVars` and a simple integer-set representation for free variable collection.
+- [x] Implement `applySubst(subst, t)` with recursive traversal across all InternalType constructors.
+- [x] Implement `generalize(env, t)` and `instantiate(t)` using a ForAll wrapper constructor in `InternalType`.
+- [x] Implement `typeToString(t)` for deterministic debug rendering.
+- [x] Add `stdlib/kestrel/compiler/types.test.ks` covering fresh var ids, reset semantics, substitution, and generalize/instantiate behaviour.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test stdlib/kestrel/compiler/types.test.ks`.
 
 ## Tests to add
 
@@ -95,8 +95,8 @@ It also provides `freshVar`, `resetVarId`, `prim` helpers, shorthand constructor
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/06-typesystem.md` — note self-hosted compiler internal type constructors (`Var`, `Prim`, `Arrow`, `Record`, `App`, `Tuple`) and fresh-id allocation parity with bootstrap compiler.
-- [ ] `docs/guide.md` — add short compiler-hacking note that `stdlib/kestrel/compiler/types.ks` mirrors `compiler/src/types/internal.ts`.
+- [x] `docs/specs/06-typesystem.md` — note self-hosted compiler internal type constructors (`Var`, `Prim`, `Arrow`, `Record`, `App`, `Tuple`) and fresh-id allocation parity with bootstrap compiler.
+- [x] `docs/guide.md` — add short compiler-hacking note that `stdlib/kestrel/compiler/types.ks` mirrors `compiler/src/types/internal.ts`.
 
 ## Spec References
 
@@ -112,3 +112,9 @@ It also provides `freshVar`, `resetVarId`, `prim` helpers, shorthand constructor
 - `ForAll`/Scheme quantification in TypeScript is encoded via positive var ids for bound,
   negative ids for free; the Kestrel port can use the same convention.
 - `applySubst` is recursive and may need careful handling of cycles (occur-check in unify).
+
+## Build notes
+
+- 2026-04-11: Started implementation.
+- 2026-04-11: Blocked on JVM verifier failure while running `./kestrel test stdlib/kestrel/compiler/types.test.ks`. The generated method for `applySubstMany` fails with `VerifyError: Inconsistent stackmap frames`. Multiple simplification attempts (removing list-map lambdas, replacing Option pattern bindings, simplifying pattern forms) did not eliminate the verifier error. Stopping further retries for this file per the 3-attempt safety rule.
+- 2026-04-11: Resolved VerifyError by extracting complex match arms into dedicated helper functions. The root cause was that 10-arm match expressions with branches introducing different numbers of local variables (especially TRecord with if/else + locals `fields2` and `row2`) caused inconsistent JVM stackmap frames at branch targets within the large generated method. The fix: extracted `applySubstRecord`, `applySubstFields`, `typeToStringRecord`, `freeVarsRecord`, and `freeVarsScheme` helpers so each top-level match arm in `applySubst`, `typeToString`, and `freeVarsWithBound` is a simple function call rather than a multi-statement block. All 5 tests now pass.
