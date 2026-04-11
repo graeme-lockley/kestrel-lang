@@ -8,9 +8,24 @@ Unplanned
 
 Delivers an interactive, web-based documentation browser for Kestrel developers — analogous to Javadoc (Java) or Haddock (Haskell), but live-served rather than statically generated. Running `kestrel doc` starts a local HTTP server that indexes every exported declaration in the Kestrel stdlib (`kestrel:*`) and in the project the tool is run from, renders attached doc-comments as Markdown, and exposes a real-time server-side search API. A new `///` (per-declaration) and `//!` (module-level) doc-comment syntax is introduced to let authors annotate their public API; the compiler treats these as ordinary line comments, so no compiler changes are required. The tool is written entirely in Kestrel and follows the `kestrel:tools/*` and `kestrel:dev/*` namespace conventions established by E08.
 
-## Stories
+## Stories (ordered — implement sequentially)
 
-(None yet — use plan-epic to decompose, or story-create to add individual stories.)
+1. [S09-01-doc-comment-syntax-and-extract.md](../../unplanned/S09-01-doc-comment-syntax-and-extract.md) — Doc-comment syntax spec (`///`, `//!`) and `kestrel:dev/doc/extract` (produces `DocModule` ADT from source files)
+2. [S09-02-commonmark-markdown-renderer.md](../../unplanned/S09-02-commonmark-markdown-renderer.md) — CommonMark subset Markdown renderer (`kestrel:dev/doc/markdown`)
+3. [S09-03-declaration-signature-pretty-printer.md](../../unplanned/S09-03-declaration-signature-pretty-printer.md) — Declaration signature pretty-printer (`kestrel:dev/doc/sig`)
+4. [S09-04-dev-doc-render-html-generation.md](../../unplanned/S09-04-dev-doc-render-html-generation.md) — `kestrel:dev/doc/render` HTML fragment generation (module list, module page, declaration anchor)
+5. [S09-05-dev-doc-index-search.md](../../unplanned/S09-05-dev-doc-index-search.md) — `kestrel:dev/doc/index` in-memory search index and JSON API
+6. [S09-06-file-watching-primitive.md](../../unplanned/S09-06-file-watching-primitive.md) — File-watching JVM primitive (`KRuntime`) and `kestrel:io/fs` stdlib binding
+7. [S09-07-tools-doc-server.md](../../unplanned/S09-07-tools-doc-server.md) — `kestrel:tools/doc` HTTP server, CLI, routing, and `docs/specs/09-tools.md` spec section
+8. [S09-08-live-reload-integration.md](../../unplanned/S09-08-live-reload-integration.md) — Live-reload integration: file watcher drives index rebuild; browser polling refreshes page
+
+**Notes on parallelism:**
+- S09-01 must come first (defines the `DocModule` / `DocEntry` ADT used by everything else).
+- S09-02 and S09-03 depend only on S09-01 and can be built in parallel with each other.
+- S09-04 and S09-05 can be built in parallel with each other after S09-01, S09-02, and S09-03.
+- S09-06 is fully independent of S09-01–S09-05 and can be built at any point.
+- S09-07 requires S09-01 through S09-05 (all converge here).
+- S09-08 requires S09-06 and S09-07.
 
 ## Dependencies
 
