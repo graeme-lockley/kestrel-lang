@@ -58,15 +58,15 @@ The [samples/](samples/) directory contains standalone programs that showcase th
 
 | File | What it shows |
 |------|---------------|
-| [samples/quicksort.ks](samples/quicksort.ks) | Divide-and-conquer sort with pattern matching on lists |
-| [samples/primes.ks](samples/primes.ks) | Sieve of Eratosthenes |
-| [samples/mandelbrot.ks](samples/mandelbrot.ks) | Mandelbrot set rendered in the terminal |
-| [samples/expr.ks](samples/expr.ks) | Expression parser and evaluator using ADTs |
-| [samples/word-count.ks](samples/word-count.ks) | Word-frequency counter with dictionaries and higher-order functions |
-| [samples/life.ks](samples/life.ks) | Conway's Game of Life |
-| [samples/lambda.ks](samples/lambda.ks) | Lambda calculus parser and reducer |
 | [samples/brainfuck.ks](samples/brainfuck.ks) | Brainfuck interpreter (~60 lines of pure Kestrel) |
+| [samples/expr.ks](samples/expr.ks) | Expression parser and evaluator using ADTs |
+| [samples/lambda.ks](samples/lambda.ks) | Lambda calculus parser and reducer |
+| [samples/life.ks](samples/life.ks) | Conway's Game of Life |
+| [samples/mandelbrot.ks](samples/mandelbrot.ks) | Mandelbrot set rendered in the terminal |
 | [samples/markov.ks](samples/markov.ks) | Character-level trigram language model |
+| [samples/primes.ks](samples/primes.ks) | Sieve of Eratosthenes |
+| [samples/quicksort.ks](samples/quicksort.ks) | Divide-and-conquer sort with pattern matching on lists |
+| [samples/word-count.ks](samples/word-count.ks) | Word-frequency counter with dictionaries and higher-order functions |
 
 Run any sample with `./kestrel run samples/<name>.ks`.
 
