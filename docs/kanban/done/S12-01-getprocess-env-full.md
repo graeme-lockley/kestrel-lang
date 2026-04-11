@@ -55,13 +55,13 @@
 
 ## Tasks
 
-- [ ] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `public static KList getEnvAll()` using `System.getenv().entrySet()`; each entry becomes a `KRecord` with fields `"0"` (key `String`) and `"1"` (value `String`); cons into `KList` in any order
-- [ ] `cd runtime/jvm && bash build.sh`
-- [ ] `stdlib/kestrel/sys/process.ks`: add private `extern fun getEnvAllImpl(): List<(String, String)> = jvm("kestrel.runtime.KRuntime#getEnvAll()")`
-- [ ] `stdlib/kestrel/sys/process.ks`: change `getProcess()` body — replace `env = []` with `env = getEnvAllImpl()`
-- [ ] `tests/conformance/runtime/valid/getenv_all.ks`: add conformance test
-- [ ] `cd compiler && npm run build && npm test`
-- [ ] `./scripts/kestrel test`
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `public static KList getEnvAll()` using `System.getenv().entrySet()`; each entry becomes a `KRecord` with fields `"0"` (key `String`) and `"1"` (value `String`); cons into `KList` in any order
+- [x] `cd runtime/jvm && bash build.sh`
+- [x] `stdlib/kestrel/sys/process.ks`: add private `extern fun getEnvAllImpl(): List<(String, String)> = jvm("kestrel.runtime.KRuntime#getEnvAll()")`
+- [x] `stdlib/kestrel/sys/process.ks`: change `getProcess()` body — replace `env = []` with `env = getEnvAllImpl()`
+- [x] `tests/conformance/runtime/valid/getenv_all.ks`: add conformance test
+- [x] `cd compiler && npm run build && npm test`
+- [x] `./scripts/kestrel test`
 
 ## Tests to add
 
@@ -71,4 +71,11 @@
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/02-stdlib.md` — update the `getProcess` row to note `env` returns the actual process environment (non-empty list); remove any "always `[]`" wording
+- [x] `docs/specs/02-stdlib.md` — update the `getProcess` row to note `env` returns the actual process environment (non-empty list); remove any "always `[]`" wording
+
+## Build notes
+
+- 2026-04-11: Started implementation.
+- 2026-04-11: `KRuntime.getEnvAll()` constructs `KRecord` tuples directly (fields `"0"` / `"1"`) using `System.getenv().entrySet()`. `Map.Entry` is available via the existing `java.util.Map` import — no new imports needed. The cast-to-`HashMap` helpers (`hashMapKeys` etc.) cannot be reused here because `System.getenv()` returns an `UnmodifiableMap`, not a `HashMap`.
+- 2026-04-11: Conformance test initially had prose `// comment` lines that were picked up as expected output by the runtime conformance runner — removed prose comments, leaving only `// True` golden lines.
+- 2026-04-11: 423 compiler tests pass, 1471 Kestrel tests pass.
