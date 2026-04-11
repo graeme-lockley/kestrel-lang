@@ -589,7 +589,10 @@ fun fmtFunSignature(
 }
 
 fun fmtFunBody(sig: Doc, body: Ast.Expr): Doc =
-  PP.hcat([sig, PP.nest(fmtIndent, PP.concat(PP.lineBreak, fmtExpr(body)))])
+  match (body) {
+    EBlock(b) => PP.hcat([sig, PP.text(" "), fmtBlock(b)])
+    _ => PP.hcat([sig, PP.nest(fmtIndent, PP.concat(PP.lineBreak, fmtExpr(body)))])
+  }
 
 fun fmtFunDecl(d: Ast.FunDecl): Doc =
   fmtFunBody(

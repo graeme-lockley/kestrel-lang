@@ -125,7 +125,7 @@ Formats one or more Kestrel source files in-place using the opinionated formatte
 
 - Line width: 120 characters
 - Indent unit: 2 spaces
-- `fun` body always breaks after `=`; body indented by 2
+- `fun` body: when the body is a block expression (`{ … }`), the opening `{` follows `=` on the same line and the block content is indented by 2 from the function signature; otherwise the body breaks to the next line indented by 2
 - `match` arms: pattern and `=>` on one line, body on next line indented by 2
 - Chained `if/else`: `else` keyword at same column as `if`; block `{` stays on the same line
 - Pipelines (`|>`) always break: each step on its own line indented by 2
