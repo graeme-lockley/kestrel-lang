@@ -343,3 +343,15 @@ export fun indexOfChar(c: Char, s: String): Option<Int> =
     val i = indexOf(s, charStr(c))
     if (i < 0) None else Some(i)
   }
+
+extern fun toHexStringImpl(n: Int): String =
+  jvm("kestrel.runtime.KRuntime#toHexString(java.lang.Object)")
+extern fun toBinaryStringImpl(n: Int): String =
+  jvm("kestrel.runtime.KRuntime#toBinaryString(java.lang.Object)")
+extern fun toOctalStringImpl(n: Int): String =
+  jvm("kestrel.runtime.KRuntime#toOctalString(java.lang.Object)")
+
+export fun toHexString(n: Int): String = toHexStringImpl(n)
+export fun toBinaryString(n: Int): String = toBinaryStringImpl(n)
+export fun toOctalString(n: Int): String = toOctalStringImpl(n)
+export fun toHexStringPadded(width: Int, n: Int): String = padLeft(width, "0", toHexString(n))

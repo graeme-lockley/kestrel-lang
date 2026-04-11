@@ -166,9 +166,9 @@ public final class KRuntime {
     }
 
     private static void awaitAsyncQuiescence() {
-        long timeoutMs = parkActive ? 0L : getExitWaitTimeoutMs();
-        if (timeoutMs == 0) {
-            // Infinite wait (opt-in via kestrel.exitWaitTimeoutMs=0).
+        long timeoutMs = getExitWaitTimeoutMs();
+        if (timeoutMs == 0 || parkActive) {
+            // Infinite wait: either explicitly requested or parkAsync was already called.
             synchronized (quiescenceSignal) {
                 while (asyncTasksInFlight.get() > 0) {
                     try {
@@ -184,6 +184,16 @@ public final class KRuntime {
         long deadline = System.currentTimeMillis() + timeoutMs;
         synchronized (quiescenceSignal) {
             while (asyncTasksInFlight.get() > 0) {
+                if (parkActive) {
+                    // parkAsync was called while we were waiting; switch to indefinite wait.
+                    try {
+                        quiescenceSignal.wait();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Interrupted while waiting for async tasks", e);
+                    }
+                    continue;
+                }
                 long remaining = deadline - System.currentTimeMillis();
                 if (remaining <= 0) {
                     long inFlight = asyncTasksInFlight.get();
@@ -1735,6 +1745,10 @@ public final class KRuntime {
     public static KTask parkAsync() {
         initAsyncRuntime();
         parkActive = true;
+        // Wake up awaitAsyncQuiescence so it sees parkActive and switches to infinite wait.
+        synchronized (quiescenceSignal) {
+            quiescenceSignal.notifyAll();
+        }
         CompletableFuture<Object> future = new CompletableFuture<>();
         asyncTasksInFlight.incrementAndGet();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -2562,6 +2576,18 @@ public final class KRuntime {
         } catch (NumberFormatException e) {
             return 0.0;
         }
+    }
+
+    public static String toHexString(Object n) {
+        return Long.toHexString((Long) n);
+    }
+
+    public static String toBinaryString(Object n) {
+        return Long.toBinaryString((Long) n);
+    }
+
+    public static String toOctalString(Object n) {
+        return Long.toOctalString((Long) n);
     }
 
     // ── File watching — kestrel:io/fs Watcher ———————————————————————————

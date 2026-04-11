@@ -47,6 +47,10 @@ String operations. All functions take the string as an explicit argument (no mem
 | `parseIntRadix` | `(Int, String) -> Option<Int>` | Parse integer in given base (e.g. 2, 8, 10, 16). Radix first, string second. Case-insensitive for hex digits. Returns `None` on invalid or empty input. |
 | `formatInt` | `(Int, Int) -> String` | Format integer `n` as a decimal string left-padded with `'0'` to at least `width` characters. E.g. `formatInt(4, 255)` → `"0255"`. Wider values are not truncated. |
 | `indexOfChar` | `(Char, String) -> Option<Int>` | Index of first occurrence of character `c` in `s`, or `None`. Character first, string second. |
+| `toHexString` | `(Int) -> String` | Lowercase hex string without prefix. `toHexString(255)` → `"ff"`. |
+| `toBinaryString` | `(Int) -> String` | Binary digit string without prefix. `toBinaryString(5)` → `"101"`. |
+| `toOctalString` | `(Int) -> String` | Octal digit string without prefix. `toOctalString(8)` → `"10"`. |
+| `toHexStringPadded` | `(Int, Int) -> String` | Hex string zero-padded to at least `width` chars. `toHexStringPadded(4, 255)` → `"00ff"`. |
 | `split` | `(String, String) -> List<String>` | Split on delimiter string; empty delimiter yields `[s]` |
 | `splitWithDelimiters` | `(String, List<String>) -> List<String>` | Split using the first matching delimiter at each step (candidates tried in list order) |
 | `join` | `(String, List<String>) -> String` | Concatenate strings with separator between elements |

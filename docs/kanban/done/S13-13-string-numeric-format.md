@@ -41,3 +41,19 @@ Add integer-to-string formatting functions for non-decimal bases to `kestrel:dat
 - Can be implemented via KRuntime JVM primitives calling `Long.toHexString` etc., or in pure Kestrel using `parseIntRadix` in reverse. The JVM approach is simpler and more efficient.
 - `toHexStringPadded` = `padLeft(width, "0", toHexString(n))`.
 - Independent of all other E13 stories except `padLeft` from existing `data/string` (already there).
+
+## Tasks
+
+- [x] Add `toHexString`, `toBinaryString`, `toOctalString` to `KRuntime.java` (delegate to `Long.*String`)
+- [x] Append extern + export funs to `stdlib/kestrel/data/string.ks`
+- [x] Create conformance test `tests/conformance/runtime/valid/string_numeric_format.ks`
+- [x] Rebuild JVM runtime (`bash build.sh`)
+- [x] Verify conformance test passes (`./kestrel run`)
+- [x] Compiler tests pass (434 passing; 3 pre-existing parse.ts failures excluded from E13)
+- [x] Update `docs/specs/02-stdlib.md` with `toHexString`, `toBinaryString`, `toOctalString`, `toHexStringPadded`
+
+## Build notes
+
+- 2026-04-11: Simple JVM delegation — `Long.toHexString`, `Long.toBinaryString`, `Long.toOctalString` return lower-case strings with no prefix.
+- `toHexStringPadded` implemented in pure Kestrel using existing `padLeft`.
+- `compiler/src/parser/parse.ts` has pre-existing uncommitted changes (stmt/expr context swap) that break 3 parse tests; confirmed unrelated to E13 via `git stash` isolation. Committed selectively without that file.
