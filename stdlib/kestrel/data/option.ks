@@ -1,32 +1,49 @@
-// kestrel:option — Option helpers (subject first for piping).
+//! Helpers for the built-in `Option<A>` type (`Some(x)` or `None`).
+//!
+//! `Option` represents a value that may or may not be present. All functions take
+//! the `Option` as their first argument so they compose cleanly with the `|>` pipe
+//! operator.
+//!
+//! Use `andThen` (flat-map) for chained fallible operations where each step produces
+//! an `Option`. Use `map` when the transform cannot itself fail. Use `map2`–`map5`
+//! to combine multiple independent `Option` values; the result is `None` if any
+//! input is `None`.
 
+/// Return the value inside `o`, or `default` if `o` is `None`.
 export fun getOrElse<A>(o: Option<A>, default: A): A = match (o) {
   None => default
   Some(x) => x
 }
 
+/// Synonym for `getOrElse`; identical behaviour, alternative name.
 export fun withDefault<A>(o: Option<A>, default: A): A = getOrElse(o, default)
 
+/// `True` if `o` is `None`.
 export fun isNone<A>(o: Option<A>): Bool = match (o) {
   None => True
   Some(_) => False
 }
 
+/// `True` if `o` is `Some(_)`.
 export fun isSome<A>(o: Option<A>): Bool = match (o) {
   None => False
   Some(_) => True
 }
 
+/// Apply `f` to the value inside `o`; propagate `None` unchanged.
 export fun map<A, B>(o: Option<A>, f: (A) -> B): Option<B> = match (o) {
   None => None
   Some(x) => Some(f(x))
 }
 
+/// Flat-map (monadic bind): apply `f` to the value inside `o`, or return `None`.
+/// Use to chain operations that each return an `Option`.
 export fun andThen<A, B>(o: Option<A>, f: (A) -> Option<B>): Option<B> = match (o) {
   None => None
   Some(x) => f(x)
 }
 
+/// Combine two `Option` values with `f`; returns `None` if either input is `None`.
 export fun map2<A, B, C>(oa: Option<A>, ob: Option<B>, f: (A, B) -> C): Option<C> =
   match (oa) {
     None => None
@@ -37,6 +54,7 @@ export fun map2<A, B, C>(oa: Option<A>, ob: Option<B>, f: (A, B) -> C): Option<C
       }
   }
 
+/// Combine three `Option` values with `f`; returns `None` if any input is `None`.
 export fun map3<A, B, C, D>(
   oa: Option<A>,
   ob: Option<B>,
@@ -56,6 +74,7 @@ export fun map3<A, B, C, D>(
       }
   }
 
+/// Combine four `Option` values with `f`; returns `None` if any input is `None`.
 export fun map4<A, B, C, D, E>(
   oa: Option<A>,
   ob: Option<B>,
@@ -80,6 +99,7 @@ export fun map4<A, B, C, D, E>(
       }
   }
 
+/// Combine five `Option` values with `f`; returns `None` if any input is `None`.
 export fun map5<A, B, C, D, E, F>(
   oa: Option<A>,
   ob: Option<B>,

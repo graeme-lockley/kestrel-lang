@@ -1,4 +1,20 @@
-// kestrel:json — JSON Value ADT, parse (Result), stringify (spec 02). Pure Kestrel; no host JSON hooks.
+//! JSON value ADT with a pure-Kestrel recursive-descent parser and a spec-compliant serialiser.
+//!
+//! `Value` represents any JSON value: null, boolean, integer, floating-point,
+//! string, array, or object (a list of key-value pairs preserving insertion order).
+//!
+//! Numbers: Integers without a decimal point or exponent are parsed as `Int`;
+//! anything else is parsed as `Float`. Exponents and leading-zero rules follow RFC 8259.
+//!
+//! Parsing: call `parse(s)` to get a `Result<Value, JsonParseError>` or `parseOrNull(s)`
+//! for an `Option<Value>`. Use `errorAsString` to turn a `JsonParseError` into a
+//! human-readable message.
+//!
+//! Serialising: `stringify(v)` produces compact, standards-compliant JSON output with
+//! minimal whitespace. Use `isNull`/`isInt`/… predicates and `asInt`/`asBool`/`asStrVal`
+//! extractors to inspect a parsed value without a full pattern-match.
+//!
+//! No host JSON hooks are used; the entire implementation is written in Kestrel.
 
 import * as Str from "kestrel:data/string"
 import * as List from "kestrel:data/list"
@@ -7,10 +23,15 @@ import * as Char from "kestrel:data/char"
 import * as Basics from "kestrel:data/basics"
 import * as Stk from "kestrel:dev/stack"
 
+/// A JSON value: `Null`, `Bool(b)`, `Int(n)`, `Float(f)`, `StrVal(s)`,
+/// `Array(elements)`, or `Object(pairs)` where `pairs` preserves insertion order.
 export type Value = Null | Bool(Bool) | Int(Int) | Float(Float) | StrVal(String) | Array(List<Value>) | Object(List<(String, Value)>)
 
+/// A parse failure. Each variant carries the 0-based code-unit offset where the error occurred,
+/// except `EmptyInput` which carries no position.
 export type JsonParseError = EmptyInput | UnclosedString(Int) | InvalidEscape(Int) | InvalidUnicodeEscape(Int) | InvalidNumber(Int) | UnclosedArray(Int) | UnclosedObject(Int) | ExpectedColon(Int) | ExpectedCommaOrBracket(Int) | TrailingGarbage(Int) | UnexpectedToken(Int)
 
+/// Human-readable description of a `JsonParseError`, suitable for error messages.
 export fun errorAsString(e: JsonParseError): String = match (e) {
   EmptyInput => "empty JSON input"
   UnclosedString(i) => Str.append("unclosed string at ", Str.fromInt(i))
@@ -25,63 +46,78 @@ export fun errorAsString(e: JsonParseError): String = match (e) {
   UnexpectedToken(i) => Str.append("unexpected token at ", Str.fromInt(i))
 }
 
+/// `True` if `v` is the JSON `null` value.
 export fun isNull(v: Value): Bool = match (v) {
   Null => True
   _ => False
 }
+/// `True` if `v` is a JSON boolean.
 export fun isBool(v: Value): Bool = match (v) {
   Bool(_) => True
   _ => False
 }
+/// `True` if `v` is a JSON integer (no decimal point or exponent in source).
 export fun isInt(v: Value): Bool = match (v) {
   Int(_) => True
   _ => False
 }
+/// `True` if `v` is a JSON floating-point number.
 export fun isFloat(v: Value): Bool = match (v) {
   Float(_) => True
   _ => False
 }
+/// `True` if `v` is a JSON string.
 export fun isString(v: Value): Bool = match (v) {
   StrVal(_) => True
   _ => False
 }
+/// `True` if `v` is a JSON array.
 export fun isArray(v: Value): Bool = match (v) {
   Array(_) => True
   _ => False
 }
+/// `True` if `v` is a JSON object.
 export fun isObject(v: Value): Bool = match (v) {
   Object(_) => True
   _ => False
 }
 
+/// The JSON `null` value.
 export fun jsonNull(): Value = Null
 
+/// Extract an `Int` from a `Value`; `None` if `v` is not an integer.
 export fun asInt(v: Value): Option<Int> = match (v) {
   Int(n) => Some(n)
   _ => None
 }
 
+/// Extract a `Bool` from a `Value`; `None` if `v` is not a boolean.
 export fun asBool(v: Value): Option<Bool> = match (v) {
   Bool(b) => Some(b)
   _ => None
 }
 
+/// Extract a `String` from a `Value`; `None` if `v` is not a string.
 export fun asStrVal(v: Value): Option<String> = match (v) {
   StrVal(t) => Some(t)
   _ => None
 }
 
+/// Number of key-value pairs in a JSON object. Returns `-1` if `v` is not an object.
 export fun objectPairCount(v: Value): Int = match (v) {
   Object(pairs) => List.length(pairs)
   _ => -1
 }
 
+/// Parse `s` and return `"ok"` on success or the error description on failure.
+/// Intended for testing and diagnostic output.
 export fun describeParse(s: String): String =
   match (Res.mapError(parse(s), errorAsString)) {
     Ok(_) => "ok"
     Err(smsg) => smsg
   }
 
+/// Regression guard: `True` if every `JsonParseError` variant has a non-empty string message.
 export fun regressionErrorMessagesNonEmpty(): Bool =
   Str.length(errorAsString(EmptyInput)) > 0
     & Str.length(errorAsString(UnclosedString(0))) > 0
@@ -427,6 +463,8 @@ fun parseValue(s: String, i: Int): Result<(Value, Int), JsonParseError> = {
   }
 }
 
+/// Parse a JSON string. Returns `Ok(value)` or `Err(error)` with the parse failure.
+/// Leading and trailing whitespace is accepted; trailing non-whitespace is an error.
 export fun parse(s: String): Result<Value, JsonParseError> = {
   val j0 = skipWs(s, 0)
   if (j0 >= Str.length(s)) Err(EmptyInput)
@@ -437,6 +475,7 @@ export fun parse(s: String): Result<Value, JsonParseError> = {
     })
 }
 
+/// Like `parse` but discards the error; returns `None` on any failure.
 export fun parseOrNull(s: String): Option<Value> = 
   Res.toOption(parse(s))
 
@@ -459,6 +498,8 @@ fun escapeStringBody(s: String, i: Int, acc: String): String =
 fun jsonString(s: String): String =
   Str.append(Str.append("\"", escapeStringBody(s, 0, "")), "\"")
 
+/// Serialise a `Value` to compact JSON with no extra whitespace.
+/// String values are escaped per RFC 8259; floats use Kestrel's default float format.
 export fun stringify(v: Value): String = match (v) {
   Null => "null"
   Bool(b) => if (b) "true" else "false"
