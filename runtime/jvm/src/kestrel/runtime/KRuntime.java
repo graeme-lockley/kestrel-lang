@@ -592,6 +592,42 @@ public final class KRuntime {
         return Long.valueOf(str.codePointCount(0, byteIdx));
     }
 
+    public static Long stringIndexOfFrom(Object s, Object sub, Object from) {
+        if (!(s instanceof String) || !(sub instanceof String)) throw new IllegalArgumentException("stringIndexOfFrom expects String");
+        String str = (String) s;
+        String subStr = (String) sub;
+        int fromCp = ((Long) from).intValue();
+        int totalCp = str.codePointCount(0, str.length());
+        if (fromCp > totalCp) return Long.valueOf(-1);
+        int fromCharIdx = str.offsetByCodePoints(0, fromCp);
+        int byteIdx = str.indexOf(subStr, fromCharIdx);
+        if (byteIdx < 0) return Long.valueOf(-1);
+        return Long.valueOf(str.codePointCount(0, byteIdx));
+    }
+
+    public static KList stringSplit(Object s, Object delim) {
+        if (!(s instanceof String) || !(delim instanceof String)) throw new IllegalArgumentException("stringSplit expects String");
+        String str = (String) s;
+        String d = (String) delim;
+        if (d.isEmpty()) return new KCons(str, KNil.INSTANCE);
+        ArrayList<String> parts = new ArrayList<>();
+        int startChar = 0;
+        while (true) {
+            int foundChar = str.indexOf(d, startChar);
+            if (foundChar < 0) {
+                parts.add(str.substring(startChar));
+                break;
+            }
+            parts.add(str.substring(startChar, foundChar));
+            startChar = foundChar + d.length();
+        }
+        KList result = KNil.INSTANCE;
+        for (int i = parts.size() - 1; i >= 0; i--) {
+            result = new KCons(parts.get(i), result);
+        }
+        return result;
+    }
+
     public static Boolean stringEquals(Object a, Object b) {
         if (!(a instanceof String) || !(b instanceof String)) return Boolean.FALSE;
         return Boolean.valueOf(((String) a).equals((String) b));
@@ -1190,6 +1226,7 @@ public final class KRuntime {
                 try {
                     if (future.isCancelled()) return;
                     ProcessBuilder pb = new ProcessBuilder(cmd);
+                    pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
                     pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                     pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                     proc = pb.start();
@@ -1993,6 +2030,16 @@ public final class KRuntime {
 
     public static Long arrayListSize(Object arrObj) {
         return (long) ((ArrayList<Object>) arrObj).size();
+    }
+
+    public static Long listLength(Object listObj) {
+        long count = 0;
+        Object node = listObj;
+        while (node instanceof KCons) {
+            count++;
+            node = ((KCons) node).tail;
+        }
+        return count;
     }
 
     public static ArrayList<Object> arrayListFromList(Object listObj) {
