@@ -83,3 +83,43 @@ exception ParseError(String)
   just the `extern type name` is sufficient.
 - V1 does not need to produce syntax-coloured output — colour is handled by the HTML renderer
   in S09-04 by wrapping the signature in a `<pre><code class="kestrel">` block with CSS styling.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib (new module) | `stdlib/kestrel/dev/doc/sig.ks` — `format(entry: DocEntry): String` |
+| Tests (new) | `stdlib/kestrel/dev/doc/sig.test.ks` — unit tests |
+| Specs | None required |
+
+## Tasks
+
+- [x] Create `stdlib/kestrel/dev/doc/sig.ks` with `format(entry: DocEntry): String`
+- [x] Normalise whitespace and apply 120-char truncation
+- [x] Create `stdlib/kestrel/dev/doc/sig.test.ks` with unit tests for each `DocKind`
+- [x] Run `./kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/dev/doc/sig.test.ks` | `DKFun` minimal signature |
+| Kestrel harness | `stdlib/kestrel/dev/doc/sig.test.ks` | `DKFun` with type parameters |
+| Kestrel harness | `stdlib/kestrel/dev/doc/sig.test.ks` | `DKType` minimal |
+| Kestrel harness | `stdlib/kestrel/dev/doc/sig.test.ks` | `DKVal` signature |
+| Kestrel harness | `stdlib/kestrel/dev/doc/sig.test.ks` | `DKVar` signature |
+| Kestrel harness | `stdlib/kestrel/dev/doc/sig.test.ks` | `DKException` signature |
+| Kestrel harness | `stdlib/kestrel/dev/doc/sig.test.ks` | `DKExternFun` signature |
+| Kestrel harness | `stdlib/kestrel/dev/doc/sig.test.ks` | `DKExternType` signature |
+| Kestrel harness | `stdlib/kestrel/dev/doc/sig.test.ks` | Long signature is truncated at 120 chars |
+
+## Documentation and specs to update
+
+- None.
+
+## Build notes
+
+- 2025-03-07: `entry.signature` from S09-01 is already whitespace-normalised by
+  `normalizeWs` in `extract.ks`. The `format` function simply trims and applies the
+  120-char truncation rule. No re-parsing is needed.
+- 14 unit tests pass; 1548 Kestrel tests pass.

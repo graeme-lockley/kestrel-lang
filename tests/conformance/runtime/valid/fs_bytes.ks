@@ -7,7 +7,6 @@ import {
 import * as Lst from "kestrel:data/list"
 
 async fun run(): Task<Unit> = {
-  // byteArrayNew / length / get / set
   val arr = byteArrayNew(4)
   println(byteArrayLength(arr))
   // 4
@@ -21,26 +20,22 @@ async fun run(): Task<Unit> = {
   println(byteArrayGet(arr, 3))
   // 68
 
-  // fromList / toList round-trip
   val xs = [1, 2, 3, 255]
   val arr2 = byteArrayFromList(xs)
   val back = byteArrayToList(arr2)
   println(back)
   // [1, 2, 3, 255]
 
-  // concat
   val a = byteArrayFromList([10, 20])
   val b = byteArrayFromList([30, 40])
   val c = byteArrayConcat(a, b)
   println(byteArrayToList(c))
   // [10, 20, 30, 40]
 
-  // slice
   val sl = byteArraySlice(c, 1, 3)
   println(byteArrayToList(sl))
   // [20, 30]
 
-  // readBytes / writeBytes round-trip
   val tmpPath = "/tmp/kestrel_test_bytes.bin"
   val _del = await deleteFile(tmpPath)
   val data = byteArrayFromList([0, 1, 2, 127, 128, 255])
@@ -58,7 +53,6 @@ async fun run(): Task<Unit> = {
     }
   }
 
-  // appendBytes
   val app = byteArrayFromList([100, 200])
   val _app = await appendBytes(tmpPath, app)
   val readResult2 = await readBytes(tmpPath)
@@ -72,7 +66,8 @@ async fun run(): Task<Unit> = {
   }
 
   val _cleanup = await deleteFile(tmpPath)
-  ()
+  println("done")
+  // done
 }
 
 run()
