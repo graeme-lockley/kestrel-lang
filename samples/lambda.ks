@@ -340,21 +340,21 @@ fun demo(title: String, source: String): Unit = {
   }
 }
 
-demo("Identity  I = \x.x", "\x.x")
+demo("Identity  I = \\x.x", "\\x.x")
 
-demo("Apply I to z", "(\x.x) z")
+demo("Apply I to z", "(\\x.x) z")
 
 // Classic combinators and reductions
-demo("K = \x.\y.x  applied", "(\x.\y.x) a b")
+demo("K = \\x.\\y.x  applied", "(\\x.\\y.x) a b")
 
-demo("S = \f.\g.\x.f x (g x)", "\f.\g.\x.f x (g x)")
+demo("S = \\f.\\g.\\x.f x (g x)", "\\f.\\g.\\x.f x (g x)")
 
-demo("S K K z  reduces to  z", "(\f.\g.\x.f x (g x)) (\x.\y.x) (\x.\y.x) z")
+demo("S K K z  reduces to  z", "(\\f.\\g.\\x.f x (g x)) (\\x.\\y.x) (\\x.\\y.x) z")
 
-demo("Church 0 = \f.\x.x", "\f.\x.x")
+demo("Church 0 = \\f.\\x.x", "\\f.\\x.x")
 
-demo("Succ applied to Church 0", "(\n.\f.\x.f (n f x)) (\f.\x.x)")
+demo("Succ applied to Church 0", "(\\n.\\f.\\x.f (n f x)) (\\f.\\x.x)")
 
-demo("Church add applied to 1+1", "((\m.\n.\f.\x.m f (n f x)) (\f.\x.f x)) (\f.\x.f x)")
+demo("Church add applied to 1+1", "((\\m.\\n.\\f.\\x.m f (n f x)) (\\f.\\x.f x)) (\\f.\\x.f x)")
 
-demo("Omega diverges", "(\x.x x) (\x.x x)")
+demo("Omega diverges", "(\\x.x x) (\\x.x x)")
