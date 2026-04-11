@@ -19,7 +19,7 @@ fun fibonacci(n: Int): Int =
   if (n <= 1) n else fibonacci(n - 1) + fibonacci(n - 2)
 
 val result = fibonacci(10)
-print(result)
+println(result)
 ```
 
 Save it as `hello.ks` and run it:
@@ -40,7 +40,7 @@ The compiler infers types wherever it can, but the annotation `(n: Int): Int` ma
 Kestrel has a small set of built-in value types:
 
 ```kestrel
-// Integers (61-bit signed)
+// Integers (64-bit signed)
 val age = 30
 val hex = 0xFF
 val binary = 0b1010
@@ -169,7 +169,7 @@ val b = 2 ** 3 ** 2   // 512 (right-associative: 2^(3^2))
 val c = True & !False  // True
 ```
 
-**Integer bounds and errors:** `Int` is a fixed-width signed type (61-bit). If an `+`, `-`, or `*` result does not fit, the runtime throws **`ArithmeticOverflow`**. **`/`** and **`%`** throw **`DivideByZero`** when the divisor is zero. Both are standard-library exception ADTs from **`kestrel:runtime`** — import them so your `catch` patterns match what the runtime throws (see [Exceptions](#exceptions) below).
+**Integer bounds and errors:** `Int` is a fixed-width signed type (64-bit). If an `+`, `-`, or `*` result does not fit, the runtime throws **`ArithmeticOverflow`**. **`/`** and **`%`** throw **`DivideByZero`** when the divisor is zero. Both are standard-library exception ADTs from **`kestrel:sys/runtime`** — import them so your `catch` patterns match what the runtime throws (see [Exceptions](#exceptions) below).
 
 ---
 
@@ -180,7 +180,7 @@ val c = True & !False  // True
 Kestrel uses Hindley–Milner type inference. You rarely need to write types, but you always can:
 
 ```kestrel
-fun length(xs: List[Int]): Int = match (xs) {
+fun length(xs: List<Int>): Int = match (xs) {
   [] => 0
   _ :: tail => 1 + length(tail)
 }
@@ -312,33 +312,33 @@ val withZero = 0 :: numbers   // cons: prepend an element
 Pattern matching on lists is the primary way to work with them:
 
 ```kestrel
-fun sum(xs: List[Int]): Int = match (xs) {
+fun sum(xs: List<Int>): Int = match (xs) {
   [] => 0
   head :: tail => head + sum(tail)
 }
 ```
 
-The `kestrel:list` module provides the usual toolkit — `map`, `filter`, `foldl`, `reverse`, `sort`, and more. See the [Standard Library](#standard-library) section.
+The `kestrel:data/list` module provides the usual toolkit — `map`, `filter`, `foldl`, `reverse`, `sort`, and more. See the [Standard Library](#standard-library) section.
 
 ### Records
 
 Records are structural — they are defined by their fields, not by a name:
 
 ```kestrel
-val alice = { name: "Alice", age: 30 }
+val alice = { name = "Alice", age = 30 }
 val n = alice.name   // "Alice"
 ```
 
 Records support spread syntax for creating modified copies:
 
 ```kestrel
-val bob = { ...alice, name: "Bob" }
+val bob = { ...alice, name = "Bob" }
 ```
 
 Fields can be declared `mut` for local mutation:
 
 ```kestrel
-val counter = { mut value: 0 }
+val counter = { mut value = 0 }
 counter.value := 42
 ```
 
@@ -347,8 +347,8 @@ Kestrel has row polymorphism: a function that reads `.x` will accept any record 
 ```kestrel
 fun getX(r) = r.x
 
-val a = getX({ x: 1, y: 2 })          // 1
-val b = getX({ x: 10, y: 20, z: 30 }) // 10
+val a = getX({ x = 1, y = 2 })          // 1
+val b = getX({ x = 10, y = 20, z = 30 }) // 10
 ```
 
 ### Tuples
@@ -364,7 +364,7 @@ val triple = (1, True, "abc")
 val flag = triple.1  // True
 ```
 
-The `kestrel:tuple` module provides `first`, `second`, `mapFirst`, `mapSecond`, and `mapBoth` for pairs.
+The `kestrel:data/tuple` module provides `first`, `second`, `mapFirst`, `mapSecond`, and `mapBoth` for pairs.
 
 ---
 
@@ -377,7 +377,7 @@ Kestrel provides three mechanisms for dealing with failure, each suited to diffe
 `Option<T>` represents a value that might be absent:
 
 ```kestrel
-import { map, getOrElse } from "kestrel:option"
+import { map, getOrElse } from "kestrel:data/option"
 
 fun safeDivide(a: Int, b: Int): Option<Int> =
   if (b == 0) None else Some(a / b)
@@ -390,7 +390,7 @@ Pattern matching works naturally:
 
 ```kestrel
 fun describe(opt: Option<Int>): String = match (opt) {
-  Some { value = n } => "Got ${n}"
+  Some(n) => "Got ${n}"
   None => "Nothing"
 }
 ```
@@ -400,7 +400,7 @@ fun describe(opt: Option<Int>): String = match (opt) {
 `Result<T, E>` represents an operation that might fail with an error value:
 
 ```kestrel
-import { map, andThen } from "kestrel:result"
+import { map, andThen } from "kestrel:data/result"
 
 fun parseInt(s: String): Result<Int, String> =
   // ... parsing logic ...
@@ -416,8 +416,8 @@ The pattern matching syntax mirrors Option:
 
 ```kestrel
 match (result) {
-  Ok { value = n } => "Success: ${n}"
-  Err { value = e } => "Error: ${e}"
+  Ok(n) => "Success: ${n}"
+  Err(e) => "Error: ${e}"
 }
 ```
 
@@ -425,10 +425,10 @@ match (result) {
 
 For truly exceptional situations, Kestrel has `throw` and `try`/`catch`.
 
-**Built-in integer traps:** Overflow and divide-by-zero from the built-in operators use the canonical types exported by **`kestrel:runtime`**. Import **`ArithmeticOverflow`** and **`DivideByZero`** so handlers can match the values the runtime constructs:
+**Built-in integer traps:** Overflow and divide-by-zero from the built-in operators use the canonical types exported by **`kestrel:sys/runtime`**. Import **`ArithmeticOverflow`** and **`DivideByZero`** so handlers can match the values the runtime constructs:
 
 ```kestrel
-import { ArithmeticOverflow, DivideByZero } from "kestrel:runtime"
+import { ArithmeticOverflow, DivideByZero } from "kestrel:sys/runtime"
 
 val ok = try { 1 / 0 } catch {
   DivideByZero => 0
@@ -449,7 +449,7 @@ val safe = try { divide(10, 0) } catch {
 // safe is 0
 ```
 
-Note that **`a / b`** and **`a % b`** already throw **`kestrel:runtime`’s `DivideByZero`** when `b == 0`; the example above is for wrapping logic that chooses to signal failure with a *custom* exception type.
+Note that **`a / b`** and **`a % b`** already throw **`kestrel:sys/runtime`'s `DivideByZero`** when `b == 0`; the example above is for wrapping logic that chooses to signal failure with a *custom* exception type.
 
 Exceptions are declared with the `exception` keyword and can carry fields. Prefer `Option` and `Result` for expected failure paths; reserve exceptions for situations where recovery is the caller's responsibility.
 
@@ -463,10 +463,10 @@ Kestrel files are modules. Import specific bindings or an entire namespace:
 
 ```kestrel
 // Named imports
-import { length, map, filter } from "kestrel:list"
+import { length, map, filter } from "kestrel:data/list"
 
 // Namespace import
-import * as Str from "kestrel:string"
+import * as Str from "kestrel:data/string"
 
 val n = Str.length("hello")  // 5
 ```
@@ -533,18 +533,25 @@ The standard library ships as `kestrel:*` modules:
 
 | Module | Purpose |
 |--------|---------|
-| `kestrel:runtime` | Canonical **`ArithmeticOverflow`** and **`DivideByZero`** exception ADTs (VM throws these for integer overflow and div/mod by zero) |
-| `kestrel:string` | String manipulation — `length`, `slice`, `split`, `join`, `trim`, `replace`, and more |
-| `kestrel:list` | List operations — `map`, `filter`, `foldl`, `sort`, `reverse`, `zip`, and more |
-| `kestrel:option` | Option helpers — `map`, `andThen`, `getOrElse`, `withDefault` |
-| `kestrel:result` | Result helpers — `map`, `mapError`, `andThen`, `toOption` |
-| `kestrel:dict` | Dictionary (key-value map) — `insert`, `get`, `remove`, `union`, `fold` |
-| `kestrel:set` | Set — `insert`, `member`, `union`, `intersect`, `diff` |
-| `kestrel:char` | Character classification — `isDigit`, `isAlpha`, `toUpper`, `toLower` |
-| `kestrel:tuple` | Pair helpers — `first`, `second`, `mapFirst`, `mapSecond` |
-| `kestrel:basics` | Numeric utilities — `clamp`, `negate`, `toFloat`, `floor`, `sqrt`, `identity` |
-| `kestrel:json` | JSON — `parse` (`Result<Value, JsonParseError>`), `parseOrNull`, `stringify`, `errorAsString`; `Value` and `JsonParseError` ADTs |
-| `kestrel:fs` | File system — `readText`, `writeText`, `listDir` |
+| `kestrel:sys/runtime` | Canonical **`ArithmeticOverflow`** and **`DivideByZero`** exception ADTs (VM throws these for integer overflow and div/mod by zero) |
+| `kestrel:data/string` | String manipulation — `length`, `slice`, `split`, `join`, `trim`, `replace`, `indexOf`, `toLowerCase`, and more |
+| `kestrel:data/list` | List operations — `map`, `filter`, `foldl`, `sort`, `reverse`, `zip`, `sum`, `range`, and more |
+| `kestrel:data/option` | Option helpers — `map`, `andThen`, `getOrElse`, `withDefault` |
+| `kestrel:data/result` | Result helpers — `map`, `mapError`, `andThen`, `toOption` |
+| `kestrel:data/dict` | Dictionary (key-value map) — `insert`, `get`, `remove`, `union`, `fold` |
+| `kestrel:data/set` | Set — `insert`, `member`, `union`, `intersect`, `diff` |
+| `kestrel:data/char` | Character classification — `isDigit`, `isAlpha`, `toUpper`, `toLower` |
+| `kestrel:data/tuple` | Pair helpers — `first`, `second`, `mapFirst`, `mapSecond` |
+| `kestrel:data/basics` | Numeric utilities — `clamp`, `negate`, `toFloat`, `floor`, `sqrt`, `identity` |
+| `kestrel:data/json` | JSON — `parse` (`Result<Value, JsonParseError>`), `parseOrNull`, `stringify`, `errorAsString`; `Value` and `JsonParseError` ADTs |
+| `kestrel:data/array` | Mutable arrays — `new`, `get`, `set`, `push`, `length`, `fromList`, `toList` |
+| `kestrel:data/int` | Integer utilities — `random`, `randomRange` |
+| `kestrel:io/fs` | File system — `readText`, `writeText`, `listDir` |
+| `kestrel:io/console` | Terminal utilities — ANSI colour constants, `terminalInfo`, `eprintln` |
+| `kestrel:io/http` | HTTP client and server — `get`, `request`, `createServer`, `listen` |
+| `kestrel:sys/process` | Process execution and environment — `getEnv`, `exit`, `runProcess` |
+| `kestrel:sys/task` | Task combinators — `map`, `all`, `race`, `cancel` |
+| `kestrel:dev/test` | Test framework — `Suite`, `group`, `eq`, `neq`, `isTrue`, `isFalse`, `throws` |
 
 ---
 
@@ -639,7 +646,7 @@ The compiler downloads the JAR to `~/.kestrel/maven/` on first use and records i
 The pipeline operators thread values through functions, letting you write chains that read left-to-right:
 
 ```kestrel
-import { map, filter, sum } from "kestrel:list"
+import { map, filter, sum } from "kestrel:data/list"
 
 val result =
   [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -661,12 +668,12 @@ val y = add(10) <| 3    // add(10, 3) = 13
 Pipelines compose well with the standard library, which consistently takes the "data" argument first:
 
 ```kestrel
-import * as Str from "kestrel:string"
+import * as Str from "kestrel:data/string"
 
 val cleaned = "  Hello, World!  "
   |> Str.trim
   |> Str.toLowerCase
-  |> Str.replace("world", "kestrel")
+  |> (s) => Str.replace("world", "kestrel", s)
 // cleaned is "hello, kestrel!"
 ```
 
@@ -677,16 +684,15 @@ val cleaned = "  Hello, World!  "
 Here is a string calculator that supports custom delimiters, combining several features from this guide — modules, pattern matching, pipelines, and error handling:
 
 ```kestrel
-import { split, left, dropLeft, length, indexOf } from "kestrel:string"
-import { map, filter, foldl } from "kestrel:list"
-import { andThen, getOrElse } from "kestrel:result"
+import { split, left, dropLeft, indexOf, parseInt } from "kestrel:data/string"
+import { map, filter, sum } from "kestrel:data/list"
 
 fun parseDelimiter(input: String): (String, String) =
-  if (left(2, input) == "//") {
-    val rest = dropLeft(2, input)
-    val nlIdx = indexOf("\n", rest) |> getOrElse(length(rest))
-    val delim = left(nlIdx, rest)
-    val body = dropLeft(nlIdx + 1, rest)
+  if (left(input, 2) == "//") {
+    val rest = dropLeft(input, 2)
+    val nlIdx = indexOf(rest, "\n")
+    val delim = if (nlIdx < 0) rest else left(rest, nlIdx)
+    val body = if (nlIdx < 0) "" else dropLeft(rest, nlIdx + 1)
     (delim, body)
   } else {
     (",", input)
@@ -698,8 +704,8 @@ fun calculate(input: String): Int = {
   body
   |> split(delim)
   |> filter((s) => s != "")
-  |> map((s) => s |> parseInt |> getOrElse(0))
-  |> foldl((acc, n) => acc + n, 0)
+  |> map((s) => parseInt(s))
+  |> sum
 }
 ```
 
@@ -711,12 +717,12 @@ fun calculate(input: String): Int = {
 
 ## Testing
 
-Kestrel has a built-in test framework. Test files end in `.test.ks` and export `run(s: Suite): Unit`. Use `kestrel:test` for assertions and grouping:
+Kestrel has a built-in test framework. Test files end in `.test.ks` and export `run(s: Suite): Task<Unit>`. Use `kestrel:dev/test` for assertions and grouping:
 
 ```kestrel
-import { Suite, group, eq, neq, isTrue, isFalse, gt, gte, throws } from "kestrel:test"
+import { Suite, group, eq, neq, isTrue, isFalse, gt, gte, throws } from "kestrel:dev/test"
 
-export fun run(s: Suite): Unit = {
+export async fun run(s: Suite): Task<Unit> = {
   group(s, "arithmetic", (s1: Suite) => {
     eq(s1, "add", 1 + 1, 2);
     neq(s1, "not three", 1 + 1, 3);
@@ -729,8 +735,7 @@ export fun run(s: Suite): Unit = {
   });
   group(s, "exceptions", (s1: Suite) => {
     throws(s1, "div by zero", (_: Unit) => {
-      val x = 1 / 0;
-      ()
+      1 / 0
     })
   })
 }
