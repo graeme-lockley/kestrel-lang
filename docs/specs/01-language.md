@@ -38,6 +38,36 @@ Tokens are the maximal sequence of characters that form a keyword, identifier, l
 - **Line comment:** `//` to end of line. The rest of the line is ignored.
 - **Block comment:** `/*` … `*/`. Block comments do not nest. A block comment is closed by the first `*/`.
 
+#### Doc-comments
+
+Kestrel supports two doc-comment forms that are recognised by `kestrel:dev/doc/extract` (and by the `kestrel doc` server). The compiler treats them as ordinary `//` comments and discards them; no compiler changes are required.
+
+| Form | Placement | Purpose |
+|------|-----------|---------|
+| `/// <text>` | Immediately before an `export` declaration | Per-declaration documentation |
+| `//! <text>` | At the top of a source file, before any declaration | Module-level prose documentation |
+
+**Rules for `///` (per-declaration):**
+
+- One or more consecutive `///` lines immediately before an `export` declaration form a doc-comment block for that declaration.
+- A blank line (a whitespace run containing `\n\n`) or any non-`///`, non-whitespace token between the last `///` line and the `export` keyword breaks the association; the preceding `///` lines are discarded.
+- A `/** … */` block comment placed immediately before an `export` declaration is also accepted as a doc-comment. When stripping, leading ` * ` prefixes are removed per line (JavaDoc style).
+- The text of each `///` line (after stripping the `/// ` or `///` prefix) is concatenated with newlines to form the `doc` string.
+- Backtick-quoted names (e.g. `` `List.map` ``) inside doc-comment text are rendered as `<code>` in the documentation browser; cross-reference links are reserved for a future version.
+
+**Rules for `//!` (module-level):**
+
+- `//!` lines at the top of a file (before any non-whitespace, non-`//!` token) are collected and concatenated to form the module-level prose string.
+- `//!` lines may not appear after the first non-comment, non-whitespace token; they are ignored in that position (treated as regular comments that break any pending `///` block).
+
+**Grammar (informative):**
+
+```
+DocLineComment   ::= "///" RestOfLine
+ModuleProseComment ::= "//!" RestOfLine
+DocBlockComment  ::= "/**" ... "*/"              -- block comment starting with /**
+```
+
 ### 2.2 Shebang (script entry point)
 
 If the **first line** of the source file (after an optional UTF-8 BOM) begins with the two characters `#!`, that entire line is a **shebang line**. The shebang is not parsed as tokens: the lexer skips from `#!` to the end of the line (including the newline), then continues tokenizing from the next line. This allows a file to be used as an executable script (e.g. `#!/usr/bin/env kestrel`).

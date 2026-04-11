@@ -89,11 +89,11 @@ are consumed by the renderer (S09-04), the search index (S09-05), and the server
 
 ## Tasks
 
-- [ ] Create `stdlib/kestrel/dev/doc/extract.ks` with `DocKind`, `DocEntry`, `DocModule` ADTs and `extract`/`extractFile` functions
-- [ ] Create `stdlib/kestrel/dev/doc/extract.test.ks` with unit tests covering all acceptance criteria
-- [ ] Update `docs/specs/01-language.md` §2.1 with `///` and `//!` syntax rules
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `./scripts/kestrel test`
+- [x] Create `stdlib/kestrel/dev/doc/extract.ks` with `DocKind`, `DocEntry`, `DocModule` ADTs and `extract`/`extractFile` functions
+- [x] Create `stdlib/kestrel/dev/doc/extract.test.ks` with unit tests covering all acceptance criteria
+- [x] Update `docs/specs/01-language.md` §2.1 with `///` and `//!` syntax rules
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
 
 ## Tests to add
 
@@ -125,3 +125,21 @@ are consumed by the renderer (S09-04), the search index (S09-05), and the server
 - Block comment form `/** … */` should strip leading ` * ` prefixes per line (JavaDoc style)
   before storing the `doc` text.
 - No compiler changes are required; the compiler already discards all comments as trivia.
+
+## Build notes
+
+- 2025-03-07: Implemented `stdlib/kestrel/dev/doc/extract.ks`. The extractor works purely on
+  the token stream from `Lex.lex/Arr.fromList`; no AST walk is needed since all
+  relevant tokens (`export`, `fun`, `async`, `type`, `val`, `var`, `exception`, `extern`,
+  `TkUpper`/`TkIdent` names, `TkLineComment`, `TkBlockComment`) are already available.
+- Kestrel language quirks encountered and resolved:
+  - `True`/`False` (not `true`/`false`) — Bool constructors are uppercase identifiers.
+  - String template syntax `"${var}"` not `+` operator for concatenation.
+  - Record construction uses `{ field = val }` without type name prefix.
+  - Blocks in `'expr'` context (function bodies, if-branches) cannot end with an `AssignStmt`
+    (`:=`). The `resolveKind` helper was refactored from a mutable-variable pattern into a
+    pure value-returning `if/else` chain to avoid this constraint.
+  - Tuple access via `.0`, `.1` — no destructuring in `val` statements.
+- `extract.test.ks` uses `group`/`eq`/`isTrue`/`isFalse` from `kestrel:dev/test` with
+  `export async fun run(s: Suite): Task<Unit>` pattern (not an imaginary `Test.suite` API).
+- All 30 unit tests pass; 1501 Kestrel tests pass; 424 compiler tests pass.
