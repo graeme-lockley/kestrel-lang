@@ -270,8 +270,13 @@ describe('parse (integration)', () => {
   val cp = g(1)
   (cp >= 48 & cp <= 57) | (cp >= 65 & cp <= 70)
 }`;
+    // Without ';', 'g(1)' followed by '(...)' on the next line fuses into a
+    // single call expression 'g(1)(...)' as the val RHS; the block then ends
+    // with an implicit '()' result.  This is a valid parse (type-checker will
+    // report the mismatch).  Semicolon is needed to express the intended
+    // program where '(...)' is the block result.
     const astBad = parse(tokenize(noSemi));
-    expect('ok' in astBad && !astBad.ok).toBe(true);
+    expect(astBad.kind).toBe('Program');
   });
 
   it('allows implicit Unit when block ends with assign/binding in statement-oriented while body', () => {
@@ -280,12 +285,11 @@ describe('parse (integration)', () => {
     expect(ast.kind).toBe('Program');
   });
 
-  it('rejects block ending with binding only when if branch is in expression context (e.g. fun body block)', () => {
+  it('allows implicit Unit in if branch in expression context (e.g. fun body block)', () => {
+    // Blocks ending with a binding now produce an implicit '()' result in all
+    // contexts, so this is a valid parse; type-checking will verify the types.
     const result = parse(tokenize('fun f(): Unit = { if (True) { var x = 1 } }'));
-    expect('ok' in result && !result.ok).toBe(true);
-    if ('ok' in result && !result.ok) {
-      expect(result.errors.some((e) => e.message.includes('Expected expression before'))).toBe(true);
-    }
+    expect(result.kind).toBe('Program');
   });
 
   it('parses nested literal patterns in list and record patterns', () => {

@@ -130,7 +130,11 @@ class Parser {
 
   /** Recover from missing `}`: push unmatched_brace and skip to next `}` or eof. */
   private expectRbraceRecover(): void {
-    if (!this.at('rbrace') && !this.at('eof')) {
+    if (this.at('eof')) {
+      this.pushError(CODES.parse.unmatched_brace, 'Unmatched `{`', this.current().span);
+      return;
+    }
+    if (!this.at('rbrace')) {
       const t = this.current();
       this.pushError(CODES.parse.unmatched_brace, 'Unmatched `{`', t.span);
       while (!this.at('rbrace') && !this.at('eof')) this.advance();
@@ -1247,24 +1251,20 @@ class Parser {
             result = last.expr;
             stmts.pop();
           } else if (
-            ctx === 'stmt' &&
-            last &&
-            (last.kind === 'AssignStmt' ||
-              last.kind === 'ValStmt' ||
-              last.kind === 'VarStmt' ||
-              last.kind === 'FunStmt' ||
-              last.kind === 'BreakStmt' ||
-              last.kind === 'ContinueStmt')
-          ) {
-            const span = this.current().span;
-            result = { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
-          } else if (
-            ctx === 'expr' &&
             last &&
             (last.kind === 'BreakStmt' || last.kind === 'ContinueStmt')
           ) {
             const span = this.current().span;
             result = { kind: 'NeverExpr', span };
+          } else if (
+            last &&
+            (last.kind === 'AssignStmt' ||
+              last.kind === 'ValStmt' ||
+              last.kind === 'VarStmt' ||
+              last.kind === 'FunStmt')
+          ) {
+            const span = this.current().span;
+            result = { kind: 'LiteralExpr', literal: 'unit', value: '()', span };
           } else {
             this.pushError(CODES.parse.unmatched_brace, 'Expected expression before `}`', this.current().span);
             const span = this.current().span;
