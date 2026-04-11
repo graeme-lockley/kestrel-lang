@@ -23,7 +23,7 @@ fun fibonacci(n: Int): Int =
   if (n <= 1) n else fibonacci(n - 1) + fibonacci(n - 2)
 
 val result = fibonacci(10)
-print(result)
+println(result)
 ```
 
 Run it (the CLI compiles when inputs or dependencies change):
@@ -42,7 +42,7 @@ The **[Introduction to Kestrel](docs/guide.md)** walks through the language from
 For a quick taste:
 
 ```kestrel
-import { map, filter, sum } from "kestrel:list"
+import { map, filter, sum } from "kestrel:data/list"
 
 val result =
   [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -65,6 +65,8 @@ The [samples/](samples/) directory contains standalone programs that showcase th
 | [samples/word-count.ks](samples/word-count.ks) | Word-frequency counter with dictionaries and higher-order functions |
 | [samples/life.ks](samples/life.ks) | Conway's Game of Life |
 | [samples/lambda.ks](samples/lambda.ks) | Lambda calculus parser and reducer |
+| [samples/brainfuck.ks](samples/brainfuck.ks) | Brainfuck interpreter (~60 lines of pure Kestrel) |
+| [samples/markov.ks](samples/markov.ks) | Character-level trigram language model |
 
 Run any sample with `./kestrel run samples/<name>.ks`.
 

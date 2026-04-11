@@ -9,8 +9,7 @@ Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
 | Tool | Version | Used for |
 |------|---------|----------|
 | [Node.js](https://nodejs.org/) | 18 or newer | Compiler (TypeScript), tests |
-| [Zig](https://ziglang.org/) | Current stable | Bytecode VM, build and tests |
-| [Java](https://adoptium.net/) JDK | 21 or newer | JVM backend (`--target jvm`), async runtime, and tests |
+| [Java](https://adoptium.net/) JDK | 21 or newer | JVM runtime, async execution (Project Loom virtual threads), and tests |
 
 The compiler declares `engines.node` in [compiler/package.json](compiler/package.json). The JVM runtime is built with `--release 21` in [runtime/jvm/build.sh](runtime/jvm/build.sh) because async execution uses Project Loom virtual threads.
 
@@ -22,13 +21,6 @@ Clone the repository and install compiler dependencies:
 cd compiler
 npm install
 npm run build
-```
-
-Build the VM:
-
-```bash
-cd ../vm
-zig build
 ```
 
 From the repository root you can use the CLI:
@@ -50,29 +42,20 @@ You can add the repo to your `PATH` or symlink `./kestrel` so the toolchain reso
 This runs, in order:
 
 1. Compiler unit and integration tests — `cd compiler && npm test`
-2. VM tests — `cd vm && zig build test`
-3. End-to-end scenarios — `./scripts/run-e2e.sh`
-4. Kestrel-language unit tests — `./scripts/kestrel test`
+2. End-to-end scenarios — `./scripts/run-e2e.sh`
+3. Kestrel-language unit tests — `./scripts/kestrel test`
 
 You can run each layer alone when iterating:
 
 ```bash
 cd compiler && npm test
-cd vm && zig build test
 ./scripts/run-e2e.sh
 ./scripts/kestrel test
 ```
 
-**JVM target** (optional local check):
-
-```bash
-cd runtime/jvm && ./build.sh
-./scripts/kestrel test --target jvm
-```
-
 ## Code and documentation expectations
 
-- Follow existing style in the compiler (TypeScript, strict mode) and VM (Zig). Conventions for agents and humans are summarized in [AGENTS.md](AGENTS.md).
+- Follow existing style in the compiler (TypeScript, strict mode). Conventions for agents and humans are summarized in [AGENTS.md](AGENTS.md).
 - Language behaviour and public APIs should match the specs in [docs/specs/](docs/specs/). If you change behaviour, update the relevant spec in the same change.
 - Add or extend Kestrel tests under [tests/unit/](tests/unit/) for language or stdlib behaviour. Run `./scripts/kestrel test` to verify.
 
