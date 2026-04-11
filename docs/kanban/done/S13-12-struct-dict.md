@@ -39,3 +39,18 @@ Add a `kestrel:data/structdict` module providing `StructDict<K,V>` — a diction
 - Key serialization via `formatOne` is only faithful if `formatOne` produces unique strings for structurally distinct values and identical strings for structurally equal values. This is true for ADTs, records, primitives, and lists. It is NOT true for mutable `Array<T>` (reference-based). Document this limitation.
 - This story is "polish" — not needed for the compiler rewrite as the compiler uses only string-keyed `Dict` — but valuable for preventing subtle bugs in future compiler code.
 - Independent of all other E13 stories.
+
+## Tasks
+
+- [x] `KRuntime.java`: add `structKey(Object v) -> String` (delegates to `formatOne`)
+- [x] `stdlib/kestrel/data/structdict.ks`: new module with `StructDict<K,V>` opaque type and all exported functions
+- [x] `tests/conformance/runtime/valid/structdict.ks`: conformance test (11 checks: primitives, ADT structural equality)
+- [x] Rebuild runtime (`cd runtime/jvm && bash build.sh`)
+- [x] Compiler tests pass (`cd compiler && npm test`)
+- [x] `docs/specs/02-stdlib.md`: add `kestrel:data/structdict` section
+
+## Build notes
+
+- 2026-04-11: Backed by a pair `(Dict<String,V>, Dict<String,K>)` — values dictionary + original-key dictionary — so `keys()` and `toList()` return `K` not `String`.
+- `structKey` calls `formatOne` which already produces canonical structural output for all Kestrel value types (ADTs, records, Int, String, Bool, List). `Array<T>` is identity-based and unsupported as keys.
+- Fixed parse bug: `val sk = structKey(k)\n(tuple...)` parsed the tuple as a function application. Added `;` after `val sk` binding to terminate the statement correctly.

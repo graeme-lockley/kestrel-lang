@@ -34,6 +34,12 @@ public final class KRuntime {
     private static final AtomicLong asyncTasksInFlight = new AtomicLong(0);
     /** Signalled only when asyncTasksInFlight reaches zero; held only by awaitAsyncQuiescence. */
     private static final Object quiescenceSignal = new Object();
+    /**
+     * Set to {@code true} by {@link #parkAsync()} to indicate that the process is
+     * intentionally long-lived (e.g. an HTTP server). While {@code true},
+     * {@link #awaitAsyncQuiescence()} waits indefinitely instead of timing out.
+     */
+    private static volatile boolean parkActive = false;
     /** Stores the KTask (if any) returned by the entry-point top-level expression (e.g. main())
      *  so runMain can check for failure after quiescence. */
     private static volatile Object mainResult;
@@ -160,7 +166,7 @@ public final class KRuntime {
     }
 
     private static void awaitAsyncQuiescence() {
-        long timeoutMs = getExitWaitTimeoutMs();
+        long timeoutMs = parkActive ? 0L : getExitWaitTimeoutMs();
         if (timeoutMs == 0) {
             // Infinite wait (opt-in via kestrel.exitWaitTimeoutMs=0).
             synchronized (quiescenceSignal) {
@@ -1350,6 +1356,11 @@ public final class KRuntime {
         return result;
     }
 
+    /** Produce a canonical structural key string for any Kestrel value. Uses formatOne. */
+    public static String structKey(Object v) {
+        return formatOne(v);
+    }
+
     // ── HTTP client helpers for kestrel:http (S03-05) ────────────────────────
 
     /** Maximum number of times to retry an HTTP request when a connect timeout occurs. */
@@ -1723,6 +1734,7 @@ public final class KRuntime {
      */
     public static KTask parkAsync() {
         initAsyncRuntime();
+        parkActive = true;
         CompletableFuture<Object> future = new CompletableFuture<>();
         asyncTasksInFlight.incrementAndGet();
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {

@@ -348,6 +348,25 @@ Convenience: `hashString` / `eqString`, `hashInt` / `eqInt`, `emptyStringDict` /
 
 ---
 
+
+## kestrel:data/structdict
+
+Finite maps with **structural (value) equality** keys, exposed as the opaque type `StructDict<K,V>`. Keys are serialised to a canonical string via `KRuntime.structKey` (which calls `formatOne`) and stored in a string-keyed `Dict`. This means two separately-constructed `Some(1)` values are treated as the same key, as are two records `{x=1,y=2}` built independently.
+
+**Limitation:** `Array<T>` values are identity-based and must not be used as keys.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `empty` | `() -> StructDict<K,V>` | |
+| `singleton` | `(K, V) -> StructDict<K,V>` | |
+| `insert` / `remove` | `(StructDict<K,V>, K, …) -> StructDict<K,V>` | Copy-on-write |
+| `get` | `(StructDict<K,V>, K) -> Option<V>` | |
+| `member` / `isEmpty` / `size` | … | |
+| `keys` / `values` / `toList` / `fromList` | … | |
+| `map` / `filter` / `foldl` | … | |
+| `union` / `diff` / `intersect` | … | `union`: left-biased |
+
+---
 ## kestrel:data/set
 
 Sets as the **opaque** type `Set<E>` (defined in the module as an alias of `Dict<E, Unit>`; keys only, values are `()`). Same pipe-friendly convention as `kestrel:dict`. Helpers `emptyStringSet` / `emptyIntSet`, `singletonStringSet` / `singletonIntSet`, and `fromStringList` / `fromIntList` for common key types. `map` requires new `hash` / `eq` for the mapped key type.
