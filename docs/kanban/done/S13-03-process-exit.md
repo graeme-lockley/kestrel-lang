@@ -38,3 +38,12 @@ Expose the existing `KRuntime.exit(code)` as `exit(code: Int): Unit` in `kestrel
 - `exit` is synchronous and never returns. The return type `Unit` is a pragmatic choice — `Task<Never>` would require an `await` which is misleading. The compiler can note that anything after `exit(...)` is unreachable.
 - No new JVM runtime code needed — just an `extern` binding to the existing `KRuntime#exit`.
 - Independent of all other E13 stories.
+
+## Tasks
+
+- [x] `stdlib/kestrel/sys/process.ks`: add `export extern fun exit(code: Int): Unit`
+- [x] `docs/specs/02-stdlib.md`: add `exit` to sys/process function table
+
+## Build notes
+
+`exit` is already a built-in function in Kestrel (available without imports, as used by `tests/e2e/scenarios/negative/runtime_exit_one.ks`). This story adds it to `kestrel:sys/process` so it can be explicitly imported by name. No new JVM code needed; binding to existing `KRuntime#exit(Object)` at line 269.

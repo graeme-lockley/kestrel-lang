@@ -27,6 +27,9 @@ extern fun runProcessAsync(program: String, args: List<String>): Task<Result<Pro
 extern fun runProcessStreamAsync(program: String, args: List<String>): Task<Result<Int, String>> =
   jvm("kestrel.runtime.KRuntime#runProcessStreamAsync(java.lang.Object,java.lang.Object)")
 
+export extern fun exit(code: Int): Unit =
+  jvm("kestrel.runtime.KRuntime#exit(java.lang.Object)")
+
 export fun getProcess(): P = {
   val os = getOs();
   val a = getArgs();

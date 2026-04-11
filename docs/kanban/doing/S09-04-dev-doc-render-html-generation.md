@@ -97,13 +97,13 @@ defined here.
 
 ## Tasks
 
-- [ ] Create `stdlib/kestrel/dev/doc/render.ks` with all five exported functions
-- [ ] Implement `renderModuleList(modules: List<DocModule>): String`
-- [ ] Implement `renderModule(mod: DocModule): String`
-- [ ] Implement `renderDeclaration(mod: DocModule, name: String): String`
-- [ ] Implement `staticCss(): String` and `staticJs(): String`
-- [ ] Create `stdlib/kestrel/dev/doc/render.test.ks` with unit tests
-- [ ] Run `./kestrel test`
+- [x] Create `stdlib/kestrel/dev/doc/render.ks` with all five exported functions
+- [x] Implement `renderModuleList(modules: List<DocModule>): String`
+- [x] Implement `renderModule(mod: DocModule): String`
+- [x] Implement `renderDeclaration(mod: DocModule, name: String): String`
+- [x] Implement `staticCss(): String` and `staticJs(): String`
+- [x] Create `stdlib/kestrel/dev/doc/render.test.ks` with unit tests
+- [x] Run `./kestrel test`
 
 ## Tests to add
 
