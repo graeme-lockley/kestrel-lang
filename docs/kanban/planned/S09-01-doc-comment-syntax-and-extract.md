@@ -78,6 +78,39 @@ are consumed by the renderer (S09-04), the search index (S09-05), and the server
 - `docs/specs/01-language.md` §2.1 (Comments) — to be updated.
 - `docs/specs/09-tools.md` — referenced by S09-07.
 - `kestrel:dev/parser/token` — `TkLineComment`, `TkBlockComment` token kinds.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib (new module) | `stdlib/kestrel/dev/doc/extract.ks` — new `DocKind`, `DocEntry`, `DocModule` types and `extract`, `extractFile` functions |
+| Tests (new) | `stdlib/kestrel/dev/doc/extract.test.ks` — unit tests for extractor |
+| Specs | `docs/specs/01-language.md` §2.1 — add `///` and `//!` doc-comment syntax documentation |
+
+## Tasks
+
+- [ ] Create `stdlib/kestrel/dev/doc/extract.ks` with `DocKind`, `DocEntry`, `DocModule` ADTs and `extract`/`extractFile` functions
+- [ ] Create `stdlib/kestrel/dev/doc/extract.test.ks` with unit tests covering all acceptance criteria
+- [ ] Update `docs/specs/01-language.md` §2.1 with `///` and `//!` syntax rules
+- [ ] Run `cd compiler && npm run build && npm test`
+- [ ] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/dev/doc/extract.test.ks` | Extract from source with no doc-comments → all `doc` fields empty |
+| Kestrel harness | `stdlib/kestrel/dev/doc/extract.test.ks` | Extract `///` doc-comment before `export fun` |
+| Kestrel harness | `stdlib/kestrel/dev/doc/extract.test.ks` | Extract `//!` module-level prose |
+| Kestrel harness | `stdlib/kestrel/dev/doc/extract.test.ks` | `/** */` block comment before export |
+| Kestrel harness | `stdlib/kestrel/dev/doc/extract.test.ks` | Blank line between `///` and `export` discards doc |
+| Kestrel harness | `stdlib/kestrel/dev/doc/extract.test.ks` | Extract `export type`, `export val`, `export var`, `export exception`, `export extern fun/type` |
+| Kestrel harness | `stdlib/kestrel/dev/doc/extract.test.ks` | Signature stops before `=` for type/val/fun |
+| Kestrel harness | `stdlib/kestrel/dev/doc/extract.test.ks` | Multiple consecutive exports each get the right doc |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/01-language.md` §2.1 (Comments) — add `///` and `//!` syntax rules and semantics
 - `kestrel:dev/parser/ast` — all `TopDecl` and `FunDecl` / `TypeDecl` variants.
 
 ## Risks / Notes
