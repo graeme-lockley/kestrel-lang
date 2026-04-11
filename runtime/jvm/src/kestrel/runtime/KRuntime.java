@@ -2403,6 +2403,78 @@ public final class KRuntime {
         java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
         return digestToHex(md.digest((byte[]) arr));
     }
+
+    // ── Path utilities for kestrel:sys/path ───────────────────────────────────
+
+    public static String pathJoin(Object listObj) {
+        KList node = (KList) listObj;
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        while (node instanceof KCons) {
+            parts.add((String) ((KCons) node).head);
+            node = (KList) ((KCons) node).tail;
+        }
+        if (parts.isEmpty()) return "";
+        java.nio.file.Path p = java.nio.file.Paths.get(parts.get(0),
+            parts.subList(1, parts.size()).toArray(new String[0]));
+        return p.toString();
+    }
+
+    public static String pathDirname(Object path) {
+        java.nio.file.Path p = java.nio.file.Paths.get((String) path);
+        java.nio.file.Path parent = p.getParent();
+        return parent == null ? "." : parent.toString();
+    }
+
+    public static String pathBasename(Object path) {
+        java.nio.file.Path p = java.nio.file.Paths.get((String) path);
+        java.nio.file.Path fname = p.getFileName();
+        return fname == null ? "" : fname.toString();
+    }
+
+    public static String pathResolve(Object base, Object rel) {
+        java.nio.file.Path b = java.nio.file.Paths.get((String) base);
+        return b.resolve((String) rel).normalize().toString();
+    }
+
+    public static Boolean pathIsAbsolute(Object path) {
+        return java.nio.file.Paths.get((String) path).isAbsolute();
+    }
+
+    public static Object pathExtension(Object path) {
+        String s = (String) path;
+        String filename = java.nio.file.Paths.get(s).getFileName() == null
+            ? s
+            : java.nio.file.Paths.get(s).getFileName().toString();
+        int dot = filename.lastIndexOf('.');
+        if (dot <= 0) return KNone.INSTANCE;
+        return new KSome(filename.substring(dot + 1));
+    }
+
+    public static String pathWithoutExtension(Object path) {
+        String s = (String) path;
+        java.nio.file.Path p = java.nio.file.Paths.get(s);
+        String filename = p.getFileName() == null ? s : p.getFileName().toString();
+        int dot = filename.lastIndexOf('.');
+        if (dot <= 0) return s;
+        java.nio.file.Path parent = p.getParent();
+        String stem = filename.substring(0, dot);
+        return parent == null ? stem : parent.resolve(stem).toString();
+    }
+
+    public static Object pathSplit(Object path) {
+        String s = (String) path;
+        java.nio.file.Path p = java.nio.file.Paths.get(s);
+        java.nio.file.Path parent = p.getParent();
+        java.nio.file.Path fname = p.getFileName();
+        KRecord r = new KRecord();
+        r.set("0", parent == null ? "" : parent.toString());
+        r.set("1", fname == null ? "" : fname.toString());
+        return r;
+    }
+
+    public static String pathNormalize(Object path) {
+        return java.nio.file.Paths.get((String) path).normalize().toString();
+    }
 }
 
 

@@ -239,6 +239,24 @@ Process information and subprocess execution.
 | `runProcess` | `(String, List<String>) -> Task<Result<ProcessResult, ProcessError>>` | Spawn a subprocess, capture combined stdout+stderr, and return `Ok(ProcessResult)` on completion where `exitCode` is the process exit code and `stdout` contains the captured output. Returns `Err(ProcessSpawnError(message))` when process start/execution fails. |
 | `exit` | `(Int) -> Unit` | Terminate the current process immediately with the given exit code. Never returns. |
 
+---
+
+## kestrel:sys/path
+
+OS-native path manipulation without I/O. Backed by `java.nio.file.Paths`.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `join` | `(List<String>) -> String` | Join path segments with OS separator. |
+| `dirname` | `(String) -> String` | Parent directory of a path; returns `"."` for a bare filename. |
+| `basename` | `(String) -> String` | Final component (filename) of a path. |
+| `resolve` | `(String, String) -> String` | Resolve the second path relative to the first and normalize. |
+| `isAbsolute` | `(String) -> Bool` | `True` if the path is absolute. |
+| `extension` | `(String) -> Option<String>` | File extension without the dot; `None` if no extension or only a leading dot. |
+| `withoutExtension` | `(String) -> String` | Path with the last extension removed. |
+| `splitPath` | `(String) -> (String, String)` | Split into `(directory, filename)` pair. |
+| `normalize` | `(String) -> String` | Canonicalize `.` and `..` without I/O. |
+
 ### Implementation notes
 
 `getOs`, `getArgs`, `getCwd`, `getEnv`, `getEnvAll`, and `runProcessAsync` are `extern fun` declarations backed by `KRuntime.getOs()`, `KRuntime.getArgs()`, `KRuntime.getCwd()`, `KRuntime.getEnv(Object)`, `KRuntime.getEnvAll()`, and `KRuntime.runProcessAsync(Object, Object)` static methods in the JVM runtime. `getProcess` and `runProcess` are thin wrappers over these extern funs.

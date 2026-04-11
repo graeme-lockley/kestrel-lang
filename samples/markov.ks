@@ -1,16 +1,16 @@
 #!/usr/bin/env kestrel
 
-// samples/markov.ks — character-level bigram language model
+// samples/markov.ks — character-level trigram language model
 //
 // Demonstrates the statistical core shared by all language models:
-//   1. Slide a 2-character context window across training text and count
-//      how often each character follows each pair.
+//   1. Slide a 3-character context window across training text and count
+//      how often each character follows each triple.
 //   2. To generate new text, repeatedly sample the next character
 //      weighted by those counts, then slide the window one step right.
 //
 // This is exactly what a large language model does, scaled up:
-//   context  :  2 chars           →  128 000 tokens
-//   table    :  bigram count dict →  weight matrices (billions of params)
+//   context  :  3 chars            →  128 000 tokens
+//   table    :  trigram count dict →  weight matrices (billions of params)
 //   sampling :  frequency counts  →  softmax(W · x + b)
 //   learning :  counting          →  gradient descent
 //
@@ -24,13 +24,20 @@ import * as Rnd  from "kestrel:data/int"
 
 // ── Corpus ──────────────────────────────────────────────────────────────────
 //
-// Hamlet, Act III Scene I.  ~500 characters of training text.
-// Even at this tiny scale the model learns:
-//   • common bigrams: "th", "he", "in", "to", "an"
-//   • word boundaries (space ↔ consonant transitions)
-//   • short, recognisable fragments of the original text
+// Mixed corpus: Shakespeare, Poe, Melville, and a small technical passage.
+// This gives the generator more varied transitions, punctuation, and rhythm.
+// Even with only a 3-char context, the model starts to blend voices in a way
+// that feels much more alive than training on one excerpt alone.
 
-val corpus = "to be or not to be that is the question whether tis nobler in the mind to suffer the slings and arrows of outrageous fortune or to take arms against a sea of troubles and by opposing end them to die to sleep no more and by a sleep to say we end the heartache and the thousand natural shocks that flesh is heir to tis a consummation devoutly to be wished to die to sleep to sleep perchance to dream ay there is the rub "
+val corpus =
+  Str.join("", [
+    "to be or not to be that is the question whether tis nobler in the mind to suffer the slings and arrows of outrageous fortune or to take arms against a sea of troubles and by opposing end them to die to sleep no more and by a sleep to say we end the heartache and the thousand natural shocks that flesh is heir to tis a consummation devoutly to be wished to die to sleep to sleep perchance to dream ay there is the rub ",
+    "once upon a midnight dreary while i pondered weak and weary over many a quaint and curious volume of forgotten lore while i nodded nearly napping suddenly there came a tapping as of some one gently rapping rapping at my chamber door only this and nothing more ",
+    "call me ishmael some years ago never mind how long precisely having little or no money in my purse and nothing particular to interest me on shore i thought i would sail about a little and see the watery part of the world it is a way i have of driving off the spleen and regulating the circulation ",
+    "the machine learns by observing sequences counting patterns and compressing surprise a prompt becomes context context becomes prediction and prediction becomes the next token tiny models count characters larger models shape probability across vast spaces of text both are trying to continue what comes next ",
+    "in the workshop the lamp burned low the rain struck the window and the page filled slowly with symbols hypotheses and fragments of speech every sentence left a trail every trail suggested another turn and the system kept asking what kind of thing usually follows this one ",
+    "deep in the archive old words met new ones fragments of theatre collided with sea journals and laboratory notes the result was not wisdom exactly but it had motion texture and a strange synthetic memory of storms candles engines and dreams "
+  ])
 
 // ── Training ────────────────────────────────────────────────────────────────
 
@@ -43,7 +50,7 @@ fun incr(d: Dict<String, Int>, ch: String): Dict<String, Int> = {
   Dict.insert(d, ch, cur + 1)
 }
 
-// Record that the 2-char context `ctx` was followed by character `ch`.
+// Record that the 3-char context `ctx` was followed by character `ch`.
 fun observe(
   model: Dict<String, Dict<String, Int>>,
   ctx:   String,
@@ -56,16 +63,17 @@ fun observe(
   Dict.insert(model, ctx, incr(inner, ch))
 }
 
-// Slide the 2-char window left-to-right, recording every (bigram → next) pair.
+// Slide the 3-char window left-to-right, recording every (trigram → next) pair.
 fun trainLoop(
   model: Dict<String, Dict<String, Int>>,
   a:     String,
   b:     String,
+  c:     String,
   chars: List<String>
 ): Dict<String, Dict<String, Int>> =
   match (chars) {
     []     => model
-    h :: t => trainLoop(observe(model, "${a}${b}", h), b, h, t)
+    h :: t => trainLoop(observe(model, "${a}${b}${c}", h), b, c, h, t)
   }
 
 // Build the model from a string.
@@ -75,8 +83,12 @@ fun train(text: String): Dict<String, Dict<String, Int>> = {
     [] => Dict.empty()
     h :: rest =>
       match (rest) {
-        []       => Dict.empty()
-        s :: more => trainLoop(Dict.empty(), h, s, more)
+        [] => Dict.empty()
+        s :: more =>
+          match (more) {
+            [] => Dict.empty()
+            t :: tail => trainLoop(Dict.empty(), h, s, t, tail)
+          }
       }
   }
 }
@@ -116,14 +128,14 @@ fun sampleFrom(d: Dict<String, Int>): String = {
   if (total == 0) " " else pickChar(ks, d, Rnd.random(total))
 }
 
-// Predict the next character for a 2-char context.
+// Predict the next character for a 3-char context.
 fun nextChar(model: Dict<String, Dict<String, Int>>, ctx: String): String =
   match (Dict.get(model, ctx)) {
     None    => " "           // unseen context — emit a space
     Some(d) => sampleFrom(d)
   }
 
-// Generate `n` characters, keeping a sliding 2-char context window.
+// Generate `n` characters, keeping a sliding 3-char context window.
 fun genLoop(
   model: Dict<String, Dict<String, Int>>,
   ctx:   String,
@@ -133,7 +145,7 @@ fun genLoop(
   if (n <= 0) acc
   else {
     val ch     = nextChar(model, ctx)
-    val newCtx = Str.right("${ctx}${ch}", 2)
+    val newCtx = Str.right("${ctx}${ch}", 3)
     genLoop(model, newCtx, n - 1, "${acc}${ch}")
   }
 
@@ -201,7 +213,7 @@ fun main(): Unit = {
   val corpusLen = Str.length(corpus)
   val ctxCount  = Dict.size(model)
   println("   Corpus length : ${corpusLen} characters")
-  println("   Unique bigrams: ${ctxCount} contexts learned")
+  println("   Unique trigrams: ${ctxCount} contexts learned")
   println("")
 
   // ── Character frequency chart ─────────────────────────────────────────
@@ -217,8 +229,8 @@ fun main(): Unit = {
   println("")
 
   // ── Generate samples ──────────────────────────────────────────────────
-  println("── Generated text  (2-char seed → 76 sampled chars) ──────")
-  val seeds = ["to", "th", "sl", "qu"]
+  println("── Generated text  (3-char seed → 76 sampled chars) ──────")
+  val seeds = ["the", "sle", "onc", "mac"]
   Lst.forEach(seeds, (seed: String) => {
     val text = generate(model, seed, 76)
     println("   [${seed}] ${text}")
@@ -229,13 +241,13 @@ fun main(): Unit = {
   println("── What this demonstrates ────────────────────────────────")
   println("   The model is just a lookup table:")
   println("     context → { next_char: count, ... }")
-  println("   e.g.  \"th\" → { 'e':20, 'a':3, 'i':5, 'o':2 }")
+  println("   e.g.  \"the\" → { ' ':15, 'r':6, 'y':3, 'n':2 }")
   println("")
   println("   To generate, pick a random next char weighted by those")
   println("   counts, append it, then slide the window one step right.")
   println("")
   println("   A production LLM does the same thing — just scaled up:")
-  println("     context  : 2 chars        →  128 000 tokens")
+  println("     context  : 3 chars        →  128 000 tokens")
   println("     table    : count dict     →  billions of learned weights")
   println("     sampling : freq. counts   →  softmax( W · x + b )")
   println("     learning : counting       →  gradient descent")

@@ -49,3 +49,16 @@ Add a new `kestrel:sys/path` module with common path manipulation utilities back
 - Use `java.nio.file.Paths.get(...).normalize().toString()` for `normalize` and `resolve`. This is I/O-free on absolute paths.
 - `join` should use `Paths.get(first, rest...)` to be OS-correct.
 - Independent of all other E13 stories.
+
+## Tasks
+
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add pathJoin, pathDirname, pathBasename, pathResolve, pathIsAbsolute, pathExtension, pathWithoutExtension, pathSplit, pathNormalize
+- [x] `stdlib/kestrel/sys/path.ks`: create new module with all path functions
+- [x] `tests/conformance/runtime/valid/sys_path.ks`: test all functions
+- [x] `cd runtime/jvm && bash build.sh`
+- [x] `cd compiler && npm test`
+- [x] `docs/specs/02-stdlib.md`: add sys/path section
+
+## Build notes
+
+All complex return types (Option, tuples as KRecord) must return `Object` from KRuntime methods, not their specific type, to match `Ljava/lang/Object;` in generated extern call descriptors. `Bool` return → must be `Boolean` (boxed), not `boolean` (primitive).
