@@ -3585,8 +3585,6 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
   const initGuardPos = initMb.length();
   initMb.emit1s(JvmOp.IFNE, 0);
   initMb.addBranchTarget(initMb.length(), frameState(env, nextLocal));
-  initMb.emit1(JvmOp.ICONST_1);
-  initMb.emit1s(JvmOp.PUTSTATIC, cf.fieldref(className, '$initialized', 'Z'));
   for (const node of program.body) {
     if (!node) continue;
     if (node.kind === 'ValDecl' || node.kind === 'ValStmt') {
@@ -3613,6 +3611,11 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       initMb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'storeMainResult', '(Ljava/lang/Object;)V'));
     }
   }
+  // Set $initialized = true only AFTER all module-level vals are written.
+  // Setting it early (before the loop) creates a race: a concurrent virtual thread
+  // can see $initialized=true and read still-null fields.
+  initMb.emit1(JvmOp.ICONST_1);
+  initMb.emit1s(JvmOp.PUTSTATIC, cf.fieldref(className, '$initialized', 'Z'));
   const initEndPos = initMb.length();
   initMb.addBranchTarget(initEndPos, frameState(env, nextLocal));
   initMb.emit1(JvmOp.RETURN);
