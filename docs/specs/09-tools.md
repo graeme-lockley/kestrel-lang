@@ -127,7 +127,7 @@ Formats one or more Kestrel source files in-place using the opinionated formatte
 - Indent unit: 2 spaces
 - `fun` body: when the body is a block expression (`{ … }`), the opening `{` follows `=` on the same line and the block content is indented by 2 from the function signature; otherwise the body breaks to the next line indented by 2
 - `match` arms: pattern and `=>` on one line, body on next line indented by 2
-- Chained `if/else`: `else` keyword at same column as `if`; block `{` stays on the same line
+- `if/else` chain: if the entire chain (including all `else if`/`else` branches) fits on one line it is kept inline; otherwise each branch always breaks — `then` body indented by 2, `else`/`else if` at the same column as `if`, `else` body indented by 2. When any branch body is a block expression the chain always breaks (blocks cannot render inline). Block `{` always stays on the same line as `if (…)` / `else`.
 - Pipelines (`|>`) always break: each step on its own line indented by 2
 - ADT type with ≥2 constructors: each constructor on its own line with `| ` prefix
 - Blank line between each top-level declaration

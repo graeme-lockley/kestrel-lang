@@ -276,30 +276,47 @@ fun fmtBinaryExpr(op: String, l: Ast.Expr, r: Ast.Expr): Doc = {
   PP.group(PP.hsep([leftDoc, PP.text(op), rightDoc]))
 }
 
-fun fmtIfExpr(cond: Ast.Expr, then_: Ast.Expr, else_: Option<Ast.Expr>): Doc = {
+fun ifHasBlock_(then_: Ast.Expr, else_: Option<Ast.Expr>): Bool =
+  match (then_) {
+    EBlock(_) => True
+    _ => match (else_) {
+      None => False
+      Some(e) => match (e) {
+        EBlock(_) => True
+        EIf(_, t2, e2) => ifHasBlock_(t2, e2)
+        _ => False
+      }
+    }
+  }
+
+fun fmtIfExprInner(cond: Ast.Expr, then_: Ast.Expr, else_: Option<Ast.Expr>): Doc = {
   val condDoc = PP.hcat([PP.text("if ("), fmtExpr(cond), PP.text(")")])
   val thenDoc = match (then_) {
     EBlock(b) => PP.beside(condDoc, fmtBlock(b))
-    _ => PP.group(PP.hcat([condDoc, PP.nest(fmtIndent, PP.concat(PP.line, fmtExpr(then_)))]))
+    _ => PP.hcat([condDoc, PP.nest(fmtIndent, PP.concat(PP.line, fmtExpr(then_)))])
   }
   match (else_) {
     None => thenDoc
     Some(e) =>
       match (e) {
         EIf(c2, t2, e2) =>
-          PP.hcat([thenDoc, PP.text(" else "), fmtIfExpr(c2, t2, e2)])
+          PP.hcat([thenDoc, PP.line, PP.text("else "), fmtIfExprInner(c2, t2, e2)])
         EBlock(b) =>
-          PP.hcat([thenDoc, PP.text(" else "), fmtBlock(b)])
+          PP.hcat([thenDoc, PP.line, PP.text("else "), fmtBlock(b)])
         _ =>
           PP.hcat([
             thenDoc,
-            PP.group(PP.hcat([
-              PP.text(" else"),
-              PP.nest(fmtIndent, PP.concat(PP.line, fmtExpr(e)))
-            ]))
+            PP.line,
+            PP.text("else"),
+            PP.nest(fmtIndent, PP.concat(PP.line, fmtExpr(e)))
           ])
       }
   }
+}
+
+fun fmtIfExpr(cond: Ast.Expr, then_: Ast.Expr, else_: Option<Ast.Expr>): Doc = {
+  val inner = fmtIfExprInner(cond, then_, else_)
+  if (ifHasBlock_(then_, else_)) inner else PP.group(inner)
 }
 
 fun fmtWhileExpr(cond: Ast.Expr, body: Ast.Block): Doc =
