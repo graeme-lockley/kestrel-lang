@@ -106,6 +106,15 @@ export fun toInt(s: String): Option<Int> =
 export fun fromInt(n: Int): String =
   "${n}"
 
+extern fun parseFloatImpl(s: String): Option<Float> =
+  jvm("kestrel.runtime.KRuntime#parseFloat(java.lang.Object)")
+
+extern fun toFloatImpl(s: String): Float =
+  jvm("kestrel.runtime.KRuntime#toFloat(java.lang.Object)")
+
+export fun parseFloat(s: String): Option<Float> = parseFloatImpl(s)
+export fun toFloat(s: String): Float = toFloatImpl(s)
+
 export extern fun split(s: String, delim: String): List<String> =
   jvm("kestrel.runtime.KRuntime#stringSplit(java.lang.Object,java.lang.Object)")
 

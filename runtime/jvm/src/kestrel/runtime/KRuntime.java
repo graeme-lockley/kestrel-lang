@@ -2475,6 +2475,24 @@ public final class KRuntime {
     public static String pathNormalize(Object path) {
         return java.nio.file.Paths.get((String) path).normalize().toString();
     }
+
+    // ── Float parsing for kestrel:data/string ────────────────────────────────
+
+    public static Object parseFloat(Object s) {
+        try {
+            return new KSome(Double.parseDouble((String) s));
+        } catch (NumberFormatException e) {
+            return KNone.INSTANCE;
+        }
+    }
+
+    public static Double toFloat(Object s) {
+        try {
+            return Double.parseDouble((String) s);
+        } catch (NumberFormatException e) {
+            return 0.0;
+        }
+    }
 }
 
 

@@ -17,54 +17,52 @@
 //   fib     — first 8 Fibonacci numbers
 
 import * as Arr from "kestrel:data/array"
+import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
 import * as Chr from "kestrel:data/char"
 
 // ── Bracket pre-compilation ───────────────────────────────────────────────────
 
-// Returns an array where jumps[pc] = matching bracket position for '[' and ']'.
-fun buildJumps(prog: Array<Char>): Array<Int> = {
-  val n = Arr.length(prog)
-  val jumps = Arr.fromList(Lst.generate(n, (_) => -1))
-  val stack: Array<Int> = Arr.new()
+fun filledInts(size: Int, value: Int): Array<Int> = {
+  val arr: Array<Int> = Arr.new()
   var i = 0
-  while (i < n) {
+  while (i < size) {
+    Arr.push(arr, value)
+    i := i + 1
+  }
+  arr
+}
+
+// Returns an array where jumps[pc] = matching bracket position for '[' and ']'.
+fun buildJumpsLoop(prog: Array<Char>, jumps: Array<Int>, stack: List<Int>, i: Int, n: Int): Array<Int> =
+  if (i >= n) {
+    jumps
+  } else {
     match (Arr.get(prog, i)) {
-      '[' => {
-        Arr.push(stack, i)
-        i := i + 1
-      }
-      ']' => {
-        val open = Arr.get(stack, Arr.length(stack) - 1)
-        Arr.set(jumps, open, i)
-        Arr.set(jumps, i, open)
-        // pop stack: rebuild without last element
-        var j = 0
-        val tmp: Array<Int> = Arr.new()
-        while (j < Arr.length(stack) - 1) {
-          Arr.push(tmp, Arr.get(stack, j))
-          j := j + 1
+      '[' =>
+        buildJumpsLoop(prog, jumps, i :: stack, i + 1, n)
+      ']' =>
+        match (stack) {
+          [] => buildJumpsLoop(prog, jumps, stack, i + 1, n)
+          open :: rest => {
+            Arr.set(jumps, open, i)
+            Arr.set(jumps, i, open)
+            buildJumpsLoop(prog, jumps, rest, i + 1, n)
+          }
         }
-        var k = 0
-        while (k < Arr.length(stack)) {
-          if (k < Arr.length(tmp))
-            Arr.set(stack, k, Arr.get(tmp, k))
-          k := k + 1
-        }
-        // shrink stack length by re-creating it
-        j := 0
-        val stk2: Array<Int> = Arr.new()
-        while (j < Arr.length(tmp)) {
-          Arr.push(stk2, Arr.get(tmp, j))
-          j := j + 1
-        }
-        i := i + 1
-      }
-      _ => i := i + 1
+      _ =>
+        buildJumpsLoop(prog, jumps, stack, i + 1, n)
     }
   }
-  jumps
+
+fun buildJumps(prog: Array<Char>): Array<Int> = {
+  val n = Arr.length(prog)
+  val jumps = filledInts(n, -1)
+  buildJumpsLoop(prog, jumps, [], 0, n)
 }
+
+fun isInstruction(c: Char): Bool =
+  c == '+' | c == '-' | c == '>' | c == '<' | c == '.' | c == ',' | c == '[' | c == ']'
 
 // ── Interpreter ────────────────────────────────────────────────────────────────
 
@@ -74,7 +72,7 @@ fun run(source: String): Unit = {
   var ci = 0
   while (ci < Arr.length(chars)) {
     val c = Arr.get(chars, ci)
-    if (c == '+' || c == '-' || c == '>' || c == '<' || c == '.' || c == ',' || c == '[' || c == ']')
+    if (isInstruction(c))
       Arr.push(prog, c)
     ci := ci + 1
   }
@@ -82,34 +80,33 @@ fun run(source: String): Unit = {
   val n = Arr.length(prog)
   val jumps = buildJumps(prog)
 
-  val tape: Array<Int> = Arr.fromList(Lst.generate(30000, (_) => 0))
+  val tape = filledInts(30000, 0)
   var dp = 0   // data pointer
   var pc = 0   // program counter
   var out = "" // accumulated output
 
   while (pc < n) {
     match (Arr.get(prog, pc)) {
-      '>' => { dp := dp + 1;                          pc := pc + 1 }
-      '<' => { dp := dp - 1;                          pc := pc + 1 }
-      '+' => { Arr.set(tape, dp, Arr.get(tape, dp) + 1); pc := pc + 1 }
-      '-' => { Arr.set(tape, dp, Arr.get(tape, dp) - 1); pc := pc + 1 }
+      '>' => { dp := dp + 1; pc := pc + 1; () }
+      '<' => { dp := dp - 1; pc := pc + 1; () }
+      '+' => { Arr.set(tape, dp, Arr.get(tape, dp) + 1); pc := pc + 1; () }
+      '-' => { Arr.set(tape, dp, Arr.get(tape, dp) - 1); pc := pc + 1; () }
       '.' => {
-        out := out ++ Chr.toString(Chr.intToChar(Arr.get(tape, dp)))
-        pc := pc + 1
+        out := Str.append(out, Chr.charToString(Chr.intToChar(Arr.get(tape, dp))))
+        pc := pc + 1;
+        ()
       }
       '[' => {
-        if (Arr.get(tape, dp) == 0)
-          pc := Arr.get(jumps, pc) + 1
-        else
-          pc := pc + 1
+        val nextPc = if (Arr.get(tape, dp) == 0) Arr.get(jumps, pc) + 1 else pc + 1
+        pc := nextPc;
+        ()
       }
       ']' => {
-        if (Arr.get(tape, dp) != 0)
-          pc := Arr.get(jumps, pc) + 1
-        else
-          pc := pc + 1
+        val nextPc = if (Arr.get(tape, dp) != 0) Arr.get(jumps, pc) else pc + 1
+        pc := nextPc;
+        ()
       }
-      _   => pc := pc + 1
+      _   => { pc := pc + 1; () }
     }
   }
   println(out)

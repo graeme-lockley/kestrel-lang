@@ -57,6 +57,24 @@ fun toResult(ie: IndexEntry): SearchResult = {
   excerpt    = makeExcerpt(ie.entry.doc)
 }
 
+// Character-by-character string comparison: returns True if a <= b (lexicographic).
+fun strLe(a: String, b: String): Bool = {
+  val la = Str.length(a);
+  val lb = Str.length(b);
+  val minLen = if (la < lb) la else lb;
+  strLePart(a, b, 0, minLen, la, lb)
+}
+
+fun strLePart(a: String, b: String, i: Int, minLen: Int, la: Int, lb: Int): Bool =
+  if (i >= minLen) la <= lb
+  else {
+    val ca = Str.codePointAt(a, i);
+    val cb = Str.codePointAt(b, i);
+    if (ca < cb) True
+    else if (ca > cb) False
+    else strLePart(a, b, i + 1, minLen, la, lb)
+  }
+
 // Simple insertion sort by (moduleSpec + "." + name)
 fun insertAlpha(r: SearchResult, rs: List<SearchResult>): List<SearchResult> =
   match (rs) {
@@ -64,7 +82,7 @@ fun insertAlpha(r: SearchResult, rs: List<SearchResult>): List<SearchResult> =
     h :: t => {
       val rKey = "${r.moduleSpec}.${r.name}";
       val hKey = "${h.moduleSpec}.${h.name}";
-      if (rKey <= hKey) r :: rs else h :: insertAlpha(r, t)
+      if (strLe(rKey, hKey)) r :: rs else h :: insertAlpha(r, t)
     }
   }
 

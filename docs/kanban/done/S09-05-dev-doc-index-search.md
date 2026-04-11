@@ -83,3 +83,42 @@ are returned as a list of `SearchResult` records and also serialised to JSON for
   is acceptable.
 - `toFullJson` is intended to allow VS Code extensions or other tooling to consume the full
   index without running a search — keep the format simple and documented in the spec.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib (new module) | `stdlib/kestrel/dev/doc/index.ks` — `DocIndex`, `SearchResult`, `build`, `query`, `toSearchJson`, `toFullJson` |
+| Tests (new) | `stdlib/kestrel/dev/doc/index.test.ks` — unit tests |
+| Specs | None required |
+
+## Tasks
+
+- [x] Create `stdlib/kestrel/dev/doc/index.ks` with `DocIndex` and `SearchResult` types
+- [x] Implement `build(modules: List<DocModule>): DocIndex`
+- [x] Implement `query(idx: DocIndex, q: String): List<SearchResult>` with rank 1–4 logic
+- [x] Implement `toSearchJson(results: List<SearchResult>): String`
+- [x] Implement `toFullJson(idx: DocIndex): String`
+- [x] Create `stdlib/kestrel/dev/doc/index.test.ks` with unit tests
+- [x] Run `./kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/dev/doc/index.test.ks` | `build([])` → empty index |
+| Kestrel harness | `stdlib/kestrel/dev/doc/index.test.ks` | `query` rank 1–4 ordering |
+| Kestrel harness | `stdlib/kestrel/dev/doc/index.test.ks` | `toSearchJson([])` → `"[]"` |
+| Kestrel harness | `stdlib/kestrel/dev/doc/index.test.ks` | `toFullJson` — module keys present |
+
+## Documentation and specs to update
+
+- None.
+
+## Build notes
+
+- `opaque type DocIndex = List<IndexEntry>` fails when the underlying type is parametric (e.g. `List<T>`). Used a wrapper record `export type DocIndex = { entries: List<IndexEntry> }` instead.
+- `<=` on `String` in Kestrel JVM always returns `False` (the JVM codegen emits a constant `Boolean.FALSE`). Implemented character-by-character string comparison using `Str.codePointAt` for alphabetical result sorting.
+- Multi-cons `a :: b :: c :: []` match patterns cause a codegen "unknown variable" error. Used `List.head` and `List.drop` instead.
+- Top-level `val` declarations cannot have type annotations (e.g. `val x: DocModule = ...` fails). Remove type annotations.
+- 36 tests pass across 18 groups.
