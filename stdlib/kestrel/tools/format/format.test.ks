@@ -3,7 +3,7 @@
 //   format(format(src)) == format(src)
 // i.e. a second formatting pass never changes the output.
 
-import { Suite, group, asyncGroup, eq, isTrue } from "kestrel:tools/test"
+import { Suite, group, asyncGroup, eq, isTrue } from "kestrel:dev/test"
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
 import { readText } from "kestrel:io/fs"

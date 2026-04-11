@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 import { equals as stringEquals } from "kestrel:data/string"
 import {
   codePoint,

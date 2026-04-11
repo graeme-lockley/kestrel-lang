@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 import { NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:io/fs"
 import * as Fs from "kestrel:io/fs"
 import * as Lst from "kestrel:data/list"

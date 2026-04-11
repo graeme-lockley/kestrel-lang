@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 import { new as newArr, get, set, push, length, fromList, toList } from "kestrel:data/array"
 import { map } from "kestrel:data/list"
 

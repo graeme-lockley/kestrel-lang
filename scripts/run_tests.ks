@@ -156,7 +156,7 @@ async fun main(): Task<Unit> = {
   val calls = buildCalls(testCount, 0)
 
   val genHead =
-    "import { printSummary, makeRoot, outputCompact, outputVerbose, outputSummary } from \"kestrel:tools/test\"\n";
+    "import { printSummary, makeRoot, outputCompact, outputVerbose, outputSummary } from \"kestrel:dev/test\"\n";
   val genMid =
     "\nasync fun main(): Task<Unit> = {\n  val root = makeRoot(";
   val genRest = ")\n";

@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 import * as Lst from "kestrel:data/list"
 import * as Token from "kestrel:dev/parser/token"
 import { TPLiteral, TPInterp, TkTemplate } from "kestrel:dev/parser/token"

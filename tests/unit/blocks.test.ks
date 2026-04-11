@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 
 // Minimal: block with var not inside a closure (direct function return)
 fun testVarBlockDirect(): Int = { var x = 0; x := 1; x }

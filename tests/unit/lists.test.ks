@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 
 fun sum(xs: List<Int>): Int = match (xs) {
   [] => 0,

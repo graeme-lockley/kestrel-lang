@@ -1,5 +1,5 @@
 // Tests for kestrel:io/socket TCP and TLS socket library (S03-02).
-import { Suite, group, asyncGroup, eq, isTrue } from "kestrel:tools/test"
+import { Suite, group, asyncGroup, eq, isTrue } from "kestrel:dev/test"
 import * as Socket from "kestrel:io/socket"
 import * as Task from "kestrel:sys/task"
 import * as Str from "kestrel:data/string"

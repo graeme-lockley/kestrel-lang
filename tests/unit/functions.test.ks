@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 
 // Minimal nested fun to trigger VM path (desugared to block val + lambda)
 fun outerWithNested(): Int = { fun inner(): Int = 1; inner() }

@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 
 fun classify(n: Int): Int =
   if (n < 0) 0

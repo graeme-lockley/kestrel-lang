@@ -3,7 +3,7 @@
 //   - extern type: naming a JVM class
 //   - extern import: auto-generating bindings from JVM class metadata
 
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 
 // ---------------------------------------------------------------------------
 // extern fun — static method: String.valueOf(Object)

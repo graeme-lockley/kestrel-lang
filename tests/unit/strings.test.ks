@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 
 fun add(a: Int, b: Int): Int = a + b
 

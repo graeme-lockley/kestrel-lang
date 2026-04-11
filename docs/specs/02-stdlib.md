@@ -605,11 +605,11 @@ Opinionated source code formatter for Kestrel. Parses source with `kestrel:dev/p
 
 **Known limitations:** Comments inside expressions or function bodies are not preserved; only `//` or `/* */` comments on the line(s) immediately before a top-level declaration are re-attached in the output.
 
-## kestrel:tools/test
+## kestrel:dev/test
 
 Assertions and reporting for the Kestrel unit-test harness (`kestrel test`). Imports from `kestrel:data/basics` (`nowMs`), `kestrel:io/console`, `kestrel:data/list`, `kestrel:dev/stack` (`format`), `kestrel:data/string`, and `kestrel:sys/task` (`asyncTasksInFlight`) for implementation; styled output uses console ANSI constants (✓/✗, colours, default-weight group names, dim for secondary text such as timing and verbose footers).
 
-The CLI entry point is `kestrel:tools/test-runner`, which generates `.kestrel_test_runner.ks`, imports `kestrel:tools/test` for harness functions, and runs it via `./scripts/kestrel run`. The CLI (`./scripts/kestrel test`) passes flags **`--verbose`** and **`--summary`** through to the runner. Default output mode is **compact**.
+The CLI entry point is `kestrel:tools/test`, which delegates to `kestrel:tools/test/discovery` (file discovery) and `kestrel:tools/test/runner` (code generation and subprocess execution). It generates `.kestrel_test_runner.ks`, imports `kestrel:dev/test` for harness functions, and runs it via `./kestrel run`. The CLI (`./scripts/kestrel test`) passes flags **`--verbose`** and **`--summary`** through to the runner. Default output mode is **compact**.
 
 ### Output mode constants
 

@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 import { getOrElse as optGet } from "kestrel:data/option"
 import {
   getOrElse,

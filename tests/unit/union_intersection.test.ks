@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 
 fun takeU(x: Int | Bool): Int = if (x is Int) x else 0
 

@@ -12,10 +12,10 @@ This epic closes that gap by filling two stdlib holes and rewriting `test-runner
 
 ## Stories
 
-1. [S11-01 — `getEnv` in `kestrel:sys/process`: expose environment variables to Kestrel programs](../../unplanned/S11-01-getenv-in-sys-process.md)
-2. [S11-02 — `kestrel:io/fs` file management: `fileExists`, `deleteFile`, `renameFile`](../../unplanned/S11-02-io-fs-file-management.md)
-3. [S11-03 — Rewrite `kestrel:tools/test-runner` as a `kestrel:dev/cli` entry point](../../unplanned/S11-03-rewrite-test-runner.md)
-4. [S11-04 — Simplify bash `cmd_test` to match `cmd_fmt`](../../unplanned/S11-04-simplify-cmd-test.md)
+1. [S11-01 — `getEnv` in `kestrel:sys/process`: expose environment variables to Kestrel programs](../../done/S11-01-getenv-in-sys-process.md)
+2. [S11-02 — `kestrel:io/fs` file management: `fileExists`, `deleteFile`, `renameFile`](../../done/S11-02-io-fs-file-management.md)
+3. [S11-03 — Rewrite `kestrel:tools/test-runner` as a `kestrel:dev/cli` entry point](../../done/S11-03-rewrite-test-runner.md)
+4. [S11-04 — Simplify bash `cmd_test` to match `cmd_fmt`](../../done/S11-04-simplify-cmd-test.md)
 
 ## Dependencies
 
@@ -25,11 +25,11 @@ This epic closes that gap by filling two stdlib holes and rewriting `test-runner
 ## Epic Completion Criteria
 
 - The end-to-end wall-clock time of `kestrel test` (measured from CLI entry to process exit on a warm cache, full test suite) is no slower than the equivalent bash-driven invocation. Benchmark both before and after S11-04 and record results in the story's Build notes.
-- `cmd_test` in `scripts/kestrel` is structurally identical to `cmd_fmt`: three lines — `ensure_tools`, a compiler-built check, and `exec "$ROOT/kestrel" run "kestrel:tools/test-runner" "$@"`.
+- `cmd_test` in `scripts/kestrel` is structurally identical to `cmd_fmt`: three lines — `ensure_tools`, a compiler-built check, and `exec "$ROOT/kestrel" run "kestrel:tools/test" "$@"`.
 - `_run_unit_tests` is deleted from `scripts/kestrel`.
-- `kestrel:tools/test-runner` accepts `--verbose`, `--summary`, `--clean`, `--refresh`, `--allow-http` via `kestrel:dev/cli`; these flags are forwarded correctly to the inner `kestrel run` subprocess for the generated runner.
+- `kestrel:tools/test` accepts `--verbose`, `--summary`, `--clean`, `--refresh`, `--allow-http` via `kestrel:dev/cli`; these flags are forwarded correctly to the inner `kestrel run` subprocess for the generated runner.
 - `kestrel:sys/process` exports `getEnv(String) -> Option<String>` backed by `KRuntime`; `getProcess().env` returns the actual process environment.
-- `kestrel:io/fs` exports `fileExists`, `deleteFile`, and `renameFile`; `test-runner.ks` uses `renameFile` instead of the `sh -c "cmp -s ... && rm ... || mv ..."` subprocess trick.
+- `kestrel:io/fs` exports `fileExists`, `deleteFile`, and `renameFile`; `kestrel:tools/test/runner` uses `renameFile` instead of the `sh -c "cmp -s ... && rm ... || mv ..."` subprocess trick.
 - All existing `./kestrel test` behaviours are preserved: default discovery (`tests/unit/` + `stdlib/kestrel/` up to 3 levels), explicit file/directory arguments, `--verbose` / `--summary` / `--generate` output modes, `--clean` cache invalidation.
 - All test suites pass: `cd compiler && npm test`, `./kestrel test`.
 
@@ -63,11 +63,11 @@ Stage 2 requires the Kestrel compiler and JVM runtime. Currently stage 2 is hand
 
 ### Project root discovery
 
-Currently, bash passes `"" "" "$ROOT"` as the first three JVM args so `test-runner.ks` can read `args[2]` as the project root. With the new launch convention (`./kestrel run kestrel:tools/test-runner "$@"`), `getArgs()` returns only the user-supplied arguments. `test-runner.ks` switches to `getProcess().cwd` as the project root (correct when `kestrel test` is run from the project root, which is the documented convention).
+Currently, bash passes `"" "" "$ROOT"` as the first three JVM args so `kestrel:tools/test` can read `args[2]` as the project root. With the new launch convention (`./kestrel run kestrel:tools/test "$@"`), `getArgs()` returns only the user-supplied arguments. `kestrel:tools/test` switches to `getProcess().cwd` as the project root (correct when `kestrel test` is run from the project root, which is the documented convention).
 
 ### Compiler-flag forwarding
 
-`--clean`, `--refresh`, and `--allow-http` are *compiler* flags consumed by `./kestrel run` when compiling `test-runner.ks`. They must also be forwarded to the inner `./kestrel run .kestrel_test_runner.ks` call so that the generated runner and the test files it imports are compiled with the same settings. `test-runner.ks` reads these flags from `proc.args` via `kestrel:dev/cli` and appends them to the inner subprocess command.
+`--clean`, `--refresh`, and `--allow-http` are *compiler* flags consumed by `./kestrel run` when compiling `kestrel:tools/test`. They must also be forwarded to the inner `./kestrel run .kestrel_test_runner.ks` call so that the generated runner and the test files it imports are compiled with the same settings. `kestrel:tools/test` reads these flags from `proc.args` via `kestrel:dev/cli` and appends them to the inner subprocess command.
 
 ### After this epic
 
@@ -79,6 +79,6 @@ cmd_test() {
   if compiler_build_needed; then
     build_compiler_jvm
   fi
-  KESTREL_BIN="$ROOT/kestrel" exec "$ROOT/kestrel" run "kestrel:tools/test-runner" "$@"
+  KESTREL_BIN="$ROOT/kestrel" exec "$ROOT/kestrel" run "kestrel:tools/test" "$@"
 }
 ```

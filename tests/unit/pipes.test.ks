@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 
 fun double(x: Int): Int = x * 2
 fun add1(x: Int): Int = x + 1

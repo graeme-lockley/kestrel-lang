@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 import { pair, first, second, mapFirst, mapSecond, mapBoth } from "kestrel:data/tuple"
 
 fun double(n: Int): Int = n + n

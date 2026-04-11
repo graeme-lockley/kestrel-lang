@@ -92,7 +92,7 @@ resolve_script() {
 }
 
 # Resolve a kestrel: module specifier to an absolute .ks path (or empty string on failure).
-# Example: kestrel:tools/test -> $ROOT/stdlib/kestrel/tools/test.ks
+# Example: kestrel:dev/test -> $ROOT/stdlib/kestrel/dev/test.ks
 resolve_module_specifier() {
   local spec="$1"
   local rest="${spec#kestrel:}"
@@ -395,7 +395,7 @@ cmd_test() {
   if compiler_build_needed; then
     build_compiler_jvm
   fi
-  KESTREL_BIN="$ROOT/kestrel" exec "$ROOT/kestrel" run "kestrel:tools/test-runner" "$@"
+  KESTREL_BIN="$ROOT/kestrel" exec "$ROOT/kestrel" run "kestrel:tools/test" "$@"
 }
 
 cmd_fmt() {

@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 import * as Fs from "kestrel:io/fs"
 import * as Process from "kestrel:sys/process"
 import * as Task from "kestrel:sys/task"

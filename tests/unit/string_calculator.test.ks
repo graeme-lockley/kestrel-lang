@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 import { slice, left, right, dropLeft, dropRight, indexOf, split, splitWithDelimiters, parseInt } from "kestrel:data/string"
 import { isEmpty, map, filter, sum } from "kestrel:data/list"
 

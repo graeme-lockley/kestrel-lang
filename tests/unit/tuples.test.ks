@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 
 fun makePair(): (Int * Int) = (7, 8)
 

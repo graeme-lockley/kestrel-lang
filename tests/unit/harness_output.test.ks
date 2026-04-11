@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 
 export async fun run(s: Suite): Task<Unit> =
   group(s, "harness output shape", (s1: Suite) => {

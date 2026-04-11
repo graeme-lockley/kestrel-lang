@@ -3,7 +3,7 @@
 // S03-06: Server round-trip tests — createServer/listen on port 0, query via Http.get.
 // S03-03: request() with method/headers/body; responseHeaders/responseHeader.
 // HTTP GET integration tests also live in tests/e2e/scenarios/positive/.
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 import * as Http from "kestrel:io/http"
 import * as Str from "kestrel:data/string"
 

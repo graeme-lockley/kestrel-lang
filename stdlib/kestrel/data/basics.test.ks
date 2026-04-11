@@ -1,4 +1,4 @@
-import { Suite, group, eq, gte, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, gte, isTrue, isFalse } from "kestrel:dev/test"
 import {
   identity,
   always,

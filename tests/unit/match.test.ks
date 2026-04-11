@@ -1,4 +1,4 @@
-import { Suite, group, eq } from "kestrel:tools/test"
+import { Suite, group, eq } from "kestrel:dev/test"
 
 fun boolToInt(b: Bool): Int = match (b) { True => 1, False => 0 }
 

@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 import { append, fromInt } from "kestrel:data/string"
 import * as List from "kestrel:data/list"
 import * as Arr  from "kestrel:data/array"

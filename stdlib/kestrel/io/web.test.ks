@@ -1,6 +1,6 @@
 // Tests for kestrel:io/web routing framework (S03-04).
 // Tests cover route matching, method dispatch, path parameters, 404/405 defaults.
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 import * as Http from "kestrel:io/http"
 import * as Web from "kestrel:io/web"
 import * as Dict from "kestrel:data/dict"

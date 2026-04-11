@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 import * as PP from "kestrel:dev/text/prettyprinter"
 import * as Str from "kestrel:data/string"
 

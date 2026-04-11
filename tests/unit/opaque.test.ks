@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 
 // Opaque ADT - within the same module, we have full access
 opaque type Token = Num(Int) | Op(String) | Eof

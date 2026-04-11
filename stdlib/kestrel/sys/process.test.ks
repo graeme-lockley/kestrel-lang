@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue } from "kestrel:tools/test"
+import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 import { ProcessSpawnError } from "kestrel:sys/process"
 import * as Process from "kestrel:sys/process"
 
