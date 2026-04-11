@@ -18,6 +18,9 @@ extern fun getCwd(): String =
 export extern fun getEnv(name: String): Option<String> =
   jvm("kestrel.runtime.KRuntime#getEnv(java.lang.Object)")
 
+extern fun getEnvAllImpl(): List<(String, String)> =
+  jvm("kestrel.runtime.KRuntime#getEnvAll()")
+
 extern fun runProcessAsync(program: String, args: List<String>): Task<Result<ProcessResult, String>> =
   jvm("kestrel.runtime.KRuntime#runProcessAsync(java.lang.Object,java.lang.Object)")
 
@@ -28,7 +31,7 @@ export fun getProcess(): P = {
   val os = getOs();
   val a = getArgs();
   val c = getCwd();
-  { os = os, args = a, env = [], cwd = c }
+  { os = os, args = a, env = getEnvAllImpl(), cwd = c }
 }
 
 fun mapProcessError(code: String): ProcessError =

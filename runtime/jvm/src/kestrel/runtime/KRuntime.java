@@ -1068,6 +1068,18 @@ public final class KRuntime {
         return value != null ? new KSome(value) : KNone.INSTANCE;
     }
 
+    /** Returns all environment variables as a KList of (String, String) tuples (KRecord with fields "0" and "1"). */
+    public static KList getEnvAll() {
+        KList result = KNil.INSTANCE;
+        for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
+            KRecord tuple = new KRecord();
+            tuple.set("0", entry.getKey());
+            tuple.set("1", entry.getValue());
+            result = new KCons(tuple, result);
+        }
+        return result;
+    }
+
     public static KTask runProcessAsync(Object program, Object argsObj) {
         CompletableFuture<Object> future = new CompletableFuture<>();
         if (!(program instanceof String)) {
