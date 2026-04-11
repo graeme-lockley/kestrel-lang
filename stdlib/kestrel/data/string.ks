@@ -40,6 +40,9 @@ extern fun charStr(c: Char): String =
 export extern fun indexOf(s: String, sub: String): Int =
   jvm("kestrel.runtime.KRuntime#stringIndexOf(java.lang.Object,java.lang.Object)")
 
+export extern fun indexOfFrom(s: String, sub: String, start: Int): Int =
+  jvm("kestrel.runtime.KRuntime#stringIndexOfFrom(java.lang.Object,java.lang.Object,java.lang.Object)")
+
 export extern fun equals(a: String, b: String): Bool =
   jvm("kestrel.runtime.KRuntime#stringEquals(java.lang.Object,java.lang.Object)")
 
@@ -103,18 +106,8 @@ export fun toInt(s: String): Option<Int> =
 export fun fromInt(n: Int): String =
   "${n}"
 
-export fun split(s: String, delim: String): List<String> =
-  if (length(delim) == 0) [s] else splitAcc(s, delim, 0, 0)
-
-fun splitAcc(s: String, delim: String, start: Int, fromIdx: Int): List<String> =
-  {
-    val tailStr = slice(s, fromIdx, length(s))
-    val rel = indexOf(tailStr, delim)
-    if (rel < 0) [slice(s, start, length(s))] else {
-      val pos = fromIdx + rel
-      slice(s, start, pos) :: splitAcc(s, delim, pos + length(delim), pos + length(delim))
-    }
-  }
+export extern fun split(s: String, delim: String): List<String> =
+  jvm("kestrel.runtime.KRuntime#stringSplit(java.lang.Object,java.lang.Object)")
 
 fun matchDelimiterAt(s: String, delims: List<String>, i: Int): Int =
   match (delims) {

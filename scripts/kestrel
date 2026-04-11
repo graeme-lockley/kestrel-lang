@@ -330,9 +330,9 @@ cmd_run() {
     java_cp="$java_cp:$maven_cp"
   fi
   if [ "$exit_mode" = "no-wait" ]; then
-    exec java -Dkestrel.exitWait=false -cp "$java_cp" "$main_class" "$@"
+    exec java -Xss8m -Dkestrel.exitWait=false -cp "$java_cp" "$main_class" "$@"
   else
-    exec java -cp "$java_cp" "$main_class" "$@"
+    exec java -Xss8m -cp "$java_cp" "$main_class" "$@"
   fi
 }
 

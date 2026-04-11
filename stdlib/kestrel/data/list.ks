@@ -1,9 +1,7 @@
 // kestrel:list — immutable list utilities.
 
-export fun length(xs: List<X>): Int = match (xs) {
-  [] => 0
-  _ :: tail => 1 + length(tail)
-}
+export extern fun length<X>(xs: List<X>): Int =
+  jvm("kestrel.runtime.KRuntime#listLength(java.lang.Object)")
 
 export fun isEmpty(xs: List<X>): Bool = match (xs) {
   [] => True
