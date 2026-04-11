@@ -24,3 +24,8 @@ extern fun _isTtyStdout(): Bool =
 /** Returns terminal dimensions and whether stdout is a TTY (falls back to 80×24 when not a TTY). */
 export fun terminalInfo(): TerminalInfo =
   { width = _terminalWidth(), height = _terminalHeight(), isTty = _isTtyStdout() }
+
+export extern fun printErr(s: String): Unit =
+  jvm("kestrel.runtime.KRuntime#printErr(java.lang.Object)")
+
+export fun eprintln(s: String): Unit = printErr(s)

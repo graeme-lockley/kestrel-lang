@@ -200,6 +200,29 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 
 ---
 
+## kestrel:io/console
+
+Terminal console utilities: ANSI colour constants, terminal info, and stderr output.
+
+| Value | Type | Description |
+|-------|------|-------------|
+| `ESC` | `String` | ASCII escape character (`\x1b`) |
+| `GREEN`, `RED`, `YELLOW`, `DIM`, `RESET` | `String` | ANSI colour/style codes |
+| `CHECK`, `CROSS`, `SPINNER` | `String` | Unicode symbols (✓, ✗, ⣋) |
+| `CLEAR_LINE` | `String` | `\r\x1b[2K` — move to start of line and erase |
+
+| Type | Definition |
+|------|------------|
+| `TerminalInfo` | `{ width: Int, height: Int, isTty: Bool }` |
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `terminalInfo` | `() -> TerminalInfo` | Terminal dimensions. Falls back to 80×24 when stdout is not a TTY. |
+| `printErr` | `(String) -> Unit` | Write a line to stderr (`System.err.println`). |
+| `eprintln` | `(String) -> Unit` | Alias for `printErr`. |
+
+---
+
 ## kestrel:sys/process
 
 Process information and subprocess execution.
