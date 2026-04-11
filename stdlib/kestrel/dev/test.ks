@@ -33,64 +33,38 @@ export fun makeRoot(output: Int): Suite = {
 
 fun indent(n: Int): String = Str.concat(Lst.repeat(n, "  "))
 
-fun groupTitleLine(s: Suite, name: String): String =
-  "${indent(s.depth)}${name}"
-
 fun passLine(s: Suite, desc: String): String =
   "${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}"
 
 /** Default-weight suite name; green count + check; dim timing only. */
 fun compactSummaryLine(depth: Int, name: String, passedInGroup: Int, elapsed: Int): String =
-  Str.append(
-    indent(depth),
-    Str.append(
-      name,
-      Str.append(
-        " (",
-        Str.append(
-          Console.GREEN,
-          Str.append(
-            Str.fromInt(passedInGroup),
-            Str.append(
-              Console.CHECK,
-              Str.append(
-                Console.RESET,
-                Str.append(
-                  Console.DIM,
-                  Str.append(" ", Str.append(Str.fromInt(elapsed), Str.append("ms)", Console.RESET)))
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
+  "${indent(depth)}${name} (${Console.GREEN}${passedInGroup}${Console.CHECK}${Console.RESET}${Console.DIM} ${elapsed}ms)${Console.RESET}"
 
-fun printLinesForward(xs: List<String>): Unit = match (xs) {
-  [] => (),
-  h :: t => {
-    println(h);
-    printLinesForward(t)
-  }
+fun countFooter(p: Int, f: Int, elapsed: Int): String = {
+  val counts = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
+  "${Console.DIM}${counts} (${elapsed}ms)${Console.RESET}"
 }
 
-fun onAssertionPassLine(s: Suite, line: String): Unit =
-  if (s.output == outputSummary) ()
-  else if (s.output == outputVerbose) println(line)
-  else {
-    if (s.counts.compactExpanded) println(line)
-    else ()
-  }
+// ─── Assertion bookkeeping ────────────────────────────────────────────────────
 
-fun onAssertionFailure(s: Suite): Unit = {
+fun recordPass(s: Suite, desc: String): Unit = {
+  s.counts.passed := s.counts.passed + 1;
+  if (s.output == outputVerbose | (s.output == outputCompact & s.counts.compactExpanded))
+    println(passLine(s, desc))
+  else ()
+}
+
+fun recordFail(s: Suite, desc: String): Unit = {
+  s.counts.failed := s.counts.failed + 1;
   s.counts.compactExpanded := True;
-  ()
+  println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}")
 }
+
+// ─── Group prologue / epilogue ────────────────────────────────────────────────
 
 fun groupPrologue(s: Suite, name: String): Suite = {
   if (s.output == outputVerbose | (s.output == outputCompact & s.depth == 0))
-    println(groupTitleLine(s, name));
+    println("${indent(s.depth)}${name}");
   { depth = s.depth + 1, output = s.output, counts = s.counts }
 }
 
@@ -100,31 +74,20 @@ fun groupEpilogue(s: Suite, name: String, passedStart: Int, failedStart: Int, pr
   val p = s.counts.passed - passedStart;
   val f = s.counts.failed - failedStart;
 
-  if (s.output == outputVerbose) {
-    val countStr = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
-    println("${indent(s.depth)}${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}")
-  } else if (s.output == outputSummary) {
+  if (s.output == outputVerbose)
+    println("${indent(s.depth)}${countFooter(p, f, elapsed)}")
+  else if (s.output == outputSummary) {
     if (s.depth == 0) {
-      val summaryLine = if (f > 0) {
-        val countStr = "${p} passed, ${f} failed";
-        "${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}"
-      } else {
-        compactSummaryLine(s.depth, name, p, elapsed)
-      };
-      println(summaryLine)
+      val line = if (f > 0) countFooter(p, f, elapsed) else compactSummaryLine(0, name, p, elapsed);
+      println(line)
     } else ()
   } else {
-    if (s.depth == 0) {
-      val countStr = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
-      println("${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}")
-    } else {
-      val summaryLine = if (f > 0) {
-        val countStr = "${p} passed, ${f} failed";
-        "${indent(s.depth)}${Console.DIM}${countStr} (${elapsed}ms)${Console.RESET}"
-      } else {
-        compactSummaryLine(s.depth, name, p, elapsed)
-      };
-      println(summaryLine)
+    // compact mode
+    if (s.depth == 0)
+      println(countFooter(p, f, elapsed))
+    else {
+      val line = if (f > 0) "${indent(s.depth)}${countFooter(p, f, elapsed)}" else compactSummaryLine(s.depth, name, p, elapsed);
+      println(line)
     }
   }
 }
@@ -159,9 +122,7 @@ export async fun asyncGroup(s: Suite, name: String, body: (Suite) -> Task<Unit>)
     True
   } catch {
     _ => {
-      s.counts.failed := s.counts.failed + 1;
-      s.counts.compactExpanded := True;
-      println("${indent(child.depth)}${Console.RED}${Console.CROSS} group threw an unexpected exception${Console.RESET}");
+      recordFail(child, "group threw an unexpected exception");
       False
     }
   };
@@ -169,103 +130,81 @@ export async fun asyncGroup(s: Suite, name: String, body: (Suite) -> Task<Unit>)
   groupEpilogue(s, name, passedStart, failedStart, prevExpanded, start)
 }
 
+// ─── Assertions ───────────────────────────────────────────────────────────────
+
 /** Equality assertion using `==` (semantic / deep equality; same notion as the VM comparison for structured values). On failure, prints labelled lines so boolean, Int, Unit, String, etc. stay distinguishable via the runtime value printer. */
 export fun eq(s: Suite, desc: String, actual: X, expected: X): Unit =
-  if (actual == expected) {
-    s.counts.passed := s.counts.passed + 1;
-    onAssertionPassLine(s, passLine(s, desc))
-  } else {
-    s.counts.failed := s.counts.failed + 1;
-    onAssertionFailure(s);
-    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+  if (actual == expected)
+    recordPass(s, desc)
+  else {
+    recordFail(s, desc);
     println("${indent(s.depth)}  expected (right): ${Stk.format(expected)}");
     println("${indent(s.depth)}  actual (left):   ${Stk.format(actual)}");
     println("${indent(s.depth)}  (deep equality / same value shape)")
   }
 
 export fun neq(s: Suite, desc: String, actual: X, notExpected: X): Unit =
-  if (actual != notExpected) {
-    s.counts.passed := s.counts.passed + 1;
-    onAssertionPassLine(s, passLine(s, desc))
-  } else {
-    s.counts.failed := s.counts.failed + 1;
-    onAssertionFailure(s);
-    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+  if (actual != notExpected)
+    recordPass(s, desc)
+  else {
+    recordFail(s, desc);
     println("${indent(s.depth)}  expected: values must differ (deep inequality)");
     println("${indent(s.depth)}  both sides: ${Stk.format(actual)}")
   }
 
 export fun isTrue(s: Suite, desc: String, value: Bool): Unit =
-  if (value) {
-    s.counts.passed := s.counts.passed + 1;
-    onAssertionPassLine(s, passLine(s, desc))
-  } else {
-    s.counts.failed := s.counts.failed + 1;
-    onAssertionFailure(s);
-    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+  if (value)
+    recordPass(s, desc)
+  else {
+    recordFail(s, desc);
     println("${indent(s.depth)}  expected (Bool): true");
     println("${indent(s.depth)}  actual (Bool):   ${Stk.format(value)}")
   }
 
 export fun isFalse(s: Suite, desc: String, value: Bool): Unit =
-  if (!value) {
-    s.counts.passed := s.counts.passed + 1;
-    onAssertionPassLine(s, passLine(s, desc))
-  } else {
-    s.counts.failed := s.counts.failed + 1;
-    onAssertionFailure(s);
-    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+  if (!value)
+    recordPass(s, desc)
+  else {
+    recordFail(s, desc);
     println("${indent(s.depth)}  expected (Bool): false");
     println("${indent(s.depth)}  actual (Bool):   ${Stk.format(value)}")
   }
 
 export fun gt(s: Suite, desc: String, left: Int, right: Int): Unit =
-  if (left > right) {
-    s.counts.passed := s.counts.passed + 1;
-    onAssertionPassLine(s, passLine(s, desc))
-  } else {
-    s.counts.failed := s.counts.failed + 1;
-    onAssertionFailure(s);
-    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+  if (left > right)
+    recordPass(s, desc)
+  else {
+    recordFail(s, desc);
     println("${indent(s.depth)}  need: left > right (strict total order on Int)");
     println("${indent(s.depth)}  left (Int):  ${Stk.format(left)}");
     println("${indent(s.depth)}  right (Int): ${Stk.format(right)}")
   }
 
 export fun lt(s: Suite, desc: String, left: Int, right: Int): Unit =
-  if (left < right) {
-    s.counts.passed := s.counts.passed + 1;
-    onAssertionPassLine(s, passLine(s, desc))
-  } else {
-    s.counts.failed := s.counts.failed + 1;
-    onAssertionFailure(s);
-    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+  if (left < right)
+    recordPass(s, desc)
+  else {
+    recordFail(s, desc);
     println("${indent(s.depth)}  need: left < right (strict total order on Int)");
     println("${indent(s.depth)}  left (Int):  ${Stk.format(left)}");
     println("${indent(s.depth)}  right (Int): ${Stk.format(right)}")
   }
 
 export fun gte(s: Suite, desc: String, left: Int, right: Int): Unit =
-  if (left >= right) {
-    s.counts.passed := s.counts.passed + 1;
-    onAssertionPassLine(s, passLine(s, desc))
-  } else {
-    s.counts.failed := s.counts.failed + 1;
-    onAssertionFailure(s);
-    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+  if (left >= right)
+    recordPass(s, desc)
+  else {
+    recordFail(s, desc);
     println("${indent(s.depth)}  need: left >= right (total order on Int)");
     println("${indent(s.depth)}  left (Int):  ${Stk.format(left)}");
     println("${indent(s.depth)}  right (Int): ${Stk.format(right)}")
   }
 
 export fun lte(s: Suite, desc: String, left: Int, right: Int): Unit =
-  if (left <= right) {
-    s.counts.passed := s.counts.passed + 1;
-    onAssertionPassLine(s, passLine(s, desc))
-  } else {
-    s.counts.failed := s.counts.failed + 1;
-    onAssertionFailure(s);
-    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+  if (left <= right)
+    recordPass(s, desc)
+  else {
+    recordFail(s, desc);
     println("${indent(s.depth)}  need: left <= right (total order on Int)");
     println("${indent(s.depth)}  left (Int):  ${Stk.format(left)}");
     println("${indent(s.depth)}  right (Int): ${Stk.format(right)}")
@@ -283,13 +222,10 @@ export fun throws(s: Suite, desc: String, thunk: (Unit) -> Unit): Unit = {
     } catch {
       _ => True
     };
-  if (threw) {
-    s.counts.passed := s.counts.passed + 1;
-    onAssertionPassLine(s, passLine(s, desc))
-  } else {
-    s.counts.failed := s.counts.failed + 1;
-    onAssertionFailure(s);
-    println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}");
+  if (threw)
+    recordPass(s, desc)
+  else {
+    recordFail(s, desc);
     println("${indent(s.depth)}  expected: callee throws an exception");
     println("${indent(s.depth)}  actual:   completed normally (no exception)")
   }
