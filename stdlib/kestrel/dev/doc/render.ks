@@ -3,7 +3,7 @@
 //! values into ready-to-serve HTML pages.
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
-import { DocModule, DocEntry } from "kestrel:dev/doc/extract"
+import { DocModule, DocEntry, DKFun, DKType, DKVal, DKVar, DKException, DKExternType, DKExternFun } from "kestrel:dev/doc/extract"
 import * as Md from "kestrel:dev/doc/markdown"
 import * as Sig from "kestrel:dev/doc/sig"
 
@@ -63,6 +63,44 @@ export fun renderModuleList(modules: List<DocModule>): String = {
 
 // ── Per-module page ───────────────────────────────────────────────────────────
 
+// Short kind indicator shown in the declaration index.
+fun kindLabel(e: DocEntry): String = match (e.kind) {
+  DKFun        => "fun"
+  DKType       => "type"
+  DKVal        => "val"
+  DKVar        => "var"
+  DKException  => "exception"
+  DKExternType => "extern type"
+  DKExternFun  => "extern fun"
+}
+
+// Character-level string comparator (needed because < is not defined on String).
+fun compareStrLoop(a: String, b: String, i: Int, la: Int, lb: Int): Int =
+  if (i >= la & i >= lb) 0
+  else if (i >= la) -1
+  else if (i >= lb) 1
+  else {
+    val d = Str.codePointAt(a, i) - Str.codePointAt(b, i);
+    if (d != 0) d else compareStrLoop(a, b, i + 1, la, lb)
+  }
+
+fun compareStr(a: String, b: String): Int =
+  compareStrLoop(a, b, 0, Str.length(a), Str.length(b))
+
+// One row in the declaration index.
+fun indexItem(e: DocEntry): String =
+  "<li><a href=\"#${escapeAttr(e.name)}\"><span class=\"idx-kind\">${escapeHtml(kindLabel(e))}</span>${escapeHtml(e.name)}</a></li>"
+
+// Render a sorted <details> foldout index for the module.
+fun renderIndex(entries: List<DocEntry>): String = {
+  val sorted = Lst.sortWith(
+    (a: DocEntry, b: DocEntry) => compareStr(a.name, b.name),
+    entries
+  );
+  val items = Str.join("\n    ", Lst.map(sorted, (e: DocEntry) => indexItem(e)));
+  "<details class=\"decl-index\">\n<summary>Index (${Lst.length(entries)})</summary>\n<ul>\n    ${items}\n</ul>\n</details>"
+}
+
 fun renderEntry(entry: DocEntry): String = {
   val sig     = Sig.format(entry)
   val docHtml = if (Str.isEmpty(entry.doc)) "" else Md.render(entry.doc)
@@ -77,8 +115,11 @@ export fun renderModule(mod: DocModule): String = {
   val proseHtml =
     if (Str.isEmpty(mod.moduleProse)) ""
     else "<div class=\"module-prose\">${Md.render(mod.moduleProse)}</div>\n"
+  val indexHtml =
+    if (Lst.isEmpty(mod.entries)) ""
+    else "${renderIndex(mod.entries)}\n"
   val entryHtml = Str.join("\n", Lst.map(mod.entries, (e: DocEntry) => renderEntry(e)))
-  val body      = "<h1 class=\"module-title\">${escapeHtml(mod.moduleSpec)}</h1>\n${proseHtml}${entryHtml}"
+  val body      = "<h1 class=\"module-title\">${escapeHtml(mod.moduleSpec)}</h1>\n${proseHtml}${indexHtml}${entryHtml}"
   page("${mod.moduleSpec} — Kestrel Docs", body)
 }
 
@@ -142,6 +183,14 @@ export fun staticCss(): String =
     "code { font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace; font-size: 0.92rem; }",
     ".doc-body p { margin: 0.6rem 0; }",
     ".doc-body code { background: #f0f0f4; padding: 0.1rem 0.3rem; border-radius: 3px; }",
+    ".decl-index { margin: 1.5rem 0 2rem; border: 1px solid #dde; border-radius: 6px; padding: 0 1rem; }",
+    ".decl-index summary { cursor: pointer; padding: 0.6rem 0; font-weight: 600; user-select: none; }",
+    ".decl-index ul { list-style: none; padding: 0; margin: 0.4rem 0 0.8rem; columns: 2; column-gap: 1.5rem; }",
+    "@media (max-width: 600px) { .decl-index ul { columns: 1; } }",
+    ".decl-index li { margin: 0.2rem 0; }",
+    ".decl-index a { text-decoration: none; color: #0057b7; font-family: monospace; font-size: 0.88rem; }",
+    ".decl-index a:hover { text-decoration: underline; }",
+    ".idx-kind { display: inline-block; min-width: 6rem; color: #777; font-size: 0.82rem; }",
     ".not-found { color: #c00; }",
     "@media (max-width: 600px) {",
     "  .site-header { flex-wrap: wrap; }",

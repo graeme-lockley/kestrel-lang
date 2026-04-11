@@ -91,6 +91,39 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(g, "mentions missing",     Str.contains("missing", out))
     });
 
+    // ── renderModule: declaration index present ───────────────────────────────
+    group(sg, "renderModule includes a <details> declaration index", (g: Suite) => {
+      val out = renderModule(mod1())
+      isTrue(g, "has details",      Str.contains("<details", out));
+      isTrue(g, "has summary",      Str.contains("<summary>", out));
+      isTrue(g, "has index link #add",    Str.contains("#add", out));
+      isTrue(g, "has index link #answer", Str.contains("#answer", out))
+    });
+
+    // ── renderModule: index is sorted alphabetically ──────────────────────────
+    group(sg, "renderModule index is sorted alphabetically", (g: Suite) => {
+      // mod1 has 'add' and 'answer'; alphabetically 'add' < 'answer'
+      val out = renderModule(mod1());
+      val iAdd    = Str.indexOf(out, "#add");
+      val iAnswer = Str.indexOf(out, "#answer");
+      isTrue(g, "add appears before answer in index", iAdd < iAnswer)
+    });
+
+    // ── renderModule: index shows kind labels ─────────────────────────────────
+    group(sg, "renderModule index shows kind labels", (g: Suite) => {
+      val out = renderModule(mod1())
+      isTrue(g, "has 'fun' kind label", Str.contains("idx-kind", out));
+      isTrue(g, "has fun text",         Str.contains(">fun<", out));
+      isTrue(g, "has val text",         Str.contains(">val<", out))
+    });
+
+    // ── renderModule: no index for empty module ───────────────────────────────
+    group(sg, "renderModule omits index when module has no entries", (g: Suite) => {
+      val empty = mkMod("kestrel:empty", "//! Empty module.\n")
+      val out = renderModule(empty)
+      isFalse(g, "no details element", Str.contains("<details", out))
+    });
+
     // ── staticCss ─────────────────────────────────────────────────────────────
     group(sg, "staticCss returns non-empty CSS", (g: Suite) => {
       val css = staticCss()
