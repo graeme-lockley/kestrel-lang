@@ -545,6 +545,7 @@ The standard library ships as `kestrel:*` modules:
 | `kestrel:data/basics` | Numeric utilities — `clamp`, `negate`, `toFloat`, `floor`, `sqrt`, `identity` |
 | `kestrel:data/json` | JSON — `parse` (`Result<Value, JsonParseError>`), `parseOrNull`, `stringify`, `errorAsString`; `Value` and `JsonParseError` ADTs |
 | `kestrel:data/array` | Mutable arrays — `new`, `get`, `set`, `push`, `length`, `fromList`, `toList` |
+| `kestrel:data/bytearray` | Mutable byte sequences — `new`, `length`, `get`, `set`, `fromList`, `toList`, `concat`, `slice` |
 | `kestrel:data/int` | Integer utilities — `random`, `randomRange` |
 | `kestrel:io/fs` | File system — `readText`, `writeText`, `listDir` |
 | `kestrel:io/console` | Terminal utilities — ANSI colour constants, `terminalInfo`, `eprintln` |

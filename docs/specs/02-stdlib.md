@@ -14,7 +14,7 @@ Standard library modules are organised under five namespaces. Each namespace has
 
 | Namespace | Purpose |
 |-----------|---------|
-| `kestrel:data/` | Pure data structures and type-safe transformations — no side effects, no I/O. Examples: `string`, `list`, `dict`, `set`, `option`, `result`, `json`, `array`. |
+| `kestrel:data/` | Pure data structures and type-safe transformations — no side effects, no I/O. Examples: `string`, `list`, `dict`, `set`, `option`, `result`, `json`, `array`, `bytearray`. |
 | `kestrel:io/` | Side-effecting I/O channels to external systems: filesystem, network, terminal. Examples: `fs`, `http`, `console`, `socket`, `web`. |
 | `kestrel:sys/` | OS and JVM runtime interface: process management, task scheduling, runtime error types. Examples: `process`, `task`, `runtime`. |
 | `kestrel:dev/` | Developer tooling libraries for building tools — CLI argument parsing, pretty-printing, stack-trace capture, parser infrastructure. Examples: `cli`, `text/prettyprinter`, `stack`, `parser/*`. |
@@ -189,7 +189,6 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 |------|------------|
 | `FsError` | `NotFound | PermissionDenied | IoError(String)` |
 | `DirEntry` | `File(String) | Dir(String)` — typed directory entry where the `String` payload is the full path |
-| `ByteArray` | Opaque type backed by Java `byte[]`. Byte values are `Int` in range 0–255. |
 | `FileStat` | `{ mtimeMs: Int, size: Int, isDir: Bool, isFile: Bool }` — file metadata returned by `stat`. `mtimeMs` is milliseconds since epoch. |
 
 | Function | Signature | Description |
@@ -200,17 +199,9 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 | `fileExists` | `(String) -> Task<Bool>` | Returns `True` if a file or directory exists at the given path, `False` otherwise. Never errors. |
 | `deleteFile` | `(String) -> Task<Result<Unit, FsError>>` | Deletes the file at the given path. Succeeds silently if the file does not exist (`Files.deleteIfExists`). Returns `Err(PermissionDenied)` on permission errors. |
 | `renameFile` | `(String, String) -> Task<Result<Unit, FsError>>` | Atomically moves a file from source to destination, replacing the destination if it exists (`Files.move` with `REPLACE_EXISTING`). Cross-device moves fall back to copy+delete on JVM. |
-| `readBytes` | `(String) -> Task<Result<ByteArray, FsError>>` | Read file contents as raw bytes. Returns `Ok(bytes)` on success. |
+| `readBytes` | `(String) -> Task<Result<ByteArray, FsError>>` | Read file contents as raw bytes. Returns `Ok(bytes)` on success. `ByteArray` is from `kestrel:data/bytearray`. |
 | `writeBytes` | `(String, ByteArray) -> Task<Result<Unit, FsError>>` | Write raw bytes to a path, creating or overwriting. Returns `Ok(())` on success. |
 | `appendBytes` | `(String, ByteArray) -> Task<Result<Unit, FsError>>` | Append raw bytes to a file, creating if needed. Returns `Ok(())` on success. |
-| `byteArrayNew` | `(Int) -> ByteArray` | Create a zeroed `ByteArray` of the given length. |
-| `byteArrayLength` | `(ByteArray) -> Int` | Number of bytes in the array. |
-| `byteArrayGet` | `(ByteArray, Int) -> Int` | Get byte at index as an unsigned value (0–255). |
-| `byteArraySet` | `(ByteArray, Int, Int) -> Unit` | Set byte at index (value is taken modulo 256). |
-| `byteArrayFromList` | `(List<Int>) -> ByteArray` | Create a `ByteArray` from a list of ints (each taken modulo 256). |
-| `byteArrayToList` | `(ByteArray) -> List<Int>` | Convert a `ByteArray` to a list of unsigned byte values (0–255). |
-| `byteArrayConcat` | `(ByteArray, ByteArray) -> ByteArray` | Concatenate two byte arrays into a new one. |
-| `byteArraySlice` | `(ByteArray, Int, Int) -> ByteArray` | Return a new `ByteArray` with bytes in the half-open range `[start, end)`. |
 | `mkdirAll` | `(String) -> Task<Result<Unit, FsError>>` | Create a directory and all missing parents (`Files.createDirectories`). No-ops if the directory already exists. |
 | `stat` | `(String) -> Task<Result<FileStat, FsError>>` | Return file metadata. `Err(NotFound)` if the path does not exist. |
 | `touchFile` | `(String) -> Task<Result<Unit, FsError>>` | Set the file's last-modified time to now. Creates an empty file if it doesn't exist. |
@@ -379,6 +370,27 @@ Finite maps with **structural (value) equality** keys, exposed as the opaque typ
 ## kestrel:data/set
 
 Sets as the **opaque** type `Set<E>` (defined in the module as an alias of `Dict<E, Unit>`; keys only, values are `()`). Same pipe-friendly convention as `kestrel:dict`. Helpers `emptyStringSet` / `emptyIntSet`, `singletonStringSet` / `singletonIntSet`, and `fromStringList` / `fromIntList` for common key types. `map` requires new `hash` / `eq` for the mapped key type.
+
+---
+
+## kestrel:data/bytearray
+
+Mutable, O(1)-indexed byte sequences backed by a primitive JVM `byte[]`. Byte values are `Int` in the range 0–255.
+
+| Type | Definition |
+|------|------------|
+| `ByteArray` | Opaque type backed by Java `byte[]`. Byte values are `Int` in range 0–255. |
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `new` | `(Int) -> ByteArray` | Create a zeroed `ByteArray` of the given length. |
+| `length` | `(ByteArray) -> Int` | Number of bytes in the array. |
+| `get` | `(ByteArray, Int) -> Int` | Get byte at index as an unsigned value (0–255). |
+| `set` | `(ByteArray, Int, Int) -> Unit` | Set byte at index (value is taken modulo 256). |
+| `fromList` | `(List<Int>) -> ByteArray` | Create a `ByteArray` from a list of ints (each taken modulo 256). |
+| `toList` | `(ByteArray) -> List<Int>` | Convert a `ByteArray` to a list of unsigned byte values (0–255). |
+| `concat` | `(ByteArray, ByteArray) -> ByteArray` | Concatenate two byte arrays into a new one. |
+| `slice` | `(ByteArray, Int, Int) -> ByteArray` | Return a new `ByteArray` with bytes in the half-open range `[start, end)`. |
 
 ---
 

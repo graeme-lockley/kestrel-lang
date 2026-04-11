@@ -4,6 +4,7 @@ import * as Lst from "kestrel:data/list"
 import { all } from "kestrel:sys/task"
 import { nowMs } from "kestrel:data/basics"
 import { random } from "kestrel:data/int"
+import { ByteArray } from "kestrel:data/bytearray"
 
 export type FsError = NotFound | PermissionDenied | IoError(String)
 
@@ -122,44 +123,14 @@ export async fun renameFile(src: String, dest: String): Task<Result<Unit, FsErro
 export fun pathBaseName(path: String): String =
   Lst.foldl(Str.split(path, "/"), "", (acc: String, s: String) => if (Str.isEmpty(s)) acc else s)
 
-// ─── ByteArray type and binary I/O ───────────────────────────────────────────
+// ─── Binary I/O ──────────────────────────────────────────────────────────────
 
-extern type JByteArray = jvm("java.lang.Object")
-
-extern fun jbaNew(size: Int): JByteArray =
-  jvm("kestrel.runtime.KRuntime#byteArrayNew(java.lang.Object)")
-extern fun jbaLength(arr: JByteArray): Int =
-  jvm("kestrel.runtime.KRuntime#byteArrayLength(java.lang.Object)")
-extern fun jbaGet(arr: JByteArray, index: Int): Int =
-  jvm("kestrel.runtime.KRuntime#byteArrayGet(java.lang.Object,java.lang.Object)")
-extern fun jbaSet(arr: JByteArray, index: Int, value: Int): Unit =
-  jvm("kestrel.runtime.KRuntime#byteArraySet(java.lang.Object,java.lang.Object,java.lang.Object)")
-extern fun jbaFromList(xs: List<Int>): JByteArray =
-  jvm("kestrel.runtime.KRuntime#byteArrayFromList(java.lang.Object)")
-extern fun jbaToList(arr: JByteArray): List<Int> =
-  jvm("kestrel.runtime.KRuntime#byteArrayToList(java.lang.Object)")
-extern fun jbaConcat(a: JByteArray, b: JByteArray): JByteArray =
-  jvm("kestrel.runtime.KRuntime#byteArrayConcat(java.lang.Object,java.lang.Object)")
-extern fun jbaSlice(arr: JByteArray, start: Int, end: Int): JByteArray =
-  jvm("kestrel.runtime.KRuntime#byteArraySlice(java.lang.Object,java.lang.Object,java.lang.Object)")
-
-extern fun readBytesAsyncImpl(path: String): Task<Result<JByteArray, String>> =
+extern fun readBytesAsyncImpl(path: String): Task<Result<ByteArray, String>> =
   jvm("kestrel.runtime.KRuntime#readBytesAsync(java.lang.Object)")
-extern fun writeBytesAsyncImpl(path: String, bytes: JByteArray): Task<Result<Unit, String>> =
+extern fun writeBytesAsyncImpl(path: String, bytes: ByteArray): Task<Result<Unit, String>> =
   jvm("kestrel.runtime.KRuntime#writeBytesAsync(java.lang.Object,java.lang.Object)")
-extern fun appendBytesAsyncImpl(path: String, bytes: JByteArray): Task<Result<Unit, String>> =
+extern fun appendBytesAsyncImpl(path: String, bytes: ByteArray): Task<Result<Unit, String>> =
   jvm("kestrel.runtime.KRuntime#appendBytesAsync(java.lang.Object,java.lang.Object)")
-
-opaque type ByteArray = JByteArray
-
-export fun byteArrayNew(size: Int): ByteArray = jbaNew(size)
-export fun byteArrayLength(bytes: ByteArray): Int = jbaLength(bytes)
-export fun byteArrayGet(bytes: ByteArray, index: Int): Int = jbaGet(bytes, index)
-export fun byteArraySet(bytes: ByteArray, index: Int, value: Int): Unit = jbaSet(bytes, index, value)
-export fun byteArrayFromList(xs: List<Int>): ByteArray = jbaFromList(xs)
-export fun byteArrayToList(bytes: ByteArray): List<Int> = jbaToList(bytes)
-export fun byteArrayConcat(a: ByteArray, b: ByteArray): ByteArray = jbaConcat(a, b)
-export fun byteArraySlice(bytes: ByteArray, start: Int, end: Int): ByteArray = jbaSlice(bytes, start, end)
 
 export async fun readBytes(path: String): Task<Result<ByteArray, FsError>> = {
   val result = await readBytesAsyncImpl(path)

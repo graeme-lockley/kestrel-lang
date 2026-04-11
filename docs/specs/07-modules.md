@@ -133,6 +133,7 @@ For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashM
   | `kestrel:sys/runtime` | `stdlib/kestrel/sys/runtime.ks` | Runtime errors |
   | `kestrel:dev/stack` | `stdlib/kestrel/dev/stack.ks` | Stack traces (debug) |
   | `kestrel:data/array` | `stdlib/kestrel/data/array.ks` | Array built-in type |
+  | `kestrel:data/bytearray` | `stdlib/kestrel/data/bytearray.ks` | Mutable byte sequences |
   | `kestrel:io/socket` | `stdlib/kestrel/io/socket.ks` | TCP/TLS sockets |
   | `kestrel:io/web` | `stdlib/kestrel/io/web.ks` | Lightweight routing |
 

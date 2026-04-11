@@ -1,44 +1,41 @@
 // Runtime conformance: ByteArray binary I/O
-import {
-  byteArrayNew, byteArrayLength, byteArrayGet, byteArraySet,
-  byteArrayFromList, byteArrayToList, byteArrayConcat, byteArraySlice,
-  readBytes, writeBytes, appendBytes, deleteFile, fileExists
-} from "kestrel:io/fs"
+import * as BA from "kestrel:data/bytearray"
+import { readBytes, writeBytes, appendBytes, deleteFile, fileExists } from "kestrel:io/fs"
 import * as Lst from "kestrel:data/list"
 
 async fun run(): Task<Unit> = {
-  val arr = byteArrayNew(4)
-  println(byteArrayLength(arr))
+  val arr = BA.new(4)
+  println(BA.length(arr))
   // 4
 
-  byteArraySet(arr, 0, 65)
-  byteArraySet(arr, 1, 66)
-  byteArraySet(arr, 2, 67)
-  byteArraySet(arr, 3, 68)
-  println(byteArrayGet(arr, 0))
+  BA.set(arr, 0, 65)
+  BA.set(arr, 1, 66)
+  BA.set(arr, 2, 67)
+  BA.set(arr, 3, 68)
+  println(BA.get(arr, 0))
   // 65
-  println(byteArrayGet(arr, 3))
+  println(BA.get(arr, 3))
   // 68
 
   val xs = [1, 2, 3, 255]
-  val arr2 = byteArrayFromList(xs)
-  val back = byteArrayToList(arr2)
+  val arr2 = BA.fromList(xs)
+  val back = BA.toList(arr2)
   println(back)
   // [1, 2, 3, 255]
 
-  val a = byteArrayFromList([10, 20])
-  val b = byteArrayFromList([30, 40])
-  val c = byteArrayConcat(a, b)
-  println(byteArrayToList(c))
+  val a = BA.fromList([10, 20])
+  val b = BA.fromList([30, 40])
+  val c = BA.concat(a, b)
+  println(BA.toList(c))
   // [10, 20, 30, 40]
 
-  val sl = byteArraySlice(c, 1, 3)
-  println(byteArrayToList(sl))
+  val sl = BA.slice(c, 1, 3)
+  println(BA.toList(sl))
   // [20, 30]
 
   val tmpPath = "/tmp/kestrel_test_bytes.bin"
   val _del = await deleteFile(tmpPath)
-  val data = byteArrayFromList([0, 1, 2, 127, 128, 255])
+  val data = BA.fromList([0, 1, 2, 127, 128, 255])
   val wr = await writeBytes(tmpPath, data)
   println(wr)
   // Ok(())
@@ -47,19 +44,19 @@ async fun run(): Task<Unit> = {
   match (readResult) {
     Err(e) => println("FAIL")
     Ok(readData) => {
-      val readList = byteArrayToList(readData)
+      val readList = BA.toList(readData)
       println(readList)
       // [0, 1, 2, 127, 128, 255]
     }
   }
 
-  val app = byteArrayFromList([100, 200])
+  val app = BA.fromList([100, 200])
   val _app = await appendBytes(tmpPath, app)
   val readResult2 = await readBytes(tmpPath)
   match (readResult2) {
     Err(_) => println("FAIL")
     Ok(rd2) => {
-      val lst2 = byteArrayToList(rd2)
+      val lst2 = BA.toList(rd2)
       println(Lst.length(lst2))
       // 8
     }
