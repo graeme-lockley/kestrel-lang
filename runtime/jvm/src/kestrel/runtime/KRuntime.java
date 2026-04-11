@@ -2368,6 +2368,41 @@ public final class KRuntime {
         }
         return KTask.fromFuture(future);
     }
+
+    // ── Cryptographic hashing for kestrel:io/crypto ───────────────────────────
+
+    private static String digestToHex(byte[] digest) {
+        StringBuilder sb = new StringBuilder(digest.length * 2);
+        for (byte b : digest) {
+            sb.append(String.format("%02x", b & 0xFF));
+        }
+        return sb.toString();
+    }
+
+    public static String sha256(Object input) throws Exception {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        return digestToHex(md.digest(((String) input).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+
+    public static String sha1(Object input) throws Exception {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
+        return digestToHex(md.digest(((String) input).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+
+    public static String md5(Object input) throws Exception {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+        return digestToHex(md.digest(((String) input).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+    }
+
+    public static String sha256Bytes(Object arr) throws Exception {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        return digestToHex(md.digest((byte[]) arr));
+    }
+
+    public static String sha1Bytes(Object arr) throws Exception {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-1");
+        return digestToHex(md.digest((byte[]) arr));
+    }
 }
 
 

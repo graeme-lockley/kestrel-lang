@@ -25,7 +25,7 @@ type IndexEntry = {
   entry:      DocEntry
 }
 
-export opaque type DocIndex = List<IndexEntry>
+opaque type DocIndex = List<IndexEntry>
 
 // ---------------------------------------------------------------------------
 // Building
@@ -43,7 +43,7 @@ export fun build(modules: List<DocModule>): DocIndex =
 // ---------------------------------------------------------------------------
 
 fun makeExcerpt(doc: String): String =
-  if (Str.length(doc) > 120) "${Str.slice(doc, 0, 117)}…"
+  if (Str.length(doc) > 120) "${Str.slice(doc, 0, 117)}..."
   else doc
 
 fun toResult(ie: IndexEntry): SearchResult = {
@@ -58,10 +58,11 @@ fun toResult(ie: IndexEntry): SearchResult = {
 fun insertAlpha(r: SearchResult, rs: List<SearchResult>): List<SearchResult> =
   match (rs) {
     [] => [r]
-    h :: t =>
+    h :: t => {
       val rKey = "${r.moduleSpec}.${r.name}";
       val hKey = "${h.moduleSpec}.${h.name}";
       if (rKey <= hKey) r :: rs else h :: insertAlpha(r, t)
+    }
   }
 
 fun sortAlpha(rs: List<SearchResult>): List<SearchResult> = match (rs) {
@@ -69,10 +70,8 @@ fun sortAlpha(rs: List<SearchResult>): List<SearchResult> = match (rs) {
   h :: t => insertAlpha(h, sortAlpha(t))
 }
 
-fun qLower(q: String): String = Str.toLowerCase(q)
-
 fun rank1(idx: DocIndex, q: String): List<SearchResult> =
-  val ql = qLower(q);
+  val ql = Str.toLowerCase(q);
   sortAlpha(
     List.map(
       List.filter(idx, (ie: IndexEntry) => Str.toLowerCase(ie.entry.name) == ql),
@@ -81,40 +80,40 @@ fun rank1(idx: DocIndex, q: String): List<SearchResult> =
   )
 
 fun rank2(idx: DocIndex, q: String): List<SearchResult> =
-  val ql = qLower(q);
+  val ql = Str.toLowerCase(q);
   sortAlpha(
     List.map(
-      List.filter(idx, (ie: IndexEntry) =>
+      List.filter(idx, (ie: IndexEntry) => {
         val n = Str.toLowerCase(ie.entry.name);
         Str.startsWith(ql, n) & (n != ql)
-      ),
+      }),
       (ie: IndexEntry) => toResult(ie)
     )
   )
 
 fun rank3(idx: DocIndex, q: String): List<SearchResult> =
-  val ql = qLower(q);
+  val ql = Str.toLowerCase(q);
   sortAlpha(
     List.map(
-      List.filter(idx, (ie: IndexEntry) =>
+      List.filter(idx, (ie: IndexEntry) => {
         val n = Str.toLowerCase(ie.entry.name);
         val s = Str.toLowerCase(Sig.format(ie.entry));
         Str.contains(ql, s) & (n != ql) & !Str.startsWith(ql, n)
-      ),
+      }),
       (ie: IndexEntry) => toResult(ie)
     )
   )
 
 fun rank4(idx: DocIndex, q: String): List<SearchResult> =
-  val ql = qLower(q);
+  val ql = Str.toLowerCase(q);
   sortAlpha(
     List.map(
-      List.filter(idx, (ie: IndexEntry) =>
+      List.filter(idx, (ie: IndexEntry) => {
         val n = Str.toLowerCase(ie.entry.name);
         val s = Str.toLowerCase(Sig.format(ie.entry));
         val d = Str.toLowerCase(ie.entry.doc);
         Str.contains(ql, d) & (n != ql) & !Str.startsWith(ql, n) & !Str.contains(ql, s)
-      ),
+      }),
       (ie: IndexEntry) => toResult(ie)
     )
   )
@@ -164,9 +163,9 @@ export fun toSearchJson(results: List<SearchResult>): String =
 fun entryToJson(ie: IndexEntry): String =
   "{\"name\":\"${jsonEscape(ie.entry.name)}\",\"kind\":\"${kindToString(ie.entry.kind)}\",\"signature\":\"${jsonEscape(Sig.format(ie.entry))}\",\"doc\":\"${jsonEscape(ie.entry.doc)}\"}"
 
-fun moduleEntriesToJson(moduleSpec: String, entries: List<IndexEntry>): String =
+fun moduleEntriesToJson(spec: String, entries: List<IndexEntry>): String =
   val items = List.map(entries, (ie: IndexEntry) => entryToJson(ie));
-  "\"${jsonEscape(moduleSpec)}\":{\"entries\":[${Str.join(",", items)}]}"
+  "\"${jsonEscape(spec)}\":{\"entries\":[${Str.join(",", items)}]}"
 
 // Collect all unique module specifiers in order of first appearance
 fun uniqueSpecs(entries: List<IndexEntry>, seen: List<String>): List<String> = match (entries) {

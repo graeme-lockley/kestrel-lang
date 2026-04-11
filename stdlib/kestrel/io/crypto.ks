@@ -1,0 +1,12 @@
+extern fun sha256Impl(s: String): String =
+  jvm("kestrel.runtime.KRuntime#sha256(java.lang.Object)")
+
+extern fun sha1Impl(s: String): String =
+  jvm("kestrel.runtime.KRuntime#sha1(java.lang.Object)")
+
+extern fun md5Impl(s: String): String =
+  jvm("kestrel.runtime.KRuntime#md5(java.lang.Object)")
+
+export fun sha256(s: String): String = sha256Impl(s)
+export fun sha1(s: String): String = sha1Impl(s)
+export fun md5(s: String): String = md5Impl(s)

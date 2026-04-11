@@ -538,6 +538,18 @@ Recursive-descent Kestrel parser written in Kestrel. Parses a token list (from t
 
 ---
 
+## kestrel:io/crypto
+
+Cryptographic hashing. All functions are pure and synchronous.
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `sha256` | `(String) -> String` | SHA-256 of the UTF-8 bytes of the string, returned as lowercase hex. |
+| `sha1` | `(String) -> String` | SHA-1 of the UTF-8 bytes of the string, returned as lowercase hex. |
+| `md5` | `(String) -> String` | MD5 of the UTF-8 bytes of the string, returned as lowercase hex. Note: MD5 is cryptographically broken; use only for legacy integrity checks. |
+
+---
+
 ## kestrel:io/http
 
 HTTP server and client. Provides an HTTP GET client and an HTTP server that dispatches incoming requests to a Kestrel handler function.

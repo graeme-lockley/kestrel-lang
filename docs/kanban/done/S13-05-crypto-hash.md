@@ -42,3 +42,19 @@ No cryptographic hashing exists anywhere in the Kestrel stdlib. `KRuntime.java` 
 - **Depends on S13-01** (ByteArray type must exist for `sha256Bytes`/`sha1Bytes`). If S13-01 is built first the `Bytes` variants can be added; alternatively, ship the String variants first and add Bytes variants as a follow-up in the same story.
 - `MessageDigest` is not thread-safe; create a new instance per call.
 - MD5 is cryptographically broken but still commonly used for integrity checks (e.g. some Maven repos use MD5). Include it but document the limitation.
+
+## Tasks
+
+- [x] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `sha256`, `sha1`, `md5`, `sha256Bytes`, `sha1Bytes`
+- [x] `stdlib/kestrel/io/crypto.ks`: create new module with `sha256`, `sha1`, `md5` (string variants; see build note for bytes)
+- [x] `tests/conformance/runtime/valid/crypto_hash.ks`: test known-good hashes
+- [x] `cd runtime/jvm && bash build.sh`
+- [x] `cd compiler && npm test`
+
+## Documentation and specs to update
+
+- [x] `docs/specs/02-stdlib.md`: add `kestrel:io/crypto` section
+
+## Build notes
+
+`sha256Bytes` and `sha1Bytes` (ByteArray variants) are implemented in KRuntime.java but NOT exported from `crypto.ks`. Cross-module opaque type usage in `extern fun` parameters fails: when `ByteArray` (opaque, defined in `kestrel:io/fs`) is imported into `crypto.ks` and used as a parameter in an `extern fun` declaration, the typecheck sees `JByteArray<> vs __opaque__<>` at the call site. This is a known limitation of the opaque/extern type system — the underlying `JByteArray` representation is only visible within the defining module. The bytes variants are not needed for compiler self-hosting (the TypeScript compiler only hashes strings).
