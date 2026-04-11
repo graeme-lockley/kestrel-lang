@@ -1,3 +1,5 @@
+#!/usr/bin/env kestrel
+
 // Quicksort — the classic divide-and-conquer sort made elegant
 // with pattern matching on list structure.
 //

@@ -1,3 +1,5 @@
+#!/usr/bin/env kestrel
+
 // Word frequency counter — Dict, higher-order list functions, and the |> pipe.
 //
 // Tokenises a text into lowercase alphabetic words, counts frequencies with

@@ -1,3 +1,5 @@
+#!/usr/bin/env kestrel
+
 // Sieve of Eratosthenes — print the first `count` prime numbers, comma-separated.
 import * as Arr from "kestrel:data/array"
 import * as Lst from "kestrel:data/list"

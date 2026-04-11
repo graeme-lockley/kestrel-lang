@@ -414,5 +414,7 @@ case "${1:-}" in
   build) shift; cmd_build "$@" ;;
   test)       shift; cmd_test "$@" ;;
   fmt)   shift; cmd_fmt "$@" ;;
+  # Implicit run: when first arg is a .ks file (enables shebang #!/usr/bin/env kestrel)
+  *.ks)  cmd_run "$@" ;;
   *)     usage ;;
 esac

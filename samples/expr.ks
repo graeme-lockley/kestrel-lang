@@ -1,3 +1,5 @@
+#!/usr/bin/env kestrel
+
 // Expression tree — algebraic data types, pattern matching, and recursive evaluation.
 //
 // An Expr is either a literal integer or a composite operation.

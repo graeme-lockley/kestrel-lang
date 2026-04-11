@@ -1,3 +1,5 @@
+#!/usr/bin/env kestrel
+
 // Conway's Game of Life — functional grid evolution on a flat Array<Int>.
 //
 // The live grid is a width×height integer array indexed as y*width+x.

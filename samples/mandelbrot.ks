@@ -1,3 +1,5 @@
+#!/usr/bin/env kestrel
+
 // Render a colour Mandelbrot set in the terminal (ANSI 256-colour + density chars).
 // Detects terminal width and height at startup; falls back to 80×24.
 import * as Str from "kestrel:data/string"
