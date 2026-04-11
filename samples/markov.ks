@@ -30,39 +30,31 @@ import * as Rnd  from "kestrel:data/int"
 //   • word boundaries (space ↔ consonant transitions)
 //   • short, recognisable fragments of the original text
 
-val corpus =
-  "to be or not to be that is the question " +
-  "whether tis nobler in the mind to suffer " +
-  "the slings and arrows of outrageous fortune " +
-  "or to take arms against a sea of troubles " +
-  "and by opposing end them to die to sleep " +
-  "no more and by a sleep to say we end " +
-  "the heartache and the thousand natural shocks " +
-  "that flesh is heir to tis a consummation " +
-  "devoutly to be wished to die to sleep " +
-  "to sleep perchance to dream ay there is the rub "
+val corpus = "to be or not to be that is the question whether tis nobler in the mind to suffer the slings and arrows of outrageous fortune or to take arms against a sea of troubles and by opposing end them to die to sleep no more and by a sleep to say we end the heartache and the thousand natural shocks that flesh is heir to tis a consummation devoutly to be wished to die to sleep to sleep perchance to dream ay there is the rub "
 
 // ── Training ────────────────────────────────────────────────────────────────
 
 // Increment the count for key `ch` in a (String → Int) count dict.
-fun incr(d: Dict<String, Int>, ch: String): Dict<String, Int> =
-  Dict.update(d, ch, (opt) =>
-    match (opt) {
-      None    => Some(1)
-      Some(n) => Some(n + 1)
-    })
+fun incr(d: Dict<String, Int>, ch: String): Dict<String, Int> = {
+  val cur = match (Dict.get(d, ch)) {
+    None    => 0
+    Some(c) => c
+  }
+  Dict.insert(d, ch, cur + 1)
+}
 
 // Record that the 2-char context `ctx` was followed by character `ch`.
 fun observe(
   model: Dict<String, Dict<String, Int>>,
   ctx:   String,
   ch:    String
-): Dict<String, Dict<String, Int>> =
-  Dict.update(model, ctx, (opt) =>
-    match (opt) {
-      None    => Some(incr(Dict.empty(), ch))
-      Some(d) => Some(incr(d, ch))
-    })
+): Dict<String, Dict<String, Int>> = {
+  val inner = match (Dict.get(model, ctx)) {
+    None    => Dict.empty()
+    Some(dd) => dd
+  }
+  Dict.insert(model, ctx, incr(inner, ch))
+}
 
 // Slide the 2-char window left-to-right, recording every (bigram → next) pair.
 fun trainLoop(
@@ -96,11 +88,11 @@ fun totalCounts(ks: List<String>, d: Dict<String, Int>, acc: Int): Int =
   match (ks) {
     [] => acc
     k :: rest => {
-      val n = match (Dict.get(d, k)) {
+      val cnt = match (Dict.get(d, k)) {
         None    => 0
-        Some(v) => v
+        Some(c) => c
       }
-      totalCounts(rest, d, acc + n)
+      totalCounts(rest, d, acc + cnt)
     }
   }
 
@@ -109,11 +101,11 @@ fun pickChar(ks: List<String>, d: Dict<String, Int>, roll: Int): String =
   match (ks) {
     [] => " "
     k :: rest => {
-      val n = match (Dict.get(d, k)) {
+      val cnt = match (Dict.get(d, k)) {
         None    => 0
-        Some(v) => v
+        Some(c) => c
       }
-      if (roll < n) k else pickChar(rest, d, roll - n)
+      if (roll < cnt) k else pickChar(rest, d, roll - cnt)
     }
   }
 
@@ -177,8 +169,10 @@ fun sortByCount(ps: List<(String, Int)>): List<(String, Int)> =
 
 // Render a 28-column bar chart entry scaled to `maxCount`.
 fun bar(n: Int, maxCount: Int): String = {
-  val filled = n * 28 / maxCount
-  "${Str.repeat(filled, "█")}${Str.repeat(28 - filled, "░")}"
+  val filled  = n * 28 / maxCount
+  val full    = Str.repeat(filled, "█")
+  val empty   = Str.repeat(28 - filled, "░")
+  "${full}${empty}"
 }
 
 // Print one frequency row.
