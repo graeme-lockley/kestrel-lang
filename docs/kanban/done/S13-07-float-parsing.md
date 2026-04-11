@@ -40,3 +40,18 @@ Add `parseFloat(s: String): Option<Float>` and `toFloat(s: String): Float` to `k
 
 - `Double.parseDouble` accepts `"Infinity"` and `"NaN"`. That's valid; document it.
 - Independent of all other E13 stories.
+
+## Tasks
+
+- [x] `KRuntime.java`: add `parseFloat(Object s) → Object` (KSome/KNone) and `toFloat(Object s) → Double`
+- [x] `stdlib/kestrel/data/string.ks`: add `parseFloat` and `toFloat` extern + export funs
+- [x] `tests/conformance/runtime/valid/string_float_parse.ks`: conformance test
+- [x] Build runtime (`cd runtime/jvm && bash build.sh`)
+- [x] Compiler tests pass (`cd compiler && npm test`)
+- [x] `docs/specs/02-stdlib.md`: add `parseFloat` and `toFloat` to data/string table
+
+## Build notes
+
+- 2025-01-01: `parseFloat` returns `Object` (KSome(Double) or KNone.INSTANCE); `toFloat` returns `Double` (boxed). Both follow the same JVM descriptor conventions as all other KRuntime extern-bound methods with complex return types.
+- `Double.parseDouble` already accepts `"Infinity"`, `"-Infinity"`, `"NaN"` — no special handling needed.
+- Pattern mirrors `parseInt`/`toInt` in the same module.

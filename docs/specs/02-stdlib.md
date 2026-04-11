@@ -42,6 +42,8 @@ String operations. All functions take the string as an explicit argument (no mem
 | `isEmpty` | `(String) -> Bool` | True when `length(s) == 0` |
 | `codePointAt` | `(String, Int) -> Int` | Unicode code point at code-point index `i`, or `-1` if out of range |
 | `parseInt` | `(String) -> Int` | Parse signed decimal integer after `trim`; optional leading `-`; malformed or non-digit content yields `0` |
+| `parseFloat` | `(String) -> Option<Float>` | Parse a floating-point number. Returns `Some(f)` on success, `None` for malformed input. Accepts `"Infinity"`, `"-Infinity"`, `"NaN"`. |
+| `toFloat` | `(String) -> Float` | Parse a floating-point number. Returns `0.0` on malformed input. |
 | `split` | `(String, String) -> List<String>` | Split on delimiter string; empty delimiter yields `[s]` |
 | `splitWithDelimiters` | `(String, List<String>) -> List<String>` | Split using the first matching delimiter at each step (candidates tried in list order) |
 | `join` | `(String, List<String>) -> String` | Concatenate strings with separator between elements |

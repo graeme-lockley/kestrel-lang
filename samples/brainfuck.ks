@@ -14,7 +14,7 @@
 //
 // Included programs:
 //   hello   — the classic "Hello, World!"
-//   fib     — first 8 Fibonacci numbers
+//   count   — prints 12345678 using a small setup loop
 
 import * as Arr from "kestrel:data/array"
 import * as Lst from "kestrel:data/list"
@@ -81,7 +81,7 @@ fun run(source: String): Unit = {
   val jumps = buildJumps(prog)
 
   val tape = filledInts(30000, 0)
-  var dp = 0   // data pointer
+  var dp = 15000   // data pointer starts mid-tape so programs can move left
   var pc = 0   // program counter
   var out = "" // accumulated output
 
@@ -116,10 +116,10 @@ fun run(source: String): Unit = {
 
 val hello = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
 
-val fib = "+++++++++++>+>>>>++++++++++++++++++++++++++++++++++++++++++++>++++++++++++++++++++++++++++++++<<<<<<[>[>>>>>>+>+<<<<<<<-]>>>>>>>[<<<<<<<+>>>>>>>-]<[>++++++++++[-<-[>>+>+<<<-]>>>[<<<+>>>-]+<[>[-]<[-]]>[<<[>>>+<<<-]>>[-]]<<]>>>[>>+>+<<<-]>>>[<<<+>>>-]+<[>[-]<[-]]>[<<+>>[-]]<<<<<<<]>>>>>[++++++++++++++++++++++++++++++++++++++++++++++++.[-]]++++++++++<[->-<]>[-]<<<<<<<<<<<[<]<<[>[>+>+<<-]>>[<<+>>-]<-]>[<<<<<<<<[<]<<[>[>+>+<<-]>>[<<+>>-]<-]>]<<<<<<<<[<]>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+val count = "++++++[>++++++++<-]>+.+.+.+.+.+.+.+."
 
 println("=== Hello, World! ===")
 run(hello)
 
-println("=== Fibonacci ===")
-run(fib)
+println("=== Counter ===")
+run(count)
