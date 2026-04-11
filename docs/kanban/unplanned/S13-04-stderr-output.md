@@ -1,0 +1,41 @@
+# Stderr output (`printErr` / `eprintln`)
+
+## Sequence: S13-04
+## Tier: 1
+## Former ID: (none)
+
+## Epic
+
+- Epic: [E13 Stdlib Compiler Readiness](../epics/unplanned/E13-stdlib-compiler-readiness.md)
+
+## Summary
+
+Add `printErr(s: String): Unit` and `eprintln(s: String): Unit` to `kestrel:io/console` (or as a built-in). Compiler diagnostics, progress lines, and error messages must go to stderr to avoid polluting stdout, which carries JSON/machine-readable output.
+
+## Current State
+
+The built-in `println(x)` and `print(x)` write to stdout only. `KRuntime.println` uses `System.out.println`. There is no stderr writing function anywhere in the stdlib. The compiler TypeScript uses `process.stderr.write()` for all diagnostic output.
+
+## Goals
+
+1. Add `public static void printErr(Object... args)` to `KRuntime.java` — writes to `System.err`.
+2. Add `public static void eprintln(Object... args)` — alias for `printErr` (matching Node.js/Rust convention).
+3. Export `printErr(s: String): Unit` from `kestrel:io/console`.
+4. Export `eprintln(s: String): Unit` from `kestrel:io/console` as an alias.
+
+## Acceptance Criteria
+
+- `printErr("error")` writes `"error\n"` to stderr and nothing to stdout.
+- `eprintln("msg")` is identical to `printErr("msg")`.
+- Both are importable from `kestrel:io/console`.
+- A conformance test verifies stderr output: run the program and compare stderr vs stdout captures.
+
+## Spec References
+
+- `docs/specs/02-stdlib.md` (io/console section)
+
+## Risks / Notes
+
+- Stderr flushing: `System.err` is auto-flushed on `println` in standard JVM. Sufficient.
+- Independent of all other E13 stories.
+- The compiler's colored caret diagnostics use ANSI codes; printing those via `printErr` will work since the ANSI constant strings are already in `io/console`.
