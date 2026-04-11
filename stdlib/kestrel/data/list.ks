@@ -268,3 +268,16 @@ fun generateAcc<A>(i: Int, n: Int, f: (Int) -> A): List<A> =
   else f(i) :: generateAcc(i + 1, n, f)
 
 export fun generate<A>(n: Int, f: (Int) -> A): List<A> = generateAcc(0, n, f)
+
+fun insertWith<A>(cmp: (A, A) -> Int, x: A, xs: List<A>): List<A> = match (xs) {
+  [] => [x]
+  h :: t => if (cmp(x, h) <= 0) x :: xs else h :: insertWith(cmp, x, t)
+}
+
+export fun sortWith<A>(cmp: (A, A) -> Int, xs: List<A>): List<A> = match (xs) {
+  [] => []
+  h :: t => insertWith(cmp, h, sortWith(cmp, t))
+}
+
+export fun sortBy<A>(f: (A) -> Int, xs: List<A>): List<A> =
+  sortWith((a: A, b: A) => f(a) - f(b), xs)

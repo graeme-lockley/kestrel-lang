@@ -191,3 +191,34 @@ export async fun collectFiles(dir: String, include: String -> Bool, excludeDir: 
       Lst.append(files, Lst.concat(subLists))
     }
   }
+
+// ── File watching ────────────────────────────────────────────────────────────
+
+extern type Watcher = jvm("kestrel.runtime.KWatcher")
+
+extern fun watchDirAsyncImpl(path: String, debounceMs: Int): Task<Result<Watcher, String>> =
+  jvm("kestrel.runtime.KRuntime#watchDirAsync(java.lang.Object,java.lang.Object)")
+
+extern fun watcherNextAsyncImpl(w: Watcher): Task<List<String>> =
+  jvm("kestrel.runtime.KRuntime#watcherNextAsync(java.lang.Object)")
+
+extern fun watcherCloseAsyncImpl(w: Watcher): Task<Unit> =
+  jvm("kestrel.runtime.KRuntime#watcherCloseAsync(java.lang.Object)")
+
+/// Start watching a directory tree for file-system changes.
+/// Returns `Err(FsError)` if the directory does not exist.
+/// `debounceMs` controls how long after the first event to wait for additional events
+/// before delivering the batch to `watcherNext`.
+export async fun watchDir(path: String, debounceMs: Int): Task<Result<Watcher, FsError>> = {
+  val r = await watchDirAsyncImpl(path, debounceMs);
+  Res.mapError(r, mapFsError)
+}
+
+/// Block until the next batch of file-system change events and return the list
+/// of changed absolute paths. Returns an empty list if the watcher has been closed.
+export async fun watcherNext(w: Watcher): Task<List<String>> =
+  await watcherNextAsyncImpl(w)
+
+/// Close the file watcher. Subsequent calls to `watcherNext` return an empty list.
+export async fun watcherClose(w: Watcher): Task<Unit> =
+  await watcherCloseAsyncImpl(w)

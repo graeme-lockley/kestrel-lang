@@ -2493,6 +2493,87 @@ public final class KRuntime {
             return 0.0;
         }
     }
+
+    // ── File watching — kestrel:io/fs Watcher ———————————————————————————
+
+    public static KTask watchDirAsync(Object path, Object debounceMs) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(path instanceof String)) {
+            future.completeExceptionally(new IllegalArgumentException("watchDir expects String path"));
+            return KTask.fromFuture(future);
+        }
+        int debounce = debounceMs instanceof Long ? ((Long) debounceMs).intValue() : 500;
+
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+        asyncTasksInFlight.incrementAndGet();
+        try {
+            executor.submit(() -> {
+                try {
+                    KWatcher watcher = KWatcher.create((String) path, debounce);
+                    if (watcher == null) {
+                        future.complete(new KErr("not_found"));
+                    } else {
+                        future.complete(new KOk(watcher));
+                    }
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
+
+    public static KTask watcherNextAsync(Object watcher) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(watcher instanceof KWatcher)) {
+            future.completeExceptionally(new IllegalArgumentException("watcherNext expects Watcher"));
+            return KTask.fromFuture(future);
+        }
+        KWatcher w = (KWatcher) watcher;
+
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) {
+            executor = asyncExecutor;
+        }
+        asyncTasksInFlight.incrementAndGet();
+        try {
+            executor.submit(() -> {
+                try {
+                    List<String> paths = w.nextBatch();
+                    KList result = KNil.INSTANCE;
+                    for (int i = paths.size() - 1; i >= 0; i--) {
+                        result = new KCons(paths.get(i), result);
+                    }
+                    future.complete(result);
+                } catch (Throwable t) {
+                    future.complete(KNil.INSTANCE);
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
+
+    public static KTask watcherCloseAsync(Object watcher) {
+        if (watcher instanceof KWatcher) {
+            ((KWatcher) watcher).close();
+        }
+        return KTask.completed(KUnit.INSTANCE);
+    }
 }
 
 

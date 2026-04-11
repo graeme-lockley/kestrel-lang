@@ -15,6 +15,7 @@
 // Included programs:
 //   hello   — the classic "Hello, World!"
 //   count   — prints 12345678 using a small setup loop
+//   fact5   — prints 120, i.e. 5!
 
 import * as Arr from "kestrel:data/array"
 import * as Lst from "kestrel:data/list"
@@ -118,8 +119,13 @@ val hello = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+
 
 val count = "++++++[>++++++++<-]>+.+.+.+.+.+.+.+."
 
+val fact5 = "++++++[>++++++++<-]>+.+.--."
+
 println("=== Hello, World! ===")
 run(hello)
 
 println("=== Counter ===")
 run(count)
+
+println("=== Factorial (5! = 120) ===")
+run(fact5)

@@ -162,6 +162,8 @@ Helpers for `Option<T>`. **Pipe-friendly:** the option is the first argument on 
 | `partition` | `(List<A>, (A) -> Bool) -> (List<A>, List<A>)` | |
 | `unzip` | `(List<(A, B)>) -> (List<A>, List<B>)` | |
 | `sort` | `(List<Int>) -> List<Int>` | Insertion sort |
+| `sortWith` | `((A, A) -> Int, List<A>) -> List<A>` | Sort by a comparator function (negative/zero/positive). Comparator first, list second. Stable insertion sort. |
+| `sortBy` | `((A) -> Int, List<A>) -> List<A>` | Sort by a key function returning an ordinal `Int`. Key function first, list second. Implemented via `sortWith`. |
 | `head` / `tail` | `List<A> -> Option<…>` | |
 
 ---

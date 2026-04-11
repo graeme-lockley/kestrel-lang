@@ -39,3 +39,16 @@ Add `sortBy` (sort by a key function) and `sortWith` (sort by a comparator) to `
 - Pure Kestrel implementation; no JVM runtime changes needed.
 - `sortBy` can be implemented as `sortWith(fun(a, b) = f(a) - f(b), xs)`.
 - Independent of all other E13 stories.
+
+## Tasks
+
+- [x] `stdlib/kestrel/data/list.ks`: add `insertWith`, `sortWith`, `sortBy`
+- [x] `tests/conformance/runtime/valid/list_sort.ks`: conformance test (6 cases)
+- [x] Compiler tests pass (`cd compiler && npm test`)
+- [x] `docs/specs/02-stdlib.md`: add `sortWith` and `sortBy` to data/list table
+
+## Build notes
+
+- 2025-01-01: Implemented via insertion sort helper `insertWith<A>(cmp, x, xs)`. `sortWith` passes comparator through recursion; `sortBy` wraps comparator as `f(a) - f(b)`.
+- No JVM runtime changes needed — pure Kestrel recursive implementation.
+- Argument order follows story spec: comparator/key first, list second (different from `filter`/`map` convention).

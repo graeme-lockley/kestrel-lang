@@ -24,6 +24,7 @@ javac -d "$OUT_DIR" --release 21 \
   "$SRC_DIR/kestrel/runtime/KErr.java" \
   "$SRC_DIR/kestrel/runtime/KOk.java" \
   "$SRC_DIR/kestrel/runtime/KMath.java" \
+  "$SRC_DIR/kestrel/runtime/KWatcher.java" \
   "$SRC_DIR/kestrel/runtime/KRuntime.java"
 cd "$OUT_DIR"
 jar cf "$JAR" kestrel/
