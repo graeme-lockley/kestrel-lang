@@ -40,3 +40,19 @@ Add `writeTextAtomic` and `writeBytesAtomic` to `kestrel:io/fs` using write-to-t
 - **Depends on S13-01** (ByteArray type needed for `writeBytesAtomic`).
 - `renameFile` on different filesystems may not be atomic on all platforms (Windows). Document this limitation.
 - The temp path should include a random component to avoid collisions when multiple processes write to the cache simultaneously. Use `KRuntime.nowMs()` + `Thread.currentThread().threadId()` as a cheap unique suffix.
+
+## Tasks
+
+- [x] Add `KRuntime.tempPath(Object path)` using `System.currentTimeMillis()` + `threadId()`
+- [x] Rebuild JVM runtime (`bash build.sh`)
+- [x] Add `tempPath`, `writeTextAtomic`, `writeBytesAtomic` to `stdlib/kestrel/io/fs.ks`
+- [x] Create conformance test `tests/conformance/runtime/valid/atomic_write.ks`
+- [x] Compiler tests: 436 pass
+- [x] Update `docs/specs/02-stdlib.md`
+
+## Build notes
+
+- 2026-04-11: `tempPath` uses `currentTimeMillis * 1000 + threadId % 1000` for a cheap collision-resistant suffix.
+- `writeTextAtomic` and `writeBytesAtomic` composed entirely in pure Kestrel: `writeText`/`writeBytes` + `renameFile`.
+- Kestrel `match` syntax inside async blocks must use `match (expr) { pattern => body }` form, not `match expr with | pattern ->`.
+- `val _` as discard in async block works in practice (function exits cleanly when last statement is a discarded `deleteFile`).

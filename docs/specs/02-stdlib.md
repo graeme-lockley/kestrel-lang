@@ -215,6 +215,9 @@ File system. File operations are async and return `Task<Result<T, FsError>>` so 
 | `listDirAll` | `(String) -> Task<Result<List<DirEntry>, FsError>>` | Recursively lists all files and directories under `path`, returning `DirEntry` values. Does not include the root itself. Returns `Err(NotFound)` if the path does not exist. |
 | `collectFilesByExtension` | `(String, String) -> Task<Result<List<String>, FsError>>` | Returns absolute paths of all files under `path` whose name ends with `ext` (e.g. `".kti"`). Directories are excluded. Returns `Err(NotFound)` if the path does not exist. |
 | `collectFiles` | `(String, (String) -> Bool, (String) -> Bool) -> Task<List<String>>` | Recursively collect files with a custom include predicate and a directory-skip predicate. Errors silently on inaccessible directories. |
+| `tempPath` | `(String) -> String` | Returns a sibling temporary path for `path` in the same directory, with a random suffix. Suitable for atomic write patterns. |
+| `writeTextAtomic` | `(String, String) -> Task<Result<Unit, FsError>>` | Write `content` to `path` atomically: writes to a temp sibling file then renames. If the write step fails, `path` is not modified. |
+| `writeBytesAtomic` | `(String, ByteArray) -> Task<Result<Unit, FsError>>` | Write `bytes` to `path` atomically: writes to a temp sibling file then renames. If the write step fails, `path` is not modified. |
 
 ---
 

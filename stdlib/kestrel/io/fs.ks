@@ -264,3 +264,32 @@ export async fun watcherNext(w: Watcher): Task<List<String>> =
 /// Close the file watcher. Subsequent calls to `watcherNext` return an empty list.
 export async fun watcherClose(w: Watcher): Task<Unit> =
   await watcherCloseAsyncImpl(w)
+
+extern fun tempPathImpl(path: String): String =
+  jvm("kestrel.runtime.KRuntime#tempPath(java.lang.Object)")
+
+/// Returns a sibling temporary path for `path` suitable for atomic write patterns.
+/// The path is in the same directory so a rename is on the same filesystem.
+export fun tempPath(path: String): String = tempPathImpl(path)
+
+/// Write `content` to `path` atomically: writes to a sibling temp file then renames.
+/// If the write fails, `path` is not modified.
+export async fun writeTextAtomic(path: String, content: String): Task<Result<Unit, FsError>> = {
+  val tmp = tempPath(path);
+  val wr = await writeText(tmp, content);
+  match (wr) {
+    Err(e) => Err(e)
+    Ok(_) => await renameFile(tmp, path)
+  }
+}
+
+/// Write `bytes` to `path` atomically: writes to a sibling temp file then renames.
+/// If the write fails, `path` is not modified.
+export async fun writeBytesAtomic(path: String, bytes: ByteArray): Task<Result<Unit, FsError>> = {
+  val tmp = tempPath(path);
+  val wr = await writeBytes(tmp, bytes);
+  match (wr) {
+    Err(e) => Err(e)
+    Ok(_) => await renameFile(tmp, path)
+  }
+}

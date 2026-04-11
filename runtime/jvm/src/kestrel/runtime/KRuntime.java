@@ -1017,6 +1017,11 @@ public final class KRuntime {
         return KTask.fromFuture(future);
     }
 
+    public static String tempPath(Object path) {
+        long id = System.currentTimeMillis() * 1000 + Thread.currentThread().threadId() % 1000;
+        return ((String) path) + ".tmp." + id;
+    }
+
     public static KTask readAllStdin() {
         CompletableFuture<Object> future = new CompletableFuture<>();
         initAsyncRuntime();

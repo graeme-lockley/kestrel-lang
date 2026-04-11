@@ -320,7 +320,7 @@ fun fmtIfExpr(cond: Ast.Expr, then_: Ast.Expr, else_: Option<Ast.Expr>): Doc = {
 }
 
 fun fmtWhileExpr(cond: Ast.Expr, body: Ast.Block): Doc =
-  PP.hcat([PP.text("while ("), fmtExpr(cond), PP.text(") "), fmtBlockStmt(body)])
+  PP.hcat([PP.text("while ("), fmtExpr(cond), PP.text(") "), fmtBlock(body)])
 
 fun fmtCase(c: Ast.Case_): Doc =
   match (c.body) {
@@ -542,14 +542,11 @@ fun buildGuardedStmtDocs(stmts: List<Ast.Stmt>, nextParen: Bool): List<Doc> =
     }
   }
 
-// fmtBlock renders a block in expression context ('expr'): the explicit ()
-// result is always emitted when present so that the output re-parses correctly
-// in 'expr' context (match arms, if/else branches, fun bodies, try bodies).
-//
-// fmtBlockStmt renders a block in statement context ('stmt'): only while
-// bodies are parsed with 'stmt' context, so only fmtWhileExpr uses this.
-// In 'stmt' context the trailing () is implicit and may be elided.
-fun fmtBlockImpl(b: Ast.Block, dropUnitIfStmts: Bool): Doc = {
+// fmtBlock renders a block expression.  A trailing '()' unit result is
+// always omitted when the block has at least one preceding statement, because
+// the parser now inserts an implicit '()' in all block contexts (not just
+// while bodies).
+fun fmtBlock(b: Ast.Block): Doc = {
   val isUnitResult = match (b.result) {
     ELit(k, _) => Str.equals(k, "unit")
     _ => False
@@ -558,13 +555,11 @@ fun fmtBlockImpl(b: Ast.Block, dropUnitIfStmts: Bool): Doc = {
     ENever => True
     _ => False
   }
-  // willDropUnit: True when the trailing () will be omitted from the output
-  // (only for while bodies in 'stmt' context).
-  val willDropUnit = dropUnitIfStmts & isUnitResult & !Lst.isEmpty(b.stmts)
+  // willDropUnit: True when the trailing () will be omitted from the output.
+  val willDropUnit = isUnitResult & !Lst.isEmpty(b.stmts)
   // When the result starts with '(', the last stmt before it may need a ';'
   // guard so it isn't fused with the '(' on a subsequent format pass.
-  // We must NOT set resultNextParen=True when we will drop the unit result,
-  // otherwise the last assignment in a while body would get a spurious ';'.
+  // We must NOT set resultNextParen=True when we will drop the unit result.
   val resultNextParen =
     if (isNeverResult | willDropUnit) False
     else exprStartsWithParen(b.result)
@@ -584,10 +579,6 @@ fun fmtBlockImpl(b: Ast.Block, dropUnitIfStmts: Bool): Doc = {
       ])
   }
 }
-
-fun fmtBlock(b: Ast.Block): Doc = fmtBlockImpl(b, False)
-
-fun fmtBlockStmt(b: Ast.Block): Doc = fmtBlockImpl(b, True)
 
 // ─── Declaration Doc ─────────────────────────────────────────────────────────
 
