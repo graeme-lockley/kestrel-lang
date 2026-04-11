@@ -30,16 +30,33 @@ export async fun run(s: Suite): Task<Unit> =
       eq(g, "trimmed", format(e), "fun f(): Int")
     });
 
-    // ── DKType minimal ────────────────────────────────────────────────────────
+    // ── DKType minimal (no body) ───────────────────────────────────────────────
     group(sg, "DKType: simple type signature", (g: Suite) => {
       val e = mkEntry(DKType, "Bool", "type Bool")
       eq(g, "format", format(e), "type Bool")
     });
 
-    // ── DKType with type parameter ────────────────────────────────────────────
+    // ── DKType with type parameter ──────────────────────────────────────────
     group(sg, "DKType: generic type signature", (g: Suite) => {
       val e = mkEntry(DKType, "Option", "type Option<A>")
       eq(g, "format", format(e), "type Option<A>")
+    });
+
+    // ── DKType with full ADT body ───────────────────────────────────────────
+    group(sg, "DKType: full ADT body preserved verbatim", (g: Suite) => {
+      val body = "type CliOptionKind = Flag | Value(String)"
+      val e = mkEntry(DKType, "CliOptionKind", body)
+      eq(g, "format", format(e), body)
+    });
+
+    // ── DKType long body is NOT truncated ─────────────────────────────────────
+    group(sg, "DKType: long signature is not truncated", (g: Suite) => {
+      // 130-char type body (longer than the 120 limit applied to non-types)
+      val longBody = "type E = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z | AA"
+      val e = mkEntry(DKType, "E", longBody)
+      val out = format(e);
+      eq(g, "not truncated", out, longBody);
+      isFalse(g, "no ellipsis", Str.endsWith(" …", out))
     });
 
     // ── DKVal ─────────────────────────────────────────────────────────────────

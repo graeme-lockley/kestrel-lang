@@ -129,14 +129,49 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(g,  "sig has return type", Str.contains("Int", sig))
     });
 
-    // ── Signature stops before = for type ────────────────────────────────────
-    group(sg, "signature stops before = for type", (g: Suite) => {
+    // ── Signature includes full ADT body for type ────────────────────────────
+    group(sg, "type signature includes full ADT body after =", (g: Suite) => {
       val src = "export type Option<A> = None | Some(A)\n";
       val mod = extract(src, "test:mod");
       val opt = entryNamed(mod.entries, "Option");
       val sig = match (opt) { Some(e) => e.signature, None => "none" };
-      isTrue(g,  "sig has type",       Str.startsWith("type", sig));
-      isFalse(g, "sig has no = body",  Str.contains("None", sig))
+      isTrue(g, "sig starts with type",   Str.startsWith("type", sig));
+      isTrue(g, "sig contains =",         Str.contains("=", sig));
+      isTrue(g, "sig contains None",      Str.contains("None", sig));
+      isTrue(g, "sig contains Some(A)",   Str.contains("Some(A)", sig))
+    });
+
+    // ── Inline flags-only ADT ─────────────────────────────────────────────────
+    group(sg, "type signature: inline flags ADT", (g: Suite) => {
+      val src = "export type CliOptionKind = Flag | Value(String)\n";
+      val mod = extract(src, "test:mod");
+      val e   = entryNamed(mod.entries, "CliOptionKind");
+      val sig = match (e) { Some(x) => x.signature, None => "none" };
+      isTrue(g, "has Flag",         Str.contains("Flag", sig));
+      isTrue(g, "has Value(String)", Str.contains("Value(String)", sig))
+    });
+
+    // ── Multi-line ADT (| on continuation lines) ──────────────────────────────
+    group(sg, "type signature: multi-line ADT", (g: Suite) => {
+      val src = "export type Color =\n  Red\n  | Green\n  | Blue\n\nexport fun f(): Unit = ()\n";
+      val mod = extract(src, "test:mod");
+      val e   = entryNamed(mod.entries, "Color");
+      val sig = match (e) { Some(x) => x.signature, None => "none" };
+      isTrue(g, "has Red",   Str.contains("Red", sig));
+      isTrue(g, "has Green", Str.contains("Green", sig));
+      isTrue(g, "has Blue",  Str.contains("Blue", sig))
+    });
+
+    // ── Record type shows all fields ──────────────────────────────────────────
+    group(sg, "type signature: record body fully captured", (g: Suite) => {
+      val src = "export type Point = {\n  x: Int,\n  y: Int\n}\n";
+      val mod = extract(src, "test:mod");
+      val e   = entryNamed(mod.entries, "Point");
+      val sig = match (e) { Some(x) => x.signature, None => "none" };
+      isTrue(g, "has {",   Str.contains("{", sig));
+      isTrue(g, "has x",   Str.contains("x", sig));
+      isTrue(g, "has y",   Str.contains("y", sig));
+      isTrue(g, "has }",   Str.contains("}", sig))
     });
 
     // ── Multiple exports each get own doc ─────────────────────────────────────

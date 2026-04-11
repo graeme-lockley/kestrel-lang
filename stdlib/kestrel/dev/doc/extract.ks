@@ -163,6 +163,86 @@ fun collectSig(arr: Array<Token>, startIdx: Int, n: Int): String = {
   normalizeWs(Str.join("", Arr.toList(parts)))
 }
 
+// collectTypeSig: collect a full `type` declaration, including `=` and the RHS.
+//
+// Unlike collectSig (which stops at `=`) this function continues past `=` so
+// the complete declaration is captured:
+//   • ADT / type-alias:  stops at a blank line, or at a single newline when
+//     the next non-trivia token is NOT `|`.  This handles both single-line ADTs
+//     and multi-line ones where each continuation line starts with `|`.
+//   • Record type: stops after the closing `}` that returns brace depth to 0.
+//
+// Original source whitespace is preserved verbatim (including newlines and
+// indentation) so that multi-line record bodies render correctly inside <pre>.
+fun collectTypeSig(arr: Array<Token>, startIdx: Int, n: Int): String = {
+  var i          = startIdx;
+  var braceDepth = 0;
+  var parenDepth = 0;
+  val parts: Array<String> = Arr.new();
+  var seenEquals = False;
+  var done       = False;
+
+  while (i < n & !done) {
+    val t = Arr.get(arr, i);
+    if (t.kind == TkEof) {
+      done := True
+    } else if (t.kind == TkWs) {
+      if (braceDepth == 0 & parenDepth == 0 & !seenEquals & containsNewline(t)) {
+        // Newline before `=`: extern/opaque type head ends here
+        done := True
+      } else if (braceDepth == 0 & parenDepth == 0 & seenEquals & containsBlankLine(t)) {
+        // Blank line at top level after `=`: end of ADT variant list
+        done := True
+      } else if (braceDepth == 0 & parenDepth == 0 & seenEquals & containsNewline(t)) {
+        // Single newline at top level after `=`: continue when the next
+        // non-trivia token is `|` (subsequent variant) or TkUpper (first
+        // variant on a continuation line without a leading `|`).
+        // Stop for keywords (fun, export, type, …) and lowercase identifiers.
+        val j    = skipTrivia(arr, i + 1, n);
+        val next = if (j < n) Arr.get(arr, j) else Arr.get(arr, n - 1);
+        val cont = (next.kind == TkOp & Str.equals(next.text, "|")) | next.kind == TkUpper;
+        if (cont) {
+          Arr.push(parts, t.text);  // preserve newline + indent
+          i := i + 1
+        } else {
+          done := True
+        }
+      } else {
+        Arr.push(parts, t.text);   // preserve whitespace verbatim
+        i := i + 1
+      }
+    } else if (t.kind == TkLineComment | t.kind == TkBlockComment) {
+      i := i + 1  // skip inline comments
+    } else {
+      if (t.kind == TkPunct & Str.equals(t.text, "{")) {
+        braceDepth := braceDepth + 1;
+        Arr.push(parts, t.text);
+        i := i + 1
+      } else if (t.kind == TkPunct & Str.equals(t.text, "}")) {
+        braceDepth := braceDepth - 1;
+        Arr.push(parts, t.text);
+        i := i + 1;
+        if (braceDepth == 0) { done := True }  // closed record body
+      } else if (t.kind == TkPunct & Str.equals(t.text, "(")) {
+        parenDepth := parenDepth + 1;
+        Arr.push(parts, t.text);
+        i := i + 1
+      } else if (t.kind == TkPunct & Str.equals(t.text, ")")) {
+        if (parenDepth > 0) { parenDepth := parenDepth - 1 };
+        Arr.push(parts, t.text);
+        i := i + 1
+      } else {
+        if (t.kind == TkOp & Str.equals(t.text, "=") & !seenEquals & braceDepth == 0 & parenDepth == 0) {
+          seenEquals := True
+        };
+        Arr.push(parts, t.text);
+        i := i + 1
+      }
+    }
+  };
+  Str.trim(Str.join("", Arr.toList(parts)))
+}
+
 // ── Declaration extraction ────────────────────────────────────────────────────
 
 // resolveKind: determine DocKind from the tokens immediately after `export`.
@@ -240,7 +320,10 @@ fun tryExtractEntry(arr: Array<Token>, exportIdx: Int, doc: String, n: Int): (Op
         guard := guard + 1
       };
 
-      val sig   = collectSig(arr, sigStart, n);
+      val sig   = match (k) {
+        DKType => collectTypeSig(arr, sigStart, n)
+        _      => collectSig(arr, sigStart, n)
+      };
       val entry = { name = nameStr, kind = k, signature = sig, doc = doc };
       (Some(entry), exportIdx + 1)
     }

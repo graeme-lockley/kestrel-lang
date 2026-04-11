@@ -3,13 +3,16 @@
 //! normalised, human-readable signature string suitable for display in the
 //! documentation browser.
 import * as Str from "kestrel:data/string"
-import { DocEntry } from "kestrel:dev/doc/extract"
+import { DocEntry, DKType } from "kestrel:dev/doc/extract"
 
 /// Format a `DocEntry` signature for display.
-/// Returns the raw `entry.signature` with leading/trailing whitespace stripped
-/// and truncated with ` …` if it exceeds 120 characters.
+/// For `DKType` entries the full declaration is returned as-is (no truncation),
+/// since the complete body is part of the type's public API.
+/// For all other kinds the signature is trimmed and truncated with ` …` if it
+/// exceeds 120 characters.
 export fun format(entry: DocEntry): String = {
   val sig = Str.trim(entry.signature)
-  if (Str.length(sig) > 120) "${Str.slice(sig, 0, 117)} …"
+  if (entry.kind == DKType) sig
+  else if (Str.length(sig) > 120) "${Str.slice(sig, 0, 117)} …"
   else sig
 }
