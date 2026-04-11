@@ -12,7 +12,9 @@ import * as Basics from "kestrel:data/basics"
 import * as Console from "kestrel:io/console"
 
 val term = Console.terminalInfo()
+
 val width = Basics.clamp(40, 200, term.width)
+
 val height = Basics.clamp(20, 60, term.height - 4)
 
 // ── grid primitives ──────────────────────────────────────────────────────

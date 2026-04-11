@@ -960,8 +960,24 @@ fun fmtProgramDoc(prog: Ast.Program): Doc = {
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
+// Extract the shebang line from src if present, returning (shebang, rest).
+// shebang is the full first line including the newline, or "" if absent.
+fun extractShebang(src: String): (String, String) = {
+  if (Str.startsWith("#!", src)) {
+    val nl = Str.indexOf(src, "\n")
+    if (nl < 0)
+      (src, "")
+    else
+      (Str.slice(src, 0, nl + 1), Str.slice(src, nl + 1, Str.length(src)))
+  } else
+    ("", src)
+}
+
 export fun format(src: String): Result<String, FormatError> = {
-  val ls = Lex.create(src)
+  val shebangRest = extractShebang(src)
+  val shebang = shebangRest.0
+  val body = shebangRest.1
+  val ls = Lex.create(body)
   match (parse(ls)) {
     Err(e) => match (e) {
       ParseError(msg, off, ln, col) => Err(FmtParseError(msg, off, ln, col))
@@ -969,10 +985,15 @@ export fun format(src: String): Result<String, FormatError> = {
     Ok(prog) => {
       val doc = fmtProgramDoc(prog)
       val rendered = PP.pretty(fmtWidth, doc)
-      if (Str.endsWith("\n", rendered))
-        Ok(reattachComments_(src, rendered))
+      val formatted =
+        if (Str.endsWith("\n", rendered))
+          reattachComments_(body, rendered)
+        else
+          reattachComments_(body, "${rendered}\n")
+      if (Str.isEmpty(shebang))
+        Ok(formatted)
       else
-        Ok(reattachComments_(src, "${rendered}\n"))
+        Ok("${shebang}\n${formatted}")
     }
   }
 }
