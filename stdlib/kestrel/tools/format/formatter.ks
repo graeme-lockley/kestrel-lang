@@ -323,11 +323,16 @@ fun fmtWhileExpr(cond: Ast.Expr, body: Ast.Block): Doc =
   PP.hcat([PP.text("while ("), fmtExpr(cond), PP.text(") "), fmtBlock(body)])
 
 fun fmtCase(c: Ast.Case_): Doc =
-  PP.hcat([
-    fmtPattern(c.pattern),
-    PP.text(" =>"),
-    PP.nest(fmtIndent, PP.concat(PP.line, fmtExpr(c.body)))
-  ])
+  match (c.body) {
+    EBlock(b) =>
+      PP.hcat([fmtPattern(c.pattern), PP.text(" => "), fmtBlock(b)])
+    _ =>
+      PP.hcat([
+        fmtPattern(c.pattern),
+        PP.text(" =>"),
+        PP.nest(fmtIndent, PP.concat(PP.line, fmtExpr(c.body)))
+      ])
+  }
 
 fun fmtMatchExpr(scrutinee: Ast.Expr, cases: List<Ast.Case_>): Doc = {
   val header = PP.hcat([PP.text("match ("), fmtExpr(scrutinee), PP.text(") {")])
