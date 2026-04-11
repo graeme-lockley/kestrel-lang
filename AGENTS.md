@@ -74,6 +74,13 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime wit
 - **Strict mode**: Always enabled in TypeScript (`tsconfig.json` has `"strict": true`)
 - **Module system**: ES modules (`.js` extensions in imports)
 
+### Kestrel Language Conventions
+
+When writing `.ks` files (stdlib, tests, samples, scripts):
+
+- **String building**: prefer interpolation (`"${a}${b}"`) over `append(a, b)` from `kestrel:data/string`. Interpolation is idiomatic and compiles to the same bytecode.
+- **Test group names**: use the `kestrel:` module reference style (e.g. `"kestrel:data/list"`, `"kestrel:lang/arithmetic"`). Language-feature tests use the `kestrel:lang/` prefix.
+
 ### TypeScript Conventions
 
 #### Imports

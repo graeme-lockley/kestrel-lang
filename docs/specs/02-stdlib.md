@@ -26,6 +26,8 @@ Standard library modules are organised under five namespaces. Each namespace has
 
 String operations. All functions take the string as an explicit argument (no member-call syntax). Strings are UTF-8. **Character** means Unicode code point: `length` returns the number of code points; `slice` and `indexOf` use code-point indices (not byte offsets).
 
+> **Idiom:** prefer string interpolation (`"${a}${b}"`) over calling `append` for concatenation. Interpolation is idiomatic Kestrel and compiles to the same bytecode. Use `append` only when composing strings inside recursive helpers that build up a result incrementally.
+
 | Function | Signature | Description |
 |----------|-----------|-------------|
 | `length` | `(String) -> Int` | Character length of string (code-point count) |
