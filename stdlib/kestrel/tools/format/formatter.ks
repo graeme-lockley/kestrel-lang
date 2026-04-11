@@ -558,15 +558,20 @@ fun fmtBlockImpl(b: Ast.Block, dropUnitIfStmts: Bool): Doc = {
     ENever => True
     _ => False
   }
+  // willDropUnit: True when the trailing () will be omitted from the output
+  // (only for while bodies in 'stmt' context).
+  val willDropUnit = dropUnitIfStmts & isUnitResult & !Lst.isEmpty(b.stmts)
   // When the result starts with '(', the last stmt before it may need a ';'
   // guard so it isn't fused with the '(' on a subsequent format pass.
+  // We must NOT set resultNextParen=True when we will drop the unit result,
+  // otherwise the last assignment in a while body would get a spurious ';'.
   val resultNextParen =
-    if (isNeverResult | isUnitResult) False
+    if (isNeverResult | willDropUnit) False
     else exprStartsWithParen(b.result)
   val stmtDocs = buildGuardedStmtDocs(b.stmts, resultNextParen)
   val items =
     if (isNeverResult) stmtDocs
-    else if (dropUnitIfStmts & isUnitResult & !Lst.isEmpty(b.stmts)) stmtDocs
+    else if (willDropUnit) stmtDocs
     else Lst.append(stmtDocs, [fmtExpr(b.result)])
   match (items) {
     [] => PP.text("{}")

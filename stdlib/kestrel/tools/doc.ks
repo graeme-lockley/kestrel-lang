@@ -13,7 +13,7 @@ import * as Http from "kestrel:io/http"
 import * as Web from "kestrel:io/web"
 import * as Cli from "kestrel:dev/cli"
 import { CliSpec, ParsedArgs, Flag, Value } from "kestrel:dev/cli"
-import { collectFiles, readText, pathBaseName } from "kestrel:io/fs"
+import { collectFiles, readText, pathBaseName, watchDir, watcherNext, Watcher } from "kestrel:io/fs"
 import { all } from "kestrel:sys/task"
 import * as Extract from "kestrel:dev/doc/extract"
 import { DocModule } from "kestrel:dev/doc/extract"
@@ -121,6 +121,14 @@ type DocState = {
   modDict: Dict<String, DocModule>
 }
 
+// Mutable live server state: the current DocState plus a reload-generation counter.
+// The counter is incremented by the watcher loop whenever any module is re-indexed,
+// allowing the browser to detect changes via polling /api/reload-token.
+type LiveState = {
+  curState: mut DocState,
+  reloadGen: mut Int
+}
+
 // ─── Content-type helpers ─────────────────────────────────────────────────────
 
 fun htmlResp(status: Int, body: String): Http.Response =
@@ -140,12 +148,14 @@ fun redirectResp(location: String): Http.Response =
 
 // ─── Request dispatcher ───────────────────────────────────────────────────────
 
-async fun dispatch(state: DocState, req: Http.Request, _params: Dict<String, String>): Task<Http.Response> = {
+async fun dispatch(live: LiveState, req: Http.Request, _params: Dict<String, String>): Task<Http.Response> = {
   val path = Http.requestPath(req);
+  val state = live.curState;
   if (Str.equals(path, "/")) redirectResp("/docs/")
   else if (Str.equals(path, "/docs/")) htmlResp(200, Render.renderModuleList(state.allModules))
   else if (Str.equals(path, "/docs/static/style.css")) cssResp(Render.staticCss())
   else if (Str.equals(path, "/docs/static/search.js")) jsResp(Render.staticJs())
+  else if (Str.equals(path, "/api/reload-token")) Http.makeResponse(200, Str.fromInt(live.reloadGen))
   else if (Str.equals(path, "/api/index")) jsonResp(200, Idx.toFullJson(state.idx))
   else if (Str.startsWith("/api/search", path)) {
     val q = match (Http.queryParam(req, "q")) {
@@ -162,6 +172,66 @@ async fun dispatch(state: DocState, req: Http.Request, _params: Dict<String, Str
     }
   } else
     Http.makeResponse(404, "Not Found")
+}
+
+// ─── Live-reload helpers ───────────────────────────────────────────────────────
+
+// Build a lookup dict from absolute file path → module specifier.
+fun buildPairDict(pairs: List<(String, String)>): Dict<String, String> =
+  Lst.foldl(pairs, Dict.empty(), (acc: Dict<String, String>, p: (String, String)) => Dict.insert(acc, p.0, p.1))
+
+// Re-extract changed .ks files and update LiveState in place.
+async fun reloadChanged(live: LiveState, changed: List<String>, pairDict: Dict<String, String>): Task<Unit> = {
+  val affectedPairs: List<(String, String)> = Lst.filterMap(changed, (p: String) =>
+    match (Dict.get(pairDict, p)) {
+      Some(spec) => Some((p, spec))
+      None => None
+    }
+  );
+  if (Lst.isEmpty(affectedPairs)) ()
+  else {
+    val newMods = await loadModules(affectedPairs);
+    val affectedSpecs: Dict<String, Bool> = Lst.foldl(
+      Lst.map(affectedPairs, (pair: (String, String)) => pair.1),
+      Dict.empty(),
+      (acc: Dict<String, Bool>, s: String) => Dict.insert(acc, s, True)
+    );
+    val kept = Lst.filter(live.curState.allModules, (m: DocModule) => !Dict.member(affectedSpecs, m.moduleSpec));
+    val updatedMods = Lst.append(kept, newMods);
+    val newIdx = Idx.build(updatedMods);
+    val newModDict: Dict<String, DocModule> = Lst.foldl(updatedMods, Dict.empty(), (acc: Dict<String, DocModule>, m: DocModule) => Dict.insert(acc, m.moduleSpec, m));
+    live.curState := { allModules = updatedMods, idx = newIdx, modDict = newModDict };
+    live.reloadGen := live.reloadGen + 1;
+    ()
+  }
+}
+
+// Watcher event loop: blocks on watcherNext, re-extracts changed files, recurses.
+// Stops when watcherNext returns an empty list (watcher closed).
+async fun watcherLoop(live: LiveState, watcher: Watcher, pairDict: Dict<String, String>): Task<Unit> = {
+  val changed = await watcherNext(watcher);
+  if (Lst.isEmpty(changed)) ()
+  else {
+    val docChanged = Lst.filter(changed, isDocKsFile);
+    if (!Lst.isEmpty(docChanged)) {
+      val _ = await reloadChanged(live, docChanged, pairDict);
+      ()
+    };
+    val next: Task<Unit> = watcherLoop(live, watcher, pairDict);
+    await next
+  }
+}
+
+// Start a watcher for a directory; fire-and-forget the loop. On failure, print a warning.
+async fun startWatcher(live: LiveState, dir: String, pairDict: Dict<String, String>): Task<Unit> = {
+  val result = await watchDir(dir, 500);
+  match (result) {
+    Err(_) => println("kestrel doc: warning: could not watch ${dir}")
+    Ok(w) => {
+      val _loop = watcherLoop(live, w, pairDict);
+      ()
+    }
+  }
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -203,15 +273,23 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
   val allModules: List<DocModule> = Lst.append(stdlibModules, projModules)
   val idx: DocIndex = Idx.build(allModules)
   val modDict: Dict<String, DocModule> = Lst.foldl(allModules, Dict.empty(), (acc: Dict<String, DocModule>, m: DocModule) => Dict.insert(acc, m.moduleSpec, m))
-  val state: DocState = { allModules = allModules, idx = idx, modDict = modDict }
+  val initialState: DocState = { allModules = allModules, idx = idx, modDict = modDict }
+  val live: LiveState = { mut curState = initialState, mut reloadGen = 0 }
 
-  // Single wildcard handler closes over state only (not nested async funs).
+  // Build the router with LiveState so the dispatch function can serve reload tokens.
   val router =
     Web.newRouter()
-    |> Web.get("/*", (req: Http.Request, params: Dict<String, String>) => dispatch(state, req, params))
+    |> Web.get("/*", (req: Http.Request, params: Dict<String, String>) => dispatch(live, req, params))
 
   val server = await Http.createServer(Web.serve(router))
   await Http.listen(server, { host = "127.0.0.1", port = port })
+
+  // Build path→spec lookup for both roots and start watchers (fire-and-forget).
+  val allPairs: List<(String, String)> = Lst.append(stdlibPairs, projPairs)
+  val pairDict = buildPairDict(allPairs)
+  val _stdlibWatcher = startWatcher(live, "${stdlibRoot}/kestrel", pairDict)
+  val _projWatcher = startWatcher(live, projectRoot, pairDict)
+
   println("Docs available at http://localhost:${Str.fromInt(port)}/docs/")
   await Http.park()
   0

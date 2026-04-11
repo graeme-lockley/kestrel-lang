@@ -10,14 +10,14 @@ Delivers an interactive, web-based documentation browser for Kestrel developers 
 
 ## Stories (ordered — implement sequentially)
 
-1. [S09-01-doc-comment-syntax-and-extract.md](../../unplanned/S09-01-doc-comment-syntax-and-extract.md) — Doc-comment syntax spec (`///`, `//!`) and `kestrel:dev/doc/extract` (produces `DocModule` ADT from source files)
-2. [S09-02-commonmark-markdown-renderer.md](../../unplanned/S09-02-commonmark-markdown-renderer.md) — CommonMark subset Markdown renderer (`kestrel:dev/doc/markdown`)
-3. [S09-03-declaration-signature-pretty-printer.md](../../unplanned/S09-03-declaration-signature-pretty-printer.md) — Declaration signature pretty-printer (`kestrel:dev/doc/sig`)
-4. [S09-04-dev-doc-render-html-generation.md](../../unplanned/S09-04-dev-doc-render-html-generation.md) — `kestrel:dev/doc/render` HTML fragment generation (module list, module page, declaration anchor)
-5. [S09-05-dev-doc-index-search.md](../../unplanned/S09-05-dev-doc-index-search.md) — `kestrel:dev/doc/index` in-memory search index and JSON API
-6. [S09-06-file-watching-primitive.md](../../unplanned/S09-06-file-watching-primitive.md) — File-watching JVM primitive (`KRuntime`) and `kestrel:io/fs` stdlib binding
-7. [S09-07-tools-doc-server.md](../../unplanned/S09-07-tools-doc-server.md) — `kestrel:tools/doc` HTTP server, CLI, routing, and `docs/specs/09-tools.md` spec section
-8. [S09-08-live-reload-integration.md](../../unplanned/S09-08-live-reload-integration.md) — Live-reload integration: file watcher drives index rebuild; browser polling refreshes page
+1. [S09-01-doc-comment-syntax-and-extract.md](../../done/S09-01-doc-comment-syntax-and-extract.md) ✓
+2. [S09-02-commonmark-markdown-renderer.md](../../done/S09-02-commonmark-markdown-renderer.md) ✓
+3. [S09-03-declaration-signature-pretty-printer.md](../../done/S09-03-declaration-signature-pretty-printer.md) ✓
+4. [S09-04-dev-doc-render-html-generation.md](../../done/S09-04-dev-doc-render-html-generation.md) ✓
+5. [S09-05-dev-doc-index-search.md](../../done/S09-05-dev-doc-index-search.md) ✓
+6. [S09-06-file-watching-primitive.md](../../done/S09-06-file-watching-primitive.md) ✓
+7. [S09-07-tools-doc-server.md](../../done/S09-07-tools-doc-server.md) ✓
+8. [S09-08-live-reload-integration.md](../../done/S09-08-live-reload-integration.md) ✓
 
 **Notes on parallelism:**
 - S09-01 must come first (defines the `DocModule` / `DocEntry` ADT used by everything else).

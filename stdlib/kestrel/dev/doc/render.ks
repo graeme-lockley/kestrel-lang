@@ -183,5 +183,18 @@ export fun staticJs(): String =
     "      res.style.display = 'none';",
     "    }",
     "  });",
+    "})();",
+    ";(function() {",
+    "  var _tok = null;",
+    "  function _poll() {",
+    "    fetch('/api/reload-token')",
+    "      .then(function(r) { return r.text(); })",
+    "      .then(function(t) {",
+    "        if (_tok === null) { _tok = t; }",
+    "        else if (t !== _tok) { location.reload(); }",
+    "      })",
+    "      .catch(function() {});",
+    "  }",
+    "  setInterval(_poll, 1000);",
     "})();"
   ])

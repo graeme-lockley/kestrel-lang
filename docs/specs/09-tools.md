@@ -193,8 +193,9 @@ Starts a local HTTP documentation browser server powered by `stdlib/kestrel/tool
 | `GET` | `/docs/<module-spec>` | HTML module detail page; 404 if not found |
 | `GET` | `/api/search?q=<query>` | JSON array of `SearchResult` objects |
 | `GET` | `/api/index` | JSON dump of the full search index |
+| `GET` | `/api/reload-token` | Plain-text monotonic integer; increments after each live reload |
 | `GET` | `/docs/static/style.css` | Embedded CSS for the documentation browser |
-| `GET` | `/docs/static/search.js` | Embedded JavaScript for the search widget |
+| `GET` | `/docs/static/search.js` | Embedded JavaScript for the search widget and live-reload polling |
 
 **Module discovery:**
 
@@ -202,6 +203,16 @@ Starts a local HTTP documentation browser server powered by `stdlib/kestrel/tool
 - **Project modules:** All `*.ks` files (excluding `*.test.ks`) under `--project-root` that are not already covered by the stdlib tree are loaded. Specifiers use the `project:` prefix followed by the path relative to the project root.
 - Files and directories whose base name starts with `.` or equals `node_modules` are skipped.
 - Extraction failures (e.g. parse errors in a file) are silently dropped; the module is simply absent from the index.
+
+**Live reload:**
+
+After the server starts, background watcher tasks monitor `$KESTREL_ROOT/stdlib/kestrel/` and `--project-root` for file-system changes (using `kestrel:io/fs.watchDir` with a 500 ms debounce). When `.ks` files change:
+
+1. Only the affected modules are re-extracted.
+2. The in-memory `DocIndex` is rebuilt.
+3. The `/api/reload-token` counter increments.
+
+The served JavaScript polls `/api/reload-token` every second; when the token changes, the browser calls `location.reload()`. Round-trip latency is typically under 2 seconds on a developer laptop. If a watched directory fails to open (e.g. it does not exist), the server logs a warning and continues serving the stale index.
 
 **Startup message:**
 

@@ -236,7 +236,7 @@ export async fun collectFiles(dir: String, include: String -> Bool, excludeDir: 
 
 // ── File watching ────────────────────────────────────────────────────────────
 
-extern type Watcher = jvm("kestrel.runtime.KWatcher")
+export extern type Watcher = jvm("kestrel.runtime.KWatcher")
 
 extern fun watchDirAsyncImpl(path: String, debounceMs: Int): Task<Result<Watcher, String>> =
   jvm("kestrel.runtime.KRuntime#watchDirAsync(java.lang.Object,java.lang.Object)")

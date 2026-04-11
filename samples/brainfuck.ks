@@ -110,12 +110,12 @@ fun run(source: String): Unit = {
       },
       '[' => {
         val nextPc = if (Arr.get(tape, dp) == 0) Arr.get(jumps, pc) + 1 else pc + 1
-        pc := nextPc
+        pc := nextPc;
         ()
       },
       ']' => {
         val nextPc = if (Arr.get(tape, dp) != 0) Arr.get(jumps, pc) else pc + 1
-        pc := nextPc
+        pc := nextPc;
         ()
       },
       _ => {
