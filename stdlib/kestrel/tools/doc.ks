@@ -22,6 +22,23 @@ import * as Idx from "kestrel:dev/doc/index"
 import { DocIndex } from "kestrel:dev/doc/index"
 import { getProcess, exit } from "kestrel:sys/process"
 
+// ─── String comparison ──────────────────────────────────────────────────────
+
+fun strCmpAt(a: String, b: String, i: Int, minLen: Int, la: Int, lb: Int): Int =
+  if (i >= minLen) la - lb
+  else {
+    val ca = Str.codePointAt(a, i);
+    val cb = Str.codePointAt(b, i);
+    if (ca != cb) ca - cb
+    else strCmpAt(a, b, i + 1, minLen, la, lb)
+  }
+
+fun strCmp(a: String, b: String): Int = {
+  val la = Str.length(a);
+  val lb = Str.length(b);
+  strCmpAt(a, b, 0, if (la < lb) la else lb, la, lb)
+}
+
 // ─── Path helpers ─────────────────────────────────────────────────────────────
 
 fun isKsFile(path: String): Bool =
@@ -197,7 +214,7 @@ async fun reloadChanged(live: LiveState, changed: List<String>, pairDict: Dict<S
       (acc: Dict<String, Bool>, s: String) => Dict.insert(acc, s, True)
     );
     val kept = Lst.filter(live.curState.allModules, (m: DocModule) => !Dict.member(affectedSpecs, m.moduleSpec));
-    val updatedMods = Lst.append(kept, newMods);
+    val updatedMods = Lst.sortWith((a: DocModule, b: DocModule) => strCmp(a.moduleSpec, b.moduleSpec), Lst.append(kept, newMods));
     val newIdx = Idx.build(updatedMods);
     val newModDict: Dict<String, DocModule> = Lst.foldl(updatedMods, Dict.empty(), (acc: Dict<String, DocModule>, m: DocModule) => Dict.insert(acc, m.moduleSpec, m));
     live.curState := { allModules = updatedMods, idx = newIdx, modDict = newModDict };
@@ -270,7 +287,7 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
   val projPairs: List<(String, String)> = Lst.map(projFiltered, (p: String) => (p, specFromProjectPath(projectRoot, p)))
   val projModules = await loadModules(projPairs)
 
-  val allModules: List<DocModule> = Lst.append(stdlibModules, projModules)
+  val allModules: List<DocModule> = Lst.sortWith((a: DocModule, b: DocModule) => strCmp(a.moduleSpec, b.moduleSpec), Lst.append(stdlibModules, projModules))
   val idx: DocIndex = Idx.build(allModules)
   val modDict: Dict<String, DocModule> = Lst.foldl(allModules, Dict.empty(), (acc: Dict<String, DocModule>, m: DocModule) => Dict.insert(acc, m.moduleSpec, m))
   val initialState: DocState = { allModules = allModules, idx = idx, modDict = modDict }
