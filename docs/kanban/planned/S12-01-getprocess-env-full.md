@@ -42,3 +42,33 @@
 
 - Tuples at the JVM level are `KRecord` objects (fields `"0"` and `"1"`). `KRuntime.getEnvAll()` must construct `KRecord` instances directly — the existing `hashMapKeys()`/`hashMapValues()` helpers cast to `HashMap` and cannot be used on the `UnmodifiableMap` returned by `System.getenv()`.
 - Order of `System.getenv().entrySet()` is undefined; the test must not assert ordering.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| JVM runtime | Add `public static KList getEnvAll()` to `KRuntime.java`: iterates `System.getenv().entrySet()`, constructs a `KRecord` per entry with fields `"0"` (key) and `"1"` (value), cons'd into a `KList` |
+| Stdlib | Add `extern fun getEnvAllImpl(): List<(String, String)> = jvm("kestrel.runtime.KRuntime#getEnvAll()")` to `stdlib/kestrel/sys/process.ks` |
+| Stdlib | Change `getProcess()` body: replace `env = []` with `env = getEnvAllImpl()` |
+| Tests | New conformance runtime test `tests/conformance/runtime/valid/getenv_all.ks` verifying `env` is non-empty and `PATH` appears in it |
+| Docs | Update `docs/specs/02-stdlib.md`: note that `getProcess().env` returns the real process environment |
+
+## Tasks
+
+- [ ] `runtime/jvm/src/kestrel/runtime/KRuntime.java`: add `public static KList getEnvAll()` using `System.getenv().entrySet()`; each entry becomes a `KRecord` with fields `"0"` (key `String`) and `"1"` (value `String`); cons into `KList` in any order
+- [ ] `cd runtime/jvm && bash build.sh`
+- [ ] `stdlib/kestrel/sys/process.ks`: add private `extern fun getEnvAllImpl(): List<(String, String)> = jvm("kestrel.runtime.KRuntime#getEnvAll()")`
+- [ ] `stdlib/kestrel/sys/process.ks`: change `getProcess()` body — replace `env = []` with `env = getEnvAllImpl()`
+- [ ] `tests/conformance/runtime/valid/getenv_all.ks`: add conformance test
+- [ ] `cd compiler && npm run build && npm test`
+- [ ] `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Conformance runtime | `tests/conformance/runtime/valid/getenv_all.ks` | `getProcess().env` is non-empty; `PATH` appears as a `(k, v)` entry; `getEnv(k)` returns `Some(v)` for that entry |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/02-stdlib.md` — update the `getProcess` row to note `env` returns the actual process environment (non-empty list); remove any "always `[]`" wording
