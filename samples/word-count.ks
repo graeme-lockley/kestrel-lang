@@ -56,17 +56,6 @@ val text = Str.concat(["Four score and seven years ago our fathers brought forth
     "they did here. It is for us the living rather to be dedicated here to the unfinished work which they who ",
     "fought here have thus far so nobly advanced."])
 
-val freq = text
-  // ── pipeline ─────────────────────────────────────────────────────────────
-  |> Str.toLower
-  |> Str.words
-  |> Lst.foldl(Dct.empty(), tally)
-
-val top15 = freq
-  |> Dct.toList
-  |> sortDesc
-  |> Lst.take(15)
-
 // ── display ──────────────────────────────────────────────────────────────
 fun printRow(pair: String * Int): Unit =
   println("  ${Str.padRight(18, " ", pair.0)} ${pair.1}")
@@ -75,4 +64,11 @@ println("Word               Count")
 
 println("─────────────────────────")
 
-Lst.forEach(top15, printRow)
+text
+  |> Str.toLower
+  |> Str.words
+  |> Lst.foldl(Dct.empty(), tally)
+  |> Dct.toList
+  |> sortDesc
+  |> Lst.take(15)
+  |> Lst.forEach(printRow)
