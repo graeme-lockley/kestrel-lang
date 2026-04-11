@@ -16,7 +16,7 @@ fun qsort(xs: List<Int>): List<Int> =
     [] =>
       [],
     h :: t =>
-      Lst.append(qsort(Lst.filter(t, (x) => x <= h)), h :: qsort(Lst.filter(t, (x) => x > h)))
+      [...qsort(Lst.filter(t, (x) => x <= h)), h, ...qsort(Lst.filter(t, (x) => x > h))]
   }
 
 val input = Lst.generate(30, (_) => RInt.randomRange(0, 100))

@@ -1132,30 +1132,19 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         return result;
       }
       case 'ListExpr': {
-        // List literal: all elements must have same type
-        if (expr.elements.length === 0) {
-          // Empty list has type List<α> for fresh α
-          const elemT = freshVar();
-          result = { kind: 'app', name: 'List', args: [elemT] };
-        } else {
-          // Infer first element type
-          const firstElem = expr.elements[0];
-          if (typeof firstElem === 'object' && 'spread' in firstElem) {
-            // Spread element
-            result = freshVar();
+        // List literal: all elements must have same type T;
+        // spread elements ("...expr") must have type List<T>.
+        const elemT = freshVar();
+        for (const elem of expr.elements) {
+          if (typeof elem === 'object' && elem !== null && (elem as { spread?: unknown }).spread === true) {
+            const spreadT = inferExpr((elem as { expr: Expr }).expr, asyncCtx);
+            unifyWithBlame(spreadT, { kind: 'app', name: 'List', args: [elemT] }, (elem as { expr: Expr }).expr);
           } else {
-            const firstT = inferExpr(firstElem as Expr, asyncCtx);
-            // Unify all other elements with first
-            for (let i = 1; i < expr.elements.length; i++) {
-              const elem = expr.elements[i];
-              if (!(typeof elem === 'object' && 'spread' in elem)) {
-                const elemT = inferExpr(elem as Expr, asyncCtx);
-                unifyWithBlame(firstT, elemT, elem as Expr);
-              }
-            }
-            result = { kind: 'app', name: 'List', args: [apply(firstT)] };
+            const t = inferExpr(elem as Expr, asyncCtx);
+            unifyWithBlame(elemT, t, elem as Expr);
           }
         }
+        result = { kind: 'app', name: 'List', args: [apply(elemT)] };
         setInferredType(expr, result);
         return result;
       }
@@ -1605,7 +1594,11 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         if (n2.kind === 'TupleExpr') (n2.elements as unknown[]).forEach(resolveNode);
         if (n2.kind === 'FieldExpr') resolveNode(n2.object);
         if (n2.kind === 'TemplateExpr') (n2.parts as { type: string; expr?: unknown }[]).forEach((p) => { if (p.expr) resolveNode(p.expr); });
-        if (n2.kind === 'ListExpr') (n2.elements as unknown[]).forEach(resolveNode);
+        if (n2.kind === 'ListExpr') (n2.elements as unknown[]).forEach((el) => {
+          if (el && typeof el === 'object' && (el as { spread?: unknown }).spread === true)
+            resolveNode((el as { expr: unknown }).expr);
+          else resolveNode(el);
+        });
         if (n2.kind === 'ConsExpr') { resolveNode(n2.head); resolveNode(n2.tail); }
         if (n2.kind === 'MatchExpr') { resolveNode(n2.scrutinee); (n2.cases as { body: unknown }[]).forEach((c) => resolveNode(c.body)); }
         if (n2.kind === 'ThrowExpr') resolveNode(n2.value);

@@ -277,7 +277,11 @@ function getFreeVars(expr: Expr, paramNames: Set<string>, scope: Map<string, num
         for (const part of e.parts) if (part.type === 'interp') walk(part.expr);
         return;
       case 'ListExpr':
-        for (const el of e.elements) walk(el as Expr);
+        for (const el of e.elements) {
+          if (typeof el === 'object' && el !== null && (el as { spread?: unknown }).spread === true)
+            walk((el as { expr: Expr }).expr);
+          else walk(el as Expr);
+        }
         return;
       case 'LiteralExpr':
         return;
@@ -439,7 +443,11 @@ function collectLambdas(program: Program, globalNames: Set<string>, funNames: Se
         for (const part of e.parts) if (part.type === 'interp') walk(part.expr);
         return;
       case 'ListExpr':
-        for (const el of e.elements) walk(el as Expr);
+        for (const el of e.elements) {
+          if (typeof el === 'object' && el !== null && (el as { spread?: unknown }).spread === true)
+            walk((el as { expr: Expr }).expr);
+          else walk(el as Expr);
+        }
         return;
       case 'ThrowExpr':
         walk(e.value);
@@ -2709,23 +2717,29 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
         mb.emit1b(JvmOp.ASTORE, listTemp);
         for (let i = expr.elements.length - 1; i >= 0; i--) {
           const el = expr.elements[i];
-          if (el && typeof el === 'object' && (el as { spread?: unknown }).spread === true) {
+          const isSpread = el && typeof el === 'object' && (el as { spread?: unknown }).spread === true;
+          if (isSpread) {
             emitExpr((el as { expr: Expr }).expr, mb, tcN);
+            mb.emit1b(JvmOp.ASTORE, elemTemp);
+            mb.emit1b(JvmOp.ALOAD, elemTemp);
+            mb.emit1b(JvmOp.ALOAD, listTemp);
+            mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(RUNTIME, 'listPrependAll', '(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KList;'));
+            mb.emit1b(JvmOp.ASTORE, listTemp);
           } else {
             emitExpr(el as Expr, mb, tcN);
+            const elExpr = el as Expr;
+            if (elExpr && (elExpr.kind === 'IfExpr' || elExpr.kind === 'MatchExpr')) {
+              mb.emit1b(JvmOp.ALOAD, elExpr.kind === 'IfExpr' ? 53 : 54);
+            }
+            mb.emit1b(JvmOp.ASTORE, elemTemp);
+            mb.emit1s(JvmOp.NEW, cf.classRef(K_CONS));
+            mb.emit1(JvmOp.DUP);
+            mb.emit1b(JvmOp.ALOAD, elemTemp);
+            mb.emit1b(JvmOp.ALOAD, listTemp);
+            mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_LIST));
+            mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_CONS, '<init>', '(Ljava/lang/Object;Lkestrel/runtime/KList;)V'));
+            mb.emit1b(JvmOp.ASTORE, listTemp);
           }
-          const elExpr = el && typeof el === 'object' && (el as { spread?: unknown }).spread === true ? (el as { expr: Expr }).expr : (el as Expr);
-          if (elExpr && (elExpr.kind === 'IfExpr' || elExpr.kind === 'MatchExpr')) {
-            mb.emit1b(JvmOp.ALOAD, elExpr.kind === 'IfExpr' ? 53 : 54);
-          }
-          mb.emit1b(JvmOp.ASTORE, elemTemp);
-          mb.emit1s(JvmOp.NEW, cf.classRef(K_CONS));
-          mb.emit1(JvmOp.DUP);
-          mb.emit1b(JvmOp.ALOAD, elemTemp);
-          mb.emit1b(JvmOp.ALOAD, listTemp);
-          mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_LIST));
-          mb.emit1s(JvmOp.INVOKESPECIAL, cf.methodref(K_CONS, '<init>', '(Ljava/lang/Object;Lkestrel/runtime/KList;)V'));
-          mb.emit1b(JvmOp.ASTORE, listTemp);
         }
         mb.emit1b(JvmOp.ALOAD, listTemp);
         return false;

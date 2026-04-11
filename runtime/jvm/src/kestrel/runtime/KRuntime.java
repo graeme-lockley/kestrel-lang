@@ -605,6 +605,26 @@ public final class KRuntime {
         return Long.valueOf(str.codePointCount(0, byteIdx));
     }
 
+    /** Prepend all elements of {@code prefix} (in order) before {@code suffix}.
+     *  Equivalent to Lst.append(prefix, suffix).  Used by list-spread codegen. */
+    public static KList listPrependAll(Object prefix, Object suffix) {
+        KList items = (KList) prefix;
+        KList reversed = KNil.INSTANCE;
+        while (items instanceof KCons) {
+            KCons c = (KCons) items;
+            reversed = new KCons(c.head, reversed);
+            items = c.tail;
+        }
+        KList result = (KList) suffix;
+        KList cur = reversed;
+        while (cur instanceof KCons) {
+            KCons c = (KCons) cur;
+            result = new KCons(c.head, result);
+            cur = c.tail;
+        }
+        return result;
+    }
+
     public static KList stringSplit(Object s, Object delim) {
         if (!(s instanceof String) || !(delim instanceof String)) throw new IllegalArgumentException("stringSplit expects String");
         String str = (String) s;
