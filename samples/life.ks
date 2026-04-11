@@ -6,10 +6,12 @@
 // watch patterns evolve.
 import * as Arr from "kestrel:data/array"
 import * as Str from "kestrel:data/string"
+import * as Basics from "kestrel:data/basics"
+import * as Console from "kestrel:io/console"
 
-val width = 40
-
-val height = 20
+val term = Console.terminalInfo()
+val width = Basics.clamp(40, 200, term.width)
+val height = Basics.clamp(20, 60, term.height - 4)
 
 // ── grid primitives ──────────────────────────────────────────────────────
 fun mkGrid(): Array<Int> = {
@@ -77,7 +79,7 @@ fun printGrid(g: Array<Int>): Unit = {
 }
 
 fun showGen(g: Array<Int>, gen: Int): Unit = {
-  println("┌── Generation ${Str.fromInt(gen)} ${Str.repeat(21, "─")}┐")
+  println("┌── Generation ${Str.fromInt(gen)} ${Str.repeat(width - 14, "─")}┐")
   printGrid(g)
   println("└${Str.repeat(width + 2, "─")}┘")
 }

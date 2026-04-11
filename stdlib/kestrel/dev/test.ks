@@ -5,6 +5,13 @@ import * as Stk from "kestrel:dev/stack"
 import * as Str from "kestrel:data/string"
 import { asyncTasksInFlight } from "kestrel:sys/task"
 
+val _isTty = Console.terminalInfo().isTty
+val _grn = if (_isTty) Console.GREEN else ""
+val _red = if (_isTty) Console.RED else ""
+val _yel = if (_isTty) Console.YELLOW else ""
+val _dim = if (_isTty) Console.DIM else ""
+val _rst = if (_isTty) Console.RESET else ""
+
 // ─── Harness types and output modes ──────────────────────────────────────────
 
 /** Harness output mode (`Suite.output`). Use these values only; other Int values behave like compact. */
@@ -34,15 +41,15 @@ export fun makeRoot(output: Int): Suite = {
 fun indent(n: Int): String = Str.concat(Lst.repeat(n, "  "))
 
 fun passLine(s: Suite, desc: String): String =
-  "${indent(s.depth)}${Console.GREEN}${Console.CHECK} ${desc}${Console.RESET}"
+  "${indent(s.depth)}${_grn}${Console.CHECK} ${desc}${_rst}"
 
 /** Default-weight suite name; green count + check; dim timing only. */
 fun compactSummaryLine(depth: Int, name: String, passedInGroup: Int, elapsed: Int): String =
-  "${indent(depth)}${name} (${Console.GREEN}${passedInGroup}${Console.CHECK}${Console.RESET}${Console.DIM} ${elapsed}ms)${Console.RESET}"
+  "${indent(depth)}${name} (${_grn}${passedInGroup}${Console.CHECK}${_rst}${_dim} ${elapsed}ms)${_rst}"
 
 fun countFooter(p: Int, f: Int, elapsed: Int): String = {
   val counts = if (f > 0) "${p} passed, ${f} failed" else "${p} passed";
-  "${Console.DIM}${counts} (${elapsed}ms)${Console.RESET}"
+  "${_dim}${counts} (${elapsed}ms)${_rst}"
 }
 
 // ─── Assertion bookkeeping ────────────────────────────────────────────────────
@@ -57,7 +64,7 @@ fun recordPass(s: Suite, desc: String): Unit = {
 fun recordFail(s: Suite, desc: String): Unit = {
   s.counts.failed := s.counts.failed + 1;
   s.counts.compactExpanded := True;
-  println("${indent(s.depth)}${Console.RED}${Console.CROSS} ${desc}${Console.RESET}")
+  println("${indent(s.depth)}${_red}${Console.CROSS} ${desc}${_rst}")
 }
 
 // ─── Group prologue / epilogue ────────────────────────────────────────────────
@@ -239,13 +246,13 @@ export fun printSummary(root: Suite): Unit = {
   // Subtract 1 for the current (main) async task.
   val leaked = asyncTasksInFlight() - 1;
   val leakedSuffix =
-    if (leaked > 0) " ${Console.YELLOW}(${leaked} async task(s) still in flight)${Console.RESET}"
+    if (leaked > 0) " ${_yel}(${leaked} async task(s) still in flight)${_rst}"
     else "";
   println("");
   if (f > 0) {
-    println("${Console.RED}${f} failed${Console.RESET}, ${p} passed (${totalElapsed}ms)${leakedSuffix}");
+    println("${_red}${f} failed${_rst}, ${p} passed (${totalElapsed}ms)${leakedSuffix}");
     exit(1)
   } else {
-    println("${Console.GREEN}${p} passed${Console.RESET} (${totalElapsed}ms)${leakedSuffix}")
+    println("${_grn}${p} passed${_rst} (${totalElapsed}ms)${leakedSuffix}")
   }
 }

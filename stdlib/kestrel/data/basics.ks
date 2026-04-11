@@ -72,6 +72,3 @@ export extern fun isInfinite(f: Float): Bool =
 export extern fun nowMs(): Int =
   jvm("kestrel.runtime.KRuntime#nowMs()")
 
-/** Returns `True` when stdout is connected to a TTY (interactive terminal). */
-export extern fun isTtyStdout(): Bool =
-  jvm("kestrel.runtime.KRuntime#isTtyStdout()")

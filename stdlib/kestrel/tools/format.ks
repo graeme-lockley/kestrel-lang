@@ -13,8 +13,14 @@ import {
   format, formatFile, checkFile
 } from "kestrel:tools/format/formatter"
 import { getProcess } from "kestrel:sys/process"
-import { GREEN, RED, DIM, RESET, CHECK, CROSS } from "kestrel:io/console"
+import { GREEN, RED, DIM, RESET, CHECK, CROSS, terminalInfo } from "kestrel:io/console"
 import { nowMs } from "kestrel:data/basics"
+
+val _isTty = terminalInfo().isTty
+val _grn = if (_isTty) GREEN else ""
+val _red = if (_isTty) RED else ""
+val _dim = if (_isTty) DIM else ""
+val _rst = if (_isTty) RESET else ""
 
 // ─── File resolution ─────────────────────────────────────────────────────────
 
@@ -115,11 +121,11 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
           [] => {
             val elapsed = nowMs() - startMs
             val bad = failCount + errorCount
-            if (!summaryMode) println("${DIM}───${RESET}") else ();
+            if (!summaryMode) println("${_dim}───${_rst}") else ();
             if (bad > 0)
-              println("${GREEN}${passCount} ${CHECK}${RESET}  ${RED}${bad} ${CROSS}${RESET}  ${DIM}(${elapsed}ms)${RESET}")
+              println("${_grn}${passCount} ${CHECK}${_rst}  ${_red}${bad} ${CROSS}${_rst}  ${_dim}(${elapsed}ms)${_rst}")
             else
-              println("${GREEN}${passCount} ${CHECK}${RESET}  ${DIM}(${elapsed}ms)${RESET}");
+              println("${_grn}${passCount} ${CHECK}${_rst}  ${_dim}(${elapsed}ms)${_rst}");
             if (anyFail) 1 else 0
           }
           path :: rest => {
@@ -128,15 +134,15 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
             val elapsed = nowMs() - t0
             match (result) {
               Err(e) => {
-                if (!summaryMode) println("${RED}${CROSS}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET} — error: ${fmtError(e)}") else ();
+                if (!summaryMode) println("${_red}${CROSS}${_rst} ${path} ${_dim}(${elapsed}ms)${_rst} — error: ${fmtError(e)}") else ();
                 await checkAll(rest, True, passCount, failCount, errorCount + 1)
               }
               Ok(alreadyFmt) =>
                 if (alreadyFmt) {
-                  if (!summaryMode) println("${GREEN}${CHECK}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET}") else ();
+                  if (!summaryMode) println("${_grn}${CHECK}${_rst} ${path} ${_dim}(${elapsed}ms)${_rst}") else ();
                   await checkAll(rest, anyFail, passCount + 1, failCount, errorCount)
                 } else {
-                  if (!summaryMode) println("${RED}${CROSS}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET} — not formatted") else ();
+                  if (!summaryMode) println("${_red}${CROSS}${_rst} ${path} ${_dim}(${elapsed}ms)${_rst} — not formatted") else ();
                   await checkAll(rest, True, passCount, failCount + 1, errorCount)
                 }
             }
@@ -148,11 +154,11 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
         match (files) {
           [] => {
             val elapsed = nowMs() - startMs
-            if (!summaryMode) println("${DIM}───${RESET}") else ();
+            if (!summaryMode) println("${_dim}───${_rst}") else ();
             if (failCount > 0)
-              println("${GREEN}${passCount} ${CHECK}${RESET}  ${RED}${failCount} ${CROSS}${RESET}  ${DIM}(${elapsed}ms)${RESET}")
+              println("${_grn}${passCount} ${CHECK}${_rst}  ${_red}${failCount} ${CROSS}${_rst}  ${_dim}(${elapsed}ms)${_rst}")
             else
-              println("${GREEN}${passCount} ${CHECK}${RESET}  ${DIM}(${elapsed}ms)${RESET}");
+              println("${_grn}${passCount} ${CHECK}${_rst}  ${_dim}(${elapsed}ms)${_rst}");
             if (anyFail) 1 else 0
           }
           path :: rest => {
@@ -161,11 +167,11 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
             val elapsed = nowMs() - t0
             match (result) {
               Err(e) => {
-                if (!summaryMode) println("${RED}${CROSS}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET} — error: ${fmtError(e)}") else ();
+                if (!summaryMode) println("${_red}${CROSS}${_rst} ${path} ${_dim}(${elapsed}ms)${_rst} — error: ${fmtError(e)}") else ();
                 await formatAll(rest, True, passCount, failCount + 1)
               }
               Ok(_) => {
-                if (!summaryMode) println("${GREEN}${CHECK}${RESET} ${path} ${DIM}(${elapsed}ms)${RESET}") else ();
+                if (!summaryMode) println("${_grn}${CHECK}${_rst} ${path} ${_dim}(${elapsed}ms)${_rst}") else ();
                 await formatAll(rest, anyFail, passCount + 1, failCount)
               }
             }

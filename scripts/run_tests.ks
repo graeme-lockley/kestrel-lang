@@ -1,5 +1,5 @@
 import { getProcess, runProcess, ProcessSpawnError } from "kestrel:sys/process"
-import { listDir, writeText, NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:io/fs"
+import { listDir, writeText, readText, renameFile, deleteFile, NotFound, PermissionDenied, IoError, DirEntry, File, Dir } from "kestrel:io/fs"
 import { all } from "kestrel:sys/task"
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
@@ -169,7 +169,15 @@ async fun main(): Task<Unit> = {
   // Write to a temp file, then only replace if content changed (preserves timestamp to avoid recompilation)
   val tmpPath = "${generatedPath}.new"
   await writeTextOrExit(tmpPath, generatedSource)
-  val _cmp = await runProcessOrExit("sh", ["-c", "cmp -s '${tmpPath}' '${generatedPath}' 2>/dev/null && rm '${tmpPath}' || mv '${tmpPath}' '${generatedPath}'"])
+  val existing = await readText(generatedPath)
+  val needsUpdate = match (existing) { Ok(c) => !Str.equals(c, generatedSource), Err(_) => True }
+  if (needsUpdate) {
+    val _ = await renameFile(tmpPath, generatedPath);
+    ()
+  } else {
+    val _ = await deleteFile(tmpPath);
+    ()
+  }
 
   if (hasFlag(proc.args, "--generate")) {
     // --generate: just write the file and exit; caller runs it directly
