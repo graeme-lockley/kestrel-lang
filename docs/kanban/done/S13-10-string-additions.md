@@ -47,3 +47,16 @@ Add three targeted string utilities to `kestrel:data/string`: base-N integer par
 - `formatInt` = `padLeft(width, "0", fromInt(n))`.
 - `indexOfChar` can use `charAt` loop or convert char to single-char string and call `indexOf`.
 - Independent of all other E13 stories.
+
+## Tasks
+
+- [x] `stdlib/kestrel/data/string.ks`: add `parseIntRadix`, `formatInt`, `indexOfChar`
+- [x] `tests/conformance/runtime/valid/string_extras.ks`: conformance test (12 checks)
+- [x] Compiler tests pass (`cd compiler && npm test`)
+- [x] `docs/specs/02-stdlib.md`: add three functions to data/string table
+
+## Build notes
+
+- 2025-01-01: Implemented `parseIntRadix` in pure Kestrel via `digitValue` + recursive accumulator helper `parseRadixLoop`.
+- Parser accepts uppercase and lowercase digits for bases above 10 (`A-F`/`a-f` for hex).
+- Kept API argument order per story spec: radix first, string second; char first, string second for `indexOfChar`.

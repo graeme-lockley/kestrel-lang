@@ -91,6 +91,46 @@ search index (S09-05) to handle all documented routes. The `kestrel doc` CLI ali
 - `kestrel:dev/cli` — CLI argument parsing.
 - `kestrel:dev/doc/extract`, `render`, `index` (S09-01–S09-05).
 
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib (new file) | `stdlib/kestrel/tools/doc.ks` — entry-point module with CLI spec, module discovery, HTTP router, and main |
+| CLI script | `scripts/kestrel` — add `doc` subcommand (mirrors `fmt` pattern) and usage line |
+| Docs | `docs/specs/09-tools.md` — new `kestrel doc` section: flags, routes, module discovery, exit codes |
+| Tests (new) | `stdlib/kestrel/tools/doc.test.ks` — unit tests for `specFromPath` and route handler helpers; minimal smoke tests |
+
+## Tasks
+
+- [ ] Create `stdlib/kestrel/tools/doc.ks`
+  - [ ] Imports: `Lst`, `Str`, `Dict`, `Http`, `Web`, `Cli`, `Fs`, `extract`, `render`, `index`, `process`
+  - [ ] `specFromStdlibPath(root, path)` → `"kestrel:<rel>"` (strip `stdlib/kestrel/` prefix + `.ks`)
+  - [ ] `isTestFile(path)` and `isKsFile(path)` predicates
+  - [ ] `isIgnoreDir(path)` predicate
+  - [ ] `discoverStdlib(root)` — `collectFiles` under `stdlib/kestrel/`, filter out test files
+  - [ ] `discoverProject(root)` — `collectFiles` under project root, filter out test files
+  - [ ] `loadModules(paths, specOf)` — `all(Lst.map(..., extractFile))`, unwrap Ok/Err
+  - [ ] `cliSpec` record (`--port`, `--project-root`)
+  - [ ] `handler(parsed)` — discover, extract, index, build router, start server, print startup message, call `Http.listen`
+  - [ ] `main(allArgs)` entry point
+  - [ ] `main(getProcess().args)` call at top level
+- [ ] Add `doc` subcommand to `scripts/kestrel`
+  - [ ] `cmd_doc()` function (same pattern as `cmd_fmt`)
+  - [ ] Register in `case` dispatch and `usage()` string
+- [ ] Update `docs/specs/09-tools.md` with `kestrel doc` section
+- [ ] Run `./kestrel test`
+- [ ] Run `cd compiler && npm test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Manual / smoke | `./kestrel doc` | Server starts, `/docs/` returns 200 HTML |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/09-tools.md` — add `kestrel doc` section (flags, routes, module discovery, exit codes)
+
 ## Risks / Notes
 
 - Module specifier derivation for stdlib files: strip `stdlib/` prefix and remove `.ks`
