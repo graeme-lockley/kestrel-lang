@@ -78,14 +78,14 @@ compiler_build_needed() {
 resolve_script() {
   local arg="$1"
   if [ -f "$arg" ]; then
-    echo "$arg"
+    echo "$(cd "$(dirname "$arg")" && pwd)/$(basename "$arg")"
     return
   fi
   if [[ "$arg" == *.ks ]]; then
     echo "" && return
   fi
   if [ -f "${arg}.ks" ]; then
-    echo "${arg}.ks"
+    echo "$(cd "$(dirname "${arg}.ks")" && pwd)/$(basename "${arg}.ks")"
     return
   fi
   echo ""
@@ -238,7 +238,7 @@ cmd_build() {
     class_dir=$(jvm_class_dir_for "$resolved")
     mkdir -p "$class_dir"
     # shellcheck disable=SC2086
-    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $status_flag $clean_flag; then
+    if ! (cd "$ROOT" && node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $status_flag $clean_flag); then
       echo "kestrel: JVM compile failed" >&2
       exit 1
     fi
@@ -317,7 +317,7 @@ cmd_run() {
   if [ -n "$clean_flag" ] || needs_compile_jvm "$resolved" "$class_dir"; then
     mkdir -p "$class_dir"
     # shellcheck disable=SC2086
-    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $clean_flag; then
+    if ! (cd "$ROOT" && node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $clean_flag); then
       echo "kestrel: JVM compile failed for $resolved" >&2
       exit 1
     fi
@@ -371,7 +371,7 @@ cmd_dis() {
   class_dir=$(jvm_class_dir_for "$resolved")
   if needs_compile_jvm "$resolved" "$class_dir"; then
     mkdir -p "$class_dir"
-    if ! node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"; then
+    if ! (cd "$ROOT" && node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"); then
       echo "kestrel: JVM compile failed for $resolved" >&2
       exit 1
     fi
