@@ -2,7 +2,7 @@
 
 ## Status
 
-Unplanned
+Done
 
 ## Summary
 
@@ -12,10 +12,10 @@ This epic closes that gap by filling two stdlib holes and rewriting `test-runner
 
 ## Stories
 
-1. [S11-01 — `getEnv` in `kestrel:sys/process`: expose environment variables to Kestrel programs](../../done/S11-01-getenv-in-sys-process.md)
-2. [S11-02 — `kestrel:io/fs` file management: `fileExists`, `deleteFile`, `renameFile`](../../done/S11-02-io-fs-file-management.md)
-3. [S11-03 — Rewrite `kestrel:tools/test-runner` as a `kestrel:dev/cli` entry point](../../done/S11-03-rewrite-test-runner.md)
-4. [S11-04 — Simplify bash `cmd_test` to match `cmd_fmt`](../../done/S11-04-simplify-cmd-test.md)
+1. ✅ [S11-01 — `getEnv` in `kestrel:sys/process`: expose environment variables to Kestrel programs](../../done/S11-01-getenv-in-sys-process.md)
+2. ✅ [S11-02 — `kestrel:io/fs` file management: `fileExists`, `deleteFile`, `renameFile`](../../done/S11-02-io-fs-file-management.md)
+3. ✅ [S11-03 — Rewrite `kestrel:tools/test-runner` as a `kestrel:dev/cli` entry point](../../done/S11-03-rewrite-test-runner.md)
+4. ✅ [S11-04 — Simplify bash `cmd_test` to match `cmd_fmt`](../../done/S11-04-simplify-cmd-test.md)
 
 ## Dependencies
 

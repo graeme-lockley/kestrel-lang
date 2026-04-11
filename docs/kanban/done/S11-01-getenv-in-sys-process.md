@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E11 Pure-Kestrel Test Runner](../epics/unplanned/E11-pure-kestrel-test-runner.md)
+- Epic: [E11 Pure-Kestrel Test Runner](../epics/done/E11-pure-kestrel-test-runner.md)
 
 ## Summary
 
