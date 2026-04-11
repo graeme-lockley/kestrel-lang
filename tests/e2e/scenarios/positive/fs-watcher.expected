@@ -1,0 +1,5 @@
+watchDir-missing-err
+watchDir-ok-closed
+watcherNext-detects-write
+watcherNext-detects-subdir
+watcherClose-empties-next
