@@ -6,7 +6,7 @@ export async fun run(s: Suite): Task<Unit> = {
   val successResult = await Process.runProcess("sh", ["-c", "exit 7"]);
   val spawnErrorResult = await Process.runProcess("__definitely_missing_binary_xyz__", []);
 
-  group(s, "process", (s1: Suite) => {
+  group(s, "kestrel:sys/process", (s1: Suite) => {
     group(s1, "runProcess success", (sg: Suite) => {
       val code =
         match (successResult) {

@@ -4,7 +4,7 @@ fun getValue(): Int = 42
 fun negate(x: Int): Int = -x
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "unary", (s1: Suite) => {
+  group(s, "kestrel:lang/unary", (s1: Suite) => {
     group(s1, "plus", (sg: Suite) => {
       eq(sg, "+5", +5, 5)
       eq(sg, "+(10+5)", +(10 + 5), 15)

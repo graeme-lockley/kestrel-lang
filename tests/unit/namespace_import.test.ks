@@ -5,7 +5,7 @@ import * as Helper from "../fixtures/export_var_helper.ks"
 import * as Lib from "../fixtures/opaque_pkg/lib.ks"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "namespace import", (s1: Suite) => {
+  group(s, "kestrel:lang/namespace-import", (s1: Suite) => {
     group(s1, "functions", (s2: Suite) => {
       eq(s2, "Str.length", Str.length("hello"), 5)
       eq(s2, "Str.slice", Str.slice("hello", 0, 2), "he")

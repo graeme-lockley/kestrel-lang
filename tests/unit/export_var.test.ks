@@ -2,7 +2,7 @@ import { Suite, group, eq } from "kestrel:dev/test"
 import { counter } from "../fixtures/export_var_helper.ks"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "export var", (s1: Suite) => {
+  group(s, "kestrel:lang/export-var", (s1: Suite) => {
     counter := 0
     val c0 = counter
     eq(s1, "initial value", c0, 0)

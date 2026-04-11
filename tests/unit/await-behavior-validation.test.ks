@@ -37,7 +37,7 @@ export async fun run(s: Suite): Task<Unit> = {
   val chainResult      = await asyncSumPair(5, 7)
   val caughtResult     = await asyncCatch()
 
-  group(s, "await behavior validation", (sg: Suite) => {
+  group(s, "kestrel:lang/await", (sg: Suite) => {
     group(sg, "basic await results", (s1: Suite) => {
       eq(s1, "asyncAdd 5+3", addResult, 8);
       eq(s1, "asyncMul 4*6", mulResult, 24)

@@ -77,7 +77,7 @@ export async fun run(s: Suite): Task<Unit> = {
 
   await Http.serverStop(server);
 
-  group(s, "kestrel:io/web routing", (s1: Suite) => {
+  group(s, "kestrel:io/web", (s1: Suite) => {
     group(s1, "GET route matches exact path", (sg: Suite) => {
       eq(sg, "status 200", Http.statusCode(rGet), 200);
       eq(sg, "body Hello", Http.bodyText(rGet), "Hello")

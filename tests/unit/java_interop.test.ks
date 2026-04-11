@@ -55,7 +55,7 @@ extern import "java:java.lang.StringBuilder" as SB {
 // ---------------------------------------------------------------------------
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "java interop", (s1: Suite) => {
+  group(s, "kestrel:lang/java-interop", (s1: Suite) => {
     group(s1, "extern fun: static method", (sg: Suite) => {
       eq(sg, "intToString(42)", intToString(42), "42")
       eq(sg, "intToString(0)", intToString(0), "0")

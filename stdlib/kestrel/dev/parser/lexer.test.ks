@@ -31,7 +31,7 @@ fun joinTexts(src: String): String =
   Lst.foldl(lex(src), "", (acc: String, t: Token.Token) => Str.append(acc, t.text))
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "lexer", (s1: Suite) => {
+  group(s, "kestrel:dev/parser/lexer", (s1: Suite) => {
 
     // ── Round-trip ────────────────────────────────────────────────────────────
 

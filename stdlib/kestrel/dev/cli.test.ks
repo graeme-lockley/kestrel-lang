@@ -58,7 +58,7 @@ fun parseErr(argv: List<String>): Bool =
   Res.isErr(Cli.parse(testSpec, argv))
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "cli", (s1: Suite) => {
+  group(s, "kestrel:dev/cli", (s1: Suite) => {
     group(s1, "version", (sg: Suite) => {
       eq(sg, "version string", Cli.version(testSpec), "mytool v1.2.3")
     });

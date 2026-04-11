@@ -26,7 +26,7 @@ fun makeList(n: Int): List<Int> = if (n <= 0) [] else n :: makeList(n - 1)
 fun sumList(xs: List<Int>): Int = match (xs) { [] => 0, h :: t => h + sumList(t) }
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "lists", (s1: Suite) => {
+  group(s, "kestrel:lang/lists", (s1: Suite) => {
     group(s1, "construction", (con: Suite) => {
       eq(con, "empty list length", length([]), 0)
       eq(con, "cons builds list", head(1 :: []), 1)

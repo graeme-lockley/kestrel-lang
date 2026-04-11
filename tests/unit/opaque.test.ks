@@ -18,7 +18,7 @@ fun myResultIsOk<T>(r: MyResult<T>): Bool = match (r) {
 }
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "opaque types", (s1: Suite) => {
+  group(s, "kestrel:lang/opaque", (s1: Suite) => {
     group(s1, "opaque ADT", (sg: Suite) => {
       eq(sg, "tokenToInt Num", tokenToInt(Num(42)), 42)
       eq(sg, "tokenToInt Op", tokenToInt(Op("plus")), 0)

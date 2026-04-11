@@ -5,7 +5,7 @@ fun double(n: Int): Int = n + n
 fun incStr(s: String): String = "${s}!"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "tuple", (s1: Suite) => {
+  group(s, "kestrel:data/tuple", (s1: Suite) => {
     group(s1, "pair first second", (sg: Suite) => {
       val t = pair(1, "a")
       eq(sg, "first", first(t), 1)

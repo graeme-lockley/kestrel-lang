@@ -51,7 +51,7 @@ export async fun run(s: Suite): Task<Unit> = {
   Task.cancel(mapped)
   val cancelPropagated: Int = try { val _ = await slowSource; 0 } catch { Cancelled => 1 }
 
-  group(s, "async virtual threads", (s1: Suite) => {
+  group(s, "kestrel:lang/async", (s1: Suite) => {
     group(s1, "await success", (sg: Suite) => {
       eq(sg, "await plusOne", plusOneValue, 42)
     });

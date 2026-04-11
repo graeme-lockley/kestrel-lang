@@ -4,7 +4,7 @@ import * as Token from "kestrel:dev/parser/token"
 import { TPLiteral, TPInterp, TkTemplate } from "kestrel:dev/parser/token"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "token", (s1: Suite) => {
+  group(s, "kestrel:dev/parser/token", (s1: Suite) => {
 
     group(s1, "spanZero", (sg: Suite) => {
       eq(sg, "start is 0", Token.spanZero().start, 0);

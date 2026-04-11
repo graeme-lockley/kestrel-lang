@@ -1,7 +1,7 @@
 import { Suite, group, eq } from "kestrel:dev/test"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "records", (s1: Suite) => {
+  group(s, "kestrel:lang/records", (s1: Suite) => {
     val point = { x = 10, y = 20 }
     eq(s1, "field access .x", point.x, 10)
     eq(s1, "field access .y", point.y, 20)

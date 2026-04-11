@@ -7,7 +7,7 @@ import { ArithmeticOverflow, DivideByZero } from "kestrel:sys/runtime"
 val halfMax = 4611686018427387904
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "overflow and divzero", (s1: Suite) => {
+  group(s, "kestrel:lang/overflow", (s1: Suite) => {
     group(s1, "integer overflow", (sg: Suite) => {
       eq(sg, "ADD overflow throws ArithmeticOverflow",
         try { halfMax + halfMax } catch { ArithmeticOverflow => 1, other => 0 }, 1)

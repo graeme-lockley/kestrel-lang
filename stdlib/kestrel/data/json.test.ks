@@ -34,7 +34,7 @@ fun unwrapOk(r): Value = Res.getOrElse(r, jsonNull())
 fun parseErrContains(s: String, needle: String): Bool = Str.indexOf(describeParse(s), needle) >= 0
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "json", (s1: Suite) => {
+  group(s, "kestrel:data/json", (s1: Suite) => {
     group(s1, "parse literals and Result", (sg: Suite) => {
       isTrue(sg, "null Ok", isNull(unwrapOk(parse("null"))));
       isTrue(sg, "true Ok", boolVal(unwrapOk(parse("true")), True));

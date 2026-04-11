@@ -17,7 +17,7 @@ import {
 } from "kestrel:dev/parser/ast"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "ast", (s1: Suite) => {
+  group(s, "kestrel:dev/parser/ast", (s1: Suite) => {
 
     group(s1, "AstType construction", (sg: Suite) => {
       match (ATIdent("Foo")) {

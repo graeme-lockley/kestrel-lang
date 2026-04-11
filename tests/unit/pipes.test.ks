@@ -6,7 +6,7 @@ fun triple(x: Int): Int = x * 3
 fun addPair(x: Int, y: Int): Int = x + y
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "pipes", (s1: Suite) => {
+  group(s, "kestrel:lang/pipes", (s1: Suite) => {
     group(s1, "forward pipe", (sg: Suite) => {
       eq(sg, "3 |> double", 3 |> double, 6)
       eq(sg, "double <| 5", double <| 5, 10)

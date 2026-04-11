@@ -88,7 +88,7 @@ export async fun run(s: Suite): Task<Unit> = {
 
   await Http.serverStop(headerCheckServer);
 
-  group(s, "http", (s1: Suite) => {
+  group(s, "kestrel:io/http", (s1: Suite) => {
     group(s1, "makeResponse + statusCode", (sg: Suite) => {
       eq(sg, "200 status", Http.statusCode(resp200), 200);
       eq(sg, "404 status", Http.statusCode(resp404), 404);

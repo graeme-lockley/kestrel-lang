@@ -19,7 +19,7 @@ import {
 } from "kestrel:data/char"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "char", (s1: Suite) => {
+  group(s, "kestrel:data/char", (s1: Suite) => {
     group(s1, "codePoint toCode", (sg: Suite) => {
       eq(sg, "A", codePoint('A'), 65)
       eq(sg, "toCode Z", toCode('Z'), 90)

@@ -1,7 +1,7 @@
 import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "float", (s1: Suite) => {
+  group(s, "kestrel:lang/float", (s1: Suite) => {
     group(s1, "literals", (sg: Suite) => {
       eq(sg, "1.0", 1.0, 1.0)
       eq(sg, "0.5", 0.5, 0.5)

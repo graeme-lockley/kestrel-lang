@@ -3,7 +3,7 @@ import * as PP from "kestrel:dev/text/prettyprinter"
 import * as Str from "kestrel:data/string"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "prettyprinter", (s1: Suite) => {
+  group(s, "kestrel:dev/text/prettyprinter", (s1: Suite) => {
     group(s1, "empty", (sg: Suite) => {
       eq(sg, "empty doc", PP.pretty(80, PP.empty), "")
     });

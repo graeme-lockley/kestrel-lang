@@ -16,7 +16,7 @@ fun fruitTag(f: Fruit): Int =
 val narrowRec = { x = 1, y = 2 }
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "is narrowing", (sg: Suite) => {
+  group(s, "kestrel:lang/narrowing", (sg: Suite) => {
     eq(sg, "None branch", optLen(None), 0)
     eq(sg, "Some branch", optLen(Some(5)), 5)
     eq(sg, "ADT Apple", fruitTag(Apple), 1)

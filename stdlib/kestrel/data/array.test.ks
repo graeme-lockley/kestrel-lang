@@ -3,7 +3,7 @@ import { new as newArr, get, set, push, length, fromList, toList } from "kestrel
 import { map } from "kestrel:data/list"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "array", (s1: Suite) => {
+  group(s, "kestrel:data/array", (s1: Suite) => {
     group(s1, "new", (sg: Suite) => {
       val a = newArr()
       eq(sg, "empty length", length(a), 0)

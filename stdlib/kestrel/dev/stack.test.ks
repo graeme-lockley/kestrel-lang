@@ -7,7 +7,7 @@ fun throwDeep(): Unit = throw ArithmeticOverflow
 fun callDeep(): Unit = throwDeep()
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "stack", (s1: Suite) => {
+  group(s, "kestrel:dev/stack", (s1: Suite) => {
     group(s1, "format primitives", (sg: Suite) => {
       gt(sg, "Int non-empty", length(format(42)), 0);
       gt(sg, "String non-empty", length(format("hi")), 0);

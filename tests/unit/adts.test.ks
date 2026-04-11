@@ -95,7 +95,7 @@ fun payloadToString(v: Payload): String = match (v) {
 }
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "user-defined ADTs", (s1: Suite) => {
+  group(s, "kestrel:lang/adts", (s1: Suite) => {
     group(s1, "nullary constructors", (sg: Suite) => {
       eq(sg, "Red to int", colorToInt(Red), 0)
       eq(sg, "Green to int", colorToInt(Green), 1)

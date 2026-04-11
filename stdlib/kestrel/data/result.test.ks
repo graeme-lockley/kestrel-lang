@@ -17,7 +17,7 @@ import {
 fun double(n: Int): Int = n + n
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "result", (s1: Suite) => {
+  group(s, "kestrel:data/result", (s1: Suite) => {
     group(s1, "construction", (sg: Suite) => {
       eq(sg, "Ok(42) pattern match", match (Ok(42)) { Err(_) => 0, Ok(v) => v }, 42)
       eq(sg, "Err(1) pattern match", match (Err(1)) { Err(e) => e, Ok(_) => 0 }, 1)

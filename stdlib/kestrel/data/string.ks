@@ -348,7 +348,7 @@ val baseDigits = "0123456789abcdef"
 
 fun toBaseLoop(base: Int, n: Int, acc: String): String =
   if (n == 0) acc
-  else toBaseLoop(base, n / base, "${slice(baseDigits, n % base, n % base + 1)}${acc}")
+  else toBaseLoop(base, n / base, append(slice(baseDigits, n % base, n % base + 1), acc))
 
 fun toBaseString(base: Int, n: Int): String =
   if (n == 0) "0" else toBaseLoop(base, n, "")

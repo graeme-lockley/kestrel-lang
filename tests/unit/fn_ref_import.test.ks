@@ -3,7 +3,7 @@ import { parseInt } from "kestrel:data/string"
 import { map } from "kestrel:data/list"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "imported function values", (sg: Suite) => {
+  group(s, "kestrel:lang/fn-ref-import", (sg: Suite) => {
     eq(sg, "map([\"1\",\"2\",\"3\"], parseInt)", map(["1", "2", "3"], parseInt), [1, 2, 3])
   })
 

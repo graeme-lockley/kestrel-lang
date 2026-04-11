@@ -52,7 +52,7 @@ import {
 } from "kestrel:data/string"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "string", (s1: Suite) => {
+  group(s, "kestrel:data/string", (s1: Suite) => {
     group(s1, "length", (sg: Suite) => {
       eq(sg, "empty", length(""), 0)
       eq(sg, "short", length("hi"), 2)

@@ -8,7 +8,7 @@ fun useOpaqueToken(): Int = secretTokenToInt(makeSecretToken(100))
 fun useOpaqueAlias(): Int = userIdToInt(makeUserId(999))
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "cross-module opaque types", (s1: Suite) => {
+  group(s, "kestrel:lang/opaque-cross-module", (s1: Suite) => {
     eq(s1, "use opaque token", useOpaqueToken(), 100)
     eq(s1, "use opaque alias", useOpaqueAlias(), 999)
   })

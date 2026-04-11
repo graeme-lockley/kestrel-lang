@@ -4,7 +4,7 @@ import { Suite, group, eq } from "kestrel:dev/test"
 fun testVarBlockDirect(): Int = { var x = 0; x := 1; x }
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "blocks", (s1: Suite) => {
+  group(s, "kestrel:lang/blocks", (s1: Suite) => {
     group(s1, "val", (sg: Suite) => {
       eq(sg, "single val", { val x = 1; x }, 1)
       eq(sg, "multiple vals", { val x = 1; val y = 2; x + y }, 3)

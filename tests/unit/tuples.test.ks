@@ -3,7 +3,7 @@ import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 fun makePair(): (Int * Int) = (7, 8)
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "tuples", (s1: Suite) => {
+  group(s, "kestrel:lang/tuples", (s1: Suite) => {
     val pair = (10, 20)
     eq(s1, "pair.0", pair.0, 10)
     eq(s1, "pair.1", pair.1, 20)

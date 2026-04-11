@@ -28,7 +28,7 @@ export async fun run(s: Suite): Task<Unit> = {
       Cancelled => 1
     }
 
-  group(s, "task", (s1: Suite) => {
+  group(s, "kestrel:sys/task", (s1: Suite) => {
     group(s1, "map", (sg: Suite) => {
       eq(sg, "map double", mapDouble, 42)
       eq(sg, "map add", mapAdd, 15)

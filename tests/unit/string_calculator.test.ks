@@ -36,7 +36,7 @@ export fun add(input: String): Result<Int, List<Int>> =
   }
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "string calculator", (s1: Suite) => {
+  group(s, "kestrel:lang/string-calculator", (s1: Suite) => {
     eq(s1, "empty string", add(""), Ok(0))
     eq(s1, "single number", add("5"), Ok(5))
     eq(s1, "comma delimited", add("1,2,3"), Ok(6))

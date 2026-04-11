@@ -49,7 +49,7 @@ async fun checkIdempotency(cwd: String, relPath: String): Task<(String, Bool, St
 }
 
 export async fun run(s: Suite): Task<Unit> = {
-  await asyncGroup(s, "formatter", async (s1: Suite) => {
+  await asyncGroup(s, "kestrel:tools/format", async (s1: Suite) => {
     await asyncGroup(s1, "idempotency over stdlib/kestrel/data", async (s2: Suite) => {
       val cwd = getProcess().cwd
       val checks = Lst.map(dataFiles, (p: String) => checkIdempotency(cwd, p))

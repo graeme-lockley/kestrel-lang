@@ -6,7 +6,7 @@ fun classify(n: Int): Int =
   else 2
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "if_else", (s1: Suite) => {
+  group(s, "kestrel:lang/if-else", (s1: Suite) => {
     group(s1, "branches", (sg: Suite) => {
       eq(sg, "true branch", if (True) 42 else 0, 42)
       eq(sg, "false branch", if (False) 0 else 99, 99)

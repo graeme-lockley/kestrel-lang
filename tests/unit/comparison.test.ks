@@ -1,7 +1,7 @@
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "comparison", (s1: Suite) => {
+  group(s, "kestrel:lang/comparison", (s1: Suite) => {
     group(s1, "equality (==) and inequality (!=) — ints", (sg: Suite) => {
       isTrue(sg, "5 == 5", 5 == 5)
       isFalse(sg, "5 == 3 is false", 5 == 3)

@@ -1,7 +1,7 @@
 import { Suite, group, eq } from "kestrel:dev/test"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "arithmetic", (s1: Suite) => {
+  group(s, "kestrel:lang/arithmetic", (s1: Suite) => {
     eq(s1, "2 + 3 == 5", 2 + 3, 5)
     eq(s1, "10 - 4 == 6", 10 - 4, 6)
     eq(s1, "3 * 7 == 21", 3 * 7, 21)

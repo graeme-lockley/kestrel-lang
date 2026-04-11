@@ -8,7 +8,7 @@ fun isEven(n: Int): Bool = n % 2 == 0
 fun emptyInts(): List<Int> = []
 
 export async fun run(s: Suite): Task<Unit> = {
-  group(s, "set", (s1: Suite) => {
+  group(s, "kestrel:data/set", (s1: Suite) => {
     group(s1, "empty singleton", (sg: Suite) => {
       val e = Set.empty(Dict.hashInt, Dict.eqInt)
       isTrue(sg, "isEmpty", Set.isEmpty(e))

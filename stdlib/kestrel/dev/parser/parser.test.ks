@@ -47,7 +47,7 @@ fun firstDecl(src: String): Ast.TopDecl =
 // ─── Test suite ───────────────────────────────────────────────────────────────
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "parser", (s1: Suite) => {
+  group(s, "kestrel:dev/parser", (s1: Suite) => {
 
     // ── Imports ───────────────────────────────────────────────────────────────
 

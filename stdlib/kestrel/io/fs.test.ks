@@ -30,7 +30,7 @@ export async fun run(s: Suite): Task<Unit> = {
   val listDirMissing = await Fs.listDir("${cwd}/tests/fixtures/fs/__nope_dir_missing__");
   val readViaAwaitResult = await readViaAwait(okPath);
 
-  group(s, "fs", (s1: Suite) => {
+  group(s, "kestrel:io/fs", (s1: Suite) => {
     group(s1, "readText", (sg: Suite) => {
       val text = match (readFixture) {
         Ok(contents) => contents,
