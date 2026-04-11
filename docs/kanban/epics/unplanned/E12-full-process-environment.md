@@ -10,7 +10,7 @@ Unplanned
 
 ## Stories
 
-(None yet — use plan-epic to decompose, or story-create to add individual stories.)
+1. [S12-01 — `getProcess().env` full environment map](../../unplanned/S12-01-getprocess-env-full.md)
 
 ## Dependencies
 
