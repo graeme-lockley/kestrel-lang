@@ -1,8 +1,7 @@
 // Sieve of Eratosthenes — print the first `count` prime numbers, comma-separated.
-
-import * as Arr  from "kestrel:data/array"
-import * as Lst  from "kestrel:data/list"
-import * as Str  from "kestrel:data/string"
+import * as Arr from "kestrel:data/array"
+import * as Lst from "kestrel:data/list"
+import * as Str from "kestrel:data/string"
 
 // Build a composite-flag array for integers 0..limit.
 // composite[i] = True means i is not prime.
@@ -43,13 +42,11 @@ fun collectPrimes(composite: Array<Bool>, limit: Int): Array<Int> = {
 // Find the first `count` primes; double the sieve limit if too few are found.
 fun findPrimes(count: Int, limit: Int): List<Int> = {
   val ps = collectPrimes(buildSieve(limit), limit)
-  if (Arr.length(ps) >= count)
-    Lst.take(Arr.toList(ps), count)
-  else
-    findPrimes(count, limit * 2)
+  if (Arr.length(ps) >= count) Lst.take(Arr.toList(ps), count) else findPrimes(count, limit * 2)
 }
 
 // Initial limit: count * 12 is a safe overestimate of p(count) for all practical n.
-fun primes(count: Int): List<Int> = findPrimes(count, count * 12)
+fun primes(count: Int): List<Int> =
+  findPrimes(count, count * 12)
 
 println(Str.join(", ", Lst.map(primes(1000), Str.fromInt)))
