@@ -89,8 +89,25 @@ The `kestrel` script implements the CLI described in [docs/specs/09-tools.md](do
 - **`kestrel build`** — Builds the compiler; optional script path to compile. `--refresh`, `--allow-http`, and `--status` (print URL cache report without compiling) are also accepted.
 - **`kestrel dis`** — Compiles if needed, then prints JVM bytecode disassembly via `javap`.
 - **`kestrel test`** — Runs Kestrel unit tests; optional test file paths. `--verbose` prints per-assertion lines; `--summary` prints one line per suite. `--clean`, `--refresh`, and `--allow-http` have the same meaning as for `run` and `build`.
+- **`kestrel fmt`** — Formats `.ks` source files in-place (120 columns, 2-space indent). Pass `--check` to report non-conforming files without modifying them; `--stdin` to read from stdin and write to stdout.
+- **`kestrel doc`** — Starts a local documentation browser at `http://localhost:7070/docs/` (override port with `--port`). Extracts doc-comments from all stdlib and project modules with live reload.
 
 JVM class output is cached under `~/.kestrel/jvm/` unless you set `KESTREL_JVM_CACHE`.
+
+## Specifications
+
+Normative specs live in [docs/specs/](docs/specs/):
+
+| Spec | Topic |
+|------|-------|
+| [01-language.md](docs/specs/01-language.md) | Core language: syntax, semantics, pattern matching, ADTs, exceptions |
+| [02-stdlib.md](docs/specs/02-stdlib.md) | Standard library contract |
+| [06-typesystem.md](docs/specs/06-typesystem.md) | Hindley–Milner type system and inference rules |
+| [07-modules.md](docs/specs/07-modules.md) | Module system, URL imports, lockfile, and caching |
+| [08-tests.md](docs/specs/08-tests.md) | Conformance and golden test plan |
+| [09-tools.md](docs/specs/09-tools.md) | Developer tools and CLI reference |
+| [10-compile-diagnostics.md](docs/specs/10-compile-diagnostics.md) | Compile-time diagnostics and error reporting |
+| [kti-format.md](docs/specs/kti-format.md) | `.kti` types-file binary format |
 
 ## Repository layout
 
