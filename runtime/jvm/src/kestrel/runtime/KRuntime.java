@@ -2108,6 +2108,166 @@ public final class KRuntime {
         }
         return sb.toString();
     }
+
+    // ── ByteArray helpers for kestrel:io/fs binary I/O ───────────────────────
+
+    public static Object byteArrayNew(Object size) {
+        int n = ((Long) size).intValue();
+        return new byte[n];
+    }
+
+    public static Long byteArrayLength(Object arr) {
+        return (long) ((byte[]) arr).length;
+    }
+
+    public static Long byteArrayGet(Object arr, Object index) {
+        byte[] bytes = (byte[]) arr;
+        int i = ((Long) index).intValue();
+        return (long) (bytes[i] & 0xFF);
+    }
+
+    public static void byteArraySet(Object arr, Object index, Object value) {
+        byte[] bytes = (byte[]) arr;
+        int i = ((Long) index).intValue();
+        bytes[i] = (byte) ((Long) value).intValue();
+    }
+
+    public static Object byteArrayFromList(Object listObj) {
+        // Count length
+        int len = 0;
+        Object node = listObj;
+        while (node instanceof KCons) { len++; node = ((KCons) node).tail; }
+        byte[] result = new byte[len];
+        node = listObj;
+        for (int i = 0; i < len; i++) {
+            result[i] = (byte) ((Long) ((KCons) node).head).intValue();
+            node = ((KCons) node).tail;
+        }
+        return result;
+    }
+
+    public static KList byteArrayToList(Object arr) {
+        byte[] bytes = (byte[]) arr;
+        KList result = KNil.INSTANCE;
+        for (int i = bytes.length - 1; i >= 0; i--) {
+            result = new KCons((long) (bytes[i] & 0xFF), result);
+        }
+        return result;
+    }
+
+    // Concatenate two ByteArrays into a new one
+    public static Object byteArrayConcat(Object a, Object b) {
+        byte[] ba = (byte[]) a;
+        byte[] bb = (byte[]) b;
+        byte[] result = new byte[ba.length + bb.length];
+        System.arraycopy(ba, 0, result, 0, ba.length);
+        System.arraycopy(bb, 0, result, ba.length, bb.length);
+        return result;
+    }
+
+    // Slice a ByteArray [start, end)
+    public static Object byteArraySlice(Object arr, Object start, Object end) {
+        byte[] bytes = (byte[]) arr;
+        int s = ((Long) start).intValue();
+        int e = ((Long) end).intValue();
+        if (s < 0) s = 0;
+        if (e > bytes.length) e = bytes.length;
+        if (s >= e) return new byte[0];
+        byte[] result = new byte[e - s];
+        System.arraycopy(bytes, s, result, 0, e - s);
+        return result;
+    }
+
+    public static KTask readBytesAsync(Object path) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(path instanceof String)) {
+            future.complete(new KErr("not_found"));
+            return KTask.fromFuture(future);
+        }
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) { executor = asyncExecutor; }
+        asyncTasksInFlight.incrementAndGet();
+        final String resolvedPath = (String) path;
+        try {
+            executor.submit(() -> {
+                try {
+                    byte[] bytes = Files.readAllBytes(Paths.get(resolvedPath));
+                    future.complete(new KOk(bytes));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
+
+    public static KTask writeBytesAsync(Object path, Object bytesObj) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(path instanceof String)) {
+            future.complete(new KErr("not_found"));
+            return KTask.fromFuture(future);
+        }
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) { executor = asyncExecutor; }
+        asyncTasksInFlight.incrementAndGet();
+        final String resolvedPath = (String) path;
+        final byte[] bytes = (byte[]) bytesObj;
+        try {
+            executor.submit(() -> {
+                try {
+                    Files.write(Paths.get(resolvedPath), bytes);
+                    future.complete(new KOk(KUnit.INSTANCE));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
+
+    public static KTask appendBytesAsync(Object path, Object bytesObj) {
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        if (!(path instanceof String)) {
+            future.complete(new KErr("not_found"));
+            return KTask.fromFuture(future);
+        }
+        initAsyncRuntime();
+        ExecutorService executor;
+        synchronized (KRuntime.class) { executor = asyncExecutor; }
+        asyncTasksInFlight.incrementAndGet();
+        final String resolvedPath = (String) path;
+        final byte[] bytes = (byte[]) bytesObj;
+        try {
+            executor.submit(() -> {
+                try {
+                    Files.write(Paths.get(resolvedPath), bytes,
+                        java.nio.file.StandardOpenOption.CREATE,
+                        java.nio.file.StandardOpenOption.APPEND);
+                    future.complete(new KOk(KUnit.INSTANCE));
+                } catch (Throwable t) {
+                    future.complete(new KErr(fsErrorCode(t)));
+                } finally {
+                    decrementAndSignal();
+                }
+            });
+        } catch (RuntimeException e) {
+            decrementAndSignal();
+            throw e;
+        }
+        return KTask.fromFuture(future);
+    }
 }
 
 
