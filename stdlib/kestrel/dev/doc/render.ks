@@ -184,7 +184,7 @@ export fun staticCss(): String =
     "code { font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace; font-size: 0.92rem; }",
     ".doc-body p { margin: 0.6rem 0; }",
     ".doc-body code { background: #f0f0f4; padding: 0.1rem 0.3rem; border-radius: 3px; }",
-    ".module-layout { display: flex; gap: 2.5rem; align-items: flex-start; }",
+    ".module-layout { display: flex; gap: 2.5rem; }",
     ".module-content { flex: 1; min-width: 0; }",
     ".module-sidebar { width: 210px; flex-shrink: 0; }",
     ".decl-index { position: sticky; top: 56px; max-height: calc(100vh - 72px); overflow-y: auto; border: 1px solid #dde; border-radius: 6px; padding: 0.8rem; background: #fafafe; }",
