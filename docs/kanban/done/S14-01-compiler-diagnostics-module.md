@@ -73,13 +73,13 @@ There is no `stdlib/kestrel/compiler/` directory yet. This story creates it.
 
 ## Tasks
 
-- [ ] Create `stdlib/kestrel/compiler/` directory and add `diagnostics.ks` with exported `Severity`, `SourceLocation`, `Diagnostic`, `RelatedLocation`, and `CODES` values.
-- [ ] Implement `lineColumnFromOffset`, `locationFromSpan`, and `locationFileOnly` in `stdlib/kestrel/compiler/diagnostics.ks`.
-- [ ] Add `stdlib/kestrel/compiler/reporter.ks` with `Reporter` state, `newReporter`, `report`, `hasErrors`, and `diagnostics` functions.
-- [ ] Implement `printDiagnostics(ds, source)` in `stdlib/kestrel/compiler/reporter.ks` with basic single-line caret rendering.
-- [ ] Add `stdlib/kestrel/compiler/diagnostics.test.ks` covering Severity variants, location helpers, and reporter accumulation.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test stdlib/kestrel/compiler/diagnostics.test.ks`.
+- [x] Create `stdlib/kestrel/compiler/` directory and add `diagnostics.ks` with exported `Severity`, `SourceLocation`, `Diagnostic`, `RelatedLocation`, and `CODES` values.
+- [x] Implement `lineColumnFromOffset`, `locationFromSpan`, and `locationFileOnly` in `stdlib/kestrel/compiler/diagnostics.ks`.
+- [x] Add `stdlib/kestrel/compiler/reporter.ks` with `Reporter` state, `newReporter`, `report`, `hasErrors`, and `diagnostics` functions.
+- [x] Implement `printDiagnostics(ds, source)` in `stdlib/kestrel/compiler/reporter.ks` with basic single-line caret rendering.
+- [x] Add `stdlib/kestrel/compiler/diagnostics.test.ks` covering Severity variants, location helpers, and reporter accumulation.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test stdlib/kestrel/compiler/diagnostics.test.ks`.
 
 ## Tests to add
 
@@ -91,8 +91,8 @@ There is no `stdlib/kestrel/compiler/` directory yet. This story creates it.
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/10-compile-diagnostics.md` — add note that `kestrel:compiler/diagnostics` mirrors the compiler Diagnostic schema and error-code strings for self-hosting bootstrap parity.
-- [ ] `docs/guide.md` — add short note in compiler-development section listing `stdlib/kestrel/compiler/diagnostics.ks` and `reporter.ks` as the Kestrel-side diagnostics implementation.
+- [x] `docs/specs/10-compile-diagnostics.md` — add note that `kestrel:compiler/diagnostics` mirrors the compiler Diagnostic schema and error-code strings for self-hosting bootstrap parity.
+- [x] `docs/guide.md` — add short note in compiler-development section listing `stdlib/kestrel/compiler/diagnostics.ks` and `reporter.ks` as the Kestrel-side diagnostics implementation.
 
 ## Spec References
 
@@ -108,3 +108,9 @@ There is no `stdlib/kestrel/compiler/` directory yet. This story creates it.
   indexing; use `kestrel:data/string` utilities.
 - The `DiagnosticReporter` in TypeScript uses mutable state; in Kestrel use a `var` inside an
   opaque wrapper or pass a `List` as a `var`.
+
+## Build notes
+
+- 2026-04-11: Started implementation.
+- 2026-04-11: Kestrel constructor matching in patterns cannot use module-qualified names (for example `Diag.Error`), while expression values can (`Diag.Error`). `hasErrors` uses direct equality (`s == Diag.Error`) to avoid parser limitations in namespaced pattern matches.
+- 2026-04-11: Implemented a minimal human reporter first (header + caret + optional hint/note). Source-line extraction from full source text is deferred to a later story once the broader self-hosted compiler pipeline is in place.

@@ -792,4 +792,6 @@ This guide covered the core language. There is more to explore:
 - **Test suite** — the [tests/unit/](../tests/unit/) directory has runnable examples of every language feature.
 - **Kanban** — [docs/kanban/future/](kanban/future/) holds pre-roadmap investigations (`slug.md`, no numeric prefix). [docs/kanban/unplanned/](kanban/unplanned/) lists the prioritized roadmap (lower sequence = higher priority); completed stories live under [docs/kanban/done/](kanban/done/). Stories progress through **planned**, **doing**, and **done** as described in [docs/kanban/README.md](kanban/README.md).
 
+If you are hacking on the self-hosted compiler, start with [stdlib/kestrel/compiler/diagnostics.ks](../stdlib/kestrel/compiler/diagnostics.ks) and [stdlib/kestrel/compiler/reporter.ks](../stdlib/kestrel/compiler/reporter.ks), which mirror the structured diagnostic model used by the TypeScript bootstrap compiler.
+
 Kestrel is under active development. Contributions are welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md).

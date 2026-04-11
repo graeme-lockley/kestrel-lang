@@ -17,7 +17,7 @@ and retire the TypeScript compiler as the primary build tool.
 
 ## Stories (ordered — implement sequentially)
 
-1. [S14-01-compiler-diagnostics-module.md](../../unplanned/S14-01-compiler-diagnostics-module.md) — Diagnostics types and reporter (`kestrel:compiler/diagnostics`)
+1. [S14-01-compiler-diagnostics-module.md](../../done/S14-01-compiler-diagnostics-module.md) — ✅ Diagnostics types and reporter (`kestrel:compiler/diagnostics`)
 2. [S14-02-internal-type-representation.md](../../unplanned/S14-02-internal-type-representation.md) — InternalType ADT, fresh vars, generalize/instantiate (`kestrel:compiler/types`)
 3. [S14-03-type-unification-engine.md](../../unplanned/S14-03-type-unification-engine.md) — Unify, applySubst, astTypeToInternal
 4. [S14-04-hindley-milner-type-checker.md](../../unplanned/S14-04-hindley-milner-type-checker.md) — Full HM type checker with row polymorphism (`kestrel:compiler/typecheck`)

@@ -13,6 +13,7 @@ This document specifies how the Kestrel compiler reports compile-time errors and
 - **Scope:** Diagnostics emitted by the parser, module resolver, typechecker, and package (multi-file) compilation. Lexer and codegen may emit diagnostics in the future; they must follow this spec.
 - **Output:** Human-readable output (source snippet and caret) and optional machine-readable output (JSON/JSONL) for IDEs and CI.
 - **API:** The compiler’s public API returns structured diagnostics on failure; the CLI renders them per §6 and §7.
+- **Self-hosting parity:** The Kestrel-side modules `kestrel:compiler/diagnostics` and `kestrel:compiler/reporter` must preserve the same diagnostic field names and stable `code` strings as the TypeScript bootstrap compiler during transition.
 
 ---
 
