@@ -102,9 +102,13 @@ export async fun run(s: Suite): Task<Unit> =
     // ── staticJs ──────────────────────────────────────────────────────────────
     group(sg, "staticJs returns non-empty JavaScript", (g: Suite) => {
       val js = staticJs()
-      isTrue(g, "non-empty",    !Str.isEmpty(js));
-      isTrue(g, "has search",   Str.contains("search", js));
-      isTrue(g, "has fetch",    Str.contains("fetch", js))
+      isTrue(g, "non-empty",         !Str.isEmpty(js));
+      isTrue(g, "has search",        Str.contains("search", js));
+      isTrue(g, "has fetch",         Str.contains("fetch", js));
+      isTrue(g, "uses h.moduleSpec", Str.contains("h.moduleSpec", js));
+      isTrue(g, "uses h.name",       Str.contains("h.name", js));
+      isFalse(g, "no h.url",         Str.contains("h.url", js));
+      isFalse(g, "no h.label",       Str.contains("h.label", js))
     })
 
   })
