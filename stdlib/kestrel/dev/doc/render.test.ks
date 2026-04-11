@@ -92,10 +92,11 @@ export async fun run(s: Suite): Task<Unit> =
     });
 
     // ── renderModule: declaration index present ───────────────────────────────
-    group(sg, "renderModule includes a <details> declaration index", (g: Suite) => {
+    group(sg, "renderModule includes a sidebar declaration index", (g: Suite) => {
       val out = renderModule(mod1())
-      isTrue(g, "has details",      Str.contains("<details", out));
-      isTrue(g, "has summary",      Str.contains("<summary>", out));
+      isTrue(g, "has sidebar aside",   Str.contains("module-sidebar", out));
+      isTrue(g, "has nav",             Str.contains("<nav class=\"decl-index\"", out));
+      isTrue(g, "has index title",     Str.contains("decl-index-title", out));
       isTrue(g, "has index link #add",    Str.contains("#add", out));
       isTrue(g, "has index link #answer", Str.contains("#answer", out))
     });
@@ -121,7 +122,7 @@ export async fun run(s: Suite): Task<Unit> =
     group(sg, "renderModule omits index when module has no entries", (g: Suite) => {
       val empty = mkMod("kestrel:empty", "//! Empty module.\n")
       val out = renderModule(empty)
-      isFalse(g, "no details element", Str.contains("<details", out))
+      isFalse(g, "no sidebar element", Str.contains("module-sidebar", out))
     });
 
     // ── staticCss ─────────────────────────────────────────────────────────────

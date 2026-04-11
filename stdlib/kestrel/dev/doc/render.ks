@@ -91,14 +91,14 @@ fun compareStr(a: String, b: String): Int =
 fun indexItem(e: DocEntry): String =
   "<li><a href=\"#${escapeAttr(e.name)}\"><span class=\"idx-kind\">${escapeHtml(kindLabel(e))}</span>${escapeHtml(e.name)}</a></li>"
 
-// Render a sorted <details> foldout index for the module.
+// Render a sorted sidebar <nav> index for the module.
 fun renderIndex(entries: List<DocEntry>): String = {
   val sorted = Lst.sortWith(
     (a: DocEntry, b: DocEntry) => compareStr(a.name, b.name),
     entries
   );
   val items = Str.join("\n    ", Lst.map(sorted, (e: DocEntry) => indexItem(e)));
-  "<details class=\"decl-index\">\n<summary>Index (${Lst.length(entries)})</summary>\n<ul>\n    ${items}\n</ul>\n</details>"
+  "<nav class=\"decl-index\">\n<div class=\"decl-index-title\">Index (${Lst.length(entries)})</div>\n<ul>\n    ${items}\n</ul>\n</nav>"
 }
 
 fun renderEntry(entry: DocEntry): String = {
@@ -115,11 +115,12 @@ export fun renderModule(mod: DocModule): String = {
   val proseHtml =
     if (Str.isEmpty(mod.moduleProse)) ""
     else "<div class=\"module-prose\">${Md.render(mod.moduleProse)}</div>\n"
-  val indexHtml =
-    if (Lst.isEmpty(mod.entries)) ""
-    else "${renderIndex(mod.entries)}\n"
   val entryHtml = Str.join("\n", Lst.map(mod.entries, (e: DocEntry) => renderEntry(e)))
-  val body      = "<h1 class=\"module-title\">${escapeHtml(mod.moduleSpec)}</h1>\n${proseHtml}${indexHtml}${entryHtml}"
+  val contentHtml = "<div class=\"module-content\">\n<h1 class=\"module-title\">${escapeHtml(mod.moduleSpec)}</h1>\n${proseHtml}${entryHtml}\n</div>"
+  val sidebarHtml =
+    if (Lst.isEmpty(mod.entries)) ""
+    else "\n<aside class=\"module-sidebar\">\n${renderIndex(mod.entries)}\n</aside>"
+  val body = "<div class=\"module-layout\">${contentHtml}${sidebarHtml}\n</div>"
   page("${mod.moduleSpec} — Kestrel Docs", body)
 }
 
@@ -170,7 +171,7 @@ export fun staticCss(): String =
     "  color: #1a1a2e; text-decoration: none; border-bottom: 1px solid #eee;",
     "}",
     ".search-results a:hover { background: #f0f4ff; }",
-    "main { max-width: 860px; margin: 0 auto; padding: 2rem 1rem; }",
+    "main { max-width: 1100px; margin: 0 auto; padding: 2rem 1rem; }",
     ".module-list { list-style: none; padding: 0; }",
     ".module-list li { margin: 0.4rem 0; }",
     ".module-list a { color: #0057b7; text-decoration: none; font-family: monospace; font-size: 0.95rem; }",
@@ -183,15 +184,22 @@ export fun staticCss(): String =
     "code { font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace; font-size: 0.92rem; }",
     ".doc-body p { margin: 0.6rem 0; }",
     ".doc-body code { background: #f0f0f4; padding: 0.1rem 0.3rem; border-radius: 3px; }",
-    ".decl-index { margin: 1.5rem 0 2rem; border: 1px solid #dde; border-radius: 6px; padding: 0 1rem; }",
-    ".decl-index summary { cursor: pointer; padding: 0.6rem 0; font-weight: 600; user-select: none; }",
-    ".decl-index ul { list-style: none; padding: 0; margin: 0.4rem 0 0.8rem; columns: 2; column-gap: 1.5rem; }",
-    "@media (max-width: 600px) { .decl-index ul { columns: 1; } }",
-    ".decl-index li { margin: 0.2rem 0; }",
-    ".decl-index a { text-decoration: none; color: #0057b7; font-family: monospace; font-size: 0.88rem; }",
+    ".module-layout { display: flex; gap: 2.5rem; align-items: flex-start; }",
+    ".module-content { flex: 1; min-width: 0; }",
+    ".module-sidebar { width: 210px; flex-shrink: 0; }",
+    ".decl-index { position: sticky; top: 56px; max-height: calc(100vh - 72px); overflow-y: auto; border: 1px solid #dde; border-radius: 6px; padding: 0.8rem; background: #fafafe; }",
+    ".decl-index-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.5rem; color: #444; }",
+    ".decl-index ul { list-style: none; padding: 0; margin: 0; }",
+    ".decl-index li { margin: 0.25rem 0; }",
+    ".decl-index a { text-decoration: none; color: #0057b7; font-family: monospace; font-size: 0.85rem; display: block; }",
     ".decl-index a:hover { text-decoration: underline; }",
-    ".idx-kind { display: inline-block; min-width: 6rem; color: #777; font-size: 0.82rem; }",
+    ".idx-kind { display: inline-block; min-width: 5.5rem; color: #777; font-size: 0.82rem; }",
     ".not-found { color: #c00; }",
+    "@media (max-width: 900px) {",
+    "  .module-layout { flex-direction: column; }",
+    "  .module-sidebar { width: 100%; }",
+    "  .decl-index { position: static; max-height: none; }",
+    "}",
     "@media (max-width: 600px) {",
     "  .site-header { flex-wrap: wrap; }",
     "  .search-box { max-width: 100%; }",
