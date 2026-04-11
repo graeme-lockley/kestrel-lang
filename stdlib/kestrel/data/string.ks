@@ -319,3 +319,27 @@ export fun allChars(s: String, pred: Char -> Bool): Bool =
 
 fun allCharLoop(s: String, i: Int, n: Int, pred: Char -> Bool): Bool =
   if (i >= n) True else if (!pred(charAt(s, i))) False else allCharLoop(s, i + 1, n, pred)
+
+fun digitValue(cp: Int, radix: Int): Int =
+  if (cp >= 48 & cp <= 57 & (cp - 48) < radix) cp - 48
+  else if (cp >= 97 & cp <= 122 & (cp - 87) < radix) cp - 87
+  else if (cp >= 65 & cp <= 90 & (cp - 55) < radix) cp - 55
+  else -1
+
+fun parseRadixLoop(s: String, i: Int, radix: Int, acc: Int): Option<Int> =
+  if (i >= length(s)) Some(acc) else {
+    val dv = digitValue(codePointAt(s, i), radix)
+    if (dv < 0) None else parseRadixLoop(s, i + 1, radix, acc * radix + dv)
+  }
+
+export fun parseIntRadix(radix: Int, s: String): Option<Int> =
+  if (length(s) == 0) None else parseRadixLoop(s, 0, radix, 0)
+
+export fun formatInt(width: Int, n: Int): String =
+  padLeft(width, "0", fromInt(n))
+
+export fun indexOfChar(c: Char, s: String): Option<Int> =
+  {
+    val i = indexOf(s, charStr(c))
+    if (i < 0) None else Some(i)
+  }

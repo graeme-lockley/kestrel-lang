@@ -15,15 +15,13 @@
 // Included programs:
 //   hello   — the classic "Hello, World!"
 //   count   — prints 12345678 using a small setup loop
-//   fact5   — prints 120, i.e. 5!
-
+//   fact5   — computes 5! on the tape, then prints 120
 import * as Arr from "kestrel:data/array"
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
 import * as Chr from "kestrel:data/char"
 
 // ── Bracket pre-compilation ───────────────────────────────────────────────────
-
 fun filledInts(size: Int, value: Int): Array<Int> = {
   val arr: Array<Int> = Arr.new()
   var i = 0
@@ -38,19 +36,21 @@ fun filledInts(size: Int, value: Int): Array<Int> = {
 fun buildJumpsLoop(prog: Array<Char>, jumps: Array<Int>, stack: List<Int>, i: Int, n: Int): Array<Int> =
   if (i >= n) {
     jumps
-  } else {
+  }
+  else {
     match (Arr.get(prog, i)) {
       '[' =>
-        buildJumpsLoop(prog, jumps, i :: stack, i + 1, n)
+        buildJumpsLoop(prog, jumps, i :: stack, i + 1, n),
       ']' =>
         match (stack) {
-          [] => buildJumpsLoop(prog, jumps, stack, i + 1, n)
+          [] =>
+            buildJumpsLoop(prog, jumps, stack, i + 1, n),
           open :: rest => {
             Arr.set(jumps, open, i)
             Arr.set(jumps, i, open)
             buildJumpsLoop(prog, jumps, rest, i + 1, n)
           }
-        }
+        },
       _ =>
         buildJumpsLoop(prog, jumps, stack, i + 1, n)
     }
@@ -66,66 +66,74 @@ fun isInstruction(c: Char): Bool =
   c == '+' | c == '-' | c == '>' | c == '<' | c == '.' | c == ',' | c == '[' | c == ']'
 
 // ── Interpreter ────────────────────────────────────────────────────────────────
-
 fun run(source: String): Unit = {
   val chars = Arr.fromList(Str.toList(source))
   val prog: Array<Char> = Arr.new()
   var ci = 0
   while (ci < Arr.length(chars)) {
     val c = Arr.get(chars, ci)
-    if (isInstruction(c))
-      Arr.push(prog, c)
+    if (isInstruction(c)) Arr.push(prog, c)
     ci := ci + 1
   }
-
   val n = Arr.length(prog)
   val jumps = buildJumps(prog)
-
   val tape = filledInts(30000, 0)
-  var dp = 15000   // data pointer starts mid-tape so programs can move left
-  var pc = 0   // program counter
-  var out = "" // accumulated output
-
+  var dp = 15000  // data pointer starts mid-tape so programs can move left
+  var pc = 0  // program counter
+  var out = ""  // accumulated output
   while (pc < n) {
     match (Arr.get(prog, pc)) {
-      '>' => { dp := dp + 1; pc := pc + 1; () }
-      '<' => { dp := dp - 1; pc := pc + 1; () }
-      '+' => { Arr.set(tape, dp, Arr.get(tape, dp) + 1); pc := pc + 1; () }
-      '-' => { Arr.set(tape, dp, Arr.get(tape, dp) - 1); pc := pc + 1; () }
+      '>' => {
+        dp := dp + 1
+        pc := pc + 1
+      },
+      '<' => {
+        dp := dp - 1
+        pc := pc + 1
+      },
+      '+' => {
+        Arr.set(tape, dp, Arr.get(tape, dp) + 1)
+        pc := pc + 1
+      },
+      '-' => {
+        Arr.set(tape, dp, Arr.get(tape, dp) - 1)
+        pc := pc + 1
+      },
       '.' => {
         out := Str.append(out, Chr.charToString(Chr.intToChar(Arr.get(tape, dp))))
-        pc := pc + 1;
-        ()
-      }
+        pc := pc + 1
+      },
       '[' => {
         val nextPc = if (Arr.get(tape, dp) == 0) Arr.get(jumps, pc) + 1 else pc + 1
-        pc := nextPc;
-        ()
-      }
+        pc := nextPc
+      },
       ']' => {
         val nextPc = if (Arr.get(tape, dp) != 0) Arr.get(jumps, pc) else pc + 1
-        pc := nextPc;
-        ()
+        pc := nextPc
+      },
+      _ => {
+        pc := pc + 1
       }
-      _   => { pc := pc + 1; () }
     }
   }
   println(out)
 }
 
-// ── Programs ──────────────────────────────────────────────────────────────────
-
 val hello = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
 
 val count = "++++++[>++++++++<-]>+.+.+.+.+.+.+.+."
 
-val fact5 = "++++++[>++++++++<-]>+.+.--."
+val fact5 = "++++>+++++<[>[-<[->>+>+<<<]>>>[<<<+>>>-]<<]>[<+>-]<<-]>>++++++++++[>++++++++++<-]+>[<<->>-]<>++++++[<++++++++>-]<.<---------->>+<<---------->>+>++++++[<++++++++>-]<.--."
 
 println("=== Hello, World! ===")
+
+// ── Programs ──────────────────────────────────────────────────────────────────
 run(hello)
 
 println("=== Counter ===")
+
 run(count)
 
 println("=== Factorial (5! = 120) ===")
+
 run(fact5)
