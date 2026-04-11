@@ -47,6 +47,9 @@ extern fun httpStatusCode_(resp: Response): Int =
 extern fun httpMakeResponse_(status: Int, body: String): Response =
   jvm("kestrel.runtime.KRuntime#httpMakeResponse(java.lang.Object,java.lang.Object)")
 
+extern fun httpMakeResponseWithHeaders_(status: Int, body: String, headers: List<(String, String)>): Response =
+  jvm("kestrel.runtime.KRuntime#httpMakeResponseWithHeaders(java.lang.Object,java.lang.Object,java.lang.Object)")
+
 // ---------------------------------------------------------------------------
 // KRuntime extern bindings (S03-06: HTTP server)
 // ---------------------------------------------------------------------------
@@ -62,6 +65,9 @@ extern fun httpServerPort_(server: Server): Int =
 
 extern fun httpServerStop_(server: Server): Task<Unit> =
   jvm("kestrel.runtime.KRuntime#httpServerStop(java.lang.Object)")
+
+extern fun httpParkAsync_(): Task<Unit> =
+  jvm("kestrel.runtime.KRuntime#parkAsync()")
 
 extern fun httpQueryParam_(request: Request, name: String): Option<String> =
   jvm("kestrel.runtime.KRuntime#httpQueryParam(java.lang.Object,java.lang.Object)")
@@ -84,6 +90,9 @@ export fun statusCode(resp: Response): Int = httpStatusCode_(resp)
 
 export fun makeResponse(status: Int, body: String): Response = httpMakeResponse_(status, body)
 
+export fun makeResponseWithHeaders(status: Int, body: String, headers: List<(String, String)>): Response =
+  httpMakeResponseWithHeaders_(status, body, headers)
+
 // ---------------------------------------------------------------------------
 // Public HTTP server API (S03-06)
 // ---------------------------------------------------------------------------
@@ -97,6 +106,10 @@ export async fun listen(server: Server, opts: { host: String, port: Int }): Task
 export fun serverPort(server: Server): Int = httpServerPort_(server)
 
 export async fun serverStop(server: Server): Task<Unit> = await httpServerStop_(server)
+
+/// Block the current task indefinitely (until process shutdown / SIGINT).
+/// Call after `Http.listen` to prevent the process from exiting due to quiescence.
+export async fun park(): Task<Unit> = await httpParkAsync_()
 
 export fun queryParam(request: Request, name: String): Option<String> = httpQueryParam_(request, name)
 

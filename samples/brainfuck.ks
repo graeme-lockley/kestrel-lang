@@ -86,33 +86,41 @@ fun run(source: String): Unit = {
       '>' => {
         dp := dp + 1
         pc := pc + 1
+        ()
       },
       '<' => {
         dp := dp - 1
         pc := pc + 1
+        ()
       },
       '+' => {
         Arr.set(tape, dp, Arr.get(tape, dp) + 1)
         pc := pc + 1
+        ()
       },
       '-' => {
         Arr.set(tape, dp, Arr.get(tape, dp) - 1)
         pc := pc + 1
+        ()
       },
       '.' => {
         out := Str.append(out, Chr.charToString(Chr.intToChar(Arr.get(tape, dp))))
         pc := pc + 1
+        ()
       },
       '[' => {
         val nextPc = if (Arr.get(tape, dp) == 0) Arr.get(jumps, pc) + 1 else pc + 1
         pc := nextPc
+        ()
       },
       ']' => {
         val nextPc = if (Arr.get(tape, dp) != 0) Arr.get(jumps, pc) else pc + 1
         pc := nextPc
+        ()
       },
       _ => {
         pc := pc + 1
+        ()
       }
     }
   }

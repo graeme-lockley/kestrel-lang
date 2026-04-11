@@ -40,6 +40,48 @@ export async fun listDir(path: String): Task<Result<List<DirEntry>, FsError>> = 
 	Res.mapError(Res.map(result, (entries: List<String>) => Lst.map(entries, toDirEntry)), mapFsError)
 }
 
+fun dirPaths(entries: List<DirEntry>, acc: List<String>): List<String> =
+  match (entries) {
+    [] => acc
+    hd :: tl => match (hd) {
+      Dir(p) => dirPaths(tl, p :: acc)
+      File(_) => dirPaths(tl, acc)
+    }
+  }
+
+async fun listDirAllLoop(pending: List<String>, acc: List<DirEntry>): Task<Result<List<DirEntry>, FsError>> =
+  match (pending) {
+    [] => Ok(Lst.reverse(acc))
+    d :: rest => {
+      val step = await listDir(d)
+      match (step) {
+        Err(e) => Err(e)
+        Ok(entries) => {
+          val subDirs = dirPaths(entries, [])
+          val next: Task<Result<List<DirEntry>, FsError>> = listDirAllLoop(Lst.append(subDirs, rest), Lst.append(entries, acc))
+          await next
+        }
+      }
+    }
+  }
+
+export async fun listDirAll(path: String): Task<Result<List<DirEntry>, FsError>> =
+  await listDirAllLoop([path], [])
+
+fun collectExt(entries: List<DirEntry>, ext: String, acc: List<String>): List<String> =
+  match (entries) {
+    [] => Lst.reverse(acc)
+    hd :: tl => match (hd) {
+      Dir(_) => collectExt(tl, ext, acc)
+      File(p) => if (Str.endsWith(ext, p)) collectExt(tl, ext, p :: acc) else collectExt(tl, ext, acc)
+    }
+  }
+
+export async fun collectFilesByExtension(path: String, ext: String): Task<Result<List<String>, FsError>> = {
+  val allEntries = await listDirAll(path)
+  Res.map(allEntries, (entries: List<DirEntry>) => collectExt(entries, ext, []))
+}
+
 export async fun writeText(path: String, content: String): Task<Result<Unit, FsError>> = {
 	val result = await writeTextAsync(path, content)
 	Res.mapError(result, mapFsError)

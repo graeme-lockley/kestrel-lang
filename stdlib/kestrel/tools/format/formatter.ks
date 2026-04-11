@@ -320,7 +320,7 @@ fun fmtIfExpr(cond: Ast.Expr, then_: Ast.Expr, else_: Option<Ast.Expr>): Doc = {
 }
 
 fun fmtWhileExpr(cond: Ast.Expr, body: Ast.Block): Doc =
-  PP.hcat([PP.text("while ("), fmtExpr(cond), PP.text(") "), fmtBlock(body)])
+  PP.hcat([PP.text("while ("), fmtExpr(cond), PP.text(") "), fmtBlockStmt(body)])
 
 fun fmtCase(c: Ast.Case_): Doc =
   match (c.body) {
@@ -542,7 +542,14 @@ fun buildGuardedStmtDocs(stmts: List<Ast.Stmt>, nextParen: Bool): List<Doc> =
     }
   }
 
-fun fmtBlock(b: Ast.Block): Doc = {
+// fmtBlock renders a block in expression context ('expr'): the explicit ()
+// result is always emitted when present so that the output re-parses correctly
+// in 'expr' context (match arms, if/else branches, fun bodies, try bodies).
+//
+// fmtBlockStmt renders a block in statement context ('stmt'): only while
+// bodies are parsed with 'stmt' context, so only fmtWhileExpr uses this.
+// In 'stmt' context the trailing () is implicit and may be elided.
+fun fmtBlockImpl(b: Ast.Block, dropUnitIfStmts: Bool): Doc = {
   val isUnitResult = match (b.result) {
     ELit(k, _) => Str.equals(k, "unit")
     _ => False
@@ -559,7 +566,7 @@ fun fmtBlock(b: Ast.Block): Doc = {
   val stmtDocs = buildGuardedStmtDocs(b.stmts, resultNextParen)
   val items =
     if (isNeverResult) stmtDocs
-    else if (isUnitResult & !Lst.isEmpty(b.stmts)) stmtDocs
+    else if (dropUnitIfStmts & isUnitResult & !Lst.isEmpty(b.stmts)) stmtDocs
     else Lst.append(stmtDocs, [fmtExpr(b.result)])
   match (items) {
     [] => PP.text("{}")
@@ -572,6 +579,10 @@ fun fmtBlock(b: Ast.Block): Doc = {
       ])
   }
 }
+
+fun fmtBlock(b: Ast.Block): Doc = fmtBlockImpl(b, False)
+
+fun fmtBlockStmt(b: Ast.Block): Doc = fmtBlockImpl(b, True)
 
 // ─── Declaration Doc ─────────────────────────────────────────────────────────
 

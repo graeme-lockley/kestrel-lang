@@ -1553,6 +1553,36 @@ public final class KRuntime {
         return new Object[]{status, body};
     }
 
+    /** Convert a Kestrel {@code List<(A,B)>} (linked KCons list of Object[] pairs) to a Java List. */
+    private static java.util.List<Object[]> kListToJavaList(Object list) {
+        java.util.List<Object[]> result = new java.util.ArrayList<>();
+        Object xs = list;
+        while (xs instanceof KCons) {
+            KCons c = (KCons) xs;
+            if (c.head instanceof Object[]) {
+                result.add((Object[]) c.head);
+            }
+            xs = c.tail;
+        }
+        return result;
+    }
+
+    /**
+     * Create a server-side response with custom response headers.
+     * {@code headers} is a Kestrel {@code List<(String, String)>} of name-value pairs.
+     * The resulting Object[] has the form {status, body, headersList}.
+     */
+    @SuppressWarnings("unchecked")
+    public static Object httpMakeResponseWithHeaders(Object status, Object body, Object headers) {
+        if (!(status instanceof Long)) {
+            throw new IllegalArgumentException("makeResponseWithHeaders expects Int status");
+        }
+        if (!(body instanceof String)) {
+            throw new IllegalArgumentException("makeResponseWithHeaders expects String body");
+        }
+        return new Object[]{status, body, headers};
+    }
+
     /**
      * Extract the body text from a {@code Response}.
      * Works for both client responses ({@code HttpResponse&lt;String&gt;}) and
@@ -1611,6 +1641,17 @@ public final class KRuntime {
                     String body = httpBodyText(response);
                     int status = (int)(long) httpStatusCode(response);
                     byte[] bodyBytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    // Emit custom headers if present (Object[]{status, body, headersList})
+                    if (response instanceof Object[] arr && arr.length >= 3 && arr[2] != null) {
+                        Object headersList = arr[2];
+                        java.util.List<Object[]> pairs = kListToJavaList(headersList);
+                        com.sun.net.httpserver.Headers respHeaders = exchange.getResponseHeaders();
+                        for (Object[] pair : pairs) {
+                            if (pair.length >= 2) {
+                                respHeaders.add((String) pair[0], (String) pair[1]);
+                            }
+                        }
+                    }
                     exchange.sendResponseHeaders(status, bodyBytes.length);
                     try (java.io.OutputStream os = exchange.getResponseBody()) {
                         os.write(bodyBytes);
@@ -1672,6 +1713,23 @@ public final class KRuntime {
      */
     public static Long httpServerPort(Object server) {
         return (long) ((com.sun.net.httpserver.HttpServer) server).getAddress().getPort();
+    }
+
+    /**
+     * Returns a {@code Task<Unit>} that never completes normally, keeping the
+     * process alive until the JVM shuts down (e.g. via SIGINT / SIGTERM).
+     * A shutdown hook completes the future and decrements the in-flight counter
+     * so that quiescence is reached and the VM can exit cleanly.
+     */
+    public static KTask parkAsync() {
+        initAsyncRuntime();
+        CompletableFuture<Object> future = new CompletableFuture<>();
+        asyncTasksInFlight.incrementAndGet();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            future.complete(KUnit.INSTANCE);
+            decrementAndSignal();
+        }));
+        return KTask.fromFuture(future);
     }
 
     /**

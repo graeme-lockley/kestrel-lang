@@ -167,6 +167,56 @@ When the compiler is invoked (e.g. by `run`, `build`, or directly), it accepts:
 - **`KESTREL_CACHE_TTL`:** Override staleness threshold in seconds.
 - **SSRF / security:** `https://` only by default. `http://` accepted only with `--allow-http`. Redirects to a different host are not followed.
 
+### 2.10 doc
+
+```
+kestrel doc [--port PORT] [--project-root PATH]
+```
+
+Starts a local HTTP documentation browser server powered by `stdlib/kestrel/tools/doc.ks`. On startup the server discovers and extracts doc-comments from all stdlib `kestrel:*` modules and any project `.ks` files found under `--project-root`, builds a search index, and begins serving HTML pages on the specified port.
+
+**Flags:**
+
+| Flag | Long | Description |
+|------|------|-------------|
+| `-p PORT` | `--port PORT` | Port to listen on (default: `7070`) |
+| | `--project-root PATH` | Root directory to scan for project modules (default: current working directory) |
+| `-h` | `--help` | Print usage and exit 0 |
+| `-V` | `--version` | Print version and exit 0 |
+
+**Routes served:**
+
+| Method | Path | Response |
+|--------|------|----------|
+| `GET` | `/` | 302 redirect to `/docs/` |
+| `GET` | `/docs/` | HTML module list page (all discovered modules) |
+| `GET` | `/docs/<module-spec>` | HTML module detail page; 404 if not found |
+| `GET` | `/api/search?q=<query>` | JSON array of `SearchResult` objects |
+| `GET` | `/api/index` | JSON dump of the full search index |
+| `GET` | `/docs/static/style.css` | Embedded CSS for the documentation browser |
+| `GET` | `/docs/static/search.js` | Embedded JavaScript for the search widget |
+
+**Module discovery:**
+
+- **Stdlib modules:** All `*.ks` files (excluding `*.test.ks`) under `$KESTREL_ROOT/stdlib/kestrel/` are loaded. Specifiers are derived by stripping the `stdlib/kestrel/` prefix and `.ks` suffix then prepending `kestrel:`.
+- **Project modules:** All `*.ks` files (excluding `*.test.ks`) under `--project-root` that are not already covered by the stdlib tree are loaded. Specifiers use the `project:` prefix followed by the path relative to the project root.
+- Files and directories whose base name starts with `.` or equals `node_modules` are skipped.
+- Extraction failures (e.g. parse errors in a file) are silently dropped; the module is simply absent from the index.
+
+**Startup message:**
+
+On successful server start the tool prints:
+```
+Docs available at http://localhost:<port>/docs/
+```
+
+**Exit codes:**
+
+| Code | Meaning |
+|------|---------|
+| 0 | Server started and running (process does not exit unless killed) |
+| 1 | Invalid flag / argument, or server failed to bind |
+
 ---
 
 | Component | Language | Role |

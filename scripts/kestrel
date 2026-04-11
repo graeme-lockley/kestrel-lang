@@ -24,6 +24,7 @@ usage() {
   echo "  build [script.ks]  Build compiler and JVM runtime; optionally compile script" >&2
   echo "  test  [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]   Run unit tests on JVM (default: compact output)" >&2
   echo "  fmt   [--check] [--stdin] [files-or-dirs...]  Format Kestrel source files (default: all .ks files in current dir)" >&2
+  echo "  doc   [--port PORT] [--project-root PATH]       Start the documentation browser (default port: 7070)" >&2
   exit 1
 }
 
@@ -407,6 +408,15 @@ cmd_fmt() {
   exec "$ROOT/kestrel" run "$fmt_script" "$@"
 }
 
+cmd_doc() {
+  ensure_tools
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
+    build_compiler_jvm
+  fi
+  local doc_script="$ROOT/stdlib/kestrel/tools/doc.ks"
+  exec "$ROOT/kestrel" run "$doc_script" "$@"
+}
+
 # Main
 case "${1:-}" in
   run)   shift; cmd_run "$@" ;;
@@ -414,6 +424,7 @@ case "${1:-}" in
   build) shift; cmd_build "$@" ;;
   test)       shift; cmd_test "$@" ;;
   fmt)   shift; cmd_fmt "$@" ;;
+  doc)   shift; cmd_doc "$@" ;;
   # Implicit run: when first arg is a .ks file (enables shebang #!/usr/bin/env kestrel)
   *.ks)  cmd_run "$@" ;;
   *)     usage ;;

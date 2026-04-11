@@ -102,24 +102,24 @@ search index (S09-05) to handle all documented routes. The `kestrel doc` CLI ali
 
 ## Tasks
 
-- [ ] Create `stdlib/kestrel/tools/doc.ks`
-  - [ ] Imports: `Lst`, `Str`, `Dict`, `Http`, `Web`, `Cli`, `Fs`, `extract`, `render`, `index`, `process`
-  - [ ] `specFromStdlibPath(root, path)` → `"kestrel:<rel>"` (strip `stdlib/kestrel/` prefix + `.ks`)
-  - [ ] `isTestFile(path)` and `isKsFile(path)` predicates
-  - [ ] `isIgnoreDir(path)` predicate
-  - [ ] `discoverStdlib(root)` — `collectFiles` under `stdlib/kestrel/`, filter out test files
-  - [ ] `discoverProject(root)` — `collectFiles` under project root, filter out test files
-  - [ ] `loadModules(paths, specOf)` — `all(Lst.map(..., extractFile))`, unwrap Ok/Err
-  - [ ] `cliSpec` record (`--port`, `--project-root`)
-  - [ ] `handler(parsed)` — discover, extract, index, build router, start server, print startup message, call `Http.listen`
-  - [ ] `main(allArgs)` entry point
-  - [ ] `main(getProcess().args)` call at top level
-- [ ] Add `doc` subcommand to `scripts/kestrel`
-  - [ ] `cmd_doc()` function (same pattern as `cmd_fmt`)
-  - [ ] Register in `case` dispatch and `usage()` string
-- [ ] Update `docs/specs/09-tools.md` with `kestrel doc` section
-- [ ] Run `./kestrel test`
-- [ ] Run `cd compiler && npm test`
+- [x] Create `stdlib/kestrel/tools/doc.ks`
+  - [x] Imports: `Lst`, `Str`, `Dict`, `Http`, `Web`, `Cli`, `Fs`, `extract`, `render`, `index`, `process`
+  - [x] `specFromStdlibPath(root, path)` → `"kestrel:<rel>"` (strip `stdlib/kestrel/` prefix + `.ks`)
+  - [x] `isTestFile(path)` and `isKsFile(path)` predicates
+  - [x] `isIgnoreDir(path)` predicate
+  - [x] `discoverStdlib(root)` — `collectFiles` under `stdlib/kestrel/`, filter out test files
+  - [x] `discoverProject(root)` — `collectFiles` under project root, filter out test files
+  - [x] `loadModules(paths, specOf)` — `all(Lst.map(..., extractFile))`, unwrap Ok/Err
+  - [x] `cliSpec` record (`--port`, `--project-root`)
+  - [x] `handler(parsed)` — discover, extract, index, build router, start server, print startup message, call `Http.listen`
+  - [x] `main(allArgs)` entry point
+  - [x] `main(getProcess().args)` call at top level
+- [x] Add `doc` subcommand to `scripts/kestrel`
+  - [x] `cmd_doc()` function (same pattern as `cmd_fmt`)
+  - [x] Register in `case` dispatch and `usage()` string
+- [x] Update `docs/specs/09-tools.md` with `kestrel doc` section
+- [x] Run `./kestrel test`
+- [x] Run `cd compiler && npm test`
 
 ## Tests to add
 
@@ -129,7 +129,23 @@ search index (S09-05) to handle all documented routes. The `kestrel doc` CLI ali
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — add `kestrel doc` section (flags, routes, module discovery, exit codes)
+- [x] `docs/specs/09-tools.md` — add `kestrel doc` section (flags, routes, module discovery, exit codes)
+
+## Build notes
+
+**2026-03-08**
+
+- `Http.makeResponse` only accepted `(status, body)`. Added `makeResponseWithHeaders` backed by a new `KRuntime.httpMakeResponseWithHeaders` method that returns `Object[]{status, body, headersList}`. The server dispatcher was updated to check for the 3-element array and emit the headers via `exchange.getResponseHeaders().add()`.
+
+- Nested `async fun` inside `handler`'s async body caused a JVM VerifyError (code generator emits invalid bytecode for async closures that capture locals). Workaround: introduced a `DocState` record holding `allModules`, `idx`, and `modDict`, and promoted the dispatcher to a top-level `async fun dispatch(state, req, _params)`. The wildcard router receives `(req, params) => dispatch(state, req, params)`, so no async closure is formed inside the handler body.
+
+- Pre-existing bug in `stdlib/kestrel/io/fs.ks`: the recursive `listDirAllLoop` call and the top-level `listDirAll` call were both missing `await`. Fixed as part of this story since `collectFiles` is used by the module discovery code.
+
+- The conformance test `tests/conformance/runtime/valid/fs_recursive_listdir.ks` was using `+` for string concatenation (not valid in Kestrel) and missing imports for `DirEntry`, `Dir`, `File`, `FsError`, `NotFound`. Fixed.
+
+- After `Http.listen` the process exited immediately because the Kestrel async runtime quits when `asyncTasksInFlight` reaches zero and `Http.listen` completes the in-flight task as soon as the `HttpServer.start()` call returns. Fixed by adding `KRuntime.parkAsync()` — a method that increments `asyncTasksInFlight`, then registers a JVM shutdown hook that completes the returned future and decrements the counter. A corresponding `Http.park()` Kestrel binding was added, and `doc.ks` calls `await Http.park()` after the startup message.
+
+- All 1633 Kestrel tests pass; all 433 compiler tests pass. Smoke test confirms `/` (302), `/docs/` (200 HTML), `/api/index` (JSON), `/api/search?q=list` (JSON array) all respond correctly.
 
 ## Risks / Notes
 
