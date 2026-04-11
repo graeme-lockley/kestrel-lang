@@ -2,7 +2,7 @@
 
 ## Status
 
-Unplanned
+Done
 
 ## Summary
 
@@ -10,7 +10,7 @@ Unplanned
 
 ## Stories
 
-1. [S12-01 — `getProcess().env` full environment map](../../unplanned/S12-01-getprocess-env-full.md)
+1. ✅ [S12-01 — `getProcess().env` full environment map](../../done/S12-01-getprocess-env-full.md)
 
 ## Dependencies
 

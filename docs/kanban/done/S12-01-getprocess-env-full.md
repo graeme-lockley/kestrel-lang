@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E12 Full Process Environment](../epics/unplanned/E12-full-process-environment.md)
+- Epic: [E12 Full Process Environment](../epics/done/E12-full-process-environment.md)
 
 ## Summary
 
