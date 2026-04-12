@@ -11,7 +11,7 @@
 
 ## Summary
 
-Port the module specifier resolver to `stdlib/kestrel/compiler/resolve.ks`, covering
+Port the module specifier resolver to `stdlib/kestrel/tools/compiler/resolve.ks`, covering
 `compiler/src/resolve.ts` (~105 lines), `compiler/src/dependency-paths.ts` (~15 lines),
 `compiler/src/module-specifiers.ts` (~44 lines), and the URL-based import cache logic in
 `compiler/src/url-cache.ts` (~426 lines).
@@ -36,7 +36,7 @@ cache, and security-sensitive cross-origin restrictions.
 
 ## Goals
 
-1. Create `stdlib/kestrel/compiler/resolve.ks` with:
+1. Create `stdlib/kestrel/tools/compiler/resolve.ks` with:
    - `ResolveOptions` record
    - `resolveSpecifier(spec: String, opts: ResolveOptions): Result<String, String>`
    - `uniqueDependencyPaths(prog: Program, fromFile: String, opts: ResolveOptions): Result<List<ResolvedDep>, String>`
@@ -48,13 +48,13 @@ cache, and security-sensitive cross-origin restrictions.
 
 ## Acceptance Criteria
 
-- `stdlib/kestrel/compiler/resolve.ks` compiles without errors.
-- A test file `stdlib/kestrel/compiler/resolve.test.ks` covers:
+- `stdlib/kestrel/tools/compiler/resolve.ks` compiles without errors.
+- A test file `stdlib/kestrel/tools/compiler/resolve.test.ks` covers:
   - `resolveSpecifier("kestrel:data/list", ...)` returns the correct absolute path
   - `resolveSpecifier("./helper.ks", ...)` resolves relative to `fromFile`
   - `resolveSpecifier("../outside.ks", ...)` from a URL-cached module returns a cross-origin error
   - An unknown stdlib specifier returns an error
-- `./kestrel test stdlib/kestrel/compiler/resolve.test.ks` passes.
+- `./kestrel test stdlib/kestrel/tools/compiler/resolve.test.ks` passes.
 - `cd compiler && npm test` still passes.
 
 ## Spec References
@@ -74,3 +74,39 @@ cache, and security-sensitive cross-origin restrictions.
   replicate it exactly to avoid path traversal vulnerabilities.
 - Maven specifiers are a special case; if Maven support is needed for the bootstrap path,
   handle it; otherwise defer to a note.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib compiler | Add `stdlib/kestrel/tools/compiler/resolve.ks` implementing specifier resolution, dependency path extraction, and URL cache helper stubs for self-hosted compilation. |
+| Parser/AST integration | Traverse `Program.imports` to collect distinct source-order specifiers and map each to a concrete resolved path. |
+| URL/module security | Enforce scaffold cross-origin relative-import rejection checks for cached URL modules to prevent path traversal. |
+| Kestrel tests | Add `stdlib/kestrel/tools/compiler/resolve.test.ks` covering stdlib and relative resolution, unknown stdlib errors, and cross-origin rejection behavior. |
+| Bootstrap regression | Preserve current TypeScript resolver behavior by keeping `compiler` integration tests green while resolver scaffolding lands. |
+
+## Tasks
+
+- [ ] Create `stdlib/kestrel/tools/compiler/resolve.ks` with exported `ResolveOptions`, `ResolvedDep`, `resolveSpecifier`, and `uniqueDependencyPaths` APIs.
+- [ ] Implement stdlib specifier mapping (`kestrel:*`) and local relative path mapping (`./`, `../`) for file-based modules.
+- [ ] Implement URL specifier handling scaffolding (`https://` and optional `http://` with `allowHttp`) and cache path helper stubs.
+- [ ] Add cross-origin relative import guard for URL-cached modules.
+- [ ] Add helper to deduplicate specifiers in source order and produce `ResolvedDep` list.
+- [ ] Add `stdlib/kestrel/tools/compiler/resolve.test.ks` for stdlib, relative, unknown-stdlib, and cross-origin rejection cases.
+- [ ] Run `NODE_OPTIONS='--max-old-space-size=8192' ./kestrel test stdlib/kestrel/tools/compiler/resolve.test.ks`.
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `./scripts/kestrel test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/tools/compiler/resolve.test.ks` | Validate stdlib module resolution path shape for `kestrel:data/list`. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/resolve.test.ks` | Validate relative `./helper.ks` resolution from a local source file. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/resolve.test.ks` | Validate unknown stdlib specifier returns `Err`. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/resolve.test.ks` | Validate URL-cache relative escape (`../outside.ks`) returns cross-origin error. |
+| Vitest integration | `compiler/test/integration/url-import.test.ts` (existing) | Regression guard for URL/module specifier behavior during migration. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/07-modules.md` — review resolver behavior (stdlib, relative, URL security checks); update only if behavior differs from documented rules.
