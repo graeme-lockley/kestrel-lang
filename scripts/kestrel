@@ -258,6 +258,10 @@ selfhost_compiler_ready() {
 }
 
 require_selfhost_compiler() {
+  # Allow bootstrap chain tests to bypass the gate via KESTREL_CLI_TS_FALLBACK=1
+  if [ "${KESTREL_CLI_TS_FALLBACK:-}" = "1" ]; then
+    return 0
+  fi
   if selfhost_compiler_ready; then
     return 0
   fi

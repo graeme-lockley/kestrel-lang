@@ -13,9 +13,9 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Name:** `kestrel`
 - **Usage:** `kestrel <command> [options]`
 - **Location:** A single entry point at the repository root (`./kestrel` or `scripts/kestrel`) exposes all commands. The root script delegates to `scripts/kestrel`.
-- **Topology:** In `self-hosted` mode (see `kestrel status`), `scripts/kestrel` dispatches normal commands (`run`, `dis`, `build`, `test`, `fmt`, `doc`, `lock`) directly to bootstrap-generated self-hosted compiler classes in `~/.kestrel/bootstrap/self-hosted/` by default. Set `KESTREL_BOOTSTRAP_ROOT` to override the bootstrap artifact root.
-- **Fallback:** Normal command execution does not fall back to the TypeScript compiler path when bootstrap state is missing. Users must restore self-hosted artifacts with `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
-- **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` for full toolchain flows. Normal post-bootstrap command execution does not invoke the bootstrap JAR.
+- **Topology:** In `self-hosted` mode (see `kestrel status`), `scripts/kestrel` gates normal commands (`run`, `dis`, `build`, `test`, `fmt`, `doc`, `lock`) on the presence of self-hosted compiler classes in `~/.kestrel/jvm/` by default. Set `KESTREL_JVM_CACHE` to override the JVM class cache root. See [11-bootstrap.md](11-bootstrap.md) for the full bootstrap architecture.
+- **Fallback:** Normal command execution does not fall back to an unbootstrapped state. Users must restore self-hosted artifacts with `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
+- **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` for full toolchain flows.
 
 ---
 
@@ -83,71 +83,15 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 
 ### 2.3.0 Bootstrap compiler JAR packaging
 
-**Usage:** `./scripts/build-bootstrap-jar.sh`
+See [11-bootstrap.md §3.1](11-bootstrap.md).
 
-- **Purpose:** Build a canonical bootstrap compiler JAR artifact from the TypeScript compiler output for use by `kestrel bootstrap` seeding flows.
-- **Output directory:** `~/.kestrel/bootstrap/compiler/` by default. Set `KESTREL_BOOTSTRAP_ROOT` to override.
-- **Artifacts:**
-  - `compiler-bootstrap.jar`
-  - `compiler-bootstrap.meta` (checksum, revision, timestamp metadata)
-- **Policy:** This JAR is a bootstrap-only artifact and is not part of normal `kestrel build/run/test` steady-state command execution.
+### 2.3.1 bootstrap
 
-### 2.3.1 Stage-0 bootstrap verification
+See [11-bootstrap.md §3.2](11-bootstrap.md).
 
-**Usage:** `./scripts/bootstrap-stage0.sh [sample.ks]`
+### 2.3.2 status
 
-- **Purpose:** Validate Stage-0 bootstrap wiring by compiling the self-hosted compiler CLI entrypoint with the TypeScript compiler, then comparing semantic output of a non-trivial sample against a TypeScript-compiled baseline.
-- **Default sample:** `samples/mandelbrot.ks`.
-- **Prerequisites:** `node`, `java`, and `javac` on `PATH`.
-- **Artifacts:** Writes temporary verification outputs under `.kestrel/bootstrap-stage0/`.
-- **Success criteria:** Exits 0 and prints `PASS` when baseline and post-bootstrap runtime outputs match.
-- **Current limitation:** The Stage-0 compiled CLI invocation in this flow is a build-command smoke check; sample compilation for semantic comparison still uses the canonical `./kestrel build` path while self-hosted argument forwarding stabilizes.
-
-### 2.3.2 Stage-1 bootstrap verification
-
-**Usage:** `./scripts/bootstrap-stage1.sh [sample.ks]`
-
-- **Purpose:** Validate Stage-1 bootstrap wiring against the Stage-0 baseline by generating a Stage-1 candidate CLI artifact, running build-command smoke checks, and comparing semantic sample output.
-- **Default sample:** `samples/mandelbrot.ks`.
-- **Prerequisites:** `node`, `java`, and `javac` on `PATH`.
-- **Artifacts:** Writes temporary verification outputs under `.kestrel/bootstrap-stage1/` and reuses Stage-0 outputs from `.kestrel/bootstrap-stage0/`.
-- **Success criteria:** Exits 0 and prints `PASS` when Stage-1 semantic output matches Stage-0 baseline.
-- **Status:** Stage-1 script verifies semantic parity against the Stage-0 baseline and acts as an additional bootstrap regression check.
-
-### 2.3.3 bootstrap
-
-**Usage:** `kestrel bootstrap`
-
-- **Purpose:** Seed self-hosted compiler classes using the bootstrap compiler JAR.
-- **Prerequisites:**
-  - Runtime JAR exists at `runtime/jvm/kestrel-runtime.jar`.
-  - Bootstrap compiler JAR exists at `~/.kestrel/bootstrap/compiler/compiler-bootstrap.jar` by default (produced by `./scripts/build-bootstrap-jar.sh`).
-- **Output directory:** `~/.kestrel/bootstrap/self-hosted/` by default.
-- **Execution model:** Runs the bootstrap compiler entry class (`Cli_entry`) on the JVM with classpath `kestrel-runtime.jar:compiler-bootstrap.jar` to compile `stdlib/kestrel/tools/compiler/cli-entry.ks` and its dependencies into self-hosted class artifacts.
-- **Validation:** Fails if required compiler entry classes (`Cli_entry.class`, `Cli_main.class`) are missing from bootstrap output.
-- **Failure diagnostics:** Emits explicit errors for missing runtime artifact, missing bootstrap JAR, and bootstrap compilation failures.
-- **Idempotence:** Repeated invocations refresh bootstrap output classes deterministically in place.
-
-### 2.3.4 status
-
-**Usage:** `kestrel status`
-
-- **Purpose:** Report active compiler mode and bootstrap provenance state.
-- **Mode values:**
-  - `self-hosted` — bootstrap state file exists and points to valid self-hosted compiler classes.
-  - `bootstrap-required` — bootstrap state missing/invalid or output classes unavailable.
-- **State file:** `~/.kestrel/bootstrap/state.env` by default.
-- **Schema fields:**
-  - `schema`
-  - `mode`
-  - `updated_utc`
-  - `bootstrap_jar`
-  - `bootstrap_jar_sha256`
-  - `git_revision`
-  - `output_classes`
-  - `entry_source`
-- **Recovery guidance:** When mode is `bootstrap-required`, command prints a remediation hint to run `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
-- **CI contract:** Post-bootstrap CI checks should assert `compiler mode: self-hosted` before running normal `build`/`run`/`test` smoke commands.
+See [11-bootstrap.md §3.3](11-bootstrap.md).
 
 ### 2.4 test
 
@@ -353,3 +297,4 @@ The extension also contributes commands and task definitions for editor workflow
 - [07-modules.md](07-modules.md) – Module resolution (future multi-file support)
 - [08-tests.md](08-tests.md) – Test harnesses: **`cd compiler && npm test`** runs parse, typecheck, and runtime conformance corpora under `tests/conformance/` (Vitest integration tests). **`scripts/run-e2e.sh`** drives the compiler (`dist/cli.js`) and JVM runtime on `tests/e2e/scenarios/negative/*.ks` (expect failure) and `tests/e2e/scenarios/positive/*.ks` (stdout vs `*.expected`); it does **not** replace the conformance runtime tree (see 08 §3.3).
 - [10-compile-diagnostics.md](10-compile-diagnostics.md) – Compile-time diagnostics and error reporting (format, API, CLI)
+- [11-bootstrap.md](11-bootstrap.md) – Bootstrap and self-hosting architecture (JAR packaging, bootstrap command, self-hosted gating, CI)

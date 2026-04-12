@@ -24,25 +24,6 @@ When working on the self-hosted compiler handoff, run the canonical bootstrap se
 If it reports `bootstrap-required`, normal `kestrel run/build/test` commands will fail until you rebuild the bootstrap JAR and rerun `./kestrel bootstrap`.
 By default the bootstrap JAR, state file, and self-hosted compiler classes live under `~/.kestrel/bootstrap/`.
 
-For deeper parity validation, run the Stage-0 verification script:
-
-```bash
-./scripts/bootstrap-stage0.sh
-```
-
-The script compiles the self-hosted compiler CLI entrypoint with the TypeScript bootstrap compiler,
-then checks semantic output parity on a non-trivial sample (default: `samples/mandelbrot.ks`).
-Artifacts are written to `.kestrel/bootstrap-stage0/` for inspection.
-
-For Stage-1 bootstrap parity checks, run:
-
-```bash
-./scripts/bootstrap-stage1.sh
-```
-
-This compares Stage-1 candidate output against the Stage-0 baseline and writes artifacts to
-`.kestrel/bootstrap-stage1/`.
-
 ## A quick sample
 
 Here is a program that computes the tenth Fibonacci number:

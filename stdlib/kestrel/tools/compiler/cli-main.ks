@@ -1,5 +1,6 @@
 import * as Lst from "kestrel:data/list"
-import { getProcess, runProcessStream, ProcessSpawnError, exit } from "kestrel:sys/process"
+import { getProcess, getEnv, runProcessStream, ProcessSpawnError, exit } from "kestrel:sys/process"
+import * as Opt from "kestrel:data/option"
 import * as Driver from "kestrel:tools/compiler/driver"
 
 export type ParsedCommand = {
@@ -27,7 +28,7 @@ export fun forwardArgs(parsed: ParsedCommand): (String, List<String>) =
   ("./kestrel", parsed.command :: parsed.args)
 
 fun defaultCompileOptions(cwd: String): Driver.CompileOptions = {
-  outDir = "${cwd}/.kestrel/jvm",
+  outDir = Opt.withDefault(getEnv("KESTREL_JVM_CACHE"), "${cwd}/.kestrel/jvm"),
   stdlibDir = "${cwd}/stdlib",
   cacheRoot = "${cwd}/.kestrel/cache",
   allowHttp = False,

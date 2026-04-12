@@ -53,12 +53,6 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime wit
 ```bash
 # Build bootstrap compiler JAR artifact (bootstrap-only)
 ./scripts/build-bootstrap-jar.sh
-
-# Stage-0 parity check
-./scripts/bootstrap-stage0.sh
-
-# Stage-1 parity check
-./scripts/bootstrap-stage1.sh
 ```
 
 ### Using the Kestrel CLI
