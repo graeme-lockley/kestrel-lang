@@ -405,7 +405,8 @@ cmd_run() {
     [ -n "$refresh_flag" ] && compiler_flags+=("$refresh_flag")
     [ -n "$allow_http_flag" ] && compiler_flags+=("$allow_http_flag")
     [ -n "$clean_flag" ] && compiler_flags+=("$clean_flag")
-    if ! compile_with_active_compiler "$resolved" "$class_dir" "${compiler_flags[@]-}"; then
+    # Keep run stdout deterministic for programs/tests; compiler chatter belongs off stdout.
+    if ! compile_with_active_compiler "$resolved" "$class_dir" "${compiler_flags[@]-}" >/dev/null; then
       echo "kestrel: JVM compile failed for $resolved" >&2
       exit 1
     fi
