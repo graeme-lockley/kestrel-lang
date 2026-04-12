@@ -15,7 +15,7 @@ Implement `textDocument/definition` for same-file bindings and `textDocument/com
 
 ## Current State
 
-No go-to-definition or completion provider exists. The compiler's `Program.decls` provides all top-level declaration spans. The typecheck environment maps names to their types but does not expose a scope-at-cursor API. Imported names are listed in `Program.imports` with their bind names.
+No go-to-definition or completion provider exists. The compiler's `Program.body` provides top-level declarations and `Program.imports` provides imported bind names. The typecheck environment maps names to their types but does not expose a scope-at-cursor API.
 
 ## Relationship to other stories
 
@@ -49,3 +49,34 @@ No go-to-definition or completion provider exists. The compiler's `Program.decls
 - Go-to-definition for ADT constructors (e.g., `Some(x)`) requires recognizing `PascalCase` call expressions as constructor references and mapping them to the `ConstructorDef` span inside the `TypeDecl`.
 - Parameter-level completion (names from enclosing `FunDecl.params`) requires a scope walk up the AST from the cursor position. The `findNodeAtOffset` helper from S10-03 should be extended or accompanied by a `collectScopeAt(program, offset): Map<string, InternalType>` helper.
 - Completion snippets (e.g., `fun name(params) = ...`) are left for a future enhancement; this story delivers plain name completions only.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Definition provider | Add `vscode-kestrel/src/server/providers/definition.ts` resolving same-file identifiers to declaration spans. |
+| Completion provider | Add `vscode-kestrel/src/server/providers/completion.ts` merging keyword, import, and declaration completions. |
+| LSP server wiring | Register `definitionProvider` and `completionProvider` capabilities and handlers in `server.ts`. |
+| Tests | Add unit tests for definition resolution and completion list coverage. |
+
+## Tasks
+
+- [ ] Add `vscode-kestrel/src/server/providers/definition.ts` that resolves same-file `IdentExpr`/`IdentType` names to declaration locations in `Program.body`.
+- [ ] Add `vscode-kestrel/src/server/providers/completion.ts` that returns keyword, import-name, top-level declaration, and constructor completions.
+- [ ] Register `onDefinition` and `onCompletion` handlers in `vscode-kestrel/src/server/server.ts` and advertise capabilities.
+- [ ] Add `vscode-kestrel/test/unit/definition.test.ts` for resolved and unresolved name lookup.
+- [ ] Add `vscode-kestrel/test/unit/completion.test.ts` for keyword/import/declaration completion coverage.
+- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/definition.test.ts` | Verify same-file symbol lookup returns declaration location and unresolved names return null. |
+| Vitest unit | `vscode-kestrel/test/unit/completion.test.ts` | Verify completion items include language keywords, imports, functions, vals/vars, and constructor names. |
+| Manual extension smoke | VS Code extension host | Cmd-click navigates to same-file declaration and completion menu includes expected names. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/01-language.md` — verify import/declaration forms consumed by completion and definition providers are aligned; no textual change expected in this story.
+- [ ] `docs/specs/09-tools.md` — no change in this story; consolidated editor capability docs remain in S10-09.
