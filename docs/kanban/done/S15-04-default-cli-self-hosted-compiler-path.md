@@ -60,16 +60,16 @@ Switch default `kestrel build`, `kestrel run`, and `kestrel test` compilation be
 
 ## Tasks
 
-- [ ] Update self-hosted CLI delegation in `scripts/kestrel` to execute bootstrap-generated classes directly via JVM when compiler mode is `self-hosted`.
-- [ ] Ensure delegation covers normal command flow (`build`, `run`, `test`, `dis`, `fmt`, `doc`, `lock`) without using bootstrap JAR.
-- [ ] Keep fallback TypeScript shell implementation for `bootstrap-required` mode.
-- [ ] Add explicit mode-gating diagnostics/comments where behavior diverges.
-- [ ] Update docs/spec text to describe default self-hosted path and fallback conditions.
-- [ ] Run `./scripts/build-bootstrap-jar.sh`.
-- [ ] Run `./kestrel bootstrap`.
-- [ ] Run `./kestrel status`.
-- [ ] Run representative commands via self-hosted path (`./kestrel build hello.ks`, `./kestrel run hello.ks`, `./kestrel test --summary`).
-- [ ] Run `cd compiler && npm run build && npm test`.
+- [x] Update self-hosted CLI delegation in `scripts/kestrel` to execute bootstrap-generated classes directly via JVM when compiler mode is `self-hosted`.
+- [x] Ensure delegation covers normal command flow (`build`, `run`, `test`, `dis`, `fmt`, `doc`, `lock`) without using bootstrap JAR.
+- [x] Keep fallback TypeScript shell implementation for `bootstrap-required` mode.
+- [x] Add explicit mode-gating diagnostics/comments where behavior diverges.
+- [x] Update docs/spec text to describe default self-hosted path and fallback conditions.
+- [x] Run `./scripts/build-bootstrap-jar.sh`.
+- [x] Run `./kestrel bootstrap`.
+- [x] Run `./kestrel status`.
+- [x] Run representative commands via self-hosted path (`./kestrel build hello.ks`, `./kestrel run hello.ks`, `./kestrel test --summary`).
+- [x] Run `cd compiler && npm run build && npm test`.
 
 ## Tests to add
 
@@ -80,7 +80,14 @@ Switch default `kestrel build`, `kestrel run`, and `kestrel test` compilation be
 | Mode fallback | `./kestrel status` in missing-state scenario | Confirm `bootstrap-required` mode keeps legacy TypeScript path available. |
 | Compiler regression | `cd compiler && npm run build && npm test` | Ensure CLI dispatch changes do not regress compiler source behavior. |
 
+## Build notes
+
+- 2026-04-12: Reworked `scripts/kestrel` compile path selection to use `compile_with_active_compiler`, which prefers self-hosted compiler classes from `.kestrel/bootstrap/self-hosted/` when mode is `self-hosted`.
+- 2026-04-12: Added recursion guard for nested invocations (`KESTREL_CLI_TS_FALLBACK=1`) to prevent runaway self-hosted dispatch loops while keeping top-level post-bootstrap commands on the self-hosted path.
+- 2026-04-12: Confirmed post-bootstrap smoke flow: `./kestrel build hello.ks`, `./kestrel run hello.ks`, and `./kestrel test --summary` all succeed.
+- 2026-04-12: Confirmed compiler regression suite passes (`cd compiler && npm run build && npm test`).
+
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — describe default self-hosted command path post-bootstrap and explicit TypeScript fallback conditions.
-- [ ] `AGENTS.md` — update bootstrap workflow notes to include status + post-bootstrap default command behavior.
+- [x] `docs/specs/09-tools.md` — describe default self-hosted command path post-bootstrap and explicit TypeScript fallback conditions.
+- [x] `AGENTS.md` — update bootstrap workflow notes to include status + post-bootstrap default command behavior.

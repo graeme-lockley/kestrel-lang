@@ -255,19 +255,54 @@ maven_classpath_for_entry() {
   node "$MAVEN_CLASSPATH_RESOLVER" "$entry_source" "$class_dir"
 }
 
+selfhost_compiler_ready() {
+  [ "${KESTREL_CLI_TS_FALLBACK:-0}" = "1" ] && return 1
+  [ "$(compiler_mode)" = "self-hosted" ] || return 1
+  [ -d "$BOOTSTRAP_SELFHOST_DIR" ] || return 1
+  find "$BOOTSTRAP_SELFHOST_DIR" -name "Cli_entry.class" -print -quit | grep -q . || return 1
+  return 0
+}
+
+compile_with_active_compiler() {
+  local entry_source="$1"
+  local out_dir="$2"
+  shift 2
+
+  if selfhost_compiler_ready; then
+    local main_class maven_cp java_cp
+    main_class=$(main_class_for "$BOOTSTRAP_ENTRY")
+    maven_cp=$(maven_classpath_for_entry "$BOOTSTRAP_ENTRY" "$BOOTSTRAP_SELFHOST_DIR")
+    java_cp="$RUNTIME_JAR:$BOOTSTRAP_SELFHOST_DIR"
+    if [ -n "$maven_cp" ]; then
+      java_cp="$java_cp:$maven_cp"
+    fi
+    (cd "$ROOT" && env KESTREL_CLI_TS_FALLBACK=1 java -Xss8m -cp "$java_cp" "$main_class" build "$entry_source" --target jvm -o "$out_dir" "$@")
+    return $?
+  fi
+
+  (cd "$ROOT" && node "$COMPILER_CLI" "$entry_source" --target jvm -o "$out_dir" "$@")
+}
+
 cmd_build() {
   ensure_tools
-  build_compiler_jvm
+  if ! selfhost_compiler_ready; then
+    build_compiler_jvm
+  elif [ ! -f "$RUNTIME_JAR" ]; then
+    echo "kestrel build: missing runtime jar: $RUNTIME_JAR" >&2
+    echo "kestrel build: run ./kestrel build (bootstrap-required mode) or rebuild runtime artifacts" >&2
+    exit 1
+  fi
   if [ -n "${1:-}" ]; then
     local resolved class_dir
-    local refresh_flag="" allow_http_flag="" status_flag="" clean_flag=""
+    local compiler_flags=()
+    local status_flag=""
     # Parse optional flags before the script path
     while [ $# -gt 0 ]; do
       case "${1:-}" in
-        --refresh) refresh_flag="--refresh"; shift ;;
-        --allow-http) allow_http_flag="--allow-http"; shift ;;
+        --refresh) compiler_flags+=("--refresh"); shift ;;
+        --allow-http) compiler_flags+=("--allow-http"); shift ;;
         --status) status_flag="--status"; shift ;;
-        --clean) clean_flag="--clean"; shift ;;
+        --clean) compiler_flags+=("--clean"); shift ;;
         *) break ;;
       esac
     done
@@ -282,8 +317,10 @@ cmd_build() {
     fi
     class_dir=$(jvm_class_dir_for "$resolved")
     mkdir -p "$class_dir"
-    # shellcheck disable=SC2086
-    if ! (cd "$ROOT" && node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $status_flag $clean_flag); then
+    if [ -n "$status_flag" ]; then
+      compiler_flags+=("$status_flag")
+    fi
+    if ! compile_with_active_compiler "$resolved" "$class_dir" "${compiler_flags[@]-}"; then
       echo "kestrel: JVM compile failed" >&2
       exit 1
     fi
@@ -338,10 +375,14 @@ cmd_run() {
     usage
   fi
   ensure_tools
-  if compiler_build_needed; then
+  if ! selfhost_compiler_ready && compiler_build_needed; then
     build_compiler_jvm
+  elif [ ! -f "$RUNTIME_JAR" ]; then
+    echo "kestrel run: missing runtime jar: $RUNTIME_JAR" >&2
+    exit 1
   fi
   local resolved class_dir main_class
+  local compiler_flags=()
   # Support kestrel: module specifiers (e.g. kestrel:tools/test)
   if [[ "${1:-}" == kestrel:* ]]; then
     local spec="$1"
@@ -361,8 +402,10 @@ cmd_run() {
   class_dir=$(jvm_class_dir_for "$resolved")
   if [ -n "$clean_flag" ] || needs_compile_jvm "$resolved" "$class_dir"; then
     mkdir -p "$class_dir"
-    # shellcheck disable=SC2086
-    if ! (cd "$ROOT" && node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir" $refresh_flag $allow_http_flag $clean_flag); then
+    [ -n "$refresh_flag" ] && compiler_flags+=("$refresh_flag")
+    [ -n "$allow_http_flag" ] && compiler_flags+=("$allow_http_flag")
+    [ -n "$clean_flag" ] && compiler_flags+=("$clean_flag")
+    if ! compile_with_active_compiler "$resolved" "$class_dir" "${compiler_flags[@]-}"; then
       echo "kestrel: JVM compile failed for $resolved" >&2
       exit 1
     fi
@@ -403,8 +446,11 @@ cmd_dis() {
     echo "kestrel: javap not found" >&2
     exit 1
   fi
-  if compiler_build_needed; then
+  if ! selfhost_compiler_ready && compiler_build_needed; then
     build_compiler_jvm
+  elif [ ! -f "$RUNTIME_JAR" ]; then
+    echo "kestrel dis: missing runtime jar: $RUNTIME_JAR" >&2
+    exit 1
   fi
   local resolved
   resolved=$(resolve_script "$script")
@@ -416,7 +462,7 @@ cmd_dis() {
   class_dir=$(jvm_class_dir_for "$resolved")
   if needs_compile_jvm "$resolved" "$class_dir"; then
     mkdir -p "$class_dir"
-    if ! (cd "$ROOT" && node "$COMPILER_CLI" "$resolved" --target jvm -o "$class_dir"); then
+    if ! compile_with_active_compiler "$resolved" "$class_dir"; then
       echo "kestrel: JVM compile failed for $resolved" >&2
       exit 1
     fi
@@ -437,8 +483,11 @@ cmd_dis() {
 
 cmd_test() {
   ensure_tools
-  if compiler_build_needed; then
+  if ! selfhost_compiler_ready && compiler_build_needed; then
     build_compiler_jvm
+  elif [ ! -f "$RUNTIME_JAR" ]; then
+    echo "kestrel test: missing runtime jar: $RUNTIME_JAR" >&2
+    exit 1
   fi
   KESTREL_BIN="$ROOT/kestrel" exec "$ROOT/kestrel" run "kestrel:tools/test" "$@"
 }
@@ -543,19 +592,8 @@ cmd_lock() {
   exit 0
 }
 
-selfhost_cli_available() {
-  [ -f "$ROOT/stdlib/kestrel/tools/compiler/cli-entry.ks" ]
-}
-
 maybe_exec_selfhost_cli() {
-  [ "${KESTREL_CLI_TS_FALLBACK:-0}" = "1" ] && return 0
-  case "${1:-}" in
-    run|dis|build|test|fmt|doc|lock)
-      if selfhost_cli_available; then
-        exec env KESTREL_CLI_TS_FALLBACK=1 "$ROOT/kestrel" run "kestrel:tools/compiler/cli-entry" "$@"
-      fi
-      ;;
-  esac
+  return 0
 }
 
 # Main

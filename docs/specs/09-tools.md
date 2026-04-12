@@ -13,8 +13,9 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Name:** `kestrel`
 - **Usage:** `kestrel <command> [options]`
 - **Location:** A single entry point at the repository root (`./kestrel` or `scripts/kestrel`) exposes all commands. The root script delegates to `scripts/kestrel`.
-- **Topology:** `scripts/kestrel` prefers the Kestrel CLI entrypoint `kestrel:tools/compiler/cli-main` for command dispatch when available. It sets `KESTREL_CLI_TS_FALLBACK=1` for delegated calls to prevent recursive re-entry.
-- **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` to build and run. The TypeScript compiler remains the documented fallback bootstrap path and is used whenever `KESTREL_CLI_TS_FALLBACK=1` is set.
+- **Topology:** In `self-hosted` mode (see `kestrel status`), `scripts/kestrel` dispatches normal commands (`run`, `dis`, `build`, `test`, `fmt`, `doc`, `lock`) directly to bootstrap-generated self-hosted compiler classes in `.kestrel/bootstrap/self-hosted/`.
+- **Fallback:** In `bootstrap-required` mode, `scripts/kestrel` uses the TypeScript compiler path for normal command execution.
+- **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` for full toolchain flows. Normal post-bootstrap command execution does not invoke the bootstrap JAR.
 
 ---
 
@@ -60,6 +61,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 **Usage:** `kestrel build [--refresh] [--allow-http] [--status] [--clean] [script[.ks]]`
 
 - **Effect:** Builds the compiler so that it is up-to-date. If a script path is provided, also compiles that script to a `.class` file using the same cache and freshness rules as `run`.
+- **Mode behavior:** In `self-hosted` mode, this command is dispatched through self-hosted compiler classes by default. In `bootstrap-required` mode, the TypeScript path is used.
 - **Build steps:** `cd compiler && npm run build`. Compiler output is `compiler/dist/`.
 - **URL dependencies:** Same on-demand fetch behaviour as `run` (see §2.9). `--refresh` and `--allow-http` have the same meaning as for `run`.
 - **`--clean`:** Same as for `run`: delete all `.kti` incremental-cache files from the output directory before compiling. If no output directory is configured, silently ignored.
