@@ -43,10 +43,26 @@ export async fun run(s: Suite): Task<Unit> =
     });
 
     // ── DKType with full ADT body ───────────────────────────────────────────
-    group(sg, "DKType: full ADT body preserved verbatim", (g: Suite) => {
+    group(sg, "DKType: single-line ADT pretty-prints to multiline", (g: Suite) => {
       val body = "type CliOptionKind = Flag | Value(String)"
       val e = mkEntry(DKType, "CliOptionKind", body)
-      eq(g, "format", format(e), body)
+      eq(g, "format", format(e), "type CliOptionKind =\n    Flag\n  | Value(String)")
+    });
+
+    group(sg, "DKType: existing multiline body is preserved", (g: Suite) => {
+      val body = "type Color =\n  Red\n  | Green\n  | Blue"
+      val e = mkEntry(DKType, "Color", body)
+      eq(g, "format", format(e), "type Color =\n    Red\n  | Green\n  | Blue")
+    });
+
+    group(sg, "DKType: dense variant line is expanded to one variant per line", (g: Suite) => {
+      val body = "type TokenKind =\n  TkInt               | TkFloat             | TkStr"
+      val e = mkEntry(DKType, "TokenKind", body)
+      val out = format(e)
+      isTrue(g, "starts with head", Str.startsWith("type TokenKind =\n", out));
+      isTrue(g, "has first variant line", Str.contains("\n    TkInt\n", out));
+      isTrue(g, "has second variant line", Str.contains("\n  | TkFloat\n", out));
+      isTrue(g, "has third variant line", Str.contains("\n  | TkStr", out))
     });
 
     // ── DKType long body is NOT truncated ─────────────────────────────────────
@@ -55,7 +71,8 @@ export async fun run(s: Suite): Task<Unit> =
       val longBody = "type E = A | B | C | D | E | F | G | H | I | J | K | L | M | N | O | P | Q | R | S | T | U | V | W | X | Y | Z | AA"
       val e = mkEntry(DKType, "E", longBody)
       val out = format(e);
-      eq(g, "not truncated", out, longBody);
+      isTrue(g, "pretty-printed with line breaks", Str.contains("\n  | ", out));
+      isTrue(g, "keeps final variant", Str.contains("| AA", out));
       isFalse(g, "no ellipsis", Str.endsWith(" …", out))
     });
 

@@ -6,6 +6,7 @@ import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
 import * as Res from "kestrel:data/result"
+import * as Arr from "kestrel:data/array"
 
 /// A record field descriptor: field name, mutability flag, and field type.
 export type TypeField = { name: String, mut_: Bool, type_: InternalType }
@@ -143,42 +144,78 @@ fun envFreeVars(env: Dict<String, InternalType>): Dict<Int, Unit> = {
   Lst.foldl(vals, setEmpty(), (acc: Dict<Int, Unit>, t: InternalType) => setUnion(acc, freeVars(t)))
 }
 
-fun applySubstFields(subst: Dict<Int, InternalType>, fs: List<TypeField>): List<TypeField> =
-  Lst.map(fs, (f: TypeField) => { name = f.name, mut_ = f.mut_, type_ = applySubst(subst, f.type_) })
+fun applySubstFieldsWithSeen(subst: Dict<Int, InternalType>, seen: Dict<Int, Unit>, fs: List<TypeField>): List<TypeField> = {
+  var rest = fs;
+  val out: Array<TypeField> = Arr.new();
+  while (rest != []) {
+    match (rest) {
+      [] => ()
+      f :: tail => {
+        Arr.push(out, { name = f.name, mut_ = f.mut_, type_ = applySubstWithSeen(subst, seen, f.type_) });
+        rest := tail
+      }
+    }
+  };
+  Arr.toList(out)
+}
 
-fun applySubstRecord(subst: Dict<Int, InternalType>, fields: List<TypeField>, rowOpt: Option<InternalType>): InternalType = {
-  val fields2 = applySubstFields(subst, fields)
+fun applySubstRecordWithSeen(subst: Dict<Int, InternalType>, seen: Dict<Int, Unit>, fields: List<TypeField>, rowOpt: Option<InternalType>): InternalType = {
+  val fields2 = applySubstFieldsWithSeen(subst, seen, fields)
   val row2 =
     if (rowOpt == None)
       None
     else
-      Some(applySubst(subst, Opt.getOrElse(rowOpt, tUnit)))
+      Some(applySubstWithSeen(subst, seen, Opt.getOrElse(rowOpt, tUnit)))
   TRecord(fields2, row2)
 }
 
-fun applySubstMany(subst: Dict<Int, InternalType>, ts: List<InternalType>): List<InternalType> =
-  match (ts) {
-    [] => []
-    h :: rest => applySubst(subst, h) :: applySubstMany(subst, rest)
+fun applySubstManyWithSeen(subst: Dict<Int, InternalType>, seen: Dict<Int, Unit>, ts: List<InternalType>): List<InternalType> = {
+  var rest = ts;
+  val out: Array<InternalType> = Arr.new();
+  while (rest != []) {
+    match (rest) {
+      [] => ()
+      h :: tail => {
+        Arr.push(out, applySubstWithSeen(subst, seen, h));
+        rest := tail
+      }
+    }
+  };
+  Arr.toList(out)
+}
+
+fun applySubstWithSeen(subst: Dict<Int, InternalType>, seen: Dict<Int, Unit>, t: InternalType): InternalType =
+  match (t) {
+    TVar(id) => {
+      if (setMember(seen, id))
+        t
+      else {
+        val found = Dict.get(subst, id)
+        if (found == None)
+          t
+        else {
+          val next = Opt.getOrElse(found, t)
+          if (next == t)
+            t
+          else
+            applySubstWithSeen(subst, setInsert(seen, id), next)
+        }
+      }
+    }
+    TPrim(_) => t
+    TArrow(params, ret) => TArrow(applySubstManyWithSeen(subst, seen, params), applySubstWithSeen(subst, seen, ret))
+    TRecord(fields, rowOpt) => applySubstRecordWithSeen(subst, seen, fields, rowOpt)
+    TApp(name, args) => TApp(name, applySubstManyWithSeen(subst, seen, args))
+    TTuple(elements) => TTuple(applySubstManyWithSeen(subst, seen, elements))
+    TUnion(left, right) => TUnion(applySubstWithSeen(subst, seen, left), applySubstWithSeen(subst, seen, right))
+    TInter(left, right) => TInter(applySubstWithSeen(subst, seen, left), applySubstWithSeen(subst, seen, right))
+    TScheme(vars, body) => TScheme(vars, body)
+    TNamespace(_) => t
   }
 
 /// Apply a substitution map to all free variables in a type.
 export fun applySubst(subst: Dict<Int, InternalType>, t: InternalType): InternalType =
-  match (t) {
-    TVar(id) => {
-      val found = Dict.get(subst, id)
-      if (found == None) t else Opt.getOrElse(found, t)
-    }
-    TPrim(_) => t
-    TArrow(params, ret) => TArrow(applySubstMany(subst, params), applySubst(subst, ret))
-    TRecord(fields, rowOpt) => applySubstRecord(subst, fields, rowOpt)
-    TApp(name, args) => TApp(name, applySubstMany(subst, args))
-    TTuple(elements) => TTuple(applySubstMany(subst, elements))
-    TUnion(left, right) => TUnion(applySubst(subst, left), applySubst(subst, right))
-    TInter(left, right) => TInter(applySubst(subst, left), applySubst(subst, right))
-    TScheme(vars, body) => TScheme(vars, body)
-    TNamespace(_) => t
-  }
+  applySubstWithSeen(subst, setEmpty(), t)
 
 /// Quantify free vars in `t` that are not free in `env`.
 export fun generalize(env: Dict<String, InternalType>, t: InternalType): InternalType = {
@@ -261,44 +298,52 @@ fun occurs(id: Int, t: InternalType): Bool =
 
 /// Apply substitution and chase variable chains until fixed point.
 export fun applySubstFull(subst: Dict<Int, InternalType>, t: InternalType): InternalType =
-  match (t) {
-    TVar(id) => {
-      val found = Dict.get(subst, id)
-      if (found == None)
-        t
-      else {
-        val next = Opt.getOrElse(found, t)
-        if (next == t) t else applySubstFull(subst, next)
-      }
-    }
-    _ => applySubst(subst, t)
-  }
+  applySubst(subst, t)
 
 fun bindVar(subst: Dict<Int, InternalType>, id: Int, t: InternalType): Result<Dict<Int, InternalType>, (InternalType, InternalType)> =
-  if (t == TVar(id))
+  {
+    val normalized = applySubst(subst, t)
+    if (normalized == TVar(id))
     Ok(subst)
-  else if (occurs(id, t))
-    Err(mkUnifyError(TVar(id), t))
-  else
-    Ok(Dict.insert(subst, id, t))
-
-fun unifyMany(subst: Dict<Int, InternalType>, left: List<InternalType>, right: List<InternalType>): Result<Dict<Int, InternalType>, (InternalType, InternalType)> =
-  match (left) {
-    [] =>
-      match (right) {
-        [] => Ok(subst)
-        _ => Err(mkUnifyError(TTuple(left), TTuple(right)))
-      }
-    lh :: lt =>
-      match (right) {
-        [] => Err(mkUnifyError(TTuple(left), TTuple(right)))
-        rh :: rt =>
-          Res.andThen(
-            unify(subst, lh, rh),
-            (s2: Dict<Int, InternalType>) => unifyMany(s2, lt, rt)
-          )
-      }
+    else if (occurs(id, normalized))
+      Err(mkUnifyError(TVar(id), normalized))
+    else
+      Ok(Dict.insert(subst, id, normalized))
   }
+
+fun unifyMany(subst: Dict<Int, InternalType>, left: List<InternalType>, right: List<InternalType>): Result<Dict<Int, InternalType>, (InternalType, InternalType)> = {
+  var ls = left;
+  var rs = right;
+  var current = subst;
+  var failed: Option<(InternalType, InternalType)> = None;
+
+  while (failed == None & ls != [] & rs != []) {
+    match (ls) {
+      [] => ()
+      lh :: lt =>
+        match (rs) {
+          [] => ()
+          rh :: rt => {
+            val step = unify(current, lh, rh);
+            if (Res.isOk(step)) {
+              current := Res.getOrElse(step, current);
+              ls := lt;
+              rs := rt
+            } else {
+              failed := Some(mkUnifyError(lh, rh))
+            }
+          }
+        }
+    }
+  };
+
+  if (failed != None)
+    Err(Opt.getOrElse(failed, mkUnifyError(TTuple(left), TTuple(right))))
+  else if (ls == [] & rs == [])
+    Ok(current)
+  else
+    Err(mkUnifyError(TTuple(left), TTuple(right)))
+}
 
 fun unifyRecordFields(
   subst: Dict<Int, InternalType>,

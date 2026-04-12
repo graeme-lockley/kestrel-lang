@@ -186,6 +186,15 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(g, "has Blue",  Str.contains("Blue", sig))
     });
 
+    group(sg, "type signature stops before following export after comment", (g: Suite) => {
+      val src = "export type AstType =\n  A\n  | B\n  | C\n\n/// helper\nexport fun astTypeTag(t: AstType): String = \"\"\n";
+      val mod = extract(src, "test:mod");
+      val e   = entryNamed(mod.entries, "AstType");
+      val sig = match (e) { Some(x) => x.signature, None => "none" };
+      isFalse(g, "does not include next export", Str.contains("export fun astTypeTag", sig));
+      isTrue(g, "keeps final variant", Str.contains("| C", sig))
+    });
+
     // ── Record type shows all fields ──────────────────────────────────────────
     group(sg, "type signature: record body fully captured", (g: Suite) => {
       val src = "export type Point = {\n  x: Int,\n  y: Int\n}\n";

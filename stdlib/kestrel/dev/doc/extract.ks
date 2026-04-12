@@ -255,12 +255,31 @@ fun collectTypeSig(arr: Array<Token>, startIdx: Int, n: Int): String = {
         i := i + 1
       }
     } else if (t.kind == TkLineComment | t.kind == TkBlockComment) {
-      i := i + 1;  // skip inline comments
-      // Also skip the whitespace token immediately following the comment so
-      // that comment lines inside record bodies don't leave blank lines in
-      // the output (the whitespace *before* the comment is already in parts).
-      if (i < n & Arr.get(arr, i).kind == TkWs) {
-        i := i + 1
+      if (braceDepth == 0 & parenDepth == 0 & seenEquals) {
+        // At top-level after `=` comments can appear between ADT variants, but
+        // if the next significant token is not a variant continuation then the
+        // type declaration has ended.
+        val j    = skipTrivia(arr, i + 1, n);
+        val next = if (j < n) Arr.get(arr, j) else Arr.get(arr, n - 1);
+        val cont = (next.kind == TkOp & Str.equals(next.text, "|")) | next.kind == TkUpper;
+        if (cont) {
+          i := i + 1;
+          // Also skip trailing whitespace after continuation comments to avoid
+          // introducing blank lines in rendered signatures.
+          if (i < n & Arr.get(arr, i).kind == TkWs) {
+            i := i + 1
+          }
+        } else {
+          done := True
+        }
+      } else {
+        i := i + 1;  // skip inline comments
+        // Also skip the whitespace token immediately following the comment so
+        // that comment lines inside record bodies don't leave blank lines in
+        // the output (the whitespace *before* the comment is already in parts).
+        if (i < n & Arr.get(arr, i).kind == TkWs) {
+          i := i + 1
+        }
       }
     } else {
       if (t.kind == TkPunct & Str.equals(t.text, "{")) {
