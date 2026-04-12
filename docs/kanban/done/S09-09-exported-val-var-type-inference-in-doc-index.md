@@ -60,17 +60,17 @@ The current doc pipeline can format declaration signatures, but exported val/var
 
 ## Tasks
 
-- [ ] Update `stdlib/kestrel/dev/doc/extract.ks` to detect exported `val`/`var` declarations with missing type annotations and resolve an inferred type string via existing canonical typecheck/type-rendering utilities.
-- [ ] Add a stable fallback marker for unresolved exported binding inference and ensure extractor output remains deterministic and non-crashing.
-- [ ] Confirm `stdlib/kestrel/dev/doc/index.ks` preserves inferred/fallback signatures through `Sig.format`, `query`, and `toFullJson` payloads for `/api/index`.
-- [ ] Verify `stdlib/kestrel/dev/doc/render.ks` module and declaration rendering paths surface inferred/fallback signatures for exported `val`/`var` entries.
-- [ ] Add/extend doc extractor tests in `stdlib/kestrel/dev/doc/extract.test.ks` for inferred exported `val` and `var` signatures, plus unresolved-inference fallback behavior.
-- [ ] Add/extend index JSON tests in `stdlib/kestrel/dev/doc/index.test.ks` to assert `/api/index`-equivalent payload includes inferred/fallback signatures.
-- [ ] Add/extend render tests in `stdlib/kestrel/dev/doc/render.test.ks` to assert inferred signatures appear in HTML output for unannotated exported `val`/`var` declarations.
-- [ ] Update `docs/specs/06-typesystem.md` with a note that docs tooling presents inferred types for unannotated exported bindings using compiler inference.
-- [ ] Update `docs/specs/09-tools.md` (`kestrel doc` and `/api/index` sections) to document inferred binding signatures and unresolved fallback marker behavior.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Update `stdlib/kestrel/dev/doc/extract.ks` to detect exported `val`/`var` declarations with missing type annotations and resolve an inferred type string via existing canonical typecheck/type-rendering utilities.
+- [x] Add a stable fallback marker for unresolved exported binding inference and ensure extractor output remains deterministic and non-crashing.
+- [x] Confirm `stdlib/kestrel/dev/doc/index.ks` preserves inferred/fallback signatures through `Sig.format`, `query`, and `toFullJson` payloads for `/api/index`.
+- [x] Verify `stdlib/kestrel/dev/doc/render.ks` module and declaration rendering paths surface inferred/fallback signatures for exported `val`/`var` entries.
+- [x] Add/extend doc extractor tests in `stdlib/kestrel/dev/doc/extract.test.ks` for inferred exported `val` and `var` signatures, plus unresolved-inference fallback behavior.
+- [x] Add/extend index JSON tests in `stdlib/kestrel/dev/doc/index.test.ks` to assert `/api/index`-equivalent payload includes inferred/fallback signatures.
+- [x] Add/extend render tests in `stdlib/kestrel/dev/doc/render.test.ks` to assert inferred signatures appear in HTML output for unannotated exported `val`/`var` declarations.
+- [x] Update `docs/specs/06-typesystem.md` with a note that docs tooling presents inferred types for unannotated exported bindings using compiler inference.
+- [x] Update `docs/specs/09-tools.md` (`kestrel doc` and `/api/index` sections) to document inferred binding signatures and unresolved fallback marker behavior.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -82,5 +82,11 @@ The current doc pipeline can format declaration signatures, but exported val/var
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/06-typesystem.md` - document that docs browser signatures for unannotated exported bindings are produced from compiler inference output (including limitations where inference cannot resolve).
-- [ ] `docs/specs/09-tools.md` - update `kestrel doc` and `/api/index` behavior to specify inferred exported `val`/`var` signatures and the unresolved fallback marker.
+- [x] `docs/specs/06-typesystem.md` - document that docs browser signatures for unannotated exported bindings are produced from compiler inference output (including limitations where inference cannot resolve).
+- [x] `docs/specs/09-tools.md` - update `kestrel doc` and `/api/index` behavior to specify inferred exported `val`/`var` signatures and the unresolved fallback marker.
+
+## Build notes
+
+- 2026-04-12: Added canonical inference in `kestrel:dev/doc/extract` by parsing and typechecking source once per module, then enriching unannotated exported `val`/`var` signatures with `Ty.typeToString` output.
+- 2026-04-12: Added stable fallback marker `<inference-unavailable>` when parser/typechecker inference metadata is unavailable; this keeps docs generation deterministic and non-crashing.
+- 2026-04-12: Initial fallback tests used a type-error expression (`1 + True`) but typecheck still emitted a concrete type for that binding; switched fallback fixtures to parse-invalid exports so the inference-unavailable path is exercised explicitly.

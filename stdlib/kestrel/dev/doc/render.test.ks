@@ -19,6 +19,12 @@ fun mod2(): DocModule =
 fun modLongFun(): DocModule =
   mkMod("kestrel:data/long", "/// Long function.\nexport fun reallyLongFunctionName(parameterOne: SomeVeryLongTypeName, parameterTwo: AnotherLongTypeName): ResultTypeWithLongName = todo()\n")
 
+fun modInferredBindings(): DocModule =
+  mkMod("kestrel:data/infer", "export val answer = 42\nexport var counter = 0\n")
+
+fun modFallbackBinding(): DocModule =
+  mkMod("kestrel:data/fallback", "export val broken = (\n")
+
 export async fun run(s: Suite): Task<Unit> =
   group(s, "kestrel:dev/doc/render", (sg: Suite) => {
 
@@ -58,6 +64,17 @@ export async fun run(s: Suite): Task<Unit> =
       val out = renderModule(mod1())
       isTrue(g, "has kestrel code",  Str.contains("class=\"kestrel\"", out));
       isTrue(g, "has fun add sig",   Str.contains("fun add", out))
+    });
+
+    group(sg, "renderModule shows inferred val/var signatures", (g: Suite) => {
+      val out = renderModule(modInferredBindings())
+      isTrue(g, "has inferred val signature", Str.contains("val answer: Int", out));
+      isTrue(g, "has inferred var signature", Str.contains("var counter: Int", out))
+    });
+
+    group(sg, "renderModule shows fallback signature marker when inference fails", (g: Suite) => {
+      val out = renderModule(modFallbackBinding())
+      isTrue(g, "has fallback marker", Str.contains("&lt;inference-unavailable&gt;", out))
     });
 
     group(sg, "renderModule renders short function signatures as multiline", (g: Suite) => {

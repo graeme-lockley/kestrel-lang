@@ -10,10 +10,14 @@
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
 import * as Arr from "kestrel:data/array"
+import * as Dict from "kestrel:data/dict"
 import * as Res from "kestrel:data/result"
 import * as Lex from "kestrel:dev/parser/lexer"
+import { parseFromList } from "kestrel:dev/parser/parser"
 import { Token, TkWs, TkLineComment, TkBlockComment, TkKw, TkOp, TkPunct,
          TkIdent, TkUpper, TkEof } from "kestrel:dev/parser/token"
+import * as TC from "kestrel:dev/typecheck/typecheck"
+import * as Ty from "kestrel:dev/typecheck/types"
 import { readText, NotFound, PermissionDenied, IoError } from "kestrel:io/fs"
 
 // ── ADTs ─────────────────────────────────────────────────────────────────────
@@ -43,6 +47,9 @@ export type DocModule = {
   entries:      List<DocEntry>  // one per exported declaration, in order
 }
 
+// Fallback marker for inferred binding signatures when inference is unavailable.
+val inferredTypeFallback = "<inference-unavailable>"
+
 // ── Token helpers ─────────────────────────────────────────────────────────────
 
 fun isTriviaToken(t: Token): Bool =
@@ -62,6 +69,42 @@ fun containsBlankLine(t: Token): Bool =
 
 fun containsNewline(t: Token): Bool =
   t.kind == TkWs & Str.contains("\n", t.text)
+
+fun hasExplicitTypeAnnotation(sig: String): Bool =
+  Str.contains(":", sig)
+
+fun inferExportTypeStrings(source: String): Dict<String, String> =
+  match (parseFromList(Lex.lex(source))) {
+    Err(_) => Dict.emptyStringDict()
+    Ok(program) => {
+      Ty.resetVarId();
+      val tc = TC.typecheck(program, {
+        importBindings = None,
+        typeAliasBindings = None,
+        importOpaqueTypes = None,
+        sourceFile = "<doc-extract>"
+      });
+      Dict.map(tc.exports.items, (_name: String, t: Ty.InternalType) => Ty.typeToString(t))
+    }
+  }
+
+fun applyInferredBindingType(entry: DocEntry, inferredTypes: Dict<String, String>): DocEntry = {
+  val shouldInfer = (entry.kind == DKVal | entry.kind == DKVar) & !hasExplicitTypeAnnotation(entry.signature);
+  if (!shouldInfer)
+    entry
+  else {
+    val inferredText = match (Dict.get(inferredTypes, entry.name)) {
+      Some(s) => s
+      None    => inferredTypeFallback
+    };
+    {
+      name = entry.name,
+      kind = entry.kind,
+      signature = "${entry.signature}: ${inferredText}",
+      doc = entry.doc
+    }
+  }
+}
 
 // ── Text helpers ──────────────────────────────────────────────────────────────
 
@@ -340,6 +383,7 @@ fun tryExtractEntry(arr: Array<Token>, exportIdx: Int, doc: String, n: Int): (Op
 
 /// extract: produce a DocModule from a raw Kestrel source string.
 export fun extract(source: String, spec: String): DocModule = {
+  val inferredTypes = inferExportTypeStrings(source);
   val tokens = Lex.lex(source);
   val arr    = Arr.fromList(tokens);
   val n      = Arr.length(arr);
@@ -404,7 +448,7 @@ export fun extract(source: String, spec: String): DocModule = {
       val extracted = tryExtractEntry(arr, scan, docStr, n);
       val entryOpt  = extracted.0;
       match (entryOpt) {
-        Some(entry) => Arr.push(entries, entry),
+        Some(entry) => Arr.push(entries, applyInferredBindingType(entry, inferredTypes)),
         None        => ()
       };
       pendingDocLines := Arr.new();

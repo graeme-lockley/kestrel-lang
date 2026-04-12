@@ -85,12 +85,36 @@ export async fun run(s: Suite): Task<Unit> =
       eq(g, "kind DKVal", match (pi) { Some(e) => e.kind == DKVal, None => False }, True)
     });
 
+    group(sg, "export val without annotation includes inferred signature type", (g: Suite) => {
+      val src = "export val answer = 42\n";
+      val mod = extract(src, "test:mod");
+      val answer = entryNamed(mod.entries, "answer");
+      val sig = match (answer) { Some(e) => e.signature, None => "none" };
+      eq(g, "inferred val signature", sig, "val answer: Int")
+    });
+
     // ── export var ────────────────────────────────────────────────────────────
     group(sg, "export var produces DKVar entry", (g: Suite) => {
       val src = "export var counter: Int = 0\n";
       val mod = extract(src, "test:mod");
       val c = entryNamed(mod.entries, "counter");
       eq(g, "kind DKVar", match (c) { Some(e) => e.kind == DKVar, None => False }, True)
+    });
+
+    group(sg, "export var without annotation includes inferred signature type", (g: Suite) => {
+      val src = "export var counter = 0\n";
+      val mod = extract(src, "test:mod");
+      val c = entryNamed(mod.entries, "counter");
+      val sig = match (c) { Some(e) => e.signature, None => "none" };
+      eq(g, "inferred var signature", sig, "var counter: Int")
+    });
+
+    group(sg, "inference fallback marker when typecheck cannot resolve export", (g: Suite) => {
+      val src = "export val broken = (\n";
+      val mod = extract(src, "test:mod");
+      val broken = entryNamed(mod.entries, "broken");
+      val sig = match (broken) { Some(e) => e.signature, None => "none" };
+      eq(g, "fallback marker", sig, "val broken: <inference-unavailable>")
     });
 
     // ── export exception ──────────────────────────────────────────────────────

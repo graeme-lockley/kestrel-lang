@@ -190,6 +190,8 @@ kestrel doc [--port PORT] [--project-root PATH]
 
 Starts a local HTTP documentation browser server powered by `stdlib/kestrel/tools/doc.ks`. On startup the server discovers and extracts doc-comments from all stdlib `kestrel:*` modules and any project `.ks` files found under `--project-root`, builds a search index, and begins serving HTML pages on the specified port.
 
+For exported bindings, doc extraction includes inferred type text for unannotated `export val` / `export var` declarations. The generated signatures are surfaced consistently across HTML pages and JSON APIs. If inference is unavailable for a specific binding, the signature uses the stable marker `<inference-unavailable>` rather than failing extraction.
+
 **Flags:**
 
 | Flag | Long | Description |
@@ -211,6 +213,8 @@ Starts a local HTTP documentation browser server powered by `stdlib/kestrel/tool
 | `GET` | `/api/reload-token` | Plain-text monotonic integer; increments after each live reload |
 | `GET` | `/docs/static/style.css` | Embedded CSS for the documentation browser |
 | `GET` | `/docs/static/search.js` | Embedded JavaScript for the search widget and live-reload polling |
+
+`/api/index` entry payloads always include `signature` strings. For unannotated exported `val`/`var`, `signature` contains the inferred type text; when inference cannot be resolved, `signature` includes `<inference-unavailable>` for that binding.
 
 **Module discovery:**
 

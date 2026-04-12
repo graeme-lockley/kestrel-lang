@@ -1,7 +1,7 @@
 // Tests for kestrel:dev/doc/index
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 import { build, query, toSearchJson, toFullJson, DocIndex, SearchResult } from "kestrel:dev/doc/index"
-import { DocEntry, DocModule, DocKind, DKFun, DKType, DKVal, DKVar } from "kestrel:dev/doc/extract"
+import { DocEntry, DocModule, DocKind, DKFun, DKType, DKVal, DKVar, extract } from "kestrel:dev/doc/extract"
 import * as List from "kestrel:data/list"
 import * as Str  from "kestrel:data/string"
 
@@ -247,6 +247,21 @@ export async fun run(s: Suite): Task<Unit> =
       val json = toFullJson(idx);
       isTrue(g, "has entries", Str.contains("entries", json));
       isTrue(g, "has foo entry", Str.contains("foo", json))
+    });
+
+    group(sg, "toFullJson: includes inferred val/var signature text", (g: Suite) => {
+      val mod = extract("export val answer = 42\nexport var counter = 0\n", "pkg:infer");
+      val idx = build([mod]);
+      val json = toFullJson(idx);
+      isTrue(g, "has inferred val signature", Str.contains("val answer: Int", json));
+      isTrue(g, "has inferred var signature", Str.contains("var counter: Int", json))
+    });
+
+    group(sg, "toFullJson: includes fallback marker when inference fails", (g: Suite) => {
+      val mod = extract("export val broken = (\n", "pkg:fallback");
+      val idx = build([mod]);
+      val json = toFullJson(idx);
+      isTrue(g, "has fallback signature marker", Str.contains("<inference-unavailable>", json))
     })
 
   })
