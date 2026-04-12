@@ -4,15 +4,15 @@ Version: 1.0
 
 ---
 
-This document specifies the Kestrel bootstrap system: the process by which the TypeScript compiler produces a self-hosted Kestrel compiler capable of compiling itself and all user programs, and the runtime gates that enforce self-hosted mode.
+This document specifies the Kestrel bootstrap system: the process by which the TypeScript compiler produces bootstrap artifacts, `kestrel bootstrap` installs self-hosted compiler classes, and runtime gates enforce self-hosted mode for normal command execution.
 
 ---
 
 ## 1. Overview
 
-Kestrel is a self-hosted language: the compiler is written in Kestrel and compiles to JVM bytecode. To break the chicken-and-egg cycle, a TypeScript compiler bootstraps the first generation of self-hosted compiler classes. After bootstrap, all normal CLI commands (`run`, `build`, `test`, `dis`) use the self-hosted compiler exclusively.
+Kestrel is a self-hosted language: the compiler is written in Kestrel and compiles to JVM bytecode. To break the chicken-and-egg cycle, a TypeScript compiler bootstraps the first generation of self-hosted compiler classes. After bootstrap, normal CLI commands (`run`, `build`, `test`, `dis`) require installed self-hosted compiler artifacts.
 
-**Invariant:** The TypeScript compiler (`compiler/dist/cli.js`) is invoked **only** during bootstrap flows. Normal steady-state command execution never touches TypeScript.
+**Current invariant:** `kestrel bootstrap` installs classes from the bootstrap JAR and does not invoke the TypeScript compiler directly. Normal command compilation is currently orchestrated through `compile_with_active_compiler` in `scripts/kestrel` and still invokes `compiler/dist/cli.js`.
 
 ### 1.1 Architecture Stages
 
@@ -40,6 +40,7 @@ Kestrel is a self-hosted language: the compiler is written in Kestrel and compil
              ▼
 ┌─────────────────────────┐
 │  User Programs           │  run, build, test, dis
+│  (gated by self-hosted)  │
 └─────────────────────────┘
 ```
 
@@ -184,7 +185,8 @@ After passing the gate, `compile_with_active_compiler` compiles scripts using th
 node compiler/dist/cli.js <script> --target jvm -o <jvm-cache>
 ```
 
-The self-hosted compiler classes (`Cli_main`) handle direct dispatch for commands like `build`, where the self-hosted `cli-main.ks` calls `Driver.compileFile()` internally. The shell wrapper orchestrates this by invoking `java -cp <runtime>:<jvm-cache> Cli_main <command> <args>` for test-compiler-bootstrap parity checks.
+The self-hosted compiler classes (`Cli_main`) are installed and gate command availability. They are also exercised directly by bootstrap-parity tooling (for example `scripts/test-compiler-bootstrap`) via:
+`java -cp <runtime>:<classes> Cli_main <command> <args>`.
 
 ---
 

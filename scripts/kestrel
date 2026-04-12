@@ -12,6 +12,8 @@ done
 ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 COMPILER="$ROOT/compiler"
 COMPILER_CLI="$COMPILER/dist/cli.js"
+TS_COMPILER_GATE_FLAG="--allow-ts-compiler"
+ALLOW_TS_COMPILER=0
 # Cache root: .class files under ~/.kestrel/jvm (clean: rm -rf ~/.kestrel)
 JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
 RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
@@ -31,6 +33,11 @@ usage() {
   echo "  lock  <lockfile>  Update URL lockfile (self-hosted CLI scaffold)" >&2
   exit 1
 }
+
+if [ "${1:-}" = "$TS_COMPILER_GATE_FLAG" ]; then
+  ALLOW_TS_COMPILER=1
+  shift
+fi
 
 run_usage() {
   echo "Usage: kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] [--clean] <script[.ks]> [args...]"
@@ -250,7 +257,37 @@ compile_with_active_compiler() {
   local out_dir="$2"
   shift 2
 
-  (cd "$ROOT" && node "$COMPILER_CLI" "$entry_source" --target jvm -o "$out_dir" "$@")
+  (cd "$ROOT" && "$ROOT/kestrel" "$TS_COMPILER_GATE_FLAG" __ts-compile "$entry_source" "$out_dir" "$@")
+}
+
+cmd_ts_compile() {
+  if [ "$ALLOW_TS_COMPILER" -ne 1 ]; then
+    echo "kestrel __ts-compile: missing required gate flag $TS_COMPILER_GATE_FLAG" >&2
+    exit 1
+  fi
+
+  if [ $# -lt 2 ]; then
+    echo "kestrel __ts-compile: usage: kestrel $TS_COMPILER_GATE_FLAG __ts-compile <entry.ks> <out-dir> [compiler-args...]" >&2
+    exit 1
+  fi
+
+  local entry_source="$1"
+  local out_dir="$2"
+  shift 2
+
+  if [ ! -f "$COMPILER_CLI" ]; then
+    echo "kestrel __ts-compile: missing TypeScript compiler CLI: $COMPILER_CLI" >&2
+    echo "kestrel __ts-compile: run cd compiler && npm run build" >&2
+    exit 1
+  fi
+
+  if [ ! -f "$entry_source" ]; then
+    echo "kestrel __ts-compile: entry source not found: $entry_source" >&2
+    exit 1
+  fi
+
+  mkdir -p "$out_dir"
+  exec node "$COMPILER_CLI" "$entry_source" --target jvm -o "$out_dir" "$@"
 }
 
 selfhost_compiler_ready() {
@@ -491,25 +528,28 @@ cmd_test() {
 
 cmd_bootstrap() {
   ensure_tools
+  if ! command -v jar &>/dev/null; then
+    echo "kestrel bootstrap: jar tool not found" >&2
+    exit 1
+  fi
   if [ ! -f "$RUNTIME_JAR" ]; then
     echo "kestrel bootstrap: missing runtime jar: $RUNTIME_JAR" >&2
     echo "kestrel bootstrap: run ./kestrel build to generate runtime artifacts" >&2
     exit 1
   fi
 
-  if [ ! -f "$COMPILER_CLI" ]; then
-    echo "kestrel bootstrap: missing TypeScript compiler CLI: $COMPILER_CLI" >&2
-    echo "kestrel bootstrap: run cd compiler && npm run build" >&2
+  if [ ! -f "$MAVEN_BOOTSTRAP_JAR" ]; then
+    echo "kestrel bootstrap: missing bootstrap compiler JAR: $MAVEN_BOOTSTRAP_JAR" >&2
+    echo "kestrel bootstrap: run ./scripts/build-bootstrap-jar.sh" >&2
     exit 1
   fi
 
-  local cli_entry_path="$ROOT/stdlib/kestrel/tools/compiler/cli-entry.ks"
   local jvm_cache_abs
   jvm_cache_abs="$(cd "$JVM_CACHE" 2>/dev/null && pwd || echo "$JVM_CACHE")"
   mkdir -p "$jvm_cache_abs"
 
-  if ! (cd "$ROOT" && node "$COMPILER_CLI" "$cli_entry_path" --target jvm -o "$jvm_cache_abs"); then
-    echo "kestrel bootstrap: compilation failed" >&2
+  if ! (cd "$jvm_cache_abs" && jar xf "$MAVEN_BOOTSTRAP_JAR"); then
+    echo "kestrel bootstrap: failed to extract bootstrap compiler JAR" >&2
     exit 1
   fi
 
@@ -522,7 +562,8 @@ cmd_bootstrap() {
     exit 1
   fi
 
-  echo "kestrel bootstrap: self-hosted compiler compiled successfully"
+  echo "kestrel bootstrap: self-hosted compiler classes installed successfully"
+  echo "  source jar: $MAVEN_BOOTSTRAP_JAR"
   echo "  output classes: $jvm_cache_abs"
 }
 
@@ -568,6 +609,7 @@ maybe_exec_selfhost_cli() {
 # Main
 maybe_exec_selfhost_cli "$@"
 case "${1:-}" in
+  __ts-compile) shift; cmd_ts_compile "$@" ;;
   run)   shift; cmd_run "$@" ;;
   dis)   shift; cmd_dis "$@" ;;
   build) shift; cmd_build "$@" ;;

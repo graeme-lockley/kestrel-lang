@@ -60,7 +60,7 @@ echo "[bootstrap-jar] building TypeScript compiler"
 (cd "$COMPILER_DIR" && npm run build >/dev/null)
 
 echo "[bootstrap-jar] compiling executable compiler entrypoint"
-node "$COMPILER_CLI" "$ENTRY" --target jvm -o "$CLASSES_DIR"
+"$ROOT/kestrel" --allow-ts-compiler __ts-compile "$ENTRY" "$CLASSES_DIR"
 
 echo "[bootstrap-jar] packaging JAR"
 rm -f "$JAR_PATH"

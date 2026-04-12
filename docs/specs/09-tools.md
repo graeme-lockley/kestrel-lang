@@ -13,7 +13,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Name:** `kestrel`
 - **Usage:** `kestrel <command> [options]`
 - **Location:** A single entry point at the repository root (`./kestrel` or `scripts/kestrel`) exposes all commands. The root script delegates to `scripts/kestrel`.
-- **Topology:** In `self-hosted` mode (see `kestrel status`), `scripts/kestrel` gates normal commands (`run`, `dis`, `build`, `test`, `fmt`, `doc`, `lock`) on the presence of self-hosted compiler classes in `~/.kestrel/jvm/` by default. Set `KESTREL_JVM_CACHE` to override the JVM class cache root. See [11-bootstrap.md](11-bootstrap.md) for the full bootstrap architecture.
+- **Topology:** In `self-hosted` mode (see `kestrel status`), `scripts/kestrel` gates normal commands (`run`, `dis`, `build`, `test`, `fmt`, `doc`, `lock`) on the presence of self-hosted compiler classes in `~/.kestrel/jvm/` by default. Set `KESTREL_JVM_CACHE` to override the JVM class cache root. Script compilation is currently orchestrated via `compiler/dist/cli.js` (`compile_with_active_compiler`) after the gate passes. See [11-bootstrap.md](11-bootstrap.md) for full bootstrap architecture details.
 - **Fallback:** Normal command execution does not fall back to an unbootstrapped state. Users must restore self-hosted artifacts with `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
 - **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` for full toolchain flows.
 
@@ -61,7 +61,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 **Usage:** `kestrel build [--refresh] [--allow-http] [--status] [--clean] [script[.ks]]`
 
 - **Effect:** Builds the compiler so that it is up-to-date. If a script path is provided, also compiles that script to a `.class` file using the same cache and freshness rules as `run`.
-- **Mode behavior:** In `self-hosted` mode, this command is dispatched through self-hosted compiler classes by default. In `bootstrap-required` mode, script compilation fails with a remediation hint until bootstrap artifacts are restored.
+- **Mode behavior:** In `self-hosted` mode, this command requires self-hosted compiler artifacts to be present before script compilation is attempted. In `bootstrap-required` mode, script compilation fails with a remediation hint until bootstrap artifacts are restored.
 - **Build steps:** `cd compiler && npm run build`. Compiler output is `compiler/dist/`.
 - **URL dependencies:** Same on-demand fetch behaviour as `run` (see §2.9). `--refresh` and `--allow-http` have the same meaning as for `run`.
 - **`--clean`:** Same as for `run`: delete all `.kti` incremental-cache files from the output directory before compiling. If no output directory is configured, silently ignored.

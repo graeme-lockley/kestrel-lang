@@ -15,10 +15,11 @@ Establish a deterministic bootstrap flow where the TypeScript compiler produces 
 3. [S15-03-compiler-mode-and-provenance-state.md](../../done/S15-03-compiler-mode-and-provenance-state.md) — ✅ Add explicit compiler mode/provenance state and visible status reporting.
 4. [S15-04-default-cli-self-hosted-compiler-path.md](../../done/S15-04-default-cli-self-hosted-compiler-path.md) — ✅ Switch default `build`/`run`/`test` compile paths to self-hosted classes and prevent bootstrap-JAR use in normal flow.
 5. [S15-05-ci-and-spec-bootstrap-handoff-enforcement.md](../../done/S15-05-ci-and-spec-bootstrap-handoff-enforcement.md) — ✅ Enforce bootstrap handoff in CI and finalize specs/docs for operational use.
+6. [S15-06-bootstrap-spec-implementation-reconciliation.md](../../done/S15-06-bootstrap-spec-implementation-reconciliation.md) — ✅ Reconcile bootstrap/spec wording and align bootstrap command implementation to JAR-based seeding.
 
 ## Dependencies
 
-- E14 Self-Hosting Compiler (in progress) - requires stable self-hosted compiler entrypoints and bootstrap verification baseline.
+- E14 Self-Hosting Compiler (done) - provided stable self-hosted compiler entrypoints and bootstrap verification baseline.
 - E13 Stdlib Compiler Readiness (done) - required stdlib/runtime primitives for compiler tooling.
 - Existing CLI/runtime integration in scripts and JVM runtime process bridge.
 

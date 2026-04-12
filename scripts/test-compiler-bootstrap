@@ -109,7 +109,7 @@ echo "[bootstrap-test] building TypeScript compiler and JVM runtime"
 (cd "$ROOT/runtime/jvm" && bash build.sh >/dev/null)
 
 echo "[bootstrap-test] 1/4 TypeScript compiler -> stage0 compiler classes"
-node "$COMPILER_CLI" "$SELFHOST_EXEC_ENTRY" --target jvm -o "$STAGE0_OUT"
+"$ROOT/kestrel" --allow-ts-compiler __ts-compile "$SELFHOST_EXEC_ENTRY" "$STAGE0_OUT"
 
 echo "[bootstrap-test] 2/4 stage0 compiler -> path1 compiler classes"
 (
