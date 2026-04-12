@@ -17,6 +17,7 @@ import { collectFoldingRanges } from './providers/folding';
 import { buildHover } from './providers/hover';
 import { collectInlayHints } from './providers/inlayHints';
 import { collectSemanticTokens, semanticTokenLegend } from './providers/semanticTokens';
+import { provideSignatureHelp } from './providers/signatureHelp';
 import { collectDocumentSymbols } from './providers/symbols';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -57,6 +58,9 @@ connection.onInitialize((_params: InitializeParams) => {
       completionProvider: {
         triggerCharacters: ['.'],
       },
+      signatureHelpProvider: {
+        triggerCharacters: ['(', ','],
+      },
       semanticTokensProvider: {
         full: true,
         legend: semanticTokenLegend,
@@ -80,6 +84,14 @@ connection.onCompletion((params) => {
     return [];
   }
   return collectCompletions(doc.ast);
+});
+
+connection.onSignatureHelp(async (params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return null;
+  }
+  return provideSignatureHelp(doc.ast, doc.source, params.position);
 });
 
 connection.languages.semanticTokens.on(async (params) => {

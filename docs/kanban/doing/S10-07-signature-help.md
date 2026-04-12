@@ -58,11 +58,11 @@ No signature help provider exists. The compiler's typecheck result makes `getInf
 
 ## Tasks
 
-- [ ] Add `vscode-kestrel/src/server/providers/signatureHelp.ts` that finds call context, resolves callee name to a same-file `FunDecl`, and builds `SignatureHelp` payload.
-- [ ] Compute `activeParameter` index from comma count inside the current argument list.
-- [ ] Register signature-help capability and handler in `vscode-kestrel/src/server/server.ts` with trigger chars `(` and `,`.
-- [ ] Add `vscode-kestrel/test/unit/signatureHelp.test.ts` for first/second parameter activation and null/no-callee cases.
-- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+- [x] Add `vscode-kestrel/src/server/providers/signatureHelp.ts` that finds call context, resolves callee name to a same-file `FunDecl`, and builds `SignatureHelp` payload.
+- [x] Compute `activeParameter` index from comma count inside the current argument list.
+- [x] Register signature-help capability and handler in `vscode-kestrel/src/server/server.ts` with trigger chars `(` and `,`.
+- [x] Add `vscode-kestrel/test/unit/signatureHelp.test.ts` for first/second parameter activation and null/no-callee cases.
+- [x] Run `cd vscode-kestrel && npm run compile && npm test`.
 
 ## Tests to add
 
@@ -73,5 +73,15 @@ No signature help provider exists. The compiler's typecheck result makes `getInf
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — verify function declaration/call syntax assumptions used by signature help; no textual spec change expected.
-- [ ] `docs/specs/09-tools.md` — no change in this story; capability docs remain in S10-09.
+- [x] `docs/specs/01-language.md` — verified function declaration/call syntax assumptions used by signature help; no textual change required.
+- [x] `docs/specs/09-tools.md` — no change in this story; capability docs remain in S10-09.
+
+## Build notes
+
+- 2026-04-12: Started implementation.
+- 2026-04-12: Added `signatureHelp` provider and wired `signatureHelpProvider` + `onSignatureHelp` in the LSP server.
+- 2026-04-12: Added unit tests for active-parameter progression and null-return edge cases.
+- 2026-04-12: Verification status:
+	- `cd vscode-kestrel && npm run compile && npm test` passed.
+	- `cd compiler && npm run build && npm test` passed.
+	- `./scripts/kestrel test` is currently blocked in this workspace by a pre-existing runtime issue (`[kestrel] warning: exiting with 5 async task(s) still in flight (quiescence timeout)`), followed by Node heap OOM during the test runner compile phase.
