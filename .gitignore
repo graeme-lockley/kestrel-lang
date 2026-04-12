@@ -27,5 +27,6 @@ vscode-kestrel/*.vsix
 
 # OS
 .DS_Store
+.kestrel/
 .kestrel_test_runner.ks
 .kestrel_test_runner.ks.new
