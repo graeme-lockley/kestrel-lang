@@ -14,7 +14,7 @@ Establish a deterministic bootstrap flow where the TypeScript compiler produces 
 2. [S15-02-kestrel-bootstrap-command.md](../../done/S15-02-kestrel-bootstrap-command.md) — ✅ Add `./kestrel bootstrap` to seed self-hosted compiler classes from the bootstrap JAR.
 3. [S15-03-compiler-mode-and-provenance-state.md](../../done/S15-03-compiler-mode-and-provenance-state.md) — ✅ Add explicit compiler mode/provenance state and visible status reporting.
 4. [S15-04-default-cli-self-hosted-compiler-path.md](../../done/S15-04-default-cli-self-hosted-compiler-path.md) — ✅ Switch default `build`/`run`/`test` compile paths to self-hosted classes and prevent bootstrap-JAR use in normal flow.
-5. [S15-05-ci-and-spec-bootstrap-handoff-enforcement.md](../../unplanned/S15-05-ci-and-spec-bootstrap-handoff-enforcement.md) — Enforce bootstrap handoff in CI and finalize specs/docs for operational use.
+5. [S15-05-ci-and-spec-bootstrap-handoff-enforcement.md](../../planned/S15-05-ci-and-spec-bootstrap-handoff-enforcement.md) — Enforce bootstrap handoff in CI and finalize specs/docs for operational use.
 
 ## Dependencies
 
