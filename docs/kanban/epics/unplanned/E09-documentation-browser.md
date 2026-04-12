@@ -18,6 +18,10 @@ Delivers an interactive, web-based documentation browser for Kestrel developers 
 6. [S09-06-file-watching-primitive.md](../../done/S09-06-file-watching-primitive.md) ✓
 7. [S09-07-tools-doc-server.md](../../done/S09-07-tools-doc-server.md) ✓
 8. [S09-08-live-reload-integration.md](../../done/S09-08-live-reload-integration.md) ✓
+9. [S09-09-exported-val-var-type-inference-in-doc-index.md](../../unplanned/S09-09-exported-val-var-type-inference-in-doc-index.md)
+10. [S09-10-kestrel-syntax-colorization-for-declaration-signatures.md](../../unplanned/S09-10-kestrel-syntax-colorization-for-declaration-signatures.md)
+11. [S09-11-cross-module-hyperlinks-for-declarations.md](../../unplanned/S09-11-cross-module-hyperlinks-for-declarations.md)
+12. [S09-12-index-menu-layout-and-horizontal-scroll.md](../../unplanned/S09-12-index-menu-layout-and-horizontal-scroll.md)
 
 **Notes on parallelism:**
 - S09-01 must come first (defines the `DocModule` / `DocEntry` ADT used by everything else).
@@ -26,6 +30,10 @@ Delivers an interactive, web-based documentation browser for Kestrel developers 
 - S09-06 is fully independent of S09-01–S09-05 and can be built at any point.
 - S09-07 requires S09-01 through S09-05 (all converge here).
 - S09-08 requires S09-06 and S09-07.
+- S09-09 requires S09-03 and S09-07 (typed declaration metadata must be available in the doc index).
+- S09-10 requires S09-04 and S09-07 (rendered declaration signatures must already be part of the HTML output).
+- S09-11 requires S09-05 and S09-07 (search/index metadata and route handling are reused for cross-module declaration links).
+- S09-12 requires S09-04 (UI/layout follow-up on the generated docs index view).
 
 ## Dependencies
 
