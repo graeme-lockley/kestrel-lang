@@ -126,6 +126,26 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Failure diagnostics:** Emits explicit errors for missing runtime artifact, missing bootstrap JAR, and bootstrap compilation failures.
 - **Idempotence:** Repeated invocations refresh bootstrap output classes deterministically in place.
 
+### 2.3.4 status
+
+**Usage:** `kestrel status`
+
+- **Purpose:** Report active compiler mode and bootstrap provenance state.
+- **Mode values:**
+  - `self-hosted` — bootstrap state file exists and points to valid self-hosted compiler classes.
+  - `bootstrap-required` — bootstrap state missing/invalid or output classes unavailable.
+- **State file:** `.kestrel/bootstrap/state.env`.
+- **Schema fields:**
+  - `schema`
+  - `mode`
+  - `updated_utc`
+  - `bootstrap_jar`
+  - `bootstrap_jar_sha256`
+  - `git_revision`
+  - `output_classes`
+  - `entry_source`
+- **Fallback guidance:** When mode is `bootstrap-required`, command prints a remediation hint to run `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
+
 ### 2.4 test
 
 **Usage:** `kestrel test [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]`

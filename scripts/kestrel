@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Kestrel CLI: kestrel <command> [options]
-# Commands: run, dis, build, bootstrap, test, fmt, doc, lock
+# Commands: run, dis, build, bootstrap, status, test, fmt, doc, lock
 set -euo pipefail
 
 SOURCE="${BASH_SOURCE[0]}"
@@ -21,6 +21,7 @@ BOOTSTRAP_COMPILER_DIR="$BOOTSTRAP_ROOT/compiler"
 BOOTSTRAP_JAR="$BOOTSTRAP_COMPILER_DIR/compiler-bootstrap.jar"
 BOOTSTRAP_SELFHOST_DIR="$BOOTSTRAP_ROOT/self-hosted"
 BOOTSTRAP_ENTRY="$ROOT/stdlib/kestrel/tools/compiler/cli-entry.ks"
+BOOTSTRAP_STATE_FILE="$BOOTSTRAP_ROOT/state.env"
 
 usage() {
   echo "Usage: kestrel <command> [options]" >&2
@@ -28,6 +29,7 @@ usage() {
   echo "  dis   [--verbose|--code-only] <script[.ks]>  Compile if needed, then disassemble JVM bytecode" >&2
   echo "  build [script.ks]  Build compiler and JVM runtime; optionally compile script" >&2
   echo "  bootstrap  Build self-hosted compiler classes from bootstrap compiler JAR" >&2
+  echo "  status  Show compiler mode and bootstrap provenance state" >&2
   echo "  test  [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]   Run unit tests on JVM (default: compact output)" >&2
   echo "  fmt   [--check] [--stdin] [files-or-dirs...]  Format Kestrel source files (default: all .ks files in current dir)" >&2
   echo "  doc   [--port PORT] [--project-root PATH]       Start the documentation browser (default port: 7070)" >&2
@@ -169,6 +171,41 @@ file_mtime() {
 
   echo ""
   return 1
+}
+
+hash_file() {
+  local f="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$f" | awk '{print $1}'
+  else
+    shasum -a 256 "$f" | awk '{print $1}'
+  fi
+}
+
+state_value() {
+  local key="$1"
+  local file="$2"
+  [ -f "$file" ] || return 1
+  local line
+  line=$(grep -E "^${key}=" "$file" | head -n 1 || true)
+  [ -n "$line" ] || return 1
+  echo "${line#*=}"
+}
+
+compiler_mode() {
+  local mode output_classes
+  mode=$(state_value mode "$BOOTSTRAP_STATE_FILE" 2>/dev/null || true)
+  output_classes=$(state_value output_classes "$BOOTSTRAP_STATE_FILE" 2>/dev/null || true)
+
+  if [ "$mode" = "self-hosted" ] && [ -d "$output_classes" ]; then
+    if find "$output_classes" -name "Cli_entry.class" -print -quit | grep -q .; then
+      echo "self-hosted"
+      return 0
+    fi
+  fi
+
+  echo "bootstrap-required"
+  return 0
 }
 
 needs_compile_jvm() {
@@ -409,6 +446,7 @@ cmd_test() {
 cmd_bootstrap() {
   ensure_tools
   local bootstrap_main_class
+  local jar_sha revision updated_utc
   bootstrap_main_class=$(main_class_for "$BOOTSTRAP_ENTRY")
 
   if [ ! -f "$RUNTIME_JAR" ]; then
@@ -441,9 +479,45 @@ cmd_bootstrap() {
     exit 1
   fi
 
+  jar_sha=$(hash_file "$BOOTSTRAP_JAR")
+  revision="unknown"
+  if git -C "$ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
+    revision=$(git -C "$ROOT" rev-parse HEAD)
+  fi
+  updated_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  mkdir -p "$BOOTSTRAP_ROOT"
+  cat > "$BOOTSTRAP_STATE_FILE" <<EOF
+schema=1
+mode=self-hosted
+updated_utc=$updated_utc
+bootstrap_jar=$BOOTSTRAP_JAR
+bootstrap_jar_sha256=$jar_sha
+git_revision=$revision
+output_classes=$BOOTSTRAP_SELFHOST_DIR
+entry_source=$BOOTSTRAP_ENTRY
+EOF
+
   echo "kestrel bootstrap: wrote self-hosted compiler classes"
   echo "  bootstrap jar : $BOOTSTRAP_JAR"
   echo "  output classes: $BOOTSTRAP_SELFHOST_DIR"
+  echo "  state file    : $BOOTSTRAP_STATE_FILE"
+}
+
+cmd_status() {
+  local mode
+  mode=$(compiler_mode)
+  echo "compiler mode: $mode"
+
+  if [ -f "$BOOTSTRAP_STATE_FILE" ]; then
+    echo "state file: $BOOTSTRAP_STATE_FILE"
+    grep -E '^(schema|updated_utc|bootstrap_jar|bootstrap_jar_sha256|git_revision|output_classes|entry_source)=' "$BOOTSTRAP_STATE_FILE" || true
+  else
+    echo "state file: missing ($BOOTSTRAP_STATE_FILE)"
+  fi
+
+  if [ "$mode" = "bootstrap-required" ]; then
+    echo "hint: run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap"
+  fi
 }
 
 cmd_fmt() {
@@ -491,6 +565,7 @@ case "${1:-}" in
   dis)   shift; cmd_dis "$@" ;;
   build) shift; cmd_build "$@" ;;
   bootstrap) shift; cmd_bootstrap "$@" ;;
+  status) shift; cmd_status "$@" ;;
   test)       shift; cmd_test "$@" ;;
   fmt)   shift; cmd_fmt "$@" ;;
   doc)   shift; cmd_doc "$@" ;;
