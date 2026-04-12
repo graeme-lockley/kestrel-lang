@@ -36,4 +36,12 @@ export class DocumentManager {
   public delete(uri: string): void {
     this.docs.delete(uri);
   }
+
+  public sourceMap(): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const [uri, state] of this.docs) {
+      out.set(uri, state.source);
+    }
+    return out;
+  }
 }

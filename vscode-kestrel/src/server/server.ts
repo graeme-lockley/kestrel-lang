@@ -4,10 +4,11 @@ import {
   TextDocuments,
   TextDocumentSyncKind,
   type InitializeParams,
+  type WorkspaceSymbolParams,
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 
-import { compileSource } from './compiler-bridge';
+import { compileSource, compileWorkspace, type WorkspaceIndex } from './compiler-bridge';
 import { DebouncedScheduler } from './debounce';
 import { toLspDiagnostics } from './diagnostics';
 import { DocumentManager } from './document-manager';
@@ -19,9 +20,12 @@ import { collectFoldingRanges } from './providers/folding';
 import { formatDocument, formatDocumentRange } from './providers/formatting';
 import { buildHover } from './providers/hover';
 import { collectInlayHints } from './providers/inlayHints';
+import { buildRenameEdit } from './providers/rename';
+import { findReferences } from './providers/references';
 import { collectSemanticTokens, semanticTokenLegend } from './providers/semanticTokens';
 import { provideSignatureHelp } from './providers/signatureHelp';
 import { collectDocumentSymbols } from './providers/symbols';
+import { collectWorkspaceSymbols } from './providers/workspaceSymbols';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -32,6 +36,11 @@ const DEFAULT_DEBOUNCE_MS = 250;
 let debounceMs = DEFAULT_DEBOUNCE_MS;
 let kestrelExecutable = 'kestrel';
 let formatterEnabled = true;
+let workspaceRoot = process.cwd();
+
+async function buildWorkspaceIndex(): Promise<WorkspaceIndex> {
+  return compileWorkspace(workspaceRoot, documentManager.sourceMap());
+}
 
 function scheduleDiagnostics(doc: TextDocument): void {
   const uri = doc.uri;
@@ -67,6 +76,11 @@ connection.onInitialize((params: InitializeParams) => {
   if (typeof init?.formatterEnabled === 'boolean') {
     formatterEnabled = init.formatterEnabled;
   }
+  if (typeof params.rootUri === 'string' && params.rootUri.length > 0) {
+    workspaceRoot = params.rootUri;
+  } else if (typeof params.rootPath === 'string' && params.rootPath.length > 0) {
+    workspaceRoot = params.rootPath;
+  }
 
   return {
     capabilities: {
@@ -80,6 +94,9 @@ connection.onInitialize((params: InitializeParams) => {
         resolveProvider: false,
       },
       definitionProvider: true,
+      referencesProvider: true,
+      renameProvider: true,
+      workspaceSymbolProvider: true,
       completionProvider: {
         triggerCharacters: ['.'],
       },
@@ -98,20 +115,45 @@ connection.onInitialize((params: InitializeParams) => {
   };
 });
 
-connection.onDefinition((params) => {
+connection.onDefinition(async (params) => {
   const doc = documentManager.get(params.textDocument.uri);
   if (doc == null) {
     return null;
   }
-  return findDefinition(doc.ast, doc.source, params.textDocument.uri, params.position);
+  const workspaceIndex = await buildWorkspaceIndex();
+  return findDefinition(doc.ast, doc.source, params.textDocument.uri, params.position, workspaceIndex);
 });
 
-connection.onCompletion((params) => {
+connection.onCompletion(async (params) => {
   const doc = documentManager.get(params.textDocument.uri);
   if (doc == null) {
     return [];
   }
-  return collectCompletions(doc.ast);
+  const workspaceIndex = await buildWorkspaceIndex();
+  return collectCompletions(doc.ast, workspaceIndex.exportedNames);
+});
+
+connection.onReferences(async (params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return [];
+  }
+  const workspaceIndex = await buildWorkspaceIndex();
+  return findReferences(doc.source, params.position, workspaceIndex);
+});
+
+connection.onRenameRequest(async (params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return null;
+  }
+  const workspaceIndex = await buildWorkspaceIndex();
+  return buildRenameEdit(doc.source, params.position, params.newName, workspaceIndex);
+});
+
+connection.onWorkspaceSymbol(async (params: WorkspaceSymbolParams) => {
+  const workspaceIndex = await buildWorkspaceIndex();
+  return collectWorkspaceSymbols(workspaceIndex, params.query);
 });
 
 connection.onCodeAction((params) => {

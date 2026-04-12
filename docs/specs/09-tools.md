@@ -277,8 +277,12 @@ Supported capabilities in the current integration:
 - `textDocument/inlayHint`
 - `textDocument/codeAction` (quick fixes)
 - `textDocument/codeLens` (test lenses)
+- `textDocument/references` (cross-file find references)
+- `textDocument/rename` (workspace rename edits)
+- `workspace/symbol` (workspace-wide declaration search)
 
 Hover payloads include inferred type markdown and, when available, `///` declaration doc-comment prose appended beneath the type block.
+Definition and completion also include workspace-exported declarations from `.ks` files under the active workspace root.
 
 Supported settings:
 

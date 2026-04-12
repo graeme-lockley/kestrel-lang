@@ -66,19 +66,19 @@ Go-to-definition (S10-05) and completion (S10-05) work within a single file. Cro
 
 ## Tasks
 
-- [ ] Add workspace `.ks` discovery and compile/index helpers in `vscode-kestrel/src/server/compiler-bridge.ts`.
-- [ ] Extend `vscode-kestrel/src/server/document-manager.ts` with workspace-level state needed by cross-file providers.
-- [ ] Implement `vscode-kestrel/src/server/providers/references.ts` and wire `textDocument/references`.
-- [ ] Implement `vscode-kestrel/src/server/providers/rename.ts` and wire `textDocument/rename`.
-- [ ] Implement `vscode-kestrel/src/server/providers/workspaceSymbols.ts` and wire `workspace/symbol`.
-- [ ] Extend `vscode-kestrel/src/server/providers/definition.ts` for cross-file declaration targets.
-- [ ] Extend `vscode-kestrel/src/server/providers/completion.ts` with workspace-exported names.
-- [ ] Update `vscode-kestrel/src/server/server.ts` initialization capabilities and handlers.
-- [ ] Add/extend unit tests for definition, completion, references, rename, and workspace symbols providers.
-- [ ] Update `docs/specs/09-tools.md` to document cross-file navigation and symbol/search capabilities.
-- [ ] Run `cd vscode-kestrel && npm test`.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Add workspace `.ks` discovery and compile/index helpers in `vscode-kestrel/src/server/compiler-bridge.ts`.
+- [x] Extend `vscode-kestrel/src/server/document-manager.ts` with workspace-level state needed by cross-file providers.
+- [x] Implement `vscode-kestrel/src/server/providers/references.ts` and wire `textDocument/references`.
+- [x] Implement `vscode-kestrel/src/server/providers/rename.ts` and wire `textDocument/rename`.
+- [x] Implement `vscode-kestrel/src/server/providers/workspaceSymbols.ts` and wire `workspace/symbol`.
+- [x] Extend `vscode-kestrel/src/server/providers/definition.ts` for cross-file declaration targets.
+- [x] Extend `vscode-kestrel/src/server/providers/completion.ts` with workspace-exported names.
+- [x] Update `vscode-kestrel/src/server/server.ts` initialization capabilities and handlers.
+- [x] Add/extend unit tests for definition, completion, references, rename, and workspace symbols providers.
+- [x] Update `docs/specs/09-tools.md` to document cross-file navigation and symbol/search capabilities.
+- [x] Run `cd vscode-kestrel && npm test`.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -93,4 +93,10 @@ Go-to-definition (S10-05) and completion (S10-05) work within a single file. Cro
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — add cross-file definition/completion notes and capability entries for references/rename/workspace symbols.
+- [x] `docs/specs/09-tools.md` — add cross-file definition/completion notes and capability entries for references/rename/workspace symbols.
+
+## Build notes
+
+- 2026-04-12: Added workspace indexing in the language server bridge and wired cross-file definition, references, rename, completion enrichment, and workspace symbol providers.
+- 2026-04-12: Added provider unit tests for references, rename, workspace symbols, and extended definition/completion tests for cross-file behavior.
+- 2026-04-12: Verification passed: `cd vscode-kestrel && npm test`, `cd compiler && npm run build && npm test`, and `./scripts/kestrel test`.

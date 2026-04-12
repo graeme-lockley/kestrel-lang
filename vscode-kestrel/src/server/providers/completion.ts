@@ -13,12 +13,16 @@ function pushUnique(out: CompletionItem[], seen: Set<string>, item: CompletionIt
   out.push(item);
 }
 
-export function collectCompletions(ast: unknown | null): CompletionItem[] {
+export function collectCompletions(ast: unknown | null, exportedNames: string[] = []): CompletionItem[] {
   const out: CompletionItem[] = [];
   const seen = new Set<string>();
 
   for (const kw of KEYWORDS) {
     pushUnique(out, seen, { label: kw, kind: CompletionItemKind.Keyword });
+  }
+
+  for (const name of exportedNames) {
+    pushUnique(out, seen, { label: name, kind: CompletionItemKind.Variable });
   }
 
   if (ast == null || typeof ast !== 'object') {

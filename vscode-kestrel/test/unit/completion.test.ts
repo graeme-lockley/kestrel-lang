@@ -28,4 +28,11 @@ describe('collectCompletions', () => {
     expect(labels.has('Some')).toBe(true);
     expect(labels.has('a')).toBe(true);
   });
+
+  it('includes exported names from workspace index', () => {
+    const items = collectCompletions(null, ['println', 'parseInt']);
+    const labels = new Set(items.map((i) => i.label));
+    expect(labels.has('println')).toBe(true);
+    expect(labels.has('parseInt')).toBe(true);
+  });
 });

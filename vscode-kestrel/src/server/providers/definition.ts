@@ -1,5 +1,7 @@
 import type { Location, Position, Range } from 'vscode-languageserver/node';
 
+import type { WorkspaceIndex } from '../compiler-bridge';
+
 function rangeFromSpan(span: { line: number; column: number; endLine?: number; endColumn?: number }): Range {
   const startLine = Math.max(0, span.line - 1);
   const startChar = Math.max(0, span.column - 1);
@@ -96,7 +98,13 @@ function declarationRanges(ast: unknown): Map<string, Range> {
   return out;
 }
 
-export function findDefinition(ast: unknown | null, source: string, uri: string, position: Position): Location | null {
+export function findDefinition(
+  ast: unknown | null,
+  source: string,
+  uri: string,
+  position: Position,
+  workspaceIndex?: WorkspaceIndex,
+): Location | null {
   if (ast == null) {
     return null;
   }
@@ -109,9 +117,26 @@ export function findDefinition(ast: unknown | null, source: string, uri: string,
 
   const ranges = declarationRanges(ast);
   const range = ranges.get(ident);
-  if (range == null) {
+  if (range != null) {
+    return { uri, range };
+  }
+
+  const workspaceDecl = workspaceIndex?.declsByName.get(ident)?.[0];
+  if (workspaceDecl == null) {
     return null;
   }
 
-  return { uri, range };
+  return {
+    uri: workspaceDecl.uri,
+    range: {
+      start: {
+        line: Math.max(0, workspaceDecl.line - 1),
+        character: Math.max(0, workspaceDecl.column - 1),
+      },
+      end: {
+        line: Math.max(0, workspaceDecl.endLine - 1),
+        character: Math.max(0, workspaceDecl.endColumn - 1),
+      },
+    },
+  };
 }

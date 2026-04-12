@@ -24,4 +24,30 @@ describe('findDefinition', () => {
     const def = findDefinition(ast, source, 'file:///tmp/test.ks', { line: 0, character: 10 });
     expect(def).toBeNull();
   });
+
+  it('resolves definitions from workspace index when not local', () => {
+    const source = 'import { parseInt } from "kestrel:data/string"\nval x = parseInt("1")\n';
+    const ast = { kind: 'Program', imports: [], body: [] };
+    const workspaceIndex = {
+      decls: [],
+      exportedNames: ['parseInt'],
+      sourcesByUri: new Map<string, string>(),
+      declsByName: new Map([
+        ['parseInt', [{
+          name: 'parseInt',
+          kind: 'fun',
+          exported: true,
+          uri: 'file:///tmp/string.ks',
+          line: 4,
+          column: 12,
+          endLine: 4,
+          endColumn: 20,
+        }]],
+      ]),
+    };
+
+    const def = findDefinition(ast, source, 'file:///tmp/main.ks', { line: 1, character: 12 }, workspaceIndex);
+    expect(def?.uri).toBe('file:///tmp/string.ks');
+    expect(def?.range.start.line).toBe(3);
+  });
 });

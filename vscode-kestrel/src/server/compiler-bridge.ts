@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type { CompilerDiagnostic } from './document-manager';
 
@@ -224,4 +224,148 @@ export async function hoverDocAtOffset(source: string, offset: number): Promise<
   const docsByName = collectDocByDeclName(source);
   const doc = docsByName.get(ident);
   return doc == null || doc.length === 0 ? null : doc;
+}
+
+export interface WorkspaceDecl {
+  name: string;
+  kind: 'fun' | 'val' | 'var' | 'type' | 'exception';
+  exported: boolean;
+  uri: string;
+  line: number;
+  column: number;
+  endLine: number;
+  endColumn: number;
+}
+
+export interface WorkspaceIndex {
+  decls: WorkspaceDecl[];
+  declsByName: Map<string, WorkspaceDecl[]>;
+  exportedNames: string[];
+  sourcesByUri: Map<string, string>;
+}
+
+function walkKsFiles(rootDir: string): string[] {
+  const out: string[] = [];
+  const stack = [rootDir];
+  const skip = new Set(['.git', 'node_modules', 'dist', 'out', 'build']);
+
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    if (dir == null) {
+      continue;
+    }
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!skip.has(entry.name)) {
+          stack.push(fullPath);
+        }
+        continue;
+      }
+      if (entry.isFile() && fullPath.endsWith('.ks')) {
+        out.push(fullPath);
+      }
+    }
+  }
+
+  return out;
+}
+
+function scanTopLevelDecls(source: string, uri: string): WorkspaceDecl[] {
+  const out: WorkspaceDecl[] = [];
+  const lines = source.split(/\r?\n/);
+  const declRe = /^(\s*)(export\s+)?(?:async\s+)?(fun|val|var|type|exception)\s+([A-Za-z_][A-Za-z0-9_]*)\b/;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? '';
+    const match = line.match(declRe);
+    if (match == null) {
+      continue;
+    }
+    const exported = (match[2] ?? '').trim() === 'export';
+    const kind = match[3] as WorkspaceDecl['kind'];
+    const name = match[4] ?? '';
+    if (name.length === 0) {
+      continue;
+    }
+
+    const nameIndex = line.indexOf(name);
+    if (nameIndex < 0) {
+      continue;
+    }
+    const column = nameIndex + 1;
+    out.push({
+      name,
+      kind,
+      exported,
+      uri,
+      line: i + 1,
+      column,
+      endLine: i + 1,
+      endColumn: column + name.length,
+    });
+  }
+
+  return out;
+}
+
+function workspaceRootToFsPath(workspaceRoot: string): string {
+  if (workspaceRoot.startsWith('file://')) {
+    return fileURLToPath(workspaceRoot);
+  }
+  return workspaceRoot;
+}
+
+export async function compileWorkspace(
+  workspaceRoot: string,
+  openDocuments?: Map<string, string>,
+): Promise<WorkspaceIndex> {
+  const rootDir = workspaceRootToFsPath(workspaceRoot);
+  const filePaths = walkKsFiles(rootDir);
+  const sourcesByUri = new Map<string, string>();
+
+  for (const filePath of filePaths) {
+    const uri = pathToFileURL(filePath).href;
+    const openSource = openDocuments?.get(uri);
+    if (openSource != null) {
+      sourcesByUri.set(uri, openSource);
+      continue;
+    }
+    try {
+      const source = fs.readFileSync(filePath, 'utf8');
+      sourcesByUri.set(uri, source);
+    } catch {
+      continue;
+    }
+  }
+
+  for (const [uri, source] of openDocuments ?? []) {
+    if (!sourcesByUri.has(uri) && uri.endsWith('.ks')) {
+      sourcesByUri.set(uri, source);
+    }
+  }
+
+  const decls: WorkspaceDecl[] = [];
+  const declsByName = new Map<string, WorkspaceDecl[]>();
+
+  for (const [uri, source] of sourcesByUri) {
+    const fileDecls = scanTopLevelDecls(source, uri);
+    for (const decl of fileDecls) {
+      decls.push(decl);
+      const arr = declsByName.get(decl.name) ?? [];
+      arr.push(decl);
+      declsByName.set(decl.name, arr);
+    }
+  }
+
+  const exportedNames = [...new Set(decls.filter((d) => d.exported).map((d) => d.name))].sort();
+  return { decls, declsByName, exportedNames, sourcesByUri };
 }
