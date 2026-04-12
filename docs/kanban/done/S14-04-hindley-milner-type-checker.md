@@ -98,15 +98,15 @@ Attached type info is consumed by `jvmCodegen` via `getInferredType` helpers.
 
 ## Tasks
 
-- [ ] Create `stdlib/kestrel/tools/compiler/typecheck.ks` with `TypeEnv`, `TypecheckOptions`, `DependencyExportSnapshot`, `TypecheckResult`, and top-level `typecheck` entrypoint.
-- [ ] Implement inferred-type annotation storage (`setInferredType`, `getInferredType`) using a Kestrel-friendly key scheme based on AST identity substitutes (for example node span offsets) rather than `WeakMap`.
-- [ ] Port the minimal inference core for literals, identifiers, arithmetic/boolean/comparison ops, if/while/block, function declarations, function application, `val`/`var`, and let-generalisation/instantiation.
-- [ ] Port pattern binding and exhaustiveness checking sufficient for simple ADTs, wildcard/var/literal patterns, tuple/list patterns, and `match` expressions.
-- [ ] Port declaration handling for top-level `fun`, `val`, `var`, `type`, and exported constructor/type visibility maps needed by downstream KTI/driver stories.
-- [ ] Emit diagnostics using `kestrel:tools/compiler/diagnostics` with stable code strings and messages for unification errors, undefined names, impossible narrowing, loop-control misuse, and exhaustiveness failures.
-- [ ] Add `stdlib/kestrel/tools/compiler/typecheck.test.ks` covering acceptance criteria and a small multi-declaration integration case.
-- [ ] Run `./kestrel test stdlib/kestrel/tools/compiler/typecheck.test.ks`.
-- [ ] Run `cd compiler && npm test`.
+- [x] Create `stdlib/kestrel/tools/compiler/typecheck.ks` with `TypeEnv`, `TypecheckOptions`, `DependencyExportSnapshot`, `TypecheckResult`, and top-level `typecheck` entrypoint.
+- [x] Implement inferred-type annotation storage (`setInferredType`, `getInferredType`) using a Kestrel-friendly key scheme based on AST identity substitutes (for example node span offsets) rather than `WeakMap`.
+- [x] Port the minimal inference core for literals, identifiers, arithmetic/boolean/comparison ops, if/while/block, function declarations, function application, `val`/`var`, and let-generalisation/instantiation.
+- [x] Port pattern binding and exhaustiveness checking sufficient for simple ADTs, wildcard/var/literal patterns, tuple/list patterns, and `match` expressions.
+- [x] Port declaration handling for top-level `fun`, `val`, `var`, `type`, and exported constructor/type visibility maps needed by downstream KTI/driver stories.
+- [x] Emit diagnostics using `kestrel:tools/compiler/diagnostics` with stable code strings and messages for unification errors, undefined names, impossible narrowing, loop-control misuse, and exhaustiveness failures.
+- [x] Add `stdlib/kestrel/tools/compiler/typecheck.test.ks` covering acceptance criteria and a small multi-declaration integration case.
+- [x] Run `./kestrel test stdlib/kestrel/tools/compiler/typecheck.test.ks`.
+- [x] Run `cd compiler && npm test`.
 
 ## Tests to add
 
@@ -121,5 +121,10 @@ Attached type info is consumed by `jvmCodegen` via `getInferredType` helpers.
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/06-typesystem.md` — extend the self-hosting parity note to include `kestrel:tools/compiler/typecheck` as the checker-side consumer of `types` / `from-ast` and its exported environment maps.
-- [ ] `docs/specs/01-language.md` — update only if the port surfaces a mismatch in expression typing, match exhaustiveness, `is` narrowing, loop control, or top-level recursion rules.
+- [x] `docs/specs/06-typesystem.md` — extend the self-hosting parity note to include `kestrel:tools/compiler/typecheck` as the checker-side consumer of `types` / `from-ast` and its exported environment maps.
+- [x] `docs/specs/01-language.md` — reviewed; no updates required because no spec mismatch surfaced in expression typing, match exhaustiveness, `is` narrowing, loop control, or top-level recursion rules.
+
+## Build notes
+
+- 2026-04-12: Story entered doing with implementation already present in `stdlib/kestrel/tools/compiler/typecheck.ks`; verified parity using story-specific harness tests plus full compiler/Kestrel suites.
+- 2026-04-12: Updated `docs/specs/06-typesystem.md` to include `kestrel:tools/compiler/typecheck` in the self-hosting parity note; `docs/specs/01-language.md` required no change after review.

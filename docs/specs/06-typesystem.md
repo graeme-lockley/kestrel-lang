@@ -6,7 +6,7 @@ Version: 1.0
 
 Kestrel’s type system provides Hindley–Milner inference, structural records with row polymorphism, and union/intersection types. This document specifies the type language and typing rules.
 
-For self-hosting compiler work, `kestrel:tools/compiler/types` and `kestrel:tools/compiler/from-ast` mirror the bootstrap compiler's internal categories (`var`, `prim`, `arrow`, `record`, `app`, `tuple`, `union`, `inter`, `scheme`), unification/subtyping entry points (`unify`, `unifySubtype`), AST-to-internal conversion, and fresh type-variable id allocation behaviour to keep cross-compiler KTI/typecheck interoperability stable during migration.
+For self-hosting compiler work, `kestrel:tools/compiler/types`, `kestrel:tools/compiler/from-ast`, and `kestrel:tools/compiler/typecheck` mirror the bootstrap compiler's internal categories (`var`, `prim`, `arrow`, `record`, `app`, `tuple`, `union`, `inter`, `scheme`), unification/subtyping entry points (`unify`, `unifySubtype`), AST-to-internal conversion, inferred-type annotation flow, and fresh type-variable id allocation behaviour to keep cross-compiler KTI/typecheck interoperability stable during migration.
 
 ---
 
