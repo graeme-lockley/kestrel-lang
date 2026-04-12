@@ -90,6 +90,17 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Success criteria:** Exits 0 and prints `PASS` when baseline and post-bootstrap runtime outputs match.
 - **Current limitation:** The Stage-0 compiled CLI invocation in this flow is a build-command smoke check; sample compilation for semantic comparison still uses the canonical `./kestrel build` path while self-hosted argument forwarding stabilizes.
 
+### 2.3.2 Stage-1 bootstrap verification
+
+**Usage:** `./scripts/bootstrap-stage1.sh [sample.ks]`
+
+- **Purpose:** Validate Stage-1 bootstrap wiring against the Stage-0 baseline by generating a Stage-1 candidate CLI artifact, running build-command smoke checks, and comparing semantic sample output.
+- **Default sample:** `samples/mandelbrot.ks`.
+- **Prerequisites:** `node`, `java`, and `javac` on `PATH`.
+- **Artifacts:** Writes temporary verification outputs under `.kestrel/bootstrap-stage1/` and reuses Stage-0 outputs from `.kestrel/bootstrap-stage0/`.
+- **Success criteria:** Exits 0 and prints `PASS` when Stage-1 semantic output matches Stage-0 baseline.
+- **Current status:** The default `kestrel build` path still requires Node/TypeScript; Stage-1 script verifies parity and readiness but does not yet switch the primary build path.
+
 ### 2.4 test
 
 **Usage:** `kestrel test [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]`

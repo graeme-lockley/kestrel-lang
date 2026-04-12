@@ -22,6 +22,15 @@ The script compiles the self-hosted compiler CLI entrypoint with the TypeScript 
 then checks semantic output parity on a non-trivial sample (default: `samples/mandelbrot.ks`).
 Artifacts are written to `.kestrel/bootstrap-stage0/` for inspection.
 
+For Stage-1 bootstrap parity checks, run:
+
+```bash
+./scripts/bootstrap-stage1.sh
+```
+
+This compares Stage-1 candidate output against the Stage-0 baseline and writes artifacts to
+`.kestrel/bootstrap-stage1/`.
+
 ## A quick sample
 
 Here is a program that computes the tenth Fibonacci number:

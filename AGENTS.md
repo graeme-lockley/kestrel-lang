@@ -48,6 +48,17 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime wit
 ./scripts/run-e2e.sh
 ```
 
+### Bootstrap Verification (Self-Hosting Epic)
+
+```bash
+# Stage-0 parity check
+./scripts/bootstrap-stage0.sh
+
+# Stage-1 parity check (currently verifies readiness; default build path still
+# uses Node/TypeScript fallback until full self-hosted compile delegation lands)
+./scripts/bootstrap-stage1.sh
+```
+
 ### Using the Kestrel CLI
 
 ```bash
