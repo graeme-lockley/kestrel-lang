@@ -2655,6 +2655,44 @@ public final class KRuntime {
         }
         return KTask.completed(KUnit.INSTANCE);
     }
+
+    // ── Compiler intrinsics for classfile writer ─────────────────────────────
+
+    public static Long bitwiseAnd(Object a, Object b) {
+        return ((Number) a).longValue() & ((Number) b).longValue();
+    }
+
+    public static Long bitwiseOr(Object a, Object b) {
+        return ((Number) a).longValue() | ((Number) b).longValue();
+    }
+
+    public static Long bitwiseXor(Object a, Object b) {
+        return ((Number) a).longValue() ^ ((Number) b).longValue();
+    }
+
+    public static Long bitwiseNot(Object a) {
+        return ~((Number) a).longValue();
+    }
+
+    public static Long shiftRight(Object a, Object n) {
+        return ((Number) a).longValue() >> (int) ((Number) n).longValue();
+    }
+
+    public static Long unsignedShiftRight(Object a, Object n) {
+        return ((Number) a).longValue() >>> (int) ((Number) n).longValue();
+    }
+
+    public static Long shiftLeft(Object a, Object n) {
+        return ((Number) a).longValue() << (int) ((Number) n).longValue();
+    }
+
+    public static Long doubleToRawLongBits(Object d) {
+        return Double.doubleToRawLongBits(((Number) d).doubleValue());
+    }
+
+    public static Long floatToRawIntBits(Object f) {
+        return (long) Float.floatToRawIntBits((float) ((Number) f).doubleValue());
+    }
 }
 
 

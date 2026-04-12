@@ -20,6 +20,12 @@ tests/jvm/out/
 *.swp
 *.swo
 
+# VS Code extension artifacts
+vscode-kestrel/dist/
+vscode-kestrel/node_modules/
+vscode-kestrel/*.vsix
+
 # OS
 .DS_Store
 .kestrel_test_runner.ks
+.kestrel_test_runner.ks.new
