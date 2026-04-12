@@ -47,3 +47,35 @@ No formatting provider exists. E08 introduces `kestrel fmt` with `--stdin` mode 
 
 - The `kestrel fmt` subprocess launch path must use `kestrel.executable` setting (from S10-09) rather than a hard-coded `kestrel`. This setting should be read at the time of each format invocation, not at server startup.
 - Full-file `TextEdit` replace is the simplest approach but causes the cursor to jump to line 0 in some VS Code versions. Producing a diff-based minimal edit set avoids this; a library like `diff` (npm) can generate line-level diffs cheaply.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Formatting provider | Add `vscode-kestrel/src/server/providers/formatting.ts` invoking `kestrel fmt --stdin` and translating output to `TextEdit[]`. |
+| LSP server wiring | Register document/range formatting capabilities and handlers in `vscode-kestrel/src/server/server.ts`. |
+| Client settings | Plumb `kestrel.executable` and new `kestrel.formatter.enabled` from extension configuration to server initialization options. |
+| Extension manifest | Add `kestrel.formatter.enabled` configuration contribution in `vscode-kestrel/package.json`. |
+| Tests | Add unit tests for formatter success, no-op, and failed subprocess behavior. |
+
+## Tasks
+
+- [ ] Add formatting provider implementation in `vscode-kestrel/src/server/providers/formatting.ts` using `kestrel fmt --stdin`.
+- [ ] Wire `documentFormattingProvider` and `documentRangeFormattingProvider` in `vscode-kestrel/src/server/server.ts`.
+- [ ] Plumb executable and formatter enabled settings through `vscode-kestrel/src/extension.ts` initialization options.
+- [ ] Add `kestrel.formatter.enabled` setting to `vscode-kestrel/package.json` contributions.
+- [ ] Add `vscode-kestrel/test/unit/formatting.test.ts` for success/no-op/error cases.
+- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/formatting.test.ts` | Verify formatted output produces a text edit when source changes. |
+| Vitest unit | `vscode-kestrel/test/unit/formatting.test.ts` | Verify identical output returns no edits. |
+| Vitest unit | `vscode-kestrel/test/unit/formatting.test.ts` | Verify formatter failure returns empty edits without throwing. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/09-tools.md` — verify formatter CLI invocation semantics remain aligned; no new textual changes expected.
+- [ ] `vscode-kestrel/README.md` — include formatter setting notes.
