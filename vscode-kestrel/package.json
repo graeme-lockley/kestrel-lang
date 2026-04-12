@@ -38,8 +38,14 @@
   },
   "scripts": {
     "compile": "tsc -p .",
+    "compile:server": "tsc -p .",
     "watch": "tsc -w -p .",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
