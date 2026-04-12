@@ -11,7 +11,7 @@
 
 ## Summary
 
-Implement `textDocument/formatting` and `textDocument/rangeFormatting` by invoking `kestrel fmt --stdin` as a subprocess and returning the resulting text edits. When `editor.formatOnSave` is enabled in VS Code, the active `.ks` file is formatted automatically on save. This story is gated on E08 (Source Formatter epic) providing `kestrel fmt --stdin`.
+Implement `textDocument/formatting` and `textDocument/rangeFormatting` by invoking `kestrel fmt --stdin` as a subprocess and returning the resulting text edits. When `editor.formatOnSave` is enabled in VS Code, the active `.ks` file is formatted automatically on save. E08 (Source Formatter epic) is complete and `kestrel fmt --stdin` is available.
 
 ## Current State
 
@@ -19,7 +19,7 @@ No formatting provider exists. E08 introduces `kestrel fmt` with `--stdin` mode 
 
 ## Relationship to other stories
 
-- **Blocked by E08** — `kestrel fmt --stdin` must be available before this story is buildable.
+- **Depends on S10-09** — the `kestrel.executable` setting introduced in S10-09 is used by the formatter subprocess.
 - **Depends on S10-02** (document-manager) for the cached source text.
 - Independent of S10-03 through S10-09 in terms of code, but logically polishes the Tier 1 experience.
 
@@ -41,7 +41,7 @@ No formatting provider exists. E08 introduces `kestrel fmt` with `--stdin` mode 
 
 ## Spec References
 
-- E08 stories (once planned/done) for `kestrel fmt` CLI contract.
+- `docs/specs/09-tools.md` §2.5 `kestrel fmt` — usage, flags (`--stdin`, `--check`), exit codes (added by S08-07).
 
 ## Risks / Notes
 
