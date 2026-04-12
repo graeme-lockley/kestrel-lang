@@ -61,18 +61,18 @@ Signatures and declaration sections are rendered as static text. Even when refer
 
 ## Tasks
 
-- [ ] Add link-aware token rendering hook in `stdlib/kestrel/dev/doc/markdown.ks` so identifier/type tokens can optionally emit `<a href="...">` wrappers while preserving existing token class spans.
-- [ ] Implement deterministic declaration-link resolver in `stdlib/kestrel/dev/doc/render.ks` with priority: current module declaration name, then globally indexed declaration by sorted module spec.
-- [ ] Update signature rendering in `stdlib/kestrel/dev/doc/render.ks` to emit clickable links for resolvable references and plain tokenized text for unresolved names.
-- [ ] Add `renderModuleWithLinks` / declaration-page rendering support in `stdlib/kestrel/dev/doc/render.ks` for `/docs/{module}/{name}` outputs.
-- [ ] Update `stdlib/kestrel/tools/doc.ks` dispatch to serve `/docs/{module}` and `/docs/{module}/{name}` distinctly, including declaration-not-found behavior.
-- [ ] Ensure cross-module links work for both `kestrel:*` and `project:*` modules from the shared in-memory module index.
-- [ ] Add/extend tests in `stdlib/kestrel/dev/doc/render.test.ks` for cross-module signature links, deterministic collision behavior, and unresolved-name non-link fallback.
-- [ ] Add/extend doc-server behavior tests for `/docs/{module}/{name}` routing if route-level tests exist; otherwise add render-level declaration-page assertions and note route validation via integration run.
-- [ ] Update `docs/specs/07-modules.md` to note docs-browser declaration linking behavior relative to module-qualified names.
-- [ ] Update `docs/specs/09-tools.md` to document `/docs/{module}/{name}` behavior and cross-module signature hyperlink semantics.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Add link-aware token rendering hook in `stdlib/kestrel/dev/doc/markdown.ks` so identifier/type tokens can optionally emit `<a href="...">` wrappers while preserving existing token class spans.
+- [x] Implement deterministic declaration-link resolver in `stdlib/kestrel/dev/doc/render.ks` with priority: current module declaration name, then globally indexed declaration by sorted module spec.
+- [x] Update signature rendering in `stdlib/kestrel/dev/doc/render.ks` to emit clickable links for resolvable references and plain tokenized text for unresolved names.
+- [x] Add `renderModuleWithLinks` / declaration-page rendering support in `stdlib/kestrel/dev/doc/render.ks` for `/docs/{module}/{name}` outputs.
+- [x] Update `stdlib/kestrel/tools/doc.ks` dispatch to serve `/docs/{module}` and `/docs/{module}/{name}` distinctly, including declaration-not-found behavior.
+- [x] Ensure cross-module links work for both `kestrel:*` and `project:*` modules from the shared in-memory module index.
+- [x] Add/extend tests in `stdlib/kestrel/dev/doc/render.test.ks` for cross-module signature links, deterministic collision behavior, and unresolved-name non-link fallback.
+- [x] Add/extend doc-server behavior tests for `/docs/{module}/{name}` routing if route-level tests exist; otherwise add render-level declaration-page assertions and note route validation via integration run.
+- [x] Update `docs/specs/07-modules.md` to note docs-browser declaration linking behavior relative to module-qualified names.
+- [x] Update `docs/specs/09-tools.md` to document `/docs/{module}/{name}` behavior and cross-module signature hyperlink semantics.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -85,5 +85,12 @@ Signatures and declaration sections are rendered as static text. Even when refer
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/07-modules.md` - describe how docs signature hyperlinks resolve declarations across module boundaries and how unresolved names are handled.
-- [ ] `docs/specs/09-tools.md` - document `/docs/{module}/{name}` route behavior and declaration-signature hyperlink semantics.
+- [x] `docs/specs/07-modules.md` - describe how docs signature hyperlinks resolve declarations across module boundaries and how unresolved names are handled.
+- [x] `docs/specs/09-tools.md` - document `/docs/{module}/{name}` route behavior and declaration-signature hyperlink semantics.
+
+## Build notes
+
+- 2026-04-12: Added `renderKestrelCodeWithLinks` in `kestrel:dev/doc/markdown` so hyperlinking and syntax-token classes share one rendering path.
+- 2026-04-12: Implemented deterministic link target resolution in `kestrel:dev/doc/render`: current module wins for collisions, otherwise first match from module-spec-sorted global index.
+- 2026-04-12: Extended doc server dispatch to resolve `/docs/{module}/{name}` by exact module hit first, then final-segment split fallback for declaration pages.
+- 2026-04-12: One unresolved-link test initially over-asserted by forbidding any `/docs/` href; narrowed to assert that unresolved type names specifically are not linked.

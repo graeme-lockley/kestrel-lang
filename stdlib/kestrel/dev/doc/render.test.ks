@@ -1,6 +1,6 @@
 // Tests for kestrel:dev/doc/render
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
-import { renderModuleList, renderModule, renderDeclaration, staticCss, staticJs } from "kestrel:dev/doc/render"
+import { renderModuleList, renderModule, renderModuleWithLinks, renderDeclaration, renderDeclarationPageWithLinks, staticCss, staticJs } from "kestrel:dev/doc/render"
 import { DocModule, DocEntry, extract } from "kestrel:dev/doc/extract"
 import { DKFun, DKVal } from "kestrel:dev/doc/extract"
 import * as Str from "kestrel:data/string"
@@ -27,6 +27,21 @@ fun modInferredBindings(): DocModule =
 
 fun modFallbackBinding(): DocModule =
   mkMod("kestrel:data/fallback", "export val broken = (\n")
+
+fun modLinkTarget(): DocModule =
+  mkMod("project:target", "export type User = { id: Int }\n")
+
+fun modLinkSource(): DocModule =
+  mkMod("project:source", "export fun load(u: User): User = u\n")
+
+fun modUnresolvedSource(): DocModule =
+  mkMod("project:unresolved", "export fun load(u: MissingType): MissingType = todo()\n")
+
+fun modNameCollisionA(): DocModule =
+  mkMod("project:a", "export type Shared = { left: Int }\n")
+
+fun modNameCollisionB(): DocModule =
+  mkMod("project:b", "export type Shared = { right: Int }\nexport fun use(x: Shared): Shared = x\n")
 
 export async fun run(s: Suite): Task<Unit> =
   group(s, "kestrel:dev/doc/render", (sg: Suite) => {
@@ -147,6 +162,35 @@ export async fun run(s: Suite): Task<Unit> =
       val out = renderDeclaration(mod1(), "missing")
       isTrue(g, "has not-found class",  Str.contains("not-found", out));
       isTrue(g, "mentions missing",     Str.contains("missing", out))
+    });
+
+    group(sg, "renderModuleWithLinks links cross-module declaration references", (g: Suite) => {
+      val target = modLinkTarget();
+      val source = modLinkSource();
+      val out = renderModuleWithLinks(source, [target, source]);
+      isTrue(g, "has cross-module link", Str.contains("href=\"/docs/project:target/User\"", out))
+    });
+
+    group(sg, "renderModuleWithLinks keeps unresolved names as non-links", (g: Suite) => {
+      val out = renderModuleWithLinks(modUnresolvedSource(), [modUnresolvedSource()]);
+      isFalse(g, "missing type is not linked", Str.contains("/MissingType\"", out));
+      isTrue(g, "still renders unresolved type text", Str.contains("MissingType", out))
+    });
+
+    group(sg, "renderModuleWithLinks prefers current-module target on name collision", (g: Suite) => {
+      val a = modNameCollisionA();
+      val b = modNameCollisionB();
+      val out = renderModuleWithLinks(b, [a, b]);
+      isTrue(g, "links to current module shared type", Str.contains("href=\"/docs/project:b/Shared\"", out))
+    });
+
+    group(sg, "renderDeclarationPageWithLinks renders full declaration page", (g: Suite) => {
+      val target = modLinkTarget();
+      val source = modLinkSource();
+      val out = renderDeclarationPageWithLinks(source, "load", [target, source]);
+      isTrue(g, "has html scaffold", Str.contains("<!DOCTYPE html>", out));
+      isTrue(g, "has declaration heading", Str.contains("id=\"load\"", out));
+      isTrue(g, "has linked signature", Str.contains("href=\"/docs/project:target/User\"", out))
     });
 
     // ── renderModule: declaration index present ───────────────────────────────

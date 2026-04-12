@@ -312,3 +312,13 @@ This section specifies how `async fun` declarations interact with the module sys
 | **01** | ImportDecl, ExportDecl, TopLevelDecl grammar (01 §3.1). STRING is the specifier. UPPER_IDENT for namespace; IDENT for named import/export. Program order: imports first, then declarations and statements. |
 | **02** | Standard library module names (including `kestrel:data/string`, `kestrel:data/char`, `kestrel:data/list`, `kestrel:dev/stack`, `kestrel:io/http`, `kestrel:data/json`, `kestrel:io/fs`, `kestrel:web`, `kestrel:socket`) must resolve to modules that satisfy 02. No other spec may use those names for a different contract. |
 | **03** | One .kbc (binary) per module; references in bytecode are by offset/index only (03 §0). Import table (§6.5): `import_count` and one u32 (string table index) per distinct import specifier; the string is the **exact source specifier**. Exported names and their offsets appear in the package’s types file (07 §5); function table (§6.1), exported type declarations (§6.4), and ADT table (§10) hold the definitions in the binary. || **06** | Structural async typing (06 §6): `async fun f(x: A): Task<B>` has the same type `(A) -> Task<B>` as a plain `fun f(x: A): Task<B>`. The `async` keyword is invisible at module boundaries. `await` prohibition at module scope enforced by the type checker (06 §6). |
+
+## 13. Documentation Browser Links
+
+The `kestrel doc` browser may render hyperlinks for declaration references that appear in signatures. Link resolution is documentation-only metadata (it does not affect compile-time module resolution in §§2–4) and follows deterministic lookup over the indexed export set:
+
+- Prefer a declaration in the current module with the same name.
+- Otherwise choose the first matching declaration by sorted module specifier order.
+- If no indexed declaration matches, render plain non-link text.
+
+Routes and HTTP behavior for these links are defined in [09-tools.md](09-tools.md).

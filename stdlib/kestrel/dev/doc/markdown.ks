@@ -40,6 +40,24 @@ fun renderKestrelToken(tok: Token): String =
 export fun renderKestrelCode(code: String): String =
   Str.join("", Lst.map(Lex.lex(code), (tok: Token) => renderKestrelToken(tok)))
 
+fun tokenWithOptionalLink(tok: Token, resolver: (Token) -> Option<String>): String = {
+  val tokenHtml = renderKestrelToken(tok)
+  val urlOpt = match (tok.kind) {
+    TkIdent => resolver(tok)
+    TkUpper => resolver(tok)
+    _       => None
+  }
+  match (urlOpt) {
+    Some(url) => "<a class=\"sig-link\" href=\"${escapeAttr(url)}\">${tokenHtml}</a>"
+    None      => tokenHtml
+  }
+}
+
+/// Render Kestrel source to syntax-colored HTML and optionally attach links
+/// for identifier/type tokens resolved by `resolver`.
+export fun renderKestrelCodeWithLinks(code: String, resolver: (Token) -> Option<String>): String =
+  Str.join("", Lst.map(Lex.lex(code), (tok: Token) => tokenWithOptionalLink(tok, resolver)))
+
 fun isKestrelFence(lang: String): Bool = {
   val l = Str.toLower(Str.trim(lang))
   l == "kestrel" | l == "ks"

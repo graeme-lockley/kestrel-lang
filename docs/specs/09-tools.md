@@ -210,6 +210,7 @@ Declaration signatures in docs pages are syntax-colorized using the same Kestrel
 | `GET` | `/` | 302 redirect to `/docs/` |
 | `GET` | `/docs/` | HTML module list page (all discovered modules) |
 | `GET` | `/docs/<module-spec>` | HTML module detail page; 404 if not found |
+| `GET` | `/docs/<module-spec>/<declaration-name>` | HTML declaration detail page for one exported declaration; 404 if module not found |
 | `GET` | `/api/search?q=<query>` | JSON array of `SearchResult` objects |
 | `GET` | `/api/index` | JSON dump of the full search index |
 | `GET` | `/api/reload-token` | Plain-text monotonic integer; increments after each live reload |
@@ -217,6 +218,8 @@ Declaration signatures in docs pages are syntax-colorized using the same Kestrel
 | `GET` | `/docs/static/search.js` | Embedded JavaScript for the search widget and live-reload polling |
 
 `/api/index` entry payloads always include `signature` strings. For unannotated exported `val`/`var`, `signature` contains the inferred type text; when inference cannot be resolved, `signature` includes `<inference-unavailable>` for that binding.
+
+Declaration signatures in docs HTML may include hyperlinks for resolvable declaration references. Resolution is deterministic against the in-memory index: current-module declaration names are preferred, otherwise the first matching declaration by sorted module specifier order. Unresolvable names remain plain non-link text.
 
 **Module discovery:**
 

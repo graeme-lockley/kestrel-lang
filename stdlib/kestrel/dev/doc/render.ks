@@ -3,9 +3,11 @@
 //! values into ready-to-serve HTML pages.
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
+import * as Dict from "kestrel:data/dict"
 import { DocModule, DocEntry, DKFun, DKType, DKVal, DKVar, DKException, DKExternType, DKExternFun } from "kestrel:dev/doc/extract"
 import * as Md from "kestrel:dev/doc/markdown"
 import * as Sig from "kestrel:dev/doc/sig"
+import { Token } from "kestrel:dev/parser/token"
 
 // ── HTML escaping ─────────────────────────────────────────────────────────────
 
@@ -101,9 +103,41 @@ fun renderIndex(entries: List<DocEntry>): String = {
   "<nav class=\"decl-index\">\n<div class=\"decl-index-title\">Index (${Lst.length(entries)})</div>\n<ul>\n    ${items}\n</ul>\n</nav>"
 }
 
-fun renderEntry(entry: DocEntry): String = {
+fun sortModules(modules: List<DocModule>): List<DocModule> =
+  Lst.sortWith((a: DocModule, b: DocModule) => compareStr(a.moduleSpec, b.moduleSpec), modules)
+
+fun addGlobalLink(acc: Dict<String, String>, modSpec: String, e: DocEntry): Dict<String, String> =
+  if (Dict.member(acc, e.name)) acc
+  else Dict.insert(acc, e.name, modSpec)
+
+fun collectGlobalLinks(mods: List<DocModule>, acc: Dict<String, String>): Dict<String, String> =
+  match (mods) {
+    [] => acc
+    m :: rest => {
+      val acc2 = Lst.foldl(m.entries, acc, (a: Dict<String, String>, e: DocEntry) => addGlobalLink(a, m.moduleSpec, e));
+      collectGlobalLinks(rest, acc2)
+    }
+  }
+
+fun hasEntryNamed(entries: List<DocEntry>, name: String): Bool =
+  Lst.any(entries, (e: DocEntry) => Str.equals(e.name, name))
+
+fun resolveTokenLink(mod: DocModule, entry: DocEntry, globalLinks: Dict<String, String>, tok: Token): Option<String> = {
+  val name = tok.text;
+  if (Str.equals(name, entry.name))
+    None
+  else if (hasEntryNamed(mod.entries, name))
+    Some("/docs/${mod.moduleSpec}/${name}")
+  else
+    match (Dict.get(globalLinks, name)) {
+      Some(targetMod) => Some("/docs/${targetMod}/${name}")
+      None => None
+    }
+}
+
+fun renderEntry(mod: DocModule, entry: DocEntry, globalLinks: Dict<String, String>): String = {
   val sig     = Sig.formatWith(entry, { multilineFunctions = True })
-  val sigHtml = Md.renderKestrelCode(sig)
+  val sigHtml = Md.renderKestrelCodeWithLinks(sig, (tok: Token) => resolveTokenLink(mod, entry, globalLinks, tok))
   val docHtml = if (Str.isEmpty(entry.doc)) "" else Md.render(entry.doc)
   val docDiv  =
     if (Str.isEmpty(docHtml)) ""
@@ -112,11 +146,12 @@ fun renderEntry(entry: DocEntry): String = {
 }
 
 /// Render a full HTML page for a single `DocModule`.
-export fun renderModule(mod: DocModule): String = {
+export fun renderModuleWithLinks(mod: DocModule, allModules: List<DocModule>): String = {
+  val globalLinks = collectGlobalLinks(sortModules(allModules), Dict.emptyStringDict())
   val proseHtml =
     if (Str.isEmpty(mod.moduleProse)) ""
     else "<div class=\"module-prose\">${Md.render(mod.moduleProse)}</div>\n"
-  val entryHtml = Str.join("\n", Lst.map(mod.entries, (e: DocEntry) => renderEntry(e)))
+  val entryHtml = Str.join("\n", Lst.map(mod.entries, (e: DocEntry) => renderEntry(mod, e, globalLinks)))
   val contentHtml = "<div class=\"module-content\">\n<h1 class=\"module-title\">${escapeHtml(mod.moduleSpec)}</h1>\n${proseHtml}${entryHtml}\n</div>"
   val sidebarHtml =
     if (Lst.isEmpty(mod.entries)) ""
@@ -124,6 +159,10 @@ export fun renderModule(mod: DocModule): String = {
   val body = "<div class=\"module-layout\">${contentHtml}${sidebarHtml}\n</div>"
   page("${mod.moduleSpec} — Kestrel Docs", body)
 }
+
+/// Render a full HTML page for a single `DocModule` without global link context.
+export fun renderModule(mod: DocModule): String =
+  renderModuleWithLinks(mod, [mod])
 
 // ── Single-declaration fragment ───────────────────────────────────────────────
 
@@ -134,9 +173,19 @@ fun findEntry(entries: List<DocEntry>, name: String): Option<DocEntry> =
 /// fragment if the name does not exist in the module.
 export fun renderDeclaration(mod: DocModule, name: String): String =
   match (findEntry(mod.entries, name)) {
-    Some(e) => renderEntry(e)
+    Some(e) => renderEntry(mod, e, collectGlobalLinks(sortModules([mod]), Dict.emptyStringDict()))
     None    => "<p class=\"not-found\">Declaration <code>${escapeHtml(name)}</code> not found in <code>${escapeHtml(mod.moduleSpec)}</code>.</p>"
   }
+
+/// Render a full-page declaration view for `/docs/{module}/{name}`.
+export fun renderDeclarationPageWithLinks(mod: DocModule, name: String, allModules: List<DocModule>): String = {
+  val globalLinks = collectGlobalLinks(sortModules(allModules), Dict.emptyStringDict())
+  val body = match (findEntry(mod.entries, name)) {
+    Some(e) => "<h1 class=\"module-title\"><a href=\"/docs/${escapeAttr(mod.moduleSpec)}\">${escapeHtml(mod.moduleSpec)}</a></h1>\n${renderEntry(mod, e, globalLinks)}"
+    None    => "<p class=\"not-found\">Declaration <code>${escapeHtml(name)}</code> not found in <code>${escapeHtml(mod.moduleSpec)}</code>.</p>"
+  }
+  page("${mod.moduleSpec}/${name} — Kestrel Docs", body)
+}
 
 // ── Static CSS ────────────────────────────────────────────────────────────────
 

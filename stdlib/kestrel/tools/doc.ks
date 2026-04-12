@@ -163,6 +163,18 @@ fun jsResp(body: String): Http.Response =
 fun redirectResp(location: String): Http.Response =
   Http.makeResponseWithHeaders(302, "", [("Location", location)])
 
+fun lastSlashPos(path: String): Int = {
+  var start = 0;
+  var last  = -1;
+  var idx   = Str.indexOfFrom(path, "/", start);
+  while (idx >= 0) {
+    last := idx;
+    start := idx + 1;
+    idx := Str.indexOfFrom(path, "/", start)
+  };
+  last
+}
+
 // ─── Request dispatcher ───────────────────────────────────────────────────────
 
 async fun dispatch(live: LiveState, req: Http.Request, _params: Dict<String, String>): Task<Http.Response> = {
@@ -184,8 +196,20 @@ async fun dispatch(live: LiveState, req: Http.Request, _params: Dict<String, Str
   } else if (Str.startsWith("/docs/", path)) {
     val rawSpec = Str.dropLeft(path, 6);
     match (Dict.get(state.modDict, rawSpec)) {
-      Some(m) => htmlResp(200, Render.renderModule(m))
-      None => htmlResp(404, "<html><body><h1>404 Not Found</h1><p>Module not found: ${rawSpec}</p></body></html>")
+      Some(m) => htmlResp(200, Render.renderModuleWithLinks(m, state.allModules))
+      None => {
+        val cut = lastSlashPos(rawSpec);
+        if (cut <= 0)
+          htmlResp(404, "<html><body><h1>404 Not Found</h1><p>Module not found: ${rawSpec}</p></body></html>")
+        else {
+          val modSpec = Str.slice(rawSpec, 0, cut);
+          val decl = Str.slice(rawSpec, cut + 1, Str.length(rawSpec));
+          match (Dict.get(state.modDict, modSpec)) {
+            Some(m) => htmlResp(200, Render.renderDeclarationPageWithLinks(m, decl, state.allModules))
+            None => htmlResp(404, "<html><body><h1>404 Not Found</h1><p>Module not found: ${rawSpec}</p></body></html>")
+          }
+        }
+      }
     }
   } else
     Http.makeResponse(404, "Not Found")
