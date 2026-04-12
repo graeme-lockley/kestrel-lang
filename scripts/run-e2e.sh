@@ -25,6 +25,12 @@ fi
 cd "$COMPILER" && npm run build >/dev/null 2>&1 && cd "$ROOT" || { echo "Compiler build failed" >&2; exit 1; }
 (cd "$ROOT/runtime/jvm" && ./build.sh >/dev/null 2>&1) || { echo "JVM runtime build failed" >&2; exit 1; }
 
+# In strict no-fallback mode, normal commands require bootstrapped self-hosted compiler artifacts.
+if ! "$ROOT/kestrel" status | grep -q "compiler mode: self-hosted"; then
+  "$ROOT/scripts/build-bootstrap-jar.sh" >/dev/null
+  "$ROOT/kestrel" bootstrap >/dev/null
+fi
+
 count=0
 if [ -n "${1:-}" ]; then
   arg="$1"

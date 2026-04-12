@@ -16,7 +16,7 @@ COMPILER_CLI="$COMPILER/dist/cli.js"
 JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
 RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
 MAVEN_CLASSPATH_RESOLVER="$ROOT/scripts/resolve-maven-classpath.mjs"
-BOOTSTRAP_ROOT="$ROOT/.kestrel/bootstrap"
+BOOTSTRAP_ROOT="${KESTREL_BOOTSTRAP_ROOT:-$HOME/.kestrel/bootstrap}"
 BOOTSTRAP_COMPILER_DIR="$BOOTSTRAP_ROOT/compiler"
 BOOTSTRAP_JAR="$BOOTSTRAP_COMPILER_DIR/compiler-bootstrap.jar"
 BOOTSTRAP_SELFHOST_DIR="$BOOTSTRAP_ROOT/self-hosted"
@@ -256,17 +256,34 @@ maven_classpath_for_entry() {
 }
 
 selfhost_compiler_ready() {
-  [ "${KESTREL_CLI_TS_FALLBACK:-0}" = "1" ] && return 1
   [ "$(compiler_mode)" = "self-hosted" ] || return 1
   [ -d "$BOOTSTRAP_SELFHOST_DIR" ] || return 1
   find "$BOOTSTRAP_SELFHOST_DIR" -name "Cli_entry.class" -print -quit | grep -q . || return 1
   return 0
 }
 
+require_selfhost_compiler() {
+  if selfhost_compiler_ready; then
+    return 0
+  fi
+  if [ "${KESTREL_INTERNAL_ALLOW_TS_FALLBACK:-0}" = "1" ]; then
+    return 0
+  fi
+  echo "kestrel: self-hosted compiler artifacts are required for this command" >&2
+  echo "kestrel: expected under $BOOTSTRAP_SELFHOST_DIR" >&2
+  echo "kestrel: run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap" >&2
+  return 1
+}
+
 compile_with_active_compiler() {
   local entry_source="$1"
   local out_dir="$2"
   shift 2
+
+  if [ "${KESTREL_INTERNAL_ALLOW_TS_FALLBACK:-0}" = "1" ]; then
+    (cd "$ROOT" && node "$COMPILER_CLI" "$entry_source" --target jvm -o "$out_dir" "$@")
+    return $?
+  fi
 
   if selfhost_compiler_ready; then
     local main_class maven_cp java_cp
@@ -276,23 +293,29 @@ compile_with_active_compiler() {
     if [ -n "$maven_cp" ]; then
       java_cp="$java_cp:$maven_cp"
     fi
-    (cd "$ROOT" && env KESTREL_CLI_TS_FALLBACK=1 java -Xss8m -cp "$java_cp" "$main_class" build "$entry_source" --target jvm -o "$out_dir" "$@")
+    (cd "$ROOT" && env KESTREL_INTERNAL_ALLOW_TS_FALLBACK=1 java -Xss8m -cp "$java_cp" "$main_class" build "$entry_source" --target jvm -o "$out_dir" "$@")
     return $?
   fi
 
-  (cd "$ROOT" && node "$COMPILER_CLI" "$entry_source" --target jvm -o "$out_dir" "$@")
+  require_selfhost_compiler
+  return 1
 }
 
 cmd_build() {
   ensure_tools
-  if ! selfhost_compiler_ready; then
+  if [ -z "${1:-}" ]; then
     build_compiler_jvm
-  elif [ ! -f "$RUNTIME_JAR" ]; then
+    return 0
+  fi
+  if [ ! -f "$RUNTIME_JAR" ]; then
     echo "kestrel build: missing runtime jar: $RUNTIME_JAR" >&2
-    echo "kestrel build: run ./kestrel build (bootstrap-required mode) or rebuild runtime artifacts" >&2
+    echo "kestrel build: run ./kestrel build to generate runtime artifacts" >&2
     exit 1
   fi
   if [ -n "${1:-}" ]; then
+    if ! require_selfhost_compiler; then
+      exit 1
+    fi
     local resolved class_dir
     local compiler_flags=()
     local status_flag=""
@@ -375,10 +398,11 @@ cmd_run() {
     usage
   fi
   ensure_tools
-  if ! selfhost_compiler_ready && compiler_build_needed; then
-    build_compiler_jvm
-  elif [ ! -f "$RUNTIME_JAR" ]; then
+  if [ ! -f "$RUNTIME_JAR" ]; then
     echo "kestrel run: missing runtime jar: $RUNTIME_JAR" >&2
+    exit 1
+  fi
+  if ! require_selfhost_compiler; then
     exit 1
   fi
   local resolved class_dir main_class
@@ -447,10 +471,11 @@ cmd_dis() {
     echo "kestrel: javap not found" >&2
     exit 1
   fi
-  if ! selfhost_compiler_ready && compiler_build_needed; then
-    build_compiler_jvm
-  elif [ ! -f "$RUNTIME_JAR" ]; then
+  if [ ! -f "$RUNTIME_JAR" ]; then
     echo "kestrel dis: missing runtime jar: $RUNTIME_JAR" >&2
+    exit 1
+  fi
+  if ! require_selfhost_compiler; then
     exit 1
   fi
   local resolved
@@ -484,10 +509,11 @@ cmd_dis() {
 
 cmd_test() {
   ensure_tools
-  if ! selfhost_compiler_ready && compiler_build_needed; then
-    build_compiler_jvm
-  elif [ ! -f "$RUNTIME_JAR" ]; then
+  if [ ! -f "$RUNTIME_JAR" ]; then
     echo "kestrel test: missing runtime jar: $RUNTIME_JAR" >&2
+    exit 1
+  fi
+  if ! require_selfhost_compiler; then
     exit 1
   fi
   KESTREL_BIN="$ROOT/kestrel" exec "$ROOT/kestrel" run "kestrel:tools/test" "$@"
@@ -514,7 +540,7 @@ cmd_bootstrap() {
   rm -rf "$BOOTSTRAP_SELFHOST_DIR"
   mkdir -p "$BOOTSTRAP_SELFHOST_DIR"
 
-  if ! env KESTREL_JVM_CACHE="$BOOTSTRAP_SELFHOST_DIR" java -Xss8m -cp "$RUNTIME_JAR:$BOOTSTRAP_JAR" "$bootstrap_main_class" build "$BOOTSTRAP_ENTRY"; then
+  if ! env KESTREL_JVM_CACHE="$BOOTSTRAP_SELFHOST_DIR" KESTREL_INTERNAL_ALLOW_TS_FALLBACK=1 java -Xss8m -cp "$RUNTIME_JAR:$BOOTSTRAP_JAR" "$bootstrap_main_class" build "$BOOTSTRAP_ENTRY"; then
     echo "kestrel bootstrap: bootstrap compile failed while generating self-hosted compiler classes" >&2
     echo "kestrel bootstrap: attempted entry class: $bootstrap_main_class" >&2
     exit 1
