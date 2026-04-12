@@ -153,3 +153,75 @@ export async function tokenizeSource(source: string): Promise<unknown[]> {
   const { tokenize } = await loadHelperModules();
   return tokenize(source);
 }
+
+function isIdentChar(ch: string): boolean {
+  return /[A-Za-z0-9_]/.test(ch);
+}
+
+function identifierAtOffset(source: string, offset: number): string | null {
+  if (source.length === 0) {
+    return null;
+  }
+  const clamped = Math.max(0, Math.min(offset, source.length - 1));
+  let left = clamped;
+  let right = clamped;
+
+  if (!isIdentChar(source[clamped] ?? '') && clamped > 0 && isIdentChar(source[clamped - 1] ?? '')) {
+    left = clamped - 1;
+    right = clamped - 1;
+  }
+
+  while (left > 0 && isIdentChar(source[left - 1] ?? '')) {
+    left--;
+  }
+  while (right + 1 < source.length && isIdentChar(source[right + 1] ?? '')) {
+    right++;
+  }
+
+  const ident = source.slice(left, right + 1);
+  return ident.length > 0 && /^[A-Za-z_][A-Za-z0-9_]*$/.test(ident) ? ident : null;
+}
+
+function collectDocByDeclName(source: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const lines = source.split(/\r?\n/);
+  let pendingDoc: string[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const docMatch = line.match(/^\/\/\/\s?(.*)$/);
+    if (docMatch != null) {
+      pendingDoc.push(docMatch[1] ?? '');
+      continue;
+    }
+
+    const declMatch = line.match(/^(?:export\s+)?(?:async\s+)?(?:fun|val|var|type|exception)\s+([A-Za-z_][A-Za-z0-9_]*)\b/);
+    if (declMatch != null) {
+      const name = declMatch[1];
+      if (pendingDoc.length > 0) {
+        out.set(name, pendingDoc.join('\n').trim());
+      }
+      pendingDoc = [];
+      continue;
+    }
+
+    if (line === '' || line.startsWith('//')) {
+      continue;
+    }
+
+    pendingDoc = [];
+  }
+
+  return out;
+}
+
+export async function hoverDocAtOffset(source: string, offset: number): Promise<string | null> {
+  const ident = identifierAtOffset(source, offset);
+  if (ident == null) {
+    return null;
+  }
+
+  const docsByName = collectDocByDeclName(source);
+  const doc = docsByName.get(ident);
+  return doc == null || doc.length === 0 ? null : doc;
+}

@@ -65,14 +65,14 @@ This story is intentionally isolated from the rest of E10 and should remain unpl
 
 ## Tasks
 
-- [ ] Add doc-comment extraction helper in `vscode-kestrel/src/server/compiler-bridge.ts` for hovered symbols.
-- [ ] Update `vscode-kestrel/src/server/providers/hover.ts` to append doc-comment markdown under a separator when docs are available.
-- [ ] Keep fallback behavior unchanged (type-only hover) when no doc-comment is available.
-- [ ] Add/extend hover unit tests in `vscode-kestrel/test/unit/hover.test.ts` for type+doc and type-only cases.
-- [ ] Update `docs/specs/09-tools.md` editor integration text to mention hover doc-comment rendering.
-- [ ] Run `cd vscode-kestrel && npm test`.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Add doc-comment extraction helper in `vscode-kestrel/src/server/compiler-bridge.ts` for hovered symbols.
+- [x] Update `vscode-kestrel/src/server/providers/hover.ts` to append doc-comment markdown under a separator when docs are available.
+- [x] Keep fallback behavior unchanged (type-only hover) when no doc-comment is available.
+- [x] Add/extend hover unit tests in `vscode-kestrel/test/unit/hover.test.ts` for type+doc and type-only cases.
+- [x] Update `docs/specs/09-tools.md` editor integration text to mention hover doc-comment rendering.
+- [x] Run `cd vscode-kestrel && npm test`.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -85,4 +85,10 @@ This story is intentionally isolated from the rest of E10 and should remain unpl
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — extend editor integration capability description for hover to mention doc-comment prose rendering.
+- [x] `docs/specs/09-tools.md` — extend editor integration capability description for hover to mention doc-comment prose rendering.
+
+## Build notes
+
+- 2026-04-12: Started implementation.
+- 2026-04-12: Implemented hover doc-comment composition by combining inferred type markdown with adjacent `///` prose from source declarations.
+- 2026-04-12: Verification passed: `cd vscode-kestrel && npm test`, `cd compiler && npm run build && npm test`, and `./scripts/kestrel test`.

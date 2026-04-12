@@ -278,6 +278,8 @@ Supported capabilities in the current integration:
 - `textDocument/codeAction` (quick fixes)
 - `textDocument/codeLens` (test lenses)
 
+Hover payloads include inferred type markdown and, when available, `///` declaration doc-comment prose appended beneath the type block.
+
 Supported settings:
 
 - `kestrel.executable` — path or command name for the `kestrel` CLI used by extension commands.

@@ -1,6 +1,6 @@
 import type { Hover, Position } from 'vscode-languageserver/node';
 
-import { hoverTypeAtOffset } from '../compiler-bridge';
+import { hoverDocAtOffset, hoverTypeAtOffset } from '../compiler-bridge';
 
 function offsetFromPosition(source: string, pos: Position): number {
   let line = 0;
@@ -29,10 +29,15 @@ export async function buildHover(source: string, ast: unknown | null, position: 
     return null;
   }
 
+  const docText = await hoverDocAtOffset(source, offset);
+  const body = docText == null || docText.trim() === ''
+    ? `\`\`\`kestrel\n${typeText}\n\`\`\``
+    : `\`\`\`kestrel\n${typeText}\n\`\`\`\n---\n${docText}`;
+
   return {
     contents: {
       kind: 'markdown',
-      value: `\`\`\`kestrel\n${typeText}\n\`\`\``,
+      value: body,
     },
   };
 }
