@@ -46,3 +46,32 @@ No signature help provider exists. The compiler's typecheck result makes `getInf
 - Kestrel supports curried function application only through explicit multi-param `fun`. There is no partial application syntax in the current language, so the active-parameter calculation is straightforward.
 - Named arguments are not a current language feature; all arguments are positional.
 - If the callee expression has an unresolved type variable (e.g., the callee itself is a type error), `printType` will show `'a` for the unknown parameter; this is acceptable.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Signature-help provider | Add `vscode-kestrel/src/server/providers/signatureHelp.ts` for call-site lookup and active-parameter calculation. |
+| LSP server wiring | Register `signatureHelpProvider` capability and `onSignatureHelp` handler in `server.ts`. |
+| Compiler bridge usage | Reuse inferred type helpers for fallback type text where explicit param types are absent. |
+| Tests | Add unit tests for active-parameter indexing and null return behavior when no callable symbol is found. |
+
+## Tasks
+
+- [ ] Add `vscode-kestrel/src/server/providers/signatureHelp.ts` that finds call context, resolves callee name to a same-file `FunDecl`, and builds `SignatureHelp` payload.
+- [ ] Compute `activeParameter` index from comma count inside the current argument list.
+- [ ] Register signature-help capability and handler in `vscode-kestrel/src/server/server.ts` with trigger chars `(` and `,`.
+- [ ] Add `vscode-kestrel/test/unit/signatureHelp.test.ts` for first/second parameter activation and null/no-callee cases.
+- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/signatureHelp.test.ts` | Verify signature label and active parameter progression while typing call args. |
+| Manual extension smoke | VS Code extension host | Confirm popup appears on `(` / `,` and highlights correct argument index. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/01-language.md` — verify function declaration/call syntax assumptions used by signature help; no textual spec change expected.
+- [ ] `docs/specs/09-tools.md` — no change in this story; capability docs remain in S10-09.
