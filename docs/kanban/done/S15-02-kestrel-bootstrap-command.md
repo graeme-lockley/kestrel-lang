@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E15 Bootstrap JAR Self-Hosting Handoff](../epics/unplanned/E15-bootstrap-jar-self-hosting-handoff.md)
+- Epic: [E15 Bootstrap JAR Self-Hosting Handoff](../epics/done/E15-bootstrap-jar-self-hosting-handoff.md)
 - Companion stories: S15-01, S15-03, S15-04, S15-05
 
 ## Summary
