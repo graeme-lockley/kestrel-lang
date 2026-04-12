@@ -11,7 +11,9 @@ import { compileSource } from './compiler-bridge';
 import { DebouncedScheduler } from './debounce';
 import { toLspDiagnostics } from './diagnostics';
 import { DocumentManager } from './document-manager';
+import { collectFoldingRanges } from './providers/folding';
 import { buildHover } from './providers/hover';
+import { collectDocumentSymbols } from './providers/symbols';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -45,6 +47,8 @@ connection.onInitialize((_params: InitializeParams) => {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       hoverProvider: true,
+      documentSymbolProvider: true,
+      foldingRangeProvider: true,
     },
   };
 });
@@ -55,6 +59,22 @@ connection.onHover(async (params) => {
     return null;
   }
   return buildHover(doc.source, doc.ast, params.position);
+});
+
+connection.onDocumentSymbol((params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return [];
+  }
+  return collectDocumentSymbols(doc.ast);
+});
+
+connection.onFoldingRanges((params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return [];
+  }
+  return collectFoldingRanges(doc.ast, doc.source);
 });
 
 documents.onDidOpen((event) => {
