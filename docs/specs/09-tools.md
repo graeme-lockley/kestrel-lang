@@ -221,6 +221,8 @@ Declaration signatures in docs pages are syntax-colorized using the same Kestrel
 
 Declaration signatures in docs HTML may include hyperlinks for resolvable declaration references. Resolution is deterministic against the in-memory index: current-module declaration names are preferred, otherwise the first matching declaration by sorted module specifier order. Unresolvable names remain plain non-link text.
 
+On module detail pages, the right-hand declaration index keeps each row on a single line (`kind` + declaration name), enables horizontal scrolling for overflowed rows, and includes visible keyboard-focus styling for index links.
+
 **Module discovery:**
 
 - **Stdlib modules:** All `*.ks` files (excluding `*.test.ks`) under `$KESTREL_ROOT/stdlib/kestrel/` are loaded. Specifiers are derived by stripping the `stdlib/kestrel/` prefix and `.ks` suffix then prepending `kestrel:`.

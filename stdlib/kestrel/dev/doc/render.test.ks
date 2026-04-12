@@ -232,7 +232,10 @@ export async fun run(s: Suite): Task<Unit> =
       val css = staticCss()
       isTrue(g, "non-empty",      !Str.isEmpty(css));
       isTrue(g, "has body rule",  Str.contains("body", css));
-      isTrue(g, "has font-family", Str.contains("font-family", css))
+      isTrue(g, "has font-family", Str.contains("font-family", css));
+      isTrue(g, "index supports horizontal overflow", Str.contains("overflow-x: auto", css));
+      isTrue(g, "index rows are non-wrapping", Str.contains("white-space: nowrap", css));
+      isTrue(g, "index links have focus-visible style", Str.contains(".decl-index a:focus-visible", css))
     });
 
     // ── staticJs ──────────────────────────────────────────────────────────────

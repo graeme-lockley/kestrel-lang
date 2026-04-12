@@ -58,15 +58,15 @@ In the index menu, long declarations can wrap to additional lines. This reduces 
 
 ## Tasks
 
-- [ ] Update `.decl-index` CSS in `stdlib/kestrel/dev/doc/render.ks` to support horizontal scrolling for overflowed index content while retaining vertical scroll for long lists.
-- [ ] Update `.decl-index a` CSS to keep each index row on one line (`white-space` behavior) and avoid declaration-name wrapping.
-- [ ] Tighten `.idx-kind` spacing/width so kind labels and names are denser but still aligned.
-- [ ] Add explicit focus-visible styling for `.decl-index a` so keyboard navigation remains visible in overflow scenarios.
-- [ ] Validate media-query behavior in `staticCss()` for narrow screens to avoid overlap/truncation regressions.
-- [ ] Add/extend `stdlib/kestrel/dev/doc/render.test.ks` CSS assertions for index non-wrapping, horizontal overflow, and focus visibility rules.
-- [ ] Update `docs/specs/09-tools.md` to document non-wrapping index rows and horizontal-scroll overflow behavior.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Update `.decl-index` CSS in `stdlib/kestrel/dev/doc/render.ks` to support horizontal scrolling for overflowed index content while retaining vertical scroll for long lists.
+- [x] Update `.decl-index a` CSS to keep each index row on one line (`white-space` behavior) and avoid declaration-name wrapping.
+- [x] Tighten `.idx-kind` spacing/width so kind labels and names are denser but still aligned.
+- [x] Add explicit focus-visible styling for `.decl-index a` so keyboard navigation remains visible in overflow scenarios.
+- [x] Validate media-query behavior in `staticCss()` for narrow screens to avoid overlap/truncation regressions.
+- [x] Add/extend `stdlib/kestrel/dev/doc/render.test.ks` CSS assertions for index non-wrapping, horizontal overflow, and focus visibility rules.
+- [x] Update `docs/specs/09-tools.md` to document non-wrapping index rows and horizontal-scroll overflow behavior.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -77,4 +77,10 @@ In the index menu, long declarations can wrap to additional lines. This reduces 
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` - describe docs index menu single-line row behavior, horizontal overflow scrolling, and keyboard-focus visibility expectations.
+- [x] `docs/specs/09-tools.md` - describe docs index menu single-line row behavior, horizontal overflow scrolling, and keyboard-focus visibility expectations.
+
+## Build notes
+
+- 2026-04-12: Updated docs index CSS to combine vertical scrolling (`overflow-y`) with horizontal overflow (`overflow-x`) so long declaration rows stay single-line and remain reachable.
+- 2026-04-12: Switched index links to a non-wrapping flex row with reduced kind-label width (`.idx-kind`) for denser scanning while keeping alignment.
+- 2026-04-12: Added `.decl-index a:focus-visible` styles so keyboard focus remains visible even when users scroll horizontally through long index entries.

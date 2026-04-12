@@ -21,7 +21,7 @@ Delivers an interactive, web-based documentation browser for Kestrel developers 
 9. [S09-09-exported-val-var-type-inference-in-doc-index.md](../../done/S09-09-exported-val-var-type-inference-in-doc-index.md) ✓
 10. [S09-10-kestrel-syntax-colorization-for-declaration-signatures.md](../../done/S09-10-kestrel-syntax-colorization-for-declaration-signatures.md) ✓
 11. [S09-11-cross-module-hyperlinks-for-declarations.md](../../done/S09-11-cross-module-hyperlinks-for-declarations.md) ✓
-12. [S09-12-index-menu-layout-and-horizontal-scroll.md](../../unplanned/S09-12-index-menu-layout-and-horizontal-scroll.md)
+12. [S09-12-index-menu-layout-and-horizontal-scroll.md](../../done/S09-12-index-menu-layout-and-horizontal-scroll.md) ✓
 
 **Notes on parallelism:**
 - S09-01 must come first (defines the `DocModule` / `DocEntry` ADT used by everything else).
