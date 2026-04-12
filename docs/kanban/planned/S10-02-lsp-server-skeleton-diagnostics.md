@@ -51,3 +51,38 @@ Wire up a Language Server Protocol server (`src/server/server.ts`) rooted in `vs
 - The compiler's `compile()` function in `compiler/src/index.ts` currently returns the typed AST only on success. The LSP server needs the typed AST even when there are errors for partial feature support. The compiler-bridge may need to call `parse()` + `typecheck()` separately so partial ASTs are available.
 - The debounce interval (250 ms default) should be configurable via a VS Code setting (`kestrel.lsp.debounceMs`) to allow users on slow machines to increase it.
 - The compiler runs synchronously; for large files this may block the server event loop. If this proves to be a problem, wrap in a `setImmediate` tick or worker thread (deferred concern).
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Extension host | Replace scaffold `src/extension.ts` with language-client startup/teardown that launches the server over IPC transport. |
+| LSP server | Add `src/server/server.ts` with initialize, open/change/close handlers and publishDiagnostics pipeline. |
+| Compiler bridge | Add `src/server/compiler-bridge.ts` to call `compile()` from the built compiler and normalize diagnostics output. |
+| Document state | Add `src/server/document-manager.ts` to cache in-memory source text and latest diagnostics per URI. |
+| Package/build config | Add `vscode-languageclient` and `vscode-languageserver` deps and a `compile:server` build target. |
+| Tests | Add unit tests for diagnostic mapping and debounce-triggered diagnostic publication behavior. |
+
+## Tasks
+
+- [ ] Add dependencies and scripts in `vscode-kestrel/package.json` for `vscode-languageclient` and `vscode-languageserver` and dual compile targets.
+- [ ] Implement `vscode-kestrel/src/server/document-manager.ts` with update/get/delete operations for document source and diagnostics.
+- [ ] Implement `vscode-kestrel/src/server/compiler-bridge.ts` that calls compiler `compile(source, { sourceFile })` and returns diagnostics in a server-friendly shape.
+- [ ] Implement `vscode-kestrel/src/server/server.ts` with LSP connection lifecycle, 250ms debounced compile on open/change, and diagnostic clearing on close.
+- [ ] Update `vscode-kestrel/src/extension.ts` to start a `LanguageClient` wired to the server module.
+- [ ] Implement diagnostic conversion helper (compiler `Diagnostic` -> LSP `Diagnostic`) including severity mapping and hint/suggestion enrichment.
+- [ ] Add tests under `vscode-kestrel/test/unit/` for diagnostic conversion and debounce behavior.
+- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/diagnostics.test.ts` | Verify severity/range/message mapping from compiler diagnostics to LSP diagnostics, including hint/suggestion text. |
+| Vitest unit | `vscode-kestrel/test/unit/server.debounce.test.ts` | Verify rapid successive changes emit one compile/publish cycle after debounce. |
+| Manual extension smoke | VS Code extension host | Open `.ks` file with parse/type errors and confirm red squiggles appear and clear after fix. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/10-compile-diagnostics.md` — verify mapped fields (`hint`, `suggestion`, `related`) are represented correctly in LSP diagnostic output examples.
+- [ ] `docs/specs/09-tools.md` — no spec text change in this story; full Editor Integration section remains in S10-09.
