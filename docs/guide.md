@@ -21,7 +21,8 @@ When working on the self-hosted compiler handoff, run the canonical bootstrap se
 ```
 
 `kestrel status` should report `compiler mode: self-hosted` once bootstrap is complete.
-If it reports `bootstrap-required`, rebuild the bootstrap JAR and rerun `./kestrel bootstrap`.
+If it reports `bootstrap-required`, normal `kestrel run/build/test` commands will fail until you rebuild the bootstrap JAR and rerun `./kestrel bootstrap`.
+By default the bootstrap JAR, state file, and self-hosted compiler classes live under `~/.kestrel/bootstrap/`.
 
 For deeper parity validation, run the Stage-0 verification script:
 

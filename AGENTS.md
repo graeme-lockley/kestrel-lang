@@ -80,7 +80,7 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime wit
 ./kestrel status
 
 # After successful bootstrap (`status` shows self-hosted), normal commands
-# default to self-hosted compiler classes in .kestrel/bootstrap/self-hosted/
+# require self-hosted compiler classes in ~/.kestrel/bootstrap/self-hosted/
 
 # Run Kestrel test suite
 ./kestrel test [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]

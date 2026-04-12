@@ -13,8 +13,8 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Name:** `kestrel`
 - **Usage:** `kestrel <command> [options]`
 - **Location:** A single entry point at the repository root (`./kestrel` or `scripts/kestrel`) exposes all commands. The root script delegates to `scripts/kestrel`.
-- **Topology:** In `self-hosted` mode (see `kestrel status`), `scripts/kestrel` dispatches normal commands (`run`, `dis`, `build`, `test`, `fmt`, `doc`, `lock`) directly to bootstrap-generated self-hosted compiler classes in `.kestrel/bootstrap/self-hosted/`.
-- **Fallback:** In `bootstrap-required` mode, `scripts/kestrel` uses the TypeScript compiler path for normal command execution.
+- **Topology:** In `self-hosted` mode (see `kestrel status`), `scripts/kestrel` dispatches normal commands (`run`, `dis`, `build`, `test`, `fmt`, `doc`, `lock`) directly to bootstrap-generated self-hosted compiler classes in `~/.kestrel/bootstrap/self-hosted/` by default. Set `KESTREL_BOOTSTRAP_ROOT` to override the bootstrap artifact root.
+- **Fallback:** Normal command execution does not fall back to the TypeScript compiler path when bootstrap state is missing. Users must restore self-hosted artifacts with `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
 - **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` for full toolchain flows. Normal post-bootstrap command execution does not invoke the bootstrap JAR.
 
 ---
@@ -61,7 +61,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 **Usage:** `kestrel build [--refresh] [--allow-http] [--status] [--clean] [script[.ks]]`
 
 - **Effect:** Builds the compiler so that it is up-to-date. If a script path is provided, also compiles that script to a `.class` file using the same cache and freshness rules as `run`.
-- **Mode behavior:** In `self-hosted` mode, this command is dispatched through self-hosted compiler classes by default. In `bootstrap-required` mode, the TypeScript path is used.
+- **Mode behavior:** In `self-hosted` mode, this command is dispatched through self-hosted compiler classes by default. In `bootstrap-required` mode, script compilation fails with a remediation hint until bootstrap artifacts are restored.
 - **Build steps:** `cd compiler && npm run build`. Compiler output is `compiler/dist/`.
 - **URL dependencies:** Same on-demand fetch behaviour as `run` (see §2.9). `--refresh` and `--allow-http` have the same meaning as for `run`.
 - **`--clean`:** Same as for `run`: delete all `.kti` incremental-cache files from the output directory before compiling. If no output directory is configured, silently ignored.
@@ -86,7 +86,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 **Usage:** `./scripts/build-bootstrap-jar.sh`
 
 - **Purpose:** Build a canonical bootstrap compiler JAR artifact from the TypeScript compiler output for use by `kestrel bootstrap` seeding flows.
-- **Output directory:** `.kestrel/bootstrap/compiler/`.
+- **Output directory:** `~/.kestrel/bootstrap/compiler/` by default. Set `KESTREL_BOOTSTRAP_ROOT` to override.
 - **Artifacts:**
   - `compiler-bootstrap.jar`
   - `compiler-bootstrap.meta` (checksum, revision, timestamp metadata)
@@ -121,8 +121,8 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Purpose:** Seed self-hosted compiler classes using the bootstrap compiler JAR.
 - **Prerequisites:**
   - Runtime JAR exists at `runtime/jvm/kestrel-runtime.jar`.
-  - Bootstrap compiler JAR exists at `.kestrel/bootstrap/compiler/compiler-bootstrap.jar` (produced by `./scripts/build-bootstrap-jar.sh`).
-- **Output directory:** `.kestrel/bootstrap/self-hosted/`.
+  - Bootstrap compiler JAR exists at `~/.kestrel/bootstrap/compiler/compiler-bootstrap.jar` by default (produced by `./scripts/build-bootstrap-jar.sh`).
+- **Output directory:** `~/.kestrel/bootstrap/self-hosted/` by default.
 - **Execution model:** Runs the bootstrap compiler entry class (`Cli_entry`) on the JVM with classpath `kestrel-runtime.jar:compiler-bootstrap.jar` to compile `stdlib/kestrel/tools/compiler/cli-entry.ks` and its dependencies into self-hosted class artifacts.
 - **Validation:** Fails if required compiler entry classes (`Cli_entry.class`, `Cli_main.class`) are missing from bootstrap output.
 - **Failure diagnostics:** Emits explicit errors for missing runtime artifact, missing bootstrap JAR, and bootstrap compilation failures.
@@ -136,7 +136,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Mode values:**
   - `self-hosted` — bootstrap state file exists and points to valid self-hosted compiler classes.
   - `bootstrap-required` — bootstrap state missing/invalid or output classes unavailable.
-- **State file:** `.kestrel/bootstrap/state.env`.
+- **State file:** `~/.kestrel/bootstrap/state.env` by default.
 - **Schema fields:**
   - `schema`
   - `mode`
@@ -146,7 +146,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
   - `git_revision`
   - `output_classes`
   - `entry_source`
-- **Fallback guidance:** When mode is `bootstrap-required`, command prints a remediation hint to run `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
+- **Recovery guidance:** When mode is `bootstrap-required`, command prints a remediation hint to run `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
 - **CI contract:** Post-bootstrap CI checks should assert `compiler mode: self-hosted` before running normal `build`/`run`/`test` smoke commands.
 
 ### 2.4 test
