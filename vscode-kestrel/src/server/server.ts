@@ -12,6 +12,7 @@ import { DebouncedScheduler } from './debounce';
 import { toLspDiagnostics } from './diagnostics';
 import { DocumentManager } from './document-manager';
 import { collectCodeActions } from './providers/codeActions';
+import { collectTestCodeLenses } from './providers/codeLens';
 import { collectCompletions } from './providers/completion';
 import { findDefinition } from './providers/definition';
 import { collectFoldingRanges } from './providers/folding';
@@ -27,17 +28,18 @@ const documentManager = new DocumentManager();
 const debouncers = new Map<string, DebouncedScheduler>();
 
 const DEFAULT_DEBOUNCE_MS = 250;
+let debounceMs = DEFAULT_DEBOUNCE_MS;
 
 function scheduleDiagnostics(doc: TextDocument): void {
   const uri = doc.uri;
   let scheduler = debouncers.get(uri);
   if (scheduler == null) {
-    scheduler = new DebouncedScheduler(DEFAULT_DEBOUNCE_MS);
+    scheduler = new DebouncedScheduler(debounceMs);
     debouncers.set(uri, scheduler);
   }
 
   scheduler.cancel();
-  scheduler = new DebouncedScheduler(DEFAULT_DEBOUNCE_MS);
+  scheduler = new DebouncedScheduler(debounceMs);
   debouncers.set(uri, scheduler);
 
   scheduler.schedule(async () => {
@@ -48,13 +50,21 @@ function scheduleDiagnostics(doc: TextDocument): void {
   });
 }
 
-connection.onInitialize((_params: InitializeParams) => {
+connection.onInitialize((params: InitializeParams) => {
+  const configuredDebounce = (params.initializationOptions as { debounceMs?: unknown } | undefined)?.debounceMs;
+  if (typeof configuredDebounce === 'number' && configuredDebounce > 0) {
+    debounceMs = configuredDebounce;
+  }
+
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
       hoverProvider: true,
       documentSymbolProvider: true,
       foldingRangeProvider: true,
+      codeLensProvider: {
+        resolveProvider: false,
+      },
       definitionProvider: true,
       completionProvider: {
         triggerCharacters: ['.'],
@@ -144,6 +154,14 @@ connection.onFoldingRanges((params) => {
     return [];
   }
   return collectFoldingRanges(doc.ast, doc.source);
+});
+
+connection.onCodeLens((params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return [];
+  }
+  return collectTestCodeLenses(params.textDocument.uri, doc.source);
 });
 
 documents.onDidOpen((event) => {

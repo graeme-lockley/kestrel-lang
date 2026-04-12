@@ -91,3 +91,4 @@ No code action provider exists. The compiler publishes diagnostics with error co
    - `cd vscode-kestrel && npm run compile && npm test` passed.
    - `cd compiler && npm run build && npm test` passed.
    - `./scripts/kestrel test` currently fails in unrelated self-hosting story code (`kestrel:tools/compiler/kti` assertion mismatch in `stdlib/kestrel/tools/compiler/kti.test.ks`).
+- 2026-04-12: Re-ran `./scripts/kestrel test`; full harness passed (`1779 passed`).

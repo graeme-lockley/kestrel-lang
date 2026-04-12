@@ -2,12 +2,15 @@
 
 VS Code extension scaffold for Kestrel `.ks` files.
 
-## Features in S10-01
+## Features
 
 - Language registration for `.ks` files
 - TextMate syntax grammar (`syntaxes/kestrel.tmLanguage.json`)
 - Language configuration (`language-configuration.json`)
 - Extension activation entry point (`src/extension.ts`)
+- LSP-backed diagnostics, hover, definition, symbols, folding, semantic tokens, inlay hints
+- Quick-fix code actions for `type:unknown_variable` and `type:non_exhaustive_match`
+- Test CodeLens commands for `test("name", ...)` calls
 
 ## Development
 
@@ -27,4 +30,9 @@ npm test
 
 ## Packaging
 
-Packaging and marketplace publication are added in S10-09.
+```bash
+cd vscode-kestrel
+npm run package
+```
+
+This emits a `.vsix` package in `vscode-kestrel/` suitable for local install in VS Code.

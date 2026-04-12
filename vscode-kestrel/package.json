@@ -15,6 +15,52 @@
   ],
   "main": "./dist/src/extension.js",
   "contributes": {
+    "commands": [
+      {
+        "command": "kestrel.runTest",
+        "title": "Kestrel: Run Test"
+      },
+      {
+        "command": "kestrel.debugTest",
+        "title": "Kestrel: Debug Test"
+      }
+    ],
+    "configuration": {
+      "title": "Kestrel",
+      "properties": {
+        "kestrel.executable": {
+          "type": "string",
+          "default": "kestrel",
+          "description": "Path to the kestrel CLI executable used by extension commands."
+        },
+        "kestrel.lsp.debounceMs": {
+          "type": "number",
+          "default": 250,
+          "minimum": 1,
+          "description": "Debounce delay in milliseconds for on-change language server diagnostics."
+        }
+      }
+    },
+    "taskDefinitions": [
+      {
+        "type": "kestrel",
+        "required": [
+          "task"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "enum": [
+              "run",
+              "test"
+            ]
+          },
+          "file": {
+            "type": "string"
+          }
+        }
+      }
+    ],
     "languages": [
       {
         "id": "kestrel",
@@ -40,7 +86,8 @@
     "compile": "tsc -p .",
     "compile:server": "tsc -p .",
     "watch": "tsc -w -p .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "package": "vsce package --no-dependencies"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1",
@@ -52,6 +99,7 @@
     "@types/vscode": "^1.100.0",
     "typescript": "^5.8.3",
     "vitest": "^3.2.4",
+    "vsce": "^2.15.0",
     "vscode-oniguruma": "^2.0.1",
     "vscode-textmate": "^9.2.1"
   }

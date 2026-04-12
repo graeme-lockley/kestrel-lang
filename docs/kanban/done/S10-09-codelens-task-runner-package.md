@@ -63,14 +63,14 @@ No CodeLens, task, or packaging support exists. The compiler's AST has `CallExpr
 
 ## Tasks
 
-- [ ] Add `vscode-kestrel/src/server/providers/codeLens.ts` to detect `test("name", ...)` call sites and emit Run/Debug lenses.
-- [ ] Register `codeLensProvider` capability and `onCodeLens` handler in `vscode-kestrel/src/server/server.ts`.
-- [ ] Add `kestrel.runTest` and `kestrel.debugTest` command implementations in `vscode-kestrel/src/extension.ts`.
-- [ ] Update `vscode-kestrel/package.json` with command contributions, task definitions, and packaging script (`npm run package`).
-- [ ] Add/update unit tests under `vscode-kestrel/test/unit/` for CodeLens behavior and command payload construction.
-- [ ] Add `vscode-kestrel/test/e2e/README.md` placeholder describing deferred e2e harness setup.
-- [ ] Update `docs/specs/09-tools.md` with the new Editor Integration section and capability/settings details.
-- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+- [x] Add `vscode-kestrel/src/server/providers/codeLens.ts` to detect `test("name", ...)` call sites and emit Run/Debug lenses.
+- [x] Register `codeLensProvider` capability and `onCodeLens` handler in `vscode-kestrel/src/server/server.ts`.
+- [x] Add `kestrel.runTest` and `kestrel.debugTest` command implementations in `vscode-kestrel/src/extension.ts`.
+- [x] Update `vscode-kestrel/package.json` with command contributions, task definitions, and packaging script (`npm run package`).
+- [x] Add/update unit tests under `vscode-kestrel/test/unit/` for CodeLens behavior and command payload construction.
+- [x] Add `vscode-kestrel/test/e2e/README.md` placeholder describing deferred e2e harness setup.
+- [x] Update `docs/specs/09-tools.md` with the new Editor Integration section and capability/settings details.
+- [x] Run `cd vscode-kestrel && npm run compile && npm test`.
 
 ## Tests to add
 
@@ -82,5 +82,18 @@ No CodeLens, task, or packaging support exists. The compiler's AST has `CallExpr
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — add Editor Integration section (LSP endpoint, version, supported capabilities, and settings).
-- [ ] `vscode-kestrel/README.md` — include packaging and test CodeLens usage notes.
+- [x] `docs/specs/09-tools.md` — added Editor Integration section (LSP endpoint, version, supported capabilities, and settings).
+- [x] `vscode-kestrel/README.md` — included packaging and test CodeLens usage notes.
+
+## Build notes
+
+- 2026-04-12: Started implementation.
+- 2026-04-12: Added CodeLens provider for `test("name", ...)` call detection and run/debug command lenses.
+- 2026-04-12: Added extension command handlers for `kestrel.runTest` and `kestrel.debugTest`, with configurable CLI executable and LSP debounce settings.
+- 2026-04-12: Added command/config/task contributions and packaging script in `vscode-kestrel/package.json`.
+- 2026-04-12: Added `codeLens.test.ts` and `test/e2e/README.md` placeholder.
+- 2026-04-12: Packaging verification: `yes | npx vsce package --no-dependencies` produced `vscode-kestrel-0.0.1.vsix`.
+- 2026-04-12: Verification status:
+	- `cd vscode-kestrel && npm run compile && npm test` passed.
+	- `cd compiler && npm run build && npm test` passed.
+	- `./scripts/kestrel test` passed (`1779 passed`).

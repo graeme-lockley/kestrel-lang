@@ -230,6 +230,41 @@ Docs available at http://localhost:<port>/docs/
 
 ---
 
+## 3. Editor Integration (VS Code)
+
+Kestrel provides a VS Code extension (`vscode-kestrel/`) that hosts a language server and editor tooling for `.ks` files.
+
+- Extension entrypoint: `vscode-kestrel/dist/src/extension.js`
+- Language server entrypoint: `vscode-kestrel/dist/src/server/server.js`
+- Protocol baseline: Language Server Protocol 3.17-compatible request/notification surface (using `vscode-languageserver` 9.x)
+
+Supported capabilities in the current integration:
+
+- `textDocument/publishDiagnostics`
+- `textDocument/hover`
+- `textDocument/documentSymbol`
+- `textDocument/foldingRange`
+- `textDocument/definition`
+- `textDocument/completion`
+- `textDocument/signatureHelp`
+- `textDocument/semanticTokens/full`
+- `textDocument/inlayHint`
+- `textDocument/codeAction` (quick fixes)
+- `textDocument/codeLens` (test lenses)
+
+Supported settings:
+
+- `kestrel.executable` — path or command name for the `kestrel` CLI used by extension commands.
+- `kestrel.lsp.debounceMs` — debounce delay (ms) for on-change diagnostics scheduling in the language server.
+
+The extension also contributes commands and task definitions for editor workflows:
+
+- `kestrel.runTest`
+- `kestrel.debugTest`
+- task type `kestrel` with task kinds `run` and `test`
+
+---
+
 | Component | Language | Role |
 |-----------|----------|------|
 | **`kestrel` script** | **Bash** | Entry-point wrapper: parse subcommand and options, decide what to run, check freshness (binary older than source or missing ⇒ compile), invoke compiler or `javap`. |

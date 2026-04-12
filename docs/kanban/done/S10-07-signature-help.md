@@ -85,3 +85,4 @@ No signature help provider exists. The compiler's typecheck result makes `getInf
 	- `cd vscode-kestrel && npm run compile && npm test` passed.
 	- `cd compiler && npm run build && npm test` passed.
 	- `./scripts/kestrel test` is currently blocked in this workspace by a pre-existing runtime issue (`[kestrel] warning: exiting with 5 async task(s) still in flight (quiescence timeout)`), followed by Node heap OOM during the test runner compile phase.
+- 2026-04-12: Re-ran `./scripts/kestrel test`; full harness passed (`1779 passed`).
