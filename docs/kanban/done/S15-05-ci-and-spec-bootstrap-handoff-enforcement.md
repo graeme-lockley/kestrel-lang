@@ -58,15 +58,15 @@ CI includes bootstrap-smoke commands, but handoff guarantees are not fully enfor
 
 ## Tasks
 
-- [ ] Update `.github/workflows/ci.yml` to include an explicit bootstrap handoff gate using `./scripts/build-bootstrap-jar.sh`, `./kestrel bootstrap`, and `./kestrel status` assertions.
-- [ ] Add CI post-bootstrap command checks (`./kestrel build`, `./kestrel run`, `./kestrel test --summary`) that run after status confirms `self-hosted` mode.
-- [ ] Ensure CI fails fast when `./kestrel status` does not report `compiler mode: self-hosted` post-bootstrap.
-- [ ] Update docs/spec references to the final bootstrap handoff contract and fallback semantics.
-- [ ] Run `./scripts/build-bootstrap-jar.sh`.
-- [ ] Run `./kestrel bootstrap`.
-- [ ] Run `./kestrel status` and verify `self-hosted`.
-- [ ] Run `./kestrel build hello.ks && ./kestrel run hello.ks && ./kestrel test --summary`.
-- [ ] Run `cd compiler && npm run build && npm test`.
+- [x] Update `.github/workflows/ci.yml` to include an explicit bootstrap handoff gate using `./scripts/build-bootstrap-jar.sh`, `./kestrel bootstrap`, and `./kestrel status` assertions.
+- [x] Add CI post-bootstrap command checks (`./kestrel build`, `./kestrel run`, `./kestrel test --summary`) that run after status confirms `self-hosted` mode.
+- [x] Ensure CI fails fast when `./kestrel status` does not report `compiler mode: self-hosted` post-bootstrap.
+- [x] Update docs/spec references to the final bootstrap handoff contract and fallback semantics.
+- [x] Run `./scripts/build-bootstrap-jar.sh`.
+- [x] Run `./kestrel bootstrap`.
+- [x] Run `./kestrel status` and verify `self-hosted`.
+- [x] Run `./kestrel build hello.ks && ./kestrel run hello.ks && ./kestrel test --summary`.
+- [x] Run `cd compiler && npm run build && npm test`.
 
 ## Tests to add
 
@@ -78,6 +78,11 @@ CI includes bootstrap-smoke commands, but handoff guarantees are not fully enfor
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — finalize bootstrap handoff enforcement language and fallback semantics.
-- [ ] `docs/guide.md` — document operational bootstrap sequence and status-based troubleshooting.
-- [ ] `AGENTS.md` — align bootstrap verification and CI expectations with `kestrel status` contract.
+- [x] `docs/specs/09-tools.md` — finalize bootstrap handoff enforcement language and fallback semantics.
+- [x] `docs/guide.md` — document operational bootstrap sequence and status-based troubleshooting.
+- [x] `AGENTS.md` — align bootstrap verification and CI expectations with `kestrel status` contract.
+
+## Build notes
+
+- 2026-04-12: Added a dedicated CI bootstrap handoff gate that builds the bootstrap JAR, runs `./kestrel bootstrap`, asserts `compiler mode: self-hosted`, and then executes post-bootstrap `build`/`run`/`test` smoke commands.
+- 2026-04-12: Updated bootstrap contract wording in AGENTS and tools spec to remove stale Stage-1 fallback language and align with bootstrap-only JAR policy.

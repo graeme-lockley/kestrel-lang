@@ -112,7 +112,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Prerequisites:** `node`, `java`, and `javac` on `PATH`.
 - **Artifacts:** Writes temporary verification outputs under `.kestrel/bootstrap-stage1/` and reuses Stage-0 outputs from `.kestrel/bootstrap-stage0/`.
 - **Success criteria:** Exits 0 and prints `PASS` when Stage-1 semantic output matches Stage-0 baseline.
-- **Current status:** The default `kestrel build` path still requires Node/TypeScript; Stage-1 script verifies parity and readiness but does not yet switch the primary build path.
+- **Status:** Stage-1 script verifies semantic parity against the Stage-0 baseline and acts as an additional bootstrap regression check.
 
 ### 2.3.3 bootstrap
 
@@ -147,6 +147,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
   - `output_classes`
   - `entry_source`
 - **Fallback guidance:** When mode is `bootstrap-required`, command prints a remediation hint to run `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
+- **CI contract:** Post-bootstrap CI checks should assert `compiler mode: self-hosted` before running normal `build`/`run`/`test` smoke commands.
 
 ### 2.4 test
 

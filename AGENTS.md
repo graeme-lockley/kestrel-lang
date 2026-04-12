@@ -11,7 +11,7 @@ This file provides guidance for agentic coding agents working on the Kestrel pro
 Kestrel is a statically typed programming language with Hindley-Milner type inference. It consists of:
 - **Compiler**: TypeScript in `compiler/`
 - **JVM runtime**: Java in `runtime/jvm/`
-- **CLI**: Bash wrapper in `scripts/` with Kestrel CLI entrypoint in `stdlib/kestrel/tools/compiler/cli-main.ks` (TypeScript path remains fallback)
+- **CLI**: Bash wrapper in `scripts/` with bootstrap command entrypoint in `stdlib/kestrel/tools/compiler/cli-entry.ks`; after `./kestrel bootstrap`, normal commands default to self-hosted compiler classes
 
 ---
 
@@ -57,8 +57,7 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime wit
 # Stage-0 parity check
 ./scripts/bootstrap-stage0.sh
 
-# Stage-1 parity check (currently verifies readiness; default build path still
-# uses Node/TypeScript fallback until full self-hosted compile delegation lands)
+# Stage-1 parity check
 ./scripts/bootstrap-stage1.sh
 ```
 

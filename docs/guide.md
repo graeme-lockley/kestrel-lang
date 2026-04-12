@@ -10,9 +10,20 @@ This guide will:
 
 By the end you should be comfortable reading and writing Kestrel programs. Let's start with a small example.
 
-## Stage-0 Bootstrap Check
+## Bootstrap Handoff
 
-When working on the self-hosted compiler, run the Stage-0 verification script:
+When working on the self-hosted compiler handoff, run the canonical bootstrap sequence:
+
+```bash
+./scripts/build-bootstrap-jar.sh
+./kestrel bootstrap
+./kestrel status
+```
+
+`kestrel status` should report `compiler mode: self-hosted` once bootstrap is complete.
+If it reports `bootstrap-required`, rebuild the bootstrap JAR and rerun `./kestrel bootstrap`.
+
+For deeper parity validation, run the Stage-0 verification script:
 
 ```bash
 ./scripts/bootstrap-stage0.sh
