@@ -31,7 +31,7 @@ producing a new binary whose outputs should be semantically equivalent to Stage-
 ## Goals
 
 1. Create `scripts/bootstrap-stage1.sh` that:
-   - Uses the Stage-0 binary to compile all `stdlib/kestrel/tools/compiler/*.ks` sources.
+   - Uses the Stage-0 binary to compile all `stdlib/kestrel/compiler/*.ks` sources.
    - Runs Stage-1 binary against `samples/mandelbrot.ks`.
    - Diffs Stage-1 output against Stage-0 output (semantic equivalence check).
 2. Optionally run Stage-2 (Stage-1 compiles itself; confirm Stage-2 = Stage-1).

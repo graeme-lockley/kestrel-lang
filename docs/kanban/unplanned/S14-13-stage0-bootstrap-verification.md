@@ -23,7 +23,7 @@ before attempting self-hosting (Stage-1 in S14-14).
 ## Current State
 
 Individual compiler modules (diagnostics, types, typechecker, classfile, codegen, KTI,
-resolver, driver, CLI) will exist as Kestrel source files in `stdlib/kestrel/tools/compiler/`.
+resolver, driver, CLI) will exist as Kestrel source files in `stdlib/kestrel/compiler/`.
 The TypeScript compiler can compile any Kestrel source; the question is whether the
 Kestrel-written compiler, once compiled by TypeScript (Stage 0), produces correct output.
 
@@ -35,7 +35,7 @@ Kestrel-written compiler, once compiled by TypeScript (Stage 0), produces correc
 ## Goals
 
 1. Create `scripts/bootstrap-stage0.sh` that:
-   - Compiles all `stdlib/kestrel/tools/compiler/*.ks` sources using the TypeScript compiler.
+   - Compiles all `stdlib/kestrel/compiler/*.ks` sources using the TypeScript compiler.
    - Runs the resulting Kestrel compiler binary against `samples/mandelbrot.ks`.
    - Compares output of the Kestrel-compiled binary against the TypeScript compiler output
      (byte-for-byte or semantic equivalence).

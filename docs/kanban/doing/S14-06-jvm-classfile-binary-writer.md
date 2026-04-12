@@ -95,44 +95,41 @@ The TypeScript `Buffer` is replaced by `ByteArray` from `kestrel:data/bytearray`
 
 ## Tasks
 
-- [x] Create `stdlib/kestrel/tools/compiler/classfile.ks`
-  - [x] Add constants: CP tag values, JVM magic/version, StackMap frame type constants
-  - [x] Add `StackMapFrameState` record type and `paramOnlyFrame` helper
-  - [x] Add `ExcEntry` (exception table row) and `FieldEntry` types
-  - [x] Define `MethodState` mutable record (code: `Array<Int>`, branchTargets, etc.)
-  - [x] Define `ClassFileState` mutable record (constantPool, utf8Cache, methods, etc.)
-  - [x] Export `ClassFileBuilder` and `MethodBuilder` types backed by the above
-  - [x] Implement byte-buffer helpers: `bufU8`, `bufU16`, `bufU32`, `bufAppend`
-  - [x] Implement modified UTF-8 encoder `encodeUtf8Bytes`
-  - [x] Implement constant pool helpers: `cfUtf8`, `cfClassRef`, `cfNameAndType`,
+- [ ] Create `stdlib/kestrel/tools/compiler/classfile.ks`
+  - [ ] Add constants: CP tag values, JVM magic/version, StackMap frame type constants
+  - [ ] Add `StackMapFrameState` record type and `paramOnlyFrame` helper
+  - [ ] Add `ExcEntry` (exception table row) and `FieldEntry` types
+  - [ ] Define `MethodState` mutable record (code: `Array<Int>`, branchTargets, etc.)
+  - [ ] Define `ClassFileState` mutable record (constantPool, utf8Cache, methods, etc.)
+  - [ ] Export opaque `ClassFileBuilder` and `MethodBuilder` types backed by the above
+  - [ ] Implement byte-buffer helpers: `bufU8`, `bufU16`, `bufU32`, `bufAppend`
+  - [ ] Implement modified UTF-8 encoder `encodeUtf8Bytes`
+  - [ ] Implement constant pool helpers: `cfUtf8`, `cfClassRef`, `cfNameAndType`,
         `cfFieldref`, `cfMethodref`, `cfIfaceMethodref`, `cfString`, `cfConstantInt`,
         `cfConstantLong`, `cfConstantFloat`, `cfConstantDouble`
-  - [x] Implement `cfAddField`, `cfAddInterface`, `cfGetClassName`
-  - [x] Implement `cfAddMethod` — flushes previous method, creates new `MethodState`
-  - [x] Implement `newClassFile` constructor
-  - [x] Implement `MethodBuilder` API:
+  - [ ] Implement `cfAddField`, `cfAddInterface`, `cfGetClassName`
+  - [ ] Implement `cfAddMethod` — flushes previous method, creates new `MethodState`
+  - [ ] Implement `newClassFile` constructor
+  - [ ] Implement `MethodBuilder` API:
         `mbEmit1`, `mbEmit1b`, `mbEmit1s`, `mbEmit1i`,
         `mbPushByte`, `mbPushShort`, `mbLength`, `mbGetCode`,
         `mbAddException`, `mbAddBranchTarget`, `mbGetParamCount`, `mbSetMaxs`
-  - [x] Implement `cfFlushLastMethod`
-  - [x] Implement `countMethodParams` (count parameter slots from JVM descriptor)
-  - [x] Implement `buildStackMapTable` (generate StackMapTable bytes)
-  - [x] Implement `cfToBytes` — full class file serializer
-- [x] Create `stdlib/kestrel/tools/compiler/classfile.test.ks`
-  - [x] Test: constant pool utf8 deduplication (same string → same index)
-  - [x] Test: classRef, methodref indices are correct
-  - [x] Test: `cfToBytes` of a trivial class starts with `CAFEBABE` magic bytes
-  - [x] Test: `mbLength` counts emitted bytes correctly
-  - [x] Test: backpatch via `Arr.set` in method code array
-- [x] Run `NODE_OPTIONS='--max-old-space-size=8192' ./kestrel test stdlib/kestrel/tools/compiler/classfile.test.ks`
-- [x] Run `cd compiler && npm test`
+  - [ ] Implement `cfFlushLastMethod`
+  - [ ] Implement `countMethodParams` (count parameter slots from JVM descriptor)
+  - [ ] Implement `buildStackMapTable` (generate StackMapTable bytes)
+  - [ ] Implement `cfToBytes` — full class file serializer
+- [ ] Create `stdlib/kestrel/tools/compiler/classfile.test.ks`
+  - [ ] Test: constant pool utf8 deduplication (same string → same index)
+  - [ ] Test: classRef, methodref indices are correct
+  - [ ] Test: `cfToBytes` of a trivial class starts with `CAFEBABE` magic bytes
+  - [ ] Test: `mbLength` counts emitted bytes correctly
+  - [ ] Test: backpatch via `Arr.set` in method code array
+- [ ] Run `NODE_OPTIONS='--max-old-space-size=8192' ./kestrel test stdlib/kestrel/tools/compiler/classfile.test.ks`
+- [ ] Run `cd compiler && npm test`
 
 ## Build notes
 
 - 2026-04-12: Started implementation. Port of `compiler/src/jvm-codegen/classfile.ts` to Kestrel. Using `Array<Int>` as the mutable byte buffer (supports push/get/set/length), with `ByteArray.fromList` for final output.
-- 2026-04-12: Resolved Kestrel syntax/API mismatches (`mut` record field syntax, `Str.codePointAt`, `Str.indexOfFrom`, `ByteArray` type annotations) and converted tests to `kestrel:dev/test` Suite style.
-- 2026-04-12: Fixed JVM verifier failure in `mergeFrameState` by simplifying frame-state merge strategy to use the latest observed state, keeping emitted methods verifier-stable.
-- 2026-04-12: Added `mbGetCode` so callers/tests can perform branch-operand backpatching via `Arr.set`.
 
 ## Tests to add
 
@@ -142,4 +139,4 @@ The TypeScript `Buffer` is replaced by `ByteArray` from `kestrel:data/bytearray`
 
 ## Documentation and specs to update
 
-- [x] `docs/kanban/epics/unplanned/E14-self-hosting-compiler.md` — mark S14-06 complete
+- [ ] `docs/kanban/epics/unplanned/E14-self-hosting-compiler.md` — mark S14-06 complete

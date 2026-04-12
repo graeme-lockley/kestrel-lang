@@ -12,7 +12,7 @@
 ## Summary
 
 Port the TypeScript compiler diagnostics types and reporter to a new Kestrel module
-`kestrel:tools/compiler/diagnostics`. This is the foundational data layer that all other
+`kestrel:compiler/diagnostics`. This is the foundational data layer that all other
 self-hosted compiler modules depend on for emitting structured error messages.
 
 Covers `compiler/src/diagnostics/types.ts` (~98 lines) and
@@ -27,7 +27,7 @@ The TypeScript compiler has a well-defined diagnostics system in
 - `reporter.ts`: `DiagnosticReporter` that collects diagnostics and exposes methods to
   add/query them, plus terminal pretty-printing (`printDiagnostics`).
 
-There is no `stdlib/kestrel/tools/compiler/` directory yet. This story creates it.
+There is no `stdlib/kestrel/compiler/` directory yet. This story creates it.
 
 ## Relationship to other stories
 
@@ -36,14 +36,14 @@ There is no `stdlib/kestrel/tools/compiler/` directory yet. This story creates i
 
 ## Goals
 
-1. Create `stdlib/kestrel/tools/compiler/diagnostics.ks` with:
+1. Create `stdlib/kestrel/compiler/diagnostics.ks` with:
    - `Severity` ADT: `Error | Warning | Info | Hint`
    - `Span` record: `{ file: String, startOffset: Int, endOffset: Int, startLine: Int, startColumn: Int }`
    - `Location` record that mirrors the TS type (file, line, column, endLine, endColumn)
    - `Diagnostic` record: `{ code: String, message: String, severity: Severity, location: Location, relatedLocations: List<Location>, suggestion: Option<String> }`
    - `CODES` value exporting all diagnostic code constants (matching the TypeScript `CODES` object)
    - `locationFromSpan` and `locationFileOnly` helpers
-2. Create `stdlib/kestrel/tools/compiler/reporter.ks` with:
+2. Create `stdlib/kestrel/compiler/reporter.ks` with:
    - `Reporter` opaque type wrapping a mutable list
    - `newReporter(): Reporter`
    - `report(r: Reporter, d: Diagnostic): Unit`
@@ -53,46 +53,46 @@ There is no `stdlib/kestrel/tools/compiler/` directory yet. This story creates i
 
 ## Acceptance Criteria
 
-- `stdlib/kestrel/tools/compiler/diagnostics.ks` and `reporter.ks` compile without errors.
-- A test file `stdlib/kestrel/tools/compiler/diagnostics.test.ks` covers:
+- `stdlib/kestrel/compiler/diagnostics.ks` and `reporter.ks` compile without errors.
+- A test file `stdlib/kestrel/compiler/diagnostics.test.ks` covers:
   - constructing a `Diagnostic` with each `Severity`
   - `locationFromSpan` produces the expected `Location`
   - `Reporter` accumulates diagnostics and `hasErrors` reflects them
-- `./kestrel test stdlib/kestrel/tools/compiler/diagnostics.test.ks` passes.
+- `./kestrel test stdlib/kestrel/compiler/diagnostics.test.ks` passes.
 - `cd compiler && npm test` still passes.
 
 ## Impact analysis
 
 | Area | Change |
 |------|--------|
-| Stdlib | Add new module `stdlib/kestrel/tools/compiler/diagnostics.ks` containing compiler diagnostic records, severity ADT, code constants, and location helpers. |
-| Stdlib | Add new module `stdlib/kestrel/tools/compiler/reporter.ks` containing a mutable reporter accumulator and human-readable printer entrypoint. |
-| Kestrel tests | Add `stdlib/kestrel/tools/compiler/diagnostics.test.ks` to verify constructors, helper functions, and reporter accumulation behaviour. |
+| Stdlib | Add new module `stdlib/kestrel/compiler/diagnostics.ks` containing compiler diagnostic records, severity ADT, code constants, and location helpers. |
+| Stdlib | Add new module `stdlib/kestrel/compiler/reporter.ks` containing a mutable reporter accumulator and human-readable printer entrypoint. |
+| Kestrel tests | Add `stdlib/kestrel/compiler/diagnostics.test.ks` to verify constructors, helper functions, and reporter accumulation behaviour. |
 | Compiler (TS reference parity) | Reference-only parity check against `compiler/src/diagnostics/types.ts` and `compiler/src/diagnostics/reporter.ts` to keep code names and field shape aligned during bootstrap transition. |
 | Specs/docs | Update diagnostics spec section to mention self-hosted mirror module path and parity expectations for diagnostic code strings. |
 
 ## Tasks
 
-- [x] Create `stdlib/kestrel/tools/compiler/` directory and add `diagnostics.ks` with exported `Severity`, `SourceLocation`, `Diagnostic`, `RelatedLocation`, and `CODES` values.
-- [x] Implement `lineColumnFromOffset`, `locationFromSpan`, and `locationFileOnly` in `stdlib/kestrel/tools/compiler/diagnostics.ks`.
-- [x] Add `stdlib/kestrel/tools/compiler/reporter.ks` with `Reporter` state, `newReporter`, `report`, `hasErrors`, and `diagnostics` functions.
-- [x] Implement `printDiagnostics(ds, source)` in `stdlib/kestrel/tools/compiler/reporter.ks` with basic single-line caret rendering.
-- [x] Add `stdlib/kestrel/tools/compiler/diagnostics.test.ks` covering Severity variants, location helpers, and reporter accumulation.
+- [x] Create `stdlib/kestrel/compiler/` directory and add `diagnostics.ks` with exported `Severity`, `SourceLocation`, `Diagnostic`, `RelatedLocation`, and `CODES` values.
+- [x] Implement `lineColumnFromOffset`, `locationFromSpan`, and `locationFileOnly` in `stdlib/kestrel/compiler/diagnostics.ks`.
+- [x] Add `stdlib/kestrel/compiler/reporter.ks` with `Reporter` state, `newReporter`, `report`, `hasErrors`, and `diagnostics` functions.
+- [x] Implement `printDiagnostics(ds, source)` in `stdlib/kestrel/compiler/reporter.ks` with basic single-line caret rendering.
+- [x] Add `stdlib/kestrel/compiler/diagnostics.test.ks` covering Severity variants, location helpers, and reporter accumulation.
 - [x] Run `cd compiler && npm run build && npm test`.
-- [x] Run `./scripts/kestrel test stdlib/kestrel/tools/compiler/diagnostics.test.ks`.
+- [x] Run `./scripts/kestrel test stdlib/kestrel/compiler/diagnostics.test.ks`.
 
 ## Tests to add
 
 | Layer | Path | Intent |
 |-------|------|--------|
-| Kestrel harness | `stdlib/kestrel/tools/compiler/diagnostics.test.ks` | Verify each severity variant can be encoded in a `Diagnostic` value and inspected by helper predicates. |
-| Kestrel harness | `stdlib/kestrel/tools/compiler/diagnostics.test.ks` | Verify `locationFromSpan` copies file/line/column and computes end coordinates when source text is provided. |
-| Kestrel harness | `stdlib/kestrel/tools/compiler/diagnostics.test.ks` | Verify reporter accumulation order and `hasErrors` behaviour for warning-only vs error-containing lists. |
+| Kestrel harness | `stdlib/kestrel/compiler/diagnostics.test.ks` | Verify each severity variant can be encoded in a `Diagnostic` value and inspected by helper predicates. |
+| Kestrel harness | `stdlib/kestrel/compiler/diagnostics.test.ks` | Verify `locationFromSpan` copies file/line/column and computes end coordinates when source text is provided. |
+| Kestrel harness | `stdlib/kestrel/compiler/diagnostics.test.ks` | Verify reporter accumulation order and `hasErrors` behaviour for warning-only vs error-containing lists. |
 
 ## Documentation and specs to update
 
-- [x] `docs/specs/10-compile-diagnostics.md` — add note that `kestrel:tools/compiler/diagnostics` mirrors the compiler Diagnostic schema and error-code strings for self-hosting bootstrap parity.
-- [x] `docs/guide.md` — add short note in compiler-development section listing `stdlib/kestrel/tools/compiler/diagnostics.ks` and `reporter.ks` as the Kestrel-side diagnostics implementation.
+- [x] `docs/specs/10-compile-diagnostics.md` — add note that `kestrel:compiler/diagnostics` mirrors the compiler Diagnostic schema and error-code strings for self-hosting bootstrap parity.
+- [x] `docs/guide.md` — add short note in compiler-development section listing `stdlib/kestrel/compiler/diagnostics.ks` and `reporter.ks` as the Kestrel-side diagnostics implementation.
 
 ## Spec References
 
