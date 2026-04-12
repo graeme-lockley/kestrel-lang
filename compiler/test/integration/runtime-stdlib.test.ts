@@ -473,15 +473,17 @@ run()
     }
   });
 
-  it('test runner generation awaits each suite run call inside async main', () => {
-    execSync('./scripts/kestrel test --summary tests/unit/async_virtual_threads.test.ks', {
-      cwd: kestrelRoot,
-      stdio: 'pipe',
-    });
-
-    const generatedRunner = readFileSync(join(kestrelRoot, '.kestrel_test_runner.ks'), 'utf-8');
-    expect(generatedRunner).toContain('async fun main(): Task<Unit> = {');
-    expect(generatedRunner).toContain('await run0(root)');
-    expect(generatedRunner).not.toMatch(/\nrun\d+\(root\)\n/);
+  it('scripts/kestrel test requires self-hosted compiler artifacts before bootstrap', () => {
+    const isolatedJvmCache = join(
+      tmpdir(),
+      `kestrel-empty-jvm-cache-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    expect(() =>
+      execSync('./scripts/kestrel test --summary tests/unit/async_virtual_threads.test.ks', {
+        cwd: kestrelRoot,
+        env: { ...process.env, KESTREL_JVM_CACHE: isolatedJvmCache },
+        stdio: 'pipe',
+      })
+    ).toThrow(/self-hosted compiler artifacts are required for this command/);
   });
 });

@@ -41,6 +41,13 @@ jobs:
         working-directory: runtime/jvm
         run: ./build.sh
 
+      - name: Bootstrap self-hosted compiler
+        run: |
+          set -euo pipefail
+          ./scripts/build-bootstrap-jar.sh
+          ./kestrel bootstrap
+          ./kestrel status
+
       - name: E2E scenarios
         run: ./scripts/run-e2e.sh
 
