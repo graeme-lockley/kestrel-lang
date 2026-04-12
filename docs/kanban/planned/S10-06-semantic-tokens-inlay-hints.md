@@ -52,3 +52,36 @@ Implement `textDocument/semanticTokens/full` and `textDocument/inlayHint`. Seman
 - Determining whether a PascalCase identifier is a type vs. constructor vs. module requires resolving it against the declaration environment. A heuristic (PascalCase in type position → type, PascalCase in expression/call position → constructor) is acceptable for this story; full resolution improves with S10-12.
 - The semantic token delta encoding is stateful and order-dependent. Use the `vscode-languageserver` library's `SemanticTokensBuilder` if available, rather than implementing the delta calculation manually.
 - Inlay hints for complex inferred types (deeply nested generics) can be verbose. Limit display to types that `printType` renders to ≤60 characters; longer types show as `...` with the full type in the hover.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Semantic token provider | Add `vscode-kestrel/src/server/providers/semanticTokens.ts` to tokenize source and emit semantic tokens with a declared legend. |
+| Inlay hint provider | Add `vscode-kestrel/src/server/providers/inlayHints.ts` to emit type hints for unannotated `val`/`var` and function params. |
+| Compiler bridge | Expose tokenizer and inferred-type text helpers used by semantic and inlay providers. |
+| LSP server wiring | Register semantic tokens and inlay hints capabilities/handlers in `server.ts`. |
+| Tests | Add unit tests for inlay hint behavior and semantic token collection sanity. |
+
+## Tasks
+
+- [ ] Extend `vscode-kestrel/src/server/compiler-bridge.ts` with helpers for tokenization and inferred-type text rendering.
+- [ ] Add `vscode-kestrel/src/server/providers/semanticTokens.ts` with token legend and token collection using compiler lexer tokens.
+- [ ] Add `vscode-kestrel/src/server/providers/inlayHints.ts` for untyped binding/param type hints.
+- [ ] Register `semanticTokensProvider` and `inlayHintProvider` capabilities and handlers in `vscode-kestrel/src/server/server.ts`.
+- [ ] Add `vscode-kestrel/test/unit/inlayHints.test.ts` covering untyped and explicitly typed declaration behavior.
+- [ ] Add `vscode-kestrel/test/unit/semanticTokens.test.ts` covering baseline token extraction/classification behavior.
+- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/inlayHints.test.ts` | Verify untyped declarations emit type hints and explicitly typed declarations do not. |
+| Vitest unit | `vscode-kestrel/test/unit/semanticTokens.test.ts` | Verify semantic token collector emits tokens for keywords/types/functions/variables on representative source lines. |
+| Manual extension smoke | VS Code extension host | Confirm semantic coloring and inlay hints appear in `.ks` files with inferred types. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/06-typesystem.md` — verify inlay type displays use canonical type syntax; no textual spec change expected in this story.
+- [ ] `docs/specs/09-tools.md` — no change in this story; editor capability docs remain in S10-09.
