@@ -53,3 +53,36 @@ This story is intentionally isolated from the rest of E10 and should remain unpl
 
 - The exact API that E09 exposes for doc-comment access is not yet defined. This story should be planned (i.e., moved to `planned/`) only after E09's doc-comment AST representation is stable.
 - Doc-comment text may contain Markdown; it should be passed through as-is rather than escaped, since VS Code renders hover Markdown natively.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| LSP hover provider | Extend `vscode-kestrel/src/server/providers/hover.ts` to append doc-comment prose below inferred type markdown when present. |
+| Compiler bridge | Add helper(s) in `vscode-kestrel/src/server/compiler-bridge.ts` to locate doc-comment text near the declaration represented by the hovered identifier. |
+| Unit tests | Extend `vscode-kestrel/test/unit/hover.test.ts` to verify hover content includes type + markdown doc prose and keeps type-only behavior for undocumented bindings. |
+| LSP docs/spec | Update editor integration spec text to describe hover rendering of type + doc-comment markdown in one popup. |
+
+## Tasks
+
+- [ ] Add doc-comment extraction helper in `vscode-kestrel/src/server/compiler-bridge.ts` for hovered symbols.
+- [ ] Update `vscode-kestrel/src/server/providers/hover.ts` to append doc-comment markdown under a separator when docs are available.
+- [ ] Keep fallback behavior unchanged (type-only hover) when no doc-comment is available.
+- [ ] Add/extend hover unit tests in `vscode-kestrel/test/unit/hover.test.ts` for type+doc and type-only cases.
+- [ ] Update `docs/specs/09-tools.md` editor integration text to mention hover doc-comment rendering.
+- [ ] Run `cd vscode-kestrel && npm test`.
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `./scripts/kestrel test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/hover.test.ts` | Verify hover markdown includes both inferred type code block and doc-comment prose when docs exist. |
+| Vitest unit | `vscode-kestrel/test/unit/hover.test.ts` | Verify hover remains type-only when doc-comment text is missing. |
+| Regression suite | `cd compiler && npm run build && npm test` | Ensure extension-side hover changes do not regress compiler suites required by kanban gate. |
+| Runtime regression | `./scripts/kestrel test` | Ensure broader project test harness remains stable after extension changes. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/09-tools.md` — extend editor integration capability description for hover to mention doc-comment prose rendering.
