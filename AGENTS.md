@@ -51,6 +51,9 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime wit
 ### Bootstrap Verification (Self-Hosting Epic)
 
 ```bash
+# Build bootstrap compiler JAR artifact (bootstrap-only)
+./scripts/build-bootstrap-jar.sh
+
 # Stage-0 parity check
 ./scripts/bootstrap-stage0.sh
 

@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+
+COMPILER_DIR="$ROOT/compiler"
+COMPILER_CLI="$COMPILER_DIR/dist/cli.js"
+ENTRY="$ROOT/stdlib/kestrel/tools/compiler/cli-entry.ks"
+OUT_DIR="$ROOT/.kestrel/bootstrap/compiler"
+CLASSES_DIR="$OUT_DIR/classes"
+JAR_PATH="$OUT_DIR/compiler-bootstrap.jar"
+META_PATH="$OUT_DIR/compiler-bootstrap.meta"
+
+usage() {
+  echo "Usage: ./scripts/build-bootstrap-jar.sh" >&2
+}
+
+hash_file() {
+  local f="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$f" | awk '{print $1}'
+  else
+    shasum -a 256 "$f" | awk '{print $1}'
+  fi
+}
+
+require_tools() {
+  command -v node >/dev/null 2>&1 || { echo "build-bootstrap-jar: node not found" >&2; exit 1; }
+  command -v java >/dev/null 2>&1 || { echo "build-bootstrap-jar: java not found" >&2; exit 1; }
+  command -v javac >/dev/null 2>&1 || { echo "build-bootstrap-jar: javac not found" >&2; exit 1; }
+  command -v jar >/dev/null 2>&1 || { echo "build-bootstrap-jar: jar not found" >&2; exit 1; }
+}
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  usage
+  exit 0
+fi
+
+require_tools
+
+if [ ! -f "$ENTRY" ]; then
+  echo "build-bootstrap-jar: missing entry source: $ENTRY" >&2
+  exit 1
+fi
+
+mkdir -p "$OUT_DIR"
+rm -rf "$CLASSES_DIR"
+mkdir -p "$CLASSES_DIR"
+
+echo "[bootstrap-jar] building TypeScript compiler"
+(cd "$COMPILER_DIR" && npm run build >/dev/null)
+
+echo "[bootstrap-jar] compiling executable compiler entrypoint"
+node "$COMPILER_CLI" "$ENTRY" --target jvm -o "$CLASSES_DIR"
+
+echo "[bootstrap-jar] packaging JAR"
+rm -f "$JAR_PATH"
+(
+  cd "$CLASSES_DIR"
+  jar --create --file "$JAR_PATH" .
+)
+
+# Verify required entry classes are present.
+if ! jar tf "$JAR_PATH" | grep -q 'Cli_entry.class'; then
+  echo "build-bootstrap-jar: Cli_entry.class missing from bootstrap JAR" >&2
+  exit 1
+fi
+if ! jar tf "$JAR_PATH" | grep -q 'Cli_main.class'; then
+  echo "build-bootstrap-jar: Cli_main.class missing from bootstrap JAR" >&2
+  exit 1
+fi
+
+rev="unknown"
+if git -C "$ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
+  rev=$(git -C "$ROOT" rev-parse HEAD)
+fi
+
+checksum=$(hash_file "$JAR_PATH")
+created_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+cat > "$META_PATH" <<EOF
+jar_path=$JAR_PATH
+sha256=$checksum
+git_revision=$rev
+created_utc=$created_utc
+entry=Cli_entry
+EOF
+
+echo "[bootstrap-jar] PASS"
+echo "  jar : $JAR_PATH"
+echo "  meta: $META_PATH"

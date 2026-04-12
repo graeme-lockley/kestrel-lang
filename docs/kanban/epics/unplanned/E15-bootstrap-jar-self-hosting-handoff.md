@@ -10,7 +10,7 @@ Establish a deterministic bootstrap flow where the TypeScript compiler produces 
 
 ## Stories (ordered — implement sequentially)
 
-1. [S15-01-bootstrap-jar-packaging.md](../../unplanned/S15-01-bootstrap-jar-packaging.md) — Package TypeScript-produced bootstrap compiler classes into a canonical executable JAR artifact with metadata.
+1. [S15-01-bootstrap-jar-packaging.md](../../done/S15-01-bootstrap-jar-packaging.md) — ✅ Package TypeScript-produced bootstrap compiler classes into a canonical executable JAR artifact with metadata.
 2. [S15-02-kestrel-bootstrap-command.md](../../unplanned/S15-02-kestrel-bootstrap-command.md) — Add `./kestrel bootstrap` to seed self-hosted compiler classes from the bootstrap JAR.
 3. [S15-03-compiler-mode-and-provenance-state.md](../../unplanned/S15-03-compiler-mode-and-provenance-state.md) — Add explicit compiler mode/provenance state and visible status reporting.
 4. [S15-04-default-cli-self-hosted-compiler-path.md](../../unplanned/S15-04-default-cli-self-hosted-compiler-path.md) — Switch default `build`/`run`/`test` compile paths to self-hosted classes and prevent bootstrap-JAR use in normal flow.

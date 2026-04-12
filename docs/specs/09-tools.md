@@ -79,6 +79,17 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
   Columns are aligned. Stale entries (older than `KESTREL_CACHE_TTL`) are marked ⚠. Entries not yet cached are marked ✗. Local (path/stdlib) dependencies are omitted from this report.
 - **`--status` with `--refresh`:** Not a valid combination; exits non-zero with a usage error.
 
+### 2.3.0 Bootstrap compiler JAR packaging
+
+**Usage:** `./scripts/build-bootstrap-jar.sh`
+
+- **Purpose:** Build a canonical bootstrap compiler JAR artifact from the TypeScript compiler output for use by `kestrel bootstrap` seeding flows.
+- **Output directory:** `.kestrel/bootstrap/compiler/`.
+- **Artifacts:**
+  - `compiler-bootstrap.jar`
+  - `compiler-bootstrap.meta` (checksum, revision, timestamp metadata)
+- **Policy:** This JAR is a bootstrap-only artifact and is not part of normal `kestrel build/run/test` steady-state command execution.
+
 ### 2.3.1 Stage-0 bootstrap verification
 
 **Usage:** `./scripts/bootstrap-stage0.sh [sample.ks]`

@@ -62,16 +62,16 @@ Bootstrap scripts currently compile class files into cache directories (`.kestre
 
 ## Tasks
 
-- [ ] Add `scripts/build-bootstrap-jar.sh` (Bash) that resolves repo root, verifies prerequisites, and writes artifacts to `.kestrel/bootstrap/compiler/`.
-- [ ] In `scripts/build-bootstrap-jar.sh`, compile `stdlib/kestrel/tools/compiler/cli-entry.ks` using the TypeScript compiler into a temporary classes directory in `.kestrel/bootstrap/compiler/`.
-- [ ] Package the compiled classes into a canonical bootstrap JAR (for example `compiler-bootstrap.jar`) using `jar` with deterministic pathing.
-- [ ] Generate metadata sidecars (at minimum checksum and source revision) alongside the JAR.
-- [ ] Add verification checks in the script to fail if required entry classes (`Cli_entry`, `Cli_main`) are absent from the JAR.
-- [ ] Update docs/spec text to describe script usage and `.kestrel/bootstrap/compiler/` output layout.
-- [ ] Run `bash -n scripts/build-bootstrap-jar.sh`.
-- [ ] Run `./scripts/build-bootstrap-jar.sh`.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Add `scripts/build-bootstrap-jar.sh` (Bash) that resolves repo root, verifies prerequisites, and writes artifacts to `.kestrel/bootstrap/compiler/`.
+- [x] In `scripts/build-bootstrap-jar.sh`, compile `stdlib/kestrel/tools/compiler/cli-entry.ks` using the TypeScript compiler into a temporary classes directory in `.kestrel/bootstrap/compiler/`.
+- [x] Package the compiled classes into a canonical bootstrap JAR (for example `compiler-bootstrap.jar`) using `jar` with deterministic pathing.
+- [x] Generate metadata sidecars (at minimum checksum and source revision) alongside the JAR.
+- [x] Add verification checks in the script to fail if required entry classes (`Cli_entry`, `Cli_main`) are absent from the JAR.
+- [x] Update docs/spec text to describe script usage and `.kestrel/bootstrap/compiler/` output layout.
+- [x] Run `bash -n scripts/build-bootstrap-jar.sh`.
+- [x] Run `./scripts/build-bootstrap-jar.sh`.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -82,7 +82,13 @@ Bootstrap scripts currently compile class files into cache directories (`.kestre
 | Regression | `cd compiler && npm run build && npm test` | Ensure packaging work does not regress TypeScript compiler behavior. |
 | Regression | `./scripts/kestrel test` | Ensure runtime/stdlib behavior remains stable after packaging script introduction. |
 
+## Build notes
+
+- 2026-04-12: Added `scripts/build-bootstrap-jar.sh` to package a canonical bootstrap compiler JAR into `.kestrel/bootstrap/compiler/` with prerequisite checks and deterministic output paths.
+- 2026-04-12: Implemented entry-class integrity checks for `Cli_entry` and `Cli_main`, and wrote bootstrap metadata sidecars (`compiler-bootstrap.meta`, checksum, revision).
+- 2026-04-12: Verified required gates pass: script syntax check, bootstrap packaging run, compiler build/tests, and `./scripts/kestrel test`.
+
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — add bootstrap-JAR packaging script usage (`scripts/build-bootstrap-jar.sh`), output path (`.kestrel/bootstrap/compiler/`), and bootstrap-only usage policy.
-- [ ] `AGENTS.md` — add the packaging script command in build/test references for self-hosting workflows.
+- [x] `docs/specs/09-tools.md` — add bootstrap-JAR packaging script usage (`scripts/build-bootstrap-jar.sh`), output path (`.kestrel/bootstrap/compiler/`), and bootstrap-only usage policy.
+- [x] `AGENTS.md` — add the packaging script command in build/test references for self-hosting workflows.
