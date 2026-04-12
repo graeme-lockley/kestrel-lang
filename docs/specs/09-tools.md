@@ -192,6 +192,8 @@ Starts a local HTTP documentation browser server powered by `stdlib/kestrel/tool
 
 For exported bindings, doc extraction includes inferred type text for unannotated `export val` / `export var` declarations. The generated signatures are surfaced consistently across HTML pages and JSON APIs. If inference is unavailable for a specific binding, the signature uses the stable marker `<inference-unavailable>` rather than failing extraction.
 
+Declaration signatures in docs pages are syntax-colorized using the same Kestrel token class family as fenced `kestrel` markdown code blocks (`tok-kw`, `tok-type`, `tok-lit`, `tok-comment`, `tok-op`, `tok-punct`). The underlying signature text remains present in source order so pages stay readable when CSS is disabled.
+
 **Flags:**
 
 | Flag | Long | Description |

@@ -103,11 +103,12 @@ fun renderIndex(entries: List<DocEntry>): String = {
 
 fun renderEntry(entry: DocEntry): String = {
   val sig     = Sig.formatWith(entry, { multilineFunctions = True })
+  val sigHtml = Md.renderKestrelCode(sig)
   val docHtml = if (Str.isEmpty(entry.doc)) "" else Md.render(entry.doc)
   val docDiv  =
     if (Str.isEmpty(docHtml)) ""
     else "  <div class=\"doc-body\">${docHtml}</div>\n"
-  "<section class=\"decl\" id=\"${escapeAttr(entry.name)}\">\n  <h2 class=\"decl-name\">${escapeHtml(entry.name)}</h2>\n  <pre><code class=\"kestrel\">${escapeHtml(sig)}</code></pre>\n${docDiv}</section>"
+  "<section class=\"decl\" id=\"${escapeAttr(entry.name)}\">\n  <h2 class=\"decl-name\">${escapeHtml(entry.name)}</h2>\n  <pre><code class=\"kestrel\">${sigHtml}</code></pre>\n${docDiv}</section>"
 }
 
 /// Render a full HTML page for a single `DocModule`.

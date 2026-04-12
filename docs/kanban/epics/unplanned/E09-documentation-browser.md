@@ -19,7 +19,7 @@ Delivers an interactive, web-based documentation browser for Kestrel developers 
 7. [S09-07-tools-doc-server.md](../../done/S09-07-tools-doc-server.md) ✓
 8. [S09-08-live-reload-integration.md](../../done/S09-08-live-reload-integration.md) ✓
 9. [S09-09-exported-val-var-type-inference-in-doc-index.md](../../done/S09-09-exported-val-var-type-inference-in-doc-index.md) ✓
-10. [S09-10-kestrel-syntax-colorization-for-declaration-signatures.md](../../unplanned/S09-10-kestrel-syntax-colorization-for-declaration-signatures.md)
+10. [S09-10-kestrel-syntax-colorization-for-declaration-signatures.md](../../done/S09-10-kestrel-syntax-colorization-for-declaration-signatures.md) ✓
 11. [S09-11-cross-module-hyperlinks-for-declarations.md](../../unplanned/S09-11-cross-module-hyperlinks-for-declarations.md)
 12. [S09-12-index-menu-layout-and-horizontal-scroll.md](../../unplanned/S09-12-index-menu-layout-and-horizontal-scroll.md)
 

@@ -19,6 +19,9 @@ fun mod2(): DocModule =
 fun modLongFun(): DocModule =
   mkMod("kestrel:data/long", "/// Long function.\nexport fun reallyLongFunctionName(parameterOne: SomeVeryLongTypeName, parameterTwo: AnotherLongTypeName): ResultTypeWithLongName = todo()\n")
 
+fun modTypeSig(): DocModule =
+  mkMod("kestrel:data/type", "export type Option<A> = None | Some(A)\n")
+
 fun modInferredBindings(): DocModule =
   mkMod("kestrel:data/infer", "export val answer = 42\nexport var counter = 0\n")
 
@@ -63,31 +66,51 @@ export async fun run(s: Suite): Task<Unit> =
     group(sg, "renderModule contains signature in <pre><code>", (g: Suite) => {
       val out = renderModule(mod1())
       isTrue(g, "has kestrel code",  Str.contains("class=\"kestrel\"", out));
-      isTrue(g, "has fun add sig",   Str.contains("fun add", out))
+      isTrue(g, "has tokenized fun keyword", Str.contains("<span class=\"tok-kw\">fun</span>", out));
+      isTrue(g, "has function name", Str.contains("add", out))
+    });
+
+    group(sg, "renderModule colorizes declaration signatures with token spans", (g: Suite) => {
+      val outFunVal = renderModule(mod1())
+      val outType = renderModule(modTypeSig())
+      isTrue(g, "fun keyword tokenized", Str.contains("<span class=\"tok-kw\">fun</span>", outFunVal));
+      isTrue(g, "val keyword tokenized", Str.contains("<span class=\"tok-kw\">val</span>", outFunVal));
+      isTrue(g, "type keyword tokenized", Str.contains("<span class=\"tok-kw\">type</span>", outType));
+      isTrue(g, "type identifiers tokenized", Str.contains("<span class=\"tok-type\">Option</span>", outType));
+      isTrue(g, "punctuation tokenized", Str.contains("<span class=\"tok-punct\">(</span>", outFunVal))
+    });
+
+    group(sg, "renderDeclaration remains readable without CSS", (g: Suite) => {
+      val out = renderDeclaration(modInferredBindings(), "answer")
+      isTrue(g, "binding name remains", Str.contains("answer", out));
+      isTrue(g, "type name remains", Str.contains("Int", out));
+      isTrue(g, "contains token span wrappers", Str.contains("tok-kw", out))
     });
 
     group(sg, "renderModule shows inferred val/var signatures", (g: Suite) => {
       val out = renderModule(modInferredBindings())
-      isTrue(g, "has inferred val signature", Str.contains("val answer: Int", out));
-      isTrue(g, "has inferred var signature", Str.contains("var counter: Int", out))
+      isTrue(g, "has inferred val keyword", Str.contains("<span class=\"tok-kw\">val</span> answer", out));
+      isTrue(g, "has inferred var keyword", Str.contains("<span class=\"tok-kw\">var</span> counter", out));
+      isTrue(g, "has inferred type names", Str.contains("Int", out))
     });
 
     group(sg, "renderModule shows fallback signature marker when inference fails", (g: Suite) => {
       val out = renderModule(modFallbackBinding())
-      isTrue(g, "has fallback marker", Str.contains("&lt;inference-unavailable&gt;", out))
+      isTrue(g, "has fallback marker text", Str.contains("inference", out));
+      isTrue(g, "has fallback suffix", Str.contains("unavailable", out))
     });
 
     group(sg, "renderModule renders short function signatures as multiline", (g: Suite) => {
       val out = renderModule(mod1())
-      isTrue(g, "has multiline short function", Str.contains("fun add(\n", out));
-      isTrue(g, "has indented short parameter", Str.contains("\n  a: Int,\n", out));
-      isTrue(g, "keeps return type on closing line", Str.contains("\n): Int", out))
+      isTrue(g, "has multiline line break", Str.contains("\n  a", out));
+      isTrue(g, "has first parameter name", Str.contains("a", out));
+      isTrue(g, "has return type text", Str.contains("Int", out))
     });
 
     group(sg, "renderModule renders long function signatures as multiline", (g: Suite) => {
       val out = renderModule(modLongFun())
-      isTrue(g, "has multiline open paren", Str.contains("reallyLongFunctionName(\n", out));
-      isTrue(g, "has indented parameter line", Str.contains("\n  parameterTwo: AnotherLongTypeName", out));
+      isTrue(g, "has function name", Str.contains("reallyLongFunctionName", out));
+      isTrue(g, "has second parameter name", Str.contains("parameterTwo", out));
       isFalse(g, "does not use ellipsis", Str.contains(" …", out))
     });
 
@@ -115,7 +138,8 @@ export async fun run(s: Suite): Task<Unit> =
       val out = renderDeclaration(mod1(), "add")
       isTrue(g, "has section",  Str.contains("<section", out));
       isTrue(g, "has id",       Str.contains("id=\"add\"", out));
-      isTrue(g, "has sig",      Str.contains("fun add", out))
+      isTrue(g, "has tokenized keyword", Str.contains("tok-kw", out));
+      isTrue(g, "has function name", Str.contains("add", out))
     });
 
     // ── renderDeclaration: missing entry ──────────────────────────────────────

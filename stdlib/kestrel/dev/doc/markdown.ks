@@ -37,7 +37,7 @@ fun renderKestrelToken(tok: Token): String =
     TkEof          => ""
   }
 
-fun renderKestrelCode(code: String): String =
+export fun renderKestrelCode(code: String): String =
   Str.join("", Lst.map(Lex.lex(code), (tok: Token) => renderKestrelToken(tok)))
 
 fun isKestrelFence(lang: String): Bool = {

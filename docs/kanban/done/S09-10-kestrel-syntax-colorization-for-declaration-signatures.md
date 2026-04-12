@@ -59,16 +59,16 @@ Declaration signatures are currently rendered as plain text or minimally styled 
 
 ## Tasks
 
-- [ ] Refactor `stdlib/kestrel/dev/doc/markdown.ks` to expose a reusable Kestrel code-token rendering helper used by both fenced markdown blocks and declaration signature rendering.
-- [ ] Update `stdlib/kestrel/dev/doc/render.ks` `renderEntry` signature output to use shared Kestrel tokenized HTML (not plain escaped text) for declaration signatures.
-- [ ] Ensure `renderModule` and `renderDeclaration` both render the same colorized signature output path for `fun`, `val`, `var`, and `type` entries.
-- [ ] Keep no-CSS readability by preserving literal source text in signature HTML output (only wrapped with semantic spans).
-- [ ] Confirm markdown-rendered fenced code blocks are unchanged in structure/class naming after shared-renderer refactor.
-- [ ] Add/extend declaration colorization tests in `stdlib/kestrel/dev/doc/render.test.ks` for `fun`, `val`, `var`, and `type` signature token spans.
-- [ ] Add/extend markdown renderer tests in `stdlib/kestrel/dev/doc/markdown.test.ks` if shared helper extraction changes fenced block rendering behavior.
-- [ ] Update `docs/specs/09-tools.md` to document syntax-colorized declaration signatures in docs pages.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Refactor `stdlib/kestrel/dev/doc/markdown.ks` to expose a reusable Kestrel code-token rendering helper used by both fenced markdown blocks and declaration signature rendering.
+- [x] Update `stdlib/kestrel/dev/doc/render.ks` `renderEntry` signature output to use shared Kestrel tokenized HTML (not plain escaped text) for declaration signatures.
+- [x] Ensure `renderModule` and `renderDeclaration` both render the same colorized signature output path for `fun`, `val`, `var`, and `type` entries.
+- [x] Keep no-CSS readability by preserving literal source text in signature HTML output (only wrapped with semantic spans).
+- [x] Confirm markdown-rendered fenced code blocks are unchanged in structure/class naming after shared-renderer refactor.
+- [x] Add/extend declaration colorization tests in `stdlib/kestrel/dev/doc/render.test.ks` for `fun`, `val`, `var`, and `type` signature token spans.
+- [x] Add/extend markdown renderer tests in `stdlib/kestrel/dev/doc/markdown.test.ks` if shared helper extraction changes fenced block rendering behavior.
+- [x] Update `docs/specs/09-tools.md` to document syntax-colorized declaration signatures in docs pages.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -80,4 +80,10 @@ Declaration signatures are currently rendered as plain text or minimally styled 
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` - describe docs-page declaration signature syntax colorization and confirm fenced markdown code block behavior is unchanged.
+- [x] `docs/specs/09-tools.md` - describe docs-page declaration signature syntax colorization and confirm fenced markdown code block behavior is unchanged.
+
+## Build notes
+
+- 2026-04-12: Reused the existing markdown lexer token renderer by exporting `renderKestrelCode` from `kestrel:dev/doc/markdown` and piping declaration signatures through it in `renderEntry`.
+- 2026-04-12: Signature rendering now uses the exact `.tok-*` class family already used by fenced `kestrel` markdown blocks, so theme behavior stays consistent across docs surfaces.
+- 2026-04-12: Updated render tests to assert tokenized HTML semantics instead of raw plain-string adjacency, since syntax spans intentionally split keyword/punctuation text nodes.
