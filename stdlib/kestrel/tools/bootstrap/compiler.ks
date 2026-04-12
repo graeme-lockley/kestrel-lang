@@ -7,12 +7,15 @@ import { runProcessStream, ProcessSpawnError } from "kestrel:sys/process"
 
 // ─── Paths ────────────────────────────────────────────────────────────────────
 
+/// Return the expected runtime JAR path for a repository root.
 export fun runtimeJarPath(rootDir: String): String =
   "${rootDir}/runtime/jvm/kestrel-runtime.jar"
 
+/// Return the expected TypeScript compiler CLI path for a repository root.
 export fun compilerCliPath(rootDir: String): String =
   "${rootDir}/compiler/dist/cli.js"
 
+/// Return the stdlib bootstrap entry source path for a repository root.
 export fun cliEntryPath(rootDir: String): String =
   "${rootDir}/stdlib/kestrel/tools/compiler/cli-entry.ks"
 
@@ -38,8 +41,8 @@ async fun verifyClasses(jvmCache: String): Task<Int> = {
   }
 }
 
-/** Compile cli-entry.ks using the node/TypeScript compiler backend.
- *  Returns 0 on success, 1 on failure. */
+/// Compile cli-entry.ks using the node/TypeScript compiler backend into `jvmCache`.
+/// Returns 0 on success and 1 on any validation, process, or verification failure.
 export async fun compileCliEntry(rootDir: String, jvmCache: String): Task<Int> = {
   val runtimeJar = runtimeJarPath(rootDir)
   val compilerCli = compilerCliPath(rootDir)
