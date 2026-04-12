@@ -16,7 +16,6 @@ BOOTSTRAP_ROOT="${KESTREL_BOOTSTRAP_ROOT:-$HOME/.kestrel/bootstrap}"
 OUT_DIR="$BOOTSTRAP_ROOT/compiler"
 CLASSES_DIR="$OUT_DIR/classes"
 JAR_PATH="$OUT_DIR/compiler-bootstrap.jar"
-META_PATH="$OUT_DIR/compiler-bootstrap.meta"
 
 usage() {
   echo "Usage: ./scripts/build-bootstrap-jar.sh" >&2
@@ -100,19 +99,9 @@ if git -C "$ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
   rev=$(git -C "$ROOT" rev-parse HEAD)
 fi
 
-checksum=$(hash_file "$JAR_PATH")
-created_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-cat > "$META_PATH" <<EOF
-jar_path=$JAR_PATH
-sha256=$checksum
-git_revision=$rev
-created_utc=$created_utc
-entry=Cli_entry
-EOF
+# Clean up intermediate bootstrap build directory; everything useful is in Maven cache.
+rm -rf "$BOOTSTRAP_ROOT"
 
 echo "[bootstrap-jar] PASS"
-echo "  jar       : $JAR_PATH"
-echo "  meta      : $META_PATH"
 echo "  maven jar : $MAVEN_JAR_PATH"
 echo "  maven sha1: $MAVEN_SHA1_PATH"
