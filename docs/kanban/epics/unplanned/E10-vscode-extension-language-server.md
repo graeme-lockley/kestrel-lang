@@ -12,7 +12,7 @@ Delivers a feature-rich Visual Studio Code extension for Kestrel (`.ks` files), 
 
 ### Tier 1 — No external epic dependencies (implement in order)
 
-1. [S10-01-vscode-extension-scaffold-textmate-grammar.md](../../unplanned/S10-01-vscode-extension-scaffold-textmate-grammar.md) — Bootstrap `vscode-kestrel/` project with TextMate grammar and language configuration
+1. [S10-01-vscode-extension-scaffold-textmate-grammar.md](../../done/S10-01-vscode-extension-scaffold-textmate-grammar.md) — Bootstrap `vscode-kestrel/` project with TextMate grammar and language configuration (done)
 2. [S10-02-lsp-server-skeleton-diagnostics.md](../../done/S10-02-lsp-server-skeleton-diagnostics.md) — LSP client/server wired to compiler; live parse and type-error diagnostics (done)
 3. [S10-03-hover-type-printtype-utility.md](../../done/S10-03-hover-type-printtype-utility.md) — `textDocument/hover` showing inferred HM type; new `printType` compiler utility (done)
 4. [S10-04-document-symbols-folding-ranges.md](../../done/S10-04-document-symbols-folding-ranges.md) — OUTLINE panel (documentSymbol) and collapsible blocks (foldingRange) (done)
@@ -24,19 +24,19 @@ Delivers a feature-rich Visual Studio Code extension for Kestrel (`.ks` files), 
 
 S10-04, S10-05, S10-06, S10-07, S10-08 are independent of each other once S10-02 and S10-03 are done and may be done in any order.
 
-### Deferred — implement after E09 completes
+### Remaining stories
 
 10. [S10-10-format-on-save.md](../../done/S10-10-format-on-save.md) — Document formatting via `kestrel fmt --stdin` (done)
-11. [S10-11-hover-doc-comments.md](../../unplanned/S10-11-hover-doc-comments.md) — Hover shows `///` doc-comment prose (**blocked by E09**)
+11. [S10-11-hover-doc-comments.md](../../unplanned/S10-11-hover-doc-comments.md) — Hover shows `///` doc-comment prose
 12. [S10-12-cross-file-navigation-workspace-symbols.md](../../unplanned/S10-12-cross-file-navigation-workspace-symbols.md) — Cross-file go-to-definition, find-references, rename, workspace symbols (E04 + E07 complete — unblocked)
 
-Only S10-11 remains externally blocked. S10-01 through S10-10 and S10-12 can be planned/built now.
+S10-11 and S10-12 are now the remaining unplanned stories for E10.
 
 ## Dependencies
 
 - **E07 (Incremental Compilation)** — `.ksi` metadata files allow the language server to re-type-check only the open file on every keystroke, making cross-file diagnostics and navigation sub-second. Cross-file features (go-to-definition across modules, find-references, rename, workspace symbols) depend on E07 for acceptable performance; single-file features can land before E07 is complete.
 - **E08 (Source Formatter)** — provides `kestrel fmt` (used by the document-formatting provider and format-on-save), the `kestrel:dev/parser` module (token ranges for semantic tokens), and the stdlib namespace restructure that the LSP resolver must understand.
-- **E09 (Documentation Browser)** — introduces `///` / `//!` doc-comment syntax and the `/api/index` JSON endpoint; the hover provider reads from this index to render doc-comment Markdown in type popups. E10 can ship without E09 (hover shows type only); doc-comment hover is an additive enhancement.
+- **E09 (Documentation Browser)** — done; introduced `///` / `//!` doc-comment syntax and the `/api/index` JSON endpoint used to render doc-comment Markdown in hover popups.
 - **E04 (Module Resolution and Reproducibility)** — stable, canonical package identities are required for reliable go-to-definition and find-references across packages.
 
 E10 stories are tiered so that Tier 1 (syntax highlighting, diagnostics, hover, same-file navigation) can be implemented and released before E07/E08/E09 are complete. Tier 2+ stories carry explicit per-story dependencies on those epics.
