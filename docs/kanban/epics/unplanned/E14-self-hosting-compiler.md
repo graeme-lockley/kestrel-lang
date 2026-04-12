@@ -22,7 +22,7 @@ and retire the TypeScript compiler as the primary build tool.
 3. [S14-03-type-unification-engine.md](../../done/S14-03-type-unification-engine.md) — ✅ Unify, applySubst, astTypeToInternal
 4. [S14-04-hindley-milner-type-checker.md](../../done/S14-04-hindley-milner-type-checker.md) — ✅ Full HM type checker with row polymorphism (`kestrel:tools/compiler/typecheck`)
 5. [S14-05-jvm-opcode-table.md](../../done/S14-05-jvm-opcode-table.md) — ✅ JVM opcode constants and descriptor helpers (`kestrel:tools/compiler/opcodes`)
-6. [S14-06-jvm-classfile-binary-writer.md](../../doing/S14-06-jvm-classfile-binary-writer.md) — In progress: ClassFileBuilder and MethodBuilder binary emitter (`kestrel:tools/compiler/classfile`)
+6. [S14-06-jvm-classfile-binary-writer.md](../../done/S14-06-jvm-classfile-binary-writer.md) — ✅ ClassFileBuilder and MethodBuilder binary emitter (`kestrel:tools/compiler/classfile`)
 7. [S14-07-codegen-expressions-patterns.md](../../done/S14-07-codegen-expressions-patterns.md) — ✅ Code generator: expressions, patterns, lambdas, match
 8. [S14-08-codegen-declarations-toplevel.md](../../done/S14-08-codegen-declarations-toplevel.md) — ✅ Code generator: declarations, tail-call optimisation, async/await
 9. [S14-09-kti-interface-file-reader-writer.md](../../done/S14-09-kti-interface-file-reader-writer.md) — ✅ KTI v4 reader/writer, serialisation (`kestrel:tools/compiler/kti`)
