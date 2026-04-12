@@ -27,10 +27,10 @@ S10-04, S10-05, S10-06, S10-07, S10-08 are independent of each other once S10-02
 ### Remaining stories
 
 10. [S10-10-format-on-save.md](../../done/S10-10-format-on-save.md) — Document formatting via `kestrel fmt --stdin` (done)
-11. [S10-11-hover-doc-comments.md](../../unplanned/S10-11-hover-doc-comments.md) — Hover shows `///` doc-comment prose
-12. [S10-12-cross-file-navigation-workspace-symbols.md](../../unplanned/S10-12-cross-file-navigation-workspace-symbols.md) — Cross-file go-to-definition, find-references, rename, workspace symbols (E04 + E07 complete — unblocked)
+11. [S10-11-hover-doc-comments.md](../../done/S10-11-hover-doc-comments.md) — Hover shows `///` doc-comment prose (done)
+12. [S10-12-cross-file-navigation-workspace-symbols.md](../../done/S10-12-cross-file-navigation-workspace-symbols.md) — Cross-file go-to-definition, find-references, rename, workspace symbols (done)
 
-S10-11 and S10-12 are now the remaining unplanned stories for E10.
+All E10 stories are now implemented and moved to `done/`; epic closure can proceed via the finish-epic workflow when desired.
 
 ## Dependencies
 
