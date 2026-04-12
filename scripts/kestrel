@@ -245,24 +245,6 @@ maven_classpath_for_entry() {
   node "$MAVEN_CLASSPATH_RESOLVER" "$entry_source" "$class_dir"
 }
 
-selfhost_compiler_ready() {
-  # Check if Cli_entry.class exists in the standard JVM cache
-  find "$JVM_CACHE" -name "Cli_entry.class" -print -quit 2>/dev/null | grep -q .
-}
-
-require_selfhost_compiler() {
-  if selfhost_compiler_ready; then
-    return 0
-  fi
-  if [ "${KESTREL_INTERNAL_ALLOW_TS_FALLBACK:-0}" = "1" ]; then
-    return 0
-  fi
-  echo "kestrel: self-hosted compiler artifacts are required for this command" >&2
-  echo "kestrel: expected $JVM_CACHE/*/Cli_entry.class" >&2
-  echo "kestrel: run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap" >&2
-  return 1
-}
-
 compile_with_active_compiler() {
   local entry_source="$1"
   local out_dir="$2"
@@ -287,9 +269,6 @@ cmd_build() {
     exit 1
   fi
   if [ -n "${1:-}" ]; then
-    if ! require_selfhost_compiler; then
-      exit 1
-    fi
     local resolved class_dir
     local compiler_flags=()
     local status_flag=""
@@ -376,9 +355,6 @@ cmd_run() {
     echo "kestrel run: missing runtime jar: $RUNTIME_JAR" >&2
     exit 1
   fi
-  if ! require_selfhost_compiler; then
-    exit 1
-  fi
   local resolved class_dir main_class
   local compiler_flags=()
   # Support kestrel: module specifiers (e.g. kestrel:tools/test)
@@ -449,9 +425,6 @@ cmd_dis() {
     echo "kestrel dis: missing runtime jar: $RUNTIME_JAR" >&2
     exit 1
   fi
-  if ! require_selfhost_compiler; then
-    exit 1
-  fi
   local resolved
   resolved=$(resolve_script "$script")
   if [ -z "$resolved" ]; then
@@ -485,9 +458,6 @@ cmd_test() {
   ensure_tools
   if [ ! -f "$RUNTIME_JAR" ]; then
     echo "kestrel test: missing runtime jar: $RUNTIME_JAR" >&2
-    exit 1
-  fi
-  if ! require_selfhost_compiler; then
     exit 1
   fi
   KESTREL_BIN="$ROOT/kestrel" exec "$ROOT/kestrel" run "kestrel:tools/test" "$@"
