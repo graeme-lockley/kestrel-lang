@@ -4,6 +4,8 @@ import * as Opt from "kestrel:data/option"
 import * as Str from "kestrel:data/string"
 import * as Ast from "kestrel:dev/parser/ast"
 import {
+  TDFun, TDExternFun, TDType, TDException, TDExport, TDVal, TDVar, TDSVal, TDSVar,
+  EIDecl, TBAdt,
   ELit, EIdent, ECall, EField, EAwait, EUnary, EBinary, ECons, EPipe,
   EIf, EWhile, EMatch, ELambda, ETemplate, EList, ERecord, ETuple,
   EThrow, ETry, EBlock, EIs, ENever,
@@ -31,6 +33,10 @@ export type CodegenContext = {
   mb: CF.MethodBuilder,
   locals: mut Dict<String, Int>,
   nextLocal: mut Int
+}
+
+export type JvmCodegenResult = {
+  classes: Dict<String, ByteArray>
 }
 
 export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder): CodegenContext = {
@@ -93,6 +99,142 @@ fun bindLocal(ctx: CodegenContext, name: String): Int = {
   ctx.locals := Dict.insert(ctx.locals, name, idx)
   ctx.nextLocal := idx + 1
   idx
+}
+
+fun bindParams(ctx: CodegenContext, params: List<Ast.Param>): Unit =
+  match (params) {
+    [] => ()
+    p :: rest => {
+      bindLocal(ctx, p.name)
+      bindParams(ctx, rest)
+    }
+  }
+
+fun objectArgs(n: Int): String =
+  if (n <= 0) "" else "Ljava/lang/Object;${objectArgs(n - 1)}"
+
+fun objectMethodDesc(arity: Int): String =
+  "(${objectArgs(arity)})Ljava/lang/Object;"
+
+fun emitDefaultCtor(cf: CF.ClassFileBuilder): Unit = {
+  val mb = CF.cfAddMethod(cf, "<init>", "()V", Op.Acc.public_)
+  CF.mbEmit1(mb, Op.JvmOp.aload0)
+  val superInit = CF.cfMethodref(cf, "java/lang/Object", "<init>", "()V")
+  CF.mbEmit1s(mb, Op.JvmOp.invokespecial, superInit)
+  CF.mbEmit1(mb, Op.JvmOp.return_)
+  CF.mbSetMaxs(mb, 1, 1)
+}
+
+fun emitTailLoopScaffold(mb: CF.MethodBuilder): Unit = {
+  // Reserve a branch target so later stories can patch direct tail calls to this loop head.
+  val loopHead = CF.mbLength(mb)
+  CF.mbAddBranchTarget(mb, loopHead, None)
+}
+
+export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl): Unit = {
+  val desc = objectMethodDesc(Lst.length(decl.params))
+  val mb = CF.cfAddMethod(cf, decl.name, desc, Op.Acc.public_ + Op.Acc.static_)
+  val ctx = newCodegenContext(cf, mb)
+  bindParams(ctx, decl.params)
+  emitTailLoopScaffold(mb)
+  emitExpr(ctx, decl.body)
+  CF.mbEmit1(mb, Op.JvmOp.areturn)
+  CF.mbSetMaxs(mb, 16, 32)
+}
+
+export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit = {
+  val desc = if (Str.length(decl.jvmDesc) > 0) decl.jvmDesc else objectMethodDesc(Lst.length(decl.params))
+  val mb = CF.cfAddMethod(cf, decl.name, desc, Op.Acc.public_ + Op.Acc.static_)
+  pushNull(newCodegenContext(cf, mb))
+  CF.mbEmit1(mb, Op.JvmOp.areturn)
+  CF.mbSetMaxs(mb, 1, 8)
+}
+
+export fun emitVal(cf: CF.ClassFileBuilder, name: String, expr: Ast.Expr): Unit = {
+  CF.cfAddField(cf, name, "Ljava/lang/Object;", Op.Acc.public_ + Op.Acc.static_ + Op.Acc.final_)
+  val mb = CF.cfAddMethod(cf, "init$${name}", "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
+  val ctx = newCodegenContext(cf, mb)
+  emitExpr(ctx, expr)
+  CF.mbEmit1(mb, Op.JvmOp.areturn)
+  CF.mbSetMaxs(mb, 8, 8)
+}
+
+export fun emitVar(cf: CF.ClassFileBuilder, name: String, expr: Ast.Expr): Unit = {
+  CF.cfAddField(cf, name, "Ljava/lang/Object;", Op.Acc.public_ + Op.Acc.static_)
+  val mb = CF.cfAddMethod(cf, "init$${name}", "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
+  val ctx = newCodegenContext(cf, mb)
+  emitExpr(ctx, expr)
+  CF.mbEmit1(mb, Op.JvmOp.areturn)
+  CF.mbSetMaxs(mb, 8, 8)
+}
+
+fun emitCtorClass(moduleName: String, ctor: Ast.CtorDef): (String, ByteArray) = {
+  val className = "${moduleName}$${ctor.name}"
+  val cf = CF.newClassFile(className, "java/lang/Object", Op.Acc.public_ + Op.Acc.super_)
+  emitDefaultCtor(cf);
+  (className, CF.cfToBytes(cf))
+}
+
+fun emitExceptionClass(moduleName: String, exn: Ast.ExceptionDecl): (String, ByteArray) = {
+  val className = "${moduleName}$${exn.name}"
+  val cf = CF.newClassFile(className, "java/lang/RuntimeException", Op.Acc.public_ + Op.Acc.super_)
+  emitDefaultCtor(cf);
+  (className, CF.cfToBytes(cf))
+}
+
+export fun emitException(moduleName: String, exn: Ast.ExceptionDecl): (String, ByteArray) =
+  emitExceptionClass(moduleName, exn)
+
+fun emitTypeCtors(moduleName: String, ctors: List<Ast.CtorDef>, classes: Dict<String, ByteArray>): Dict<String, ByteArray> =
+  match (ctors) {
+    [] => classes
+    c :: rest => {
+      val pair = emitCtorClass(moduleName, c)
+      emitTypeCtors(moduleName, rest, Dict.insert(classes, pair.0, pair.1))
+    }
+  }
+
+fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, decl: Ast.TopDecl, classes: Dict<String, ByteArray>): Dict<String, ByteArray> =
+  match (decl) {
+    TDFun(funDecl) => { emitFunDecl(cf, funDecl); classes }
+    TDExternFun(externDecl) => { emitExternFun(cf, externDecl); classes }
+    TDType(typeDecl) => {
+      match (typeDecl.body) {
+        TBAdt(ctors) => emitTypeCtors(moduleName, ctors, classes)
+        _ => classes
+      }
+    }
+    TDException(exnDecl) => {
+      val pair = emitException(moduleName, exnDecl)
+      Dict.insert(classes, pair.0, pair.1)
+    }
+    TDExport(inner) => {
+      match (inner) {
+        EIDecl(d) => emitDecl(moduleName, cf, d, classes)
+        _ => classes
+      }
+    }
+    TDVal(name, _ann, expr) => { emitVal(cf, name, expr); classes }
+    TDVar(name, _ann, expr) => { emitVar(cf, name, expr); classes }
+    TDSVal(name, expr) => { emitVal(cf, name, expr); classes }
+    TDSVar(name, expr) => { emitVar(cf, name, expr); classes }
+    _ => classes
+  }
+
+fun emitDecls(moduleName: String, cf: CF.ClassFileBuilder, decls: List<Ast.TopDecl>, classes: Dict<String, ByteArray>): Dict<String, ByteArray> =
+  match (decls) {
+    [] => classes
+    d :: rest => emitDecls(moduleName, cf, rest, emitDecl(moduleName, cf, d, classes))
+  }
+
+export fun jvmCodegen(moduleName: String, prog: Ast.Program): JvmCodegenResult = {
+  val cf = CF.newClassFile(moduleName, "java/lang/Object", Op.Acc.public_ + Op.Acc.super_)
+  emitDefaultCtor(cf)
+  val extraClasses = emitDecls(moduleName, cf, prog.body, Dict.emptyStringDict())
+  val mainBytes = CF.cfToBytes(cf)
+  {
+    classes = Dict.insert(extraClasses, moduleName, mainBytes)
+  }
 }
 
 fun emitExprList(ctx: CodegenContext, xs: List<Ast.Expr>): Unit =

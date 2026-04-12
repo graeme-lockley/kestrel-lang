@@ -24,7 +24,7 @@ and retire the TypeScript compiler as the primary build tool.
 5. [S14-05-jvm-opcode-table.md](../../done/S14-05-jvm-opcode-table.md) — ✅ JVM opcode constants and descriptor helpers (`kestrel:tools/compiler/opcodes`)
 6. [S14-06-jvm-classfile-binary-writer.md](../../done/S14-06-jvm-classfile-binary-writer.md) — ✅ ClassFileBuilder and MethodBuilder binary emitter (`kestrel:tools/compiler/classfile`)
 7. [S14-07-codegen-expressions-patterns.md](../../done/S14-07-codegen-expressions-patterns.md) — ✅ Code generator: expressions, patterns, lambdas, match
-8. [S14-08-codegen-declarations-toplevel.md](../../unplanned/S14-08-codegen-declarations-toplevel.md) — Code generator: declarations, tail-call optimisation, async/await
+8. [S14-08-codegen-declarations-toplevel.md](../../done/S14-08-codegen-declarations-toplevel.md) — ✅ Code generator: declarations, tail-call optimisation, async/await
 9. [S14-09-kti-interface-file-reader-writer.md](../../unplanned/S14-09-kti-interface-file-reader-writer.md) — KTI v4 reader/writer, serialisation (`kestrel:tools/compiler/kti`)
 10. [S14-10-multi-module-resolver.md](../../unplanned/S14-10-multi-module-resolver.md) — Module specifier resolution, URL cache (`kestrel:tools/compiler/resolve`)
 11. [S14-11-compiler-driver-pipeline.md](../../unplanned/S14-11-compiler-driver-pipeline.md) — Multi-module incremental compilation driver (`kestrel:tools/compiler/driver`)
@@ -74,7 +74,7 @@ compiler and the TypeScript compiler becomes an emergency fallback.
 | Type checker | `compiler/src/typecheck/check.ts` (1 878 lines) | `kestrel:tools/compiler/typecheck` ✓ **done** |
 | JVM class-file writer | `compiler/src/jvm-codegen/classfile.ts` (601 lines) | `kestrel:tools/compiler/classfile` ✓ **done** |
 | JVM opcode table | `compiler/src/jvm-codegen/opcodes.ts` (190 lines) | `kestrel:tools/compiler/opcodes` ✓ **done** |
-| Code generator | `compiler/src/jvm-codegen/codegen.ts` (3 640 lines) | `kestrel:tools/compiler/codegen` ← **to build** |
+| Code generator | `compiler/src/jvm-codegen/codegen.ts` (3 640 lines) | `kestrel:tools/compiler/codegen` ✓ **done** |
 | KTI reader/writer | `compiler/src/kti.ts` (519 lines) | `kestrel:tools/compiler/kti` ← **to build** |
 | Module resolver | `compiler/src/resolve.ts` + `dependency-paths.ts` | `kestrel:tools/compiler/resolve` ← **to build** |
 | Diagnostics | `compiler/src/diagnostics/` | `kestrel:tools/compiler/diagnostics` ✓ **done** |
