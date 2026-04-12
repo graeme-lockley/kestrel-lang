@@ -23,6 +23,10 @@ After S14-13, a Stage-0 Kestrel compiler binary exists and is known to correctly
 most Kestrel programs. Stage-1 requires using that binary to re-compile its own source,
 producing a new binary whose outputs should be semantically equivalent to Stage-0.
 
+At present, Stage-0 verification is wiring-complete but still relies on the canonical
+`./kestrel build` path for sample compilation in semantic parity checks. Stage-1 planning must
+explicitly account for this dependency before switching the default build path.
+
 ## Relationship to other stories
 
 - **Depends on**: S14-13 (Stage-0 must be verified before Stage-1)
@@ -71,3 +75,40 @@ producing a new binary whose outputs should be semantically equivalent to Stage-
   quality check and not required for epic completion.
 - After self-hosting, the TypeScript compiler should not be removed immediately — keep it as a
   documented fallback for at least one release cycle.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Scripts | Add `scripts/bootstrap-stage1.sh` to perform Stage-1 bootstrap checks (Stage-0 artifact -> Stage-1 artifact -> semantic parity validation). |
+| CLI wrapper | Potentially update `scripts/kestrel` default build path to prefer Stage-1 artifact, retaining an explicit TypeScript fallback switch. |
+| Self-hosted compiler modules | Validate that `kestrel:tools/compiler/cli-main` and `kestrel:tools/compiler/driver` can execute the Stage-1 flow without delegating core compile work back to TypeScript in the normal path. |
+| Tooling docs/specs | Update `docs/specs/09-tools.md`, `docs/guide.md`, and `AGENTS.md` with Stage-1 topology and fallback policy. |
+| Verification suites | Add bootstrap-stage1 verification plus full compiler/Kestrel/E2E regression gates before changing defaults. |
+
+## Tasks
+
+- [ ] Implement `scripts/bootstrap-stage1.sh` with strict mode, deterministic artifact directories, and explicit Stage-0/Stage-1 output reporting.
+- [ ] In `scripts/bootstrap-stage1.sh`, consume Stage-0 artifacts from `scripts/bootstrap-stage0.sh` (or recreate them) and generate Stage-1 artifacts through the self-hosted path.
+- [ ] Add Stage-1 semantic parity checks on `samples/mandelbrot.ks` output versus Stage-0 baseline.
+- [ ] Add clear failure diagnostics when Stage-1 execution still delegates required compile steps to TypeScript in normal mode.
+- [ ] Update `scripts/kestrel` to default to Stage-1 only if bootstrap verification demonstrates that Node/TypeScript are no longer required in the normal build path; otherwise preserve fallback topology and document the blocker.
+- [ ] Update `docs/specs/09-tools.md`, `docs/guide.md`, and `AGENTS.md` with Stage-1 status, default path policy, and fallback instructions.
+- [ ] Run `./scripts/bootstrap-stage1.sh`.
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `./kestrel test`.
+- [ ] Run `./scripts/run-e2e.sh`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Script-level integration | `scripts/bootstrap-stage1.sh` | Validate Stage-0 -> Stage-1 artifact generation and parity checks with actionable diagnostics. |
+| Compiler regression | `cd compiler && npm run build && npm test` | Ensure Stage-1 bootstrap changes do not regress TypeScript compiler behavior during transition. |
+| Runtime regression | `./kestrel test` and `./scripts/run-e2e.sh` | Ensure Stage-1 bootstrap changes do not regress runtime/stdlib behavior. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/09-tools.md` — update build topology section for Stage-1 default or explicitly documented fallback status.
+- [ ] `docs/guide.md` — add Stage-1 bootstrap instructions and troubleshooting.
+- [ ] `AGENTS.md` — update project build/testing guidance to reflect Stage-1 status and fallback expectations.
