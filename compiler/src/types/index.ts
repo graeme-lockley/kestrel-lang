@@ -6,3 +6,4 @@ export { freshVar, prim, tInt, tFloat, tBool, tString, tUnit, resetVarId, freeVa
 export { unify, unifySubtype, substitute, applySubst, UnifyError } from './unify.js';
 export type { UnifyArrowMode, UnifyOptions } from './unify.js';
 export { astTypeToInternal } from './from-ast.js';
+export { printType } from './print.js';

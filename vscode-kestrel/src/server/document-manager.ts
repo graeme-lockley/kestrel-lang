@@ -18,14 +18,15 @@ export interface CompilerDiagnostic {
 
 export interface DocumentState {
   source: string;
+  ast: unknown | null;
   diagnostics: CompilerDiagnostic[];
 }
 
 export class DocumentManager {
   private readonly docs = new Map<string, DocumentState>();
 
-  public update(uri: string, source: string, diagnostics: CompilerDiagnostic[]): void {
-    this.docs.set(uri, { source, diagnostics });
+  public update(uri: string, source: string, ast: unknown | null, diagnostics: CompilerDiagnostic[]): void {
+    this.docs.set(uri, { source, ast, diagnostics });
   }
 
   public get(uri: string): DocumentState | undefined {

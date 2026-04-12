@@ -11,6 +11,7 @@ import { compileSource } from './compiler-bridge';
 import { DebouncedScheduler } from './debounce';
 import { toLspDiagnostics } from './diagnostics';
 import { DocumentManager } from './document-manager';
+import { buildHover } from './providers/hover';
 
 const connection = createConnection(ProposedFeatures.all);
 const documents = new TextDocuments(TextDocument);
@@ -34,7 +35,7 @@ function scheduleDiagnostics(doc: TextDocument): void {
   scheduler.schedule(async () => {
     const source = doc.getText();
     const result = await compileSource(source, uri);
-    documentManager.update(uri, source, result.diagnostics);
+    documentManager.update(uri, source, result.ast, result.diagnostics);
     connection.sendDiagnostics({ uri, diagnostics: toLspDiagnostics(uri, result.diagnostics) });
   });
 }
@@ -43,8 +44,17 @@ connection.onInitialize((_params: InitializeParams) => {
   return {
     capabilities: {
       textDocumentSync: TextDocumentSyncKind.Incremental,
+      hoverProvider: true,
     },
   };
+});
+
+connection.onHover(async (params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return null;
+  }
+  return buildHover(doc.source, doc.ast, params.position);
 });
 
 documents.onDidOpen((event) => {
