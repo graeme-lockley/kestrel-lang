@@ -15,7 +15,7 @@ Implement `textDocument/documentSymbol` and `textDocument/foldingRange`. Documen
 
 ## Current State
 
-No symbol or folding providers exist. The OUTLINE panel shows nothing for `.ks` files. The compiler's AST (`Program.decls`) exposes all top-level declarations with `span` fields, so these providers can be implemented with a single pass over `program.decls`.
+No symbol or folding providers exist. The OUTLINE panel shows nothing for `.ks` files. The compiler's AST (`Program.body`) exposes top-level declarations with `span` fields, so these providers can be implemented with a pass over `program.body`.
 
 ## Relationship to other stories
 
@@ -45,5 +45,36 @@ No symbol or folding providers exist. The OUTLINE panel shows nothing for `.ks` 
 
 ## Risks / Notes
 
-- `FunDecl` can appear as a method inside a `TypeDecl` body in future language versions. For now, all `FunDecl` nodes in `program.decls` are top-level.
+- `FunDecl` can appear as a method inside a `TypeDecl` body in future language versions. For now, `Program.body` emits top-level `FunDecl` entries and type constructors are nested in `TypeDecl.body`.
 - Folding for nested blocks (deep `if` inside `fun`) relies on the block `span` being set by the parser. If any block node lacks a `span`, the folding provider must skip it gracefully.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| LSP symbols provider | Add `vscode-kestrel/src/server/providers/symbols.ts` to map top-level AST declarations to `DocumentSymbol[]` with ADT constructor children. |
+| LSP folding provider | Add `vscode-kestrel/src/server/providers/folding.ts` to collect foldable ranges from AST block/type spans and comment spans from source text. |
+| LSP server wiring | Register `textDocument/documentSymbol` and `textDocument/foldingRange` handlers and capabilities in `server.ts`. |
+| Tests | Add unit tests for symbols and folding provider behavior. |
+
+## Tasks
+
+- [ ] Add `vscode-kestrel/src/server/providers/symbols.ts` with declaration collection from `Program.body` and ADT constructor children under `TypeDecl`.
+- [ ] Add `vscode-kestrel/src/server/providers/folding.ts` for AST-based fold ranges and `/* ... */` multi-line comment fold ranges.
+- [ ] Wire `documentSymbolProvider` and `foldingRangeProvider` into `vscode-kestrel/src/server/server.ts` and add handlers using cached `DocumentManager` state.
+- [ ] Add unit tests in `vscode-kestrel/test/unit/symbols.test.ts` for top-level declaration and constructor child symbols.
+- [ ] Add unit tests in `vscode-kestrel/test/unit/folding.test.ts` for function/type block and multiline comment folding ranges.
+- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/symbols.test.ts` | Verify `fun`, `val`, `var`, `type`, and `exception` symbols map to expected kinds and names, with ADT constructor children nested under type symbol. |
+| Vitest unit | `vscode-kestrel/test/unit/folding.test.ts` | Verify folding ranges are produced for block spans and multi-line comment regions. |
+| Manual extension smoke | VS Code extension host | Confirm OUTLINE entries and fold-gutter behavior in `.ks` files. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/01-language.md` — verify declaration forms consumed by symbol provider are aligned with spec; no textual change expected in this story.
+- [ ] `docs/specs/09-tools.md` — no change in this story; protocol capability listing is documented in S10-09.
