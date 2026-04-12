@@ -35,7 +35,7 @@ Covers porting `compiler/cli.ts` (~size varies) to a Kestrel CLI program, and up
 
 ## Goals
 
-1. Create `stdlib/kestrel/compiler/cli-main.ks` (or a top-level `compiler-cli.ks`) with:
+1. Create `stdlib/kestrel/tools/compiler/cli-main.ks` (or a top-level `compiler-cli.ks`) with:
    - Argument parsing using `kestrel:dev/cli` or a hand-rolled `Args` parser
    - `run <file> [args...]` — compile and execute a Kestrel program
    - `build [file]` — compile to `.class` files (calls `compileFile` from driver)
@@ -71,3 +71,40 @@ Covers porting `compiler/cli.ts` (~size varies) to a Kestrel CLI program, and up
   out and note the dependency.
 - The `test` sub-command orchestrates test runner logic currently in `scripts/run_tests.ks`;
   that script should remain as-is and be invoked by the new CLI, not replaced.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib compiler | Add `stdlib/kestrel/tools/compiler/cli-main.ks` as a Kestrel-written CLI entrypoint and command dispatcher scaffold. |
+| Kestrel tests | Add `stdlib/kestrel/tools/compiler/cli-main.test.ks` to verify command parsing and fallback dispatch argument shaping. |
+| Shell CLI wrapper | Update `scripts/kestrel` to prefer the Kestrel CLI module for core commands when available, guarded by an env var to prevent recursive re-entry. |
+| Documentation | Update `docs/guide.md` and `AGENTS.md` to document the self-hosted CLI preference and TypeScript fallback behavior. |
+
+## Tasks
+
+- [ ] Add `stdlib/kestrel/tools/compiler/cli-main.ks` with subcommand parsing (`run`, `build`, `dis`, `test`, `fmt`, `doc`, `lock`) and scaffold command handlers.
+- [ ] Add dispatch helpers that forward to `./kestrel` under explicit fallback mode so existing TypeScript-backed behavior remains intact.
+- [ ] Add minimal `build` handler integration with `kestrel:tools/compiler/driver` API shape checks to keep the self-hosted CLI coupled to the driver module.
+- [ ] Update `scripts/kestrel` to prefer `kestrel:tools/compiler/cli-main` for top-level command entry when available, with `KESTREL_CLI_TS_FALLBACK` loop prevention.
+- [ ] Add `stdlib/kestrel/tools/compiler/cli-main.test.ks` covering command parsing and dispatch argument shaping.
+- [ ] Update `docs/guide.md` to reflect the Kestrel CLI preference path and fallback behavior.
+- [ ] Update `AGENTS.md` to note the Kestrel CLI entrypoint and TypeScript fallback expectation.
+- [ ] Run `./kestrel test stdlib/kestrel/tools/compiler/cli-main.test.ks`.
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `./scripts/kestrel test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/tools/compiler/cli-main.test.ks` | Verify parsing accepts supported subcommands and rejects unknown commands with usage-style errors. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/cli-main.test.ks` | Verify dispatch helper builds the expected forwarded argument list for `run`, `build`, and `test`. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/cli-main.test.ks` | Verify `build` path touches `driver.compileFile` contract and converts failures into non-zero exit semantics. |
+| Vitest integration | existing `compiler/test/integration/*` suites | Regression guard for unchanged TypeScript CLI behavior while wrapper preference is added. |
+
+## Documentation and specs to update
+
+- [ ] `docs/guide.md` — document that `scripts/kestrel` now prefers the Kestrel CLI entrypoint for core commands and falls back to the TypeScript path.
+- [ ] `AGENTS.md` — update CLI architecture notes to include `stdlib/kestrel/tools/compiler/cli-main.ks` and fallback behavior.
+- [ ] `docs/specs/09-tools.md` — review command topology and confirm no normative text change needed for this scaffold step.
