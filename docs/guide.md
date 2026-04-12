@@ -781,6 +781,9 @@ ln -s /path/to/kestrel/kestrel ~/.local/bin/kestrel
 
 See the [CLI reference](specs/09-tools.md) for all commands.
 
+The CLI wrapper prefers the Kestrel entrypoint at `kestrel:tools/compiler/cli-main`
+when available. Set `KESTREL_CLI_TS_FALLBACK=1` to force the TypeScript-backed path.
+
 ---
 
 ## Next steps
@@ -792,6 +795,6 @@ This guide covered the core language. There is more to explore:
 - **Test suite** — the [tests/unit/](../tests/unit/) directory has runnable examples of every language feature.
 - **Kanban** — [docs/kanban/future/](kanban/future/) holds pre-roadmap investigations (`slug.md`, no numeric prefix). [docs/kanban/unplanned/](kanban/unplanned/) lists the prioritized roadmap (lower sequence = higher priority); completed stories live under [docs/kanban/done/](kanban/done/). Stories progress through **planned**, **doing**, and **done** as described in [docs/kanban/README.md](kanban/README.md).
 
-If you are hacking on the self-hosted compiler, start with [stdlib/kestrel/compiler/diagnostics.ks](../stdlib/kestrel/compiler/diagnostics.ks), [stdlib/kestrel/compiler/reporter.ks](../stdlib/kestrel/compiler/reporter.ks), [stdlib/kestrel/compiler/types.ks](../stdlib/kestrel/compiler/types.ks), and [stdlib/kestrel/compiler/opcodes.ks](../stdlib/kestrel/compiler/opcodes.ks), which mirror the bootstrap compiler's diagnostic, internal-type, and JVM opcode foundations.
+If you are hacking on the self-hosted compiler, start with [stdlib/kestrel/tools/compiler/diagnostics.ks](../stdlib/kestrel/tools/compiler/diagnostics.ks), [stdlib/kestrel/tools/compiler/reporter.ks](../stdlib/kestrel/tools/compiler/reporter.ks), [stdlib/kestrel/tools/compiler/types.ks](../stdlib/kestrel/tools/compiler/types.ks), and [stdlib/kestrel/tools/compiler/opcodes.ks](../stdlib/kestrel/tools/compiler/opcodes.ks), which mirror the bootstrap compiler's diagnostic, internal-type, and JVM opcode foundations.
 
 Kestrel is under active development. Contributions are welcome — see [CONTRIBUTING.md](../CONTRIBUTING.md).

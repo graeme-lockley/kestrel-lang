@@ -13,7 +13,8 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Name:** `kestrel`
 - **Usage:** `kestrel <command> [options]`
 - **Location:** A single entry point at the repository root (`./kestrel` or `scripts/kestrel`) exposes all commands. The root script delegates to `scripts/kestrel`.
-- **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` to build and run. The CLI builds the compiler (TypeScript) on demand when it is missing or when `build` is invoked.
+- **Topology:** `scripts/kestrel` prefers the Kestrel CLI entrypoint `kestrel:tools/compiler/cli-main` for command dispatch when available. It sets `KESTREL_CLI_TS_FALLBACK=1` for delegated calls to prevent recursive re-entry.
+- **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` to build and run. The TypeScript compiler remains the documented fallback bootstrap path and is used whenever `KESTREL_CLI_TS_FALLBACK=1` is set.
 
 ---
 

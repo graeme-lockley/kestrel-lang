@@ -12,7 +12,7 @@
 ## Summary
 
 Port the compiler's internal type representation from TypeScript to Kestrel, creating
-`stdlib/kestrel/compiler/types.ks`. This module defines the `InternalType` ADT — the
+`stdlib/kestrel/tools/compiler/types.ks`. This module defines the `InternalType` ADT — the
 backbone of the type-checker, codegen, and KTI serializer — plus core type-construction
 helpers (`freshVar`, `prim`, `tInt`, etc.) and structural operations (`freeVars`,
 `generalize`, `instantiate`, `applySubst`).
@@ -39,7 +39,7 @@ It also provides `freshVar`, `resetVarId`, `prim` helpers, shorthand constructor
 
 ## Goals
 
-1. Create `stdlib/kestrel/compiler/types.ks` with:
+1. Create `stdlib/kestrel/tools/compiler/types.ks` with:
    - `InternalType` ADT covering all seven variants
    - `Prim` ADT/type for primitive kinds
    - `freshVar(): InternalType` and `resetVarId(): Unit`
@@ -52,51 +52,51 @@ It also provides `freshVar`, `resetVarId`, `prim` helpers, shorthand constructor
 
 ## Acceptance Criteria
 
-- `stdlib/kestrel/compiler/types.ks` compiles without errors.
-- A test file `stdlib/kestrel/compiler/types.test.ks` verifies:
+- `stdlib/kestrel/tools/compiler/types.ks` compiles without errors.
+- A test file `stdlib/kestrel/tools/compiler/types.test.ks` verifies:
   - `freshVar()` returns distinct ids on successive calls
   - `resetVarId()` resets the counter
   - `freeVars` on concrete types returns empty set
   - `applySubst` with a single var mapping replaces correctly
   - `generalize`/`instantiate` round-trip produces fresh vars
-- `./kestrel test stdlib/kestrel/compiler/types.test.ks` passes.
+- `./kestrel test stdlib/kestrel/tools/compiler/types.test.ks` passes.
 - `cd compiler && npm test` still passes.
 
 ## Impact analysis
 
 | Area | Change |
 |------|--------|
-| Stdlib | Add `stdlib/kestrel/compiler/types.ks` with `InternalType` ADT and primitive constructors to mirror `compiler/src/types/internal.ts`. |
+| Stdlib | Add `stdlib/kestrel/tools/compiler/types.ks` with `InternalType` ADT and primitive constructors to mirror `compiler/src/types/internal.ts`. |
 | Stdlib | Add substitution and quantification helpers: `freeVars`, `generalize`, `instantiate`, `applySubst`, and debug renderer `typeToString`. |
-| Kestrel tests | Add `stdlib/kestrel/compiler/types.test.ks` for fresh var generation, substitution behaviour, and generalize/instantiate round-trips. |
+| Kestrel tests | Add `stdlib/kestrel/tools/compiler/types.test.ks` for fresh var generation, substitution behaviour, and generalize/instantiate round-trips. |
 | Compiler (TS reference parity) | Keep constructor names and helper behaviour aligned with `compiler/src/types/internal.ts` for bootstrap interoperability. |
 | Specs/docs | Update type-system spec with a short note that self-hosted compiler modules use the same internal type categories and id conventions. |
 
 ## Tasks
 
-- [x] Create `stdlib/kestrel/compiler/types.ks` with exported `InternalType` ADT (`Var`, `Prim`, `Arrow`, `Record`, `App`, `Tuple`) and `TypeField` helper record.
+- [x] Create `stdlib/kestrel/tools/compiler/types.ks` with exported `InternalType` ADT (`Var`, `Prim`, `Arrow`, `Record`, `App`, `Tuple`) and `TypeField` helper record.
 - [x] Implement primitive helpers (`prim`, `tInt`, `tFloat`, `tBool`, `tString`, `tUnit`, `tChar`) and mutable fresh-id state (`freshVar`, `resetVarId`).
 - [x] Implement `freeVars` and a simple integer-set representation for free variable collection.
 - [x] Implement `applySubst(subst, t)` with recursive traversal across all InternalType constructors.
 - [x] Implement `generalize(env, t)` and `instantiate(t)` using a ForAll wrapper constructor in `InternalType`.
 - [x] Implement `typeToString(t)` for deterministic debug rendering.
-- [x] Add `stdlib/kestrel/compiler/types.test.ks` covering fresh var ids, reset semantics, substitution, and generalize/instantiate behaviour.
+- [x] Add `stdlib/kestrel/tools/compiler/types.test.ks` covering fresh var ids, reset semantics, substitution, and generalize/instantiate behaviour.
 - [x] Run `cd compiler && npm run build && npm test`.
-- [x] Run `./scripts/kestrel test stdlib/kestrel/compiler/types.test.ks`.
+- [x] Run `./scripts/kestrel test stdlib/kestrel/tools/compiler/types.test.ks`.
 
 ## Tests to add
 
 | Layer | Path | Intent |
 |-------|------|--------|
-| Kestrel harness | `stdlib/kestrel/compiler/types.test.ks` | Ensure `freshVar` generates distinct ids and `resetVarId` restarts allocation deterministically. |
-| Kestrel harness | `stdlib/kestrel/compiler/types.test.ks` | Ensure `freeVars` excludes primitives and includes variables under nested Arrow/App/Tuple structures. |
-| Kestrel harness | `stdlib/kestrel/compiler/types.test.ks` | Ensure `applySubst` recursively replaces vars in nested type structures. |
-| Kestrel harness | `stdlib/kestrel/compiler/types.test.ks` | Ensure `generalize` introduces quantified vars and `instantiate` returns fresh ids on each call. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/types.test.ks` | Ensure `freshVar` generates distinct ids and `resetVarId` restarts allocation deterministically. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/types.test.ks` | Ensure `freeVars` excludes primitives and includes variables under nested Arrow/App/Tuple structures. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/types.test.ks` | Ensure `applySubst` recursively replaces vars in nested type structures. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/types.test.ks` | Ensure `generalize` introduces quantified vars and `instantiate` returns fresh ids on each call. |
 
 ## Documentation and specs to update
 
 - [x] `docs/specs/06-typesystem.md` — note self-hosted compiler internal type constructors (`Var`, `Prim`, `Arrow`, `Record`, `App`, `Tuple`) and fresh-id allocation parity with bootstrap compiler.
-- [x] `docs/guide.md` — add short compiler-hacking note that `stdlib/kestrel/compiler/types.ks` mirrors `compiler/src/types/internal.ts`.
+- [x] `docs/guide.md` — add short compiler-hacking note that `stdlib/kestrel/tools/compiler/types.ks` mirrors `compiler/src/types/internal.ts`.
 
 ## Spec References
 
@@ -116,5 +116,5 @@ It also provides `freshVar`, `resetVarId`, `prim` helpers, shorthand constructor
 ## Build notes
 
 - 2026-04-11: Started implementation.
-- 2026-04-11: Blocked on JVM verifier failure while running `./kestrel test stdlib/kestrel/compiler/types.test.ks`. The generated method for `applySubstMany` fails with `VerifyError: Inconsistent stackmap frames`. Multiple simplification attempts (removing list-map lambdas, replacing Option pattern bindings, simplifying pattern forms) did not eliminate the verifier error. Stopping further retries for this file per the 3-attempt safety rule.
+- 2026-04-11: Blocked on JVM verifier failure while running `./kestrel test stdlib/kestrel/tools/compiler/types.test.ks`. The generated method for `applySubstMany` fails with `VerifyError: Inconsistent stackmap frames`. Multiple simplification attempts (removing list-map lambdas, replacing Option pattern bindings, simplifying pattern forms) did not eliminate the verifier error. Stopping further retries for this file per the 3-attempt safety rule.
 - 2026-04-11: Resolved VerifyError by extracting complex match arms into dedicated helper functions. The root cause was that 10-arm match expressions with branches introducing different numbers of local variables (especially TRecord with if/else + locals `fields2` and `row2`) caused inconsistent JVM stackmap frames at branch targets within the large generated method. The fix: extracted `applySubstRecord`, `applySubstFields`, `typeToStringRecord`, `freeVarsRecord`, and `freeVarsScheme` helpers so each top-level match arm in `applySubst`, `typeToString`, and `freeVarsWithBound` is a simple function call rather than a multi-statement block. All 5 tests now pass.

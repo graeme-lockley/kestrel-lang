@@ -789,6 +789,44 @@ public final class KRuntime {
         return Double.valueOf(Math.abs(doubleFrom(f)));
     }
 
+    public static Long doubleToRawLongBits(Object d) {
+        return Long.valueOf(Double.doubleToRawLongBits(doubleFrom(d)));
+    }
+
+    public static Long floatToRawIntBits(Object f) {
+        // Narrow Kestrel Float (double) to single-precision float, then get raw bits.
+        float floatVal = (float) doubleFrom(f);
+        return Long.valueOf(Float.floatToRawIntBits(floatVal));
+    }
+
+    public static Long bitwiseAnd(Object a, Object b) {
+        return Long.valueOf(longFrom(a) & longFrom(b));
+    }
+
+    public static Long bitwiseOr(Object a, Object b) {
+        return Long.valueOf(longFrom(a) | longFrom(b));
+    }
+
+    public static Long bitwiseXor(Object a, Object b) {
+        return Long.valueOf(longFrom(a) ^ longFrom(b));
+    }
+
+    public static Long bitwiseNot(Object a) {
+        return Long.valueOf(~longFrom(a));
+    }
+
+    public static Long shiftRight(Object a, Object n) {
+        return Long.valueOf(longFrom(a) >> longFrom(n));
+    }
+
+    public static Long unsignedShiftRight(Object a, Object n) {
+        return Long.valueOf(longFrom(a) >>> longFrom(n));
+    }
+
+    public static Long shiftLeft(Object a, Object n) {
+        return Long.valueOf(longFrom(a) << longFrom(n));
+    }
+
     private static long longFrom(Object o) {
         if (o instanceof Long) return ((Long) o).longValue();
         if (o instanceof Integer) return ((Integer) o).longValue();

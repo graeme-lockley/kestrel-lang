@@ -28,7 +28,7 @@ and retire the TypeScript compiler as the primary build tool.
 9. [S14-09-kti-interface-file-reader-writer.md](../../done/S14-09-kti-interface-file-reader-writer.md) — ✅ KTI v4 reader/writer, serialisation (`kestrel:tools/compiler/kti`)
 10. [S14-10-multi-module-resolver.md](../../done/S14-10-multi-module-resolver.md) — ✅ Module specifier resolution, URL cache (`kestrel:tools/compiler/resolve`)
 11. [S14-11-compiler-driver-pipeline.md](../../done/S14-11-compiler-driver-pipeline.md) — ✅ Multi-module incremental compilation driver (`kestrel:tools/compiler/driver`)
-12. [S14-12-kestrel-cli-replacement.md](../../unplanned/S14-12-kestrel-cli-replacement.md) — Kestrel-written CLI replacing the TypeScript shim
+12. [S14-12-kestrel-cli-replacement.md](../../done/S14-12-kestrel-cli-replacement.md) — ✅ Kestrel-written CLI replacing the TypeScript shim
 13. [S14-13-stage0-bootstrap-verification.md](../../unplanned/S14-13-stage0-bootstrap-verification.md) — Stage-0 bootstrap: TypeScript compiles Kestrel compiler, verify output
 14. [S14-14-stage1-self-hosting-bootstrap.md](../../unplanned/S14-14-stage1-self-hosting-bootstrap.md) — Stage-1 self-hosting: Kestrel compiler compiles itself
 
@@ -79,7 +79,7 @@ compiler and the TypeScript compiler becomes an emergency fallback.
 | Module resolver | `compiler/src/resolve.ts` + `dependency-paths.ts` | `kestrel:tools/compiler/resolve` ✓ **done** |
 | Diagnostics | `compiler/src/diagnostics/` | `kestrel:tools/compiler/diagnostics` ✓ **done** |
 | Compiler driver | `compiler/src/compile-file-jvm.ts` + `index.ts` | `kestrel:tools/compiler/driver` ✓ **done** |
-| CLI | `compiler/cli.ts` | Kestrel CLI script replacing `scripts/kestrel` shim ← **to build** |
+| CLI | `compiler/cli.ts` | Kestrel CLI script replacing `scripts/kestrel` shim ✓ **done** |
 
 ### Module layout
 

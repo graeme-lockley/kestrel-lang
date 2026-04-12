@@ -11,7 +11,7 @@ This file provides guidance for agentic coding agents working on the Kestrel pro
 Kestrel is a statically typed programming language with Hindley-Milner type inference. It consists of:
 - **Compiler**: TypeScript in `compiler/`
 - **JVM runtime**: Java in `runtime/jvm/`
-- **CLI**: Bash scripts in `scripts/`
+- **CLI**: Bash wrapper in `scripts/` with Kestrel CLI entrypoint in `stdlib/kestrel/tools/compiler/cli-main.ks` (TypeScript path remains fallback)
 
 ---
 
@@ -286,6 +286,7 @@ Use the **`build-story`** skill to execute planned work. Key steps:
 - **Code generator**: `compiler/src/jvm-codegen/codegen.ts`
 - **Diagnostics**: `compiler/src/diagnostics/reporter.ts`
 - **CLI**: `scripts/kestrel`
+- **Self-hosted CLI entrypoint**: `stdlib/kestrel/tools/compiler/cli-main.ks`
 - **Specs**: `docs/specs/` (01-language, 09-tools, etc.)
 - **Kestrel tests**: `tests/e2e/`, `tests/conformance/`
 - **Kanban**: `docs/kanban/README.md` (phases and gates); skills `.github/skills/epic-create/`, `story-create/`, `plan-epic/`, `kanban-story-migrate/`, `plan-story/`, `build-story/`, `build-epic/`; subagents `.cursor/agents/kanban-*.md`
