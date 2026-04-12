@@ -47,3 +47,34 @@ No `vscode-kestrel/` directory exists. Kestrel `.ks` files open in VS Code with 
 - TextMate grammar precision: over-eager rules can mis-color user-defined names. The grammar should use scoping rules that do not try to be too smart about context (the semantic token provider in S10-06 will do the precise coloring).
 - The extension should be structured from the start to support the LSP client/server split (`vscode-languageclient` on the extension host, `vscode-languageserver` on the server process) so that S10-02 can add the server without restructuring.
 - VS Code Marketplace publish (`vsce package`) is deferred to S10-09; this story only needs `npm run compile` to work.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Extension scaffold | Add new top-level `vscode-kestrel/` TypeScript extension project with VS Code manifest, build scripts, and activation entry point. |
+| Grammar and language config | Add `syntaxes/kestrel.tmLanguage.json` and `language-configuration.json` for baseline syntax coloring and editor behavior. |
+| Tests | Add lightweight TextMate grammar scope tests under `vscode-kestrel/test/unit/` to validate core token scopes. |
+| Docs | Add `vscode-kestrel/README.md` with local dev/build instructions. |
+
+## Tasks
+
+- [ ] Create `vscode-kestrel/package.json` with language contribution, activation events, scripts, and extension entry point.
+- [ ] Create `vscode-kestrel/tsconfig.json` and `src/extension.ts` with minimal activation/deactivation functions.
+- [ ] Create `vscode-kestrel/syntaxes/kestrel.tmLanguage.json` with keyword/operator/literal/comment/type/constructor rules.
+- [ ] Create `vscode-kestrel/language-configuration.json` with bracket/comment/autoclose settings.
+- [ ] Create `vscode-kestrel/README.md` with development and packaging notes.
+- [ ] Add grammar scope tests in `vscode-kestrel/test/unit/grammar.test.ts`.
+- [ ] Run `cd vscode-kestrel && npm install && npm run compile && npm test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/grammar.test.ts` | Verify keywords use keyword scope, `True`/`False` use constant scope, and strings use string scopes. |
+| Manual extension smoke | VS Code extension host | Open a `.ks` file and verify syntax highlighting and bracket/comment behavior are active. |
+
+## Documentation and specs to update
+
+- [ ] `vscode-kestrel/README.md` — add setup, build, and extension-host run instructions.
+- [ ] `docs/specs/09-tools.md` — no change in this story; Editor Integration section is added in S10-09.
