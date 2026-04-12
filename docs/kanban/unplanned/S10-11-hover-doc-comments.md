@@ -23,6 +23,8 @@ The hover provider from S10-03 shows only the inferred type. E09 (Documentation 
 - **Depends on S10-03** — extends the existing hover provider rather than replacing it.
 - Independent of S10-10, S10-12.
 
+This story is intentionally isolated from the rest of E10 and should remain unplanned until E09 is complete.
+
 ## Goals
 
 1. Extend `compiler-bridge.ts` to also expose `getDocComment(name: string): string | null` by querying the E09 doc-index or reading `///` comment text directly from the typed AST node's attached comment field.

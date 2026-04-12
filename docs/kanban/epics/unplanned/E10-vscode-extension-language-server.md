@@ -24,11 +24,13 @@ Delivers a feature-rich Visual Studio Code extension for Kestrel (`.ks` files), 
 
 S10-04, S10-05, S10-06, S10-07, S10-08 are independent of each other once S10-02 and S10-03 are done and may be done in any order.
 
-### Tier 2 — Requires external epics (implement after blockers complete)
+### Deferred — implement after E09 completes
 
 10. [S10-10-format-on-save.md](../../unplanned/S10-10-format-on-save.md) — Document formatting via `kestrel fmt --stdin` (E08 complete — unblocked)
 11. [S10-11-hover-doc-comments.md](../../unplanned/S10-11-hover-doc-comments.md) — Hover shows `///` doc-comment prose (**blocked by E09**)
-12. [S10-12-cross-file-navigation-workspace-symbols.md](../../unplanned/S10-12-cross-file-navigation-workspace-symbols.md) — Cross-file go-to-definition, find-references, rename, workspace symbols (**blocked by E04 + E07**)
+12. [S10-12-cross-file-navigation-workspace-symbols.md](../../unplanned/S10-12-cross-file-navigation-workspace-symbols.md) — Cross-file go-to-definition, find-references, rename, workspace symbols (E04 + E07 complete — unblocked)
+
+Only S10-11 remains externally blocked. S10-01 through S10-10 and S10-12 can be planned/built now.
 
 ## Dependencies
 
