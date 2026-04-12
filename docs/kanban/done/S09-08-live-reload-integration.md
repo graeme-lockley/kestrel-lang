@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E09 Documentation Browser](../epics/unplanned/E09-documentation-browser.md)
+- Epic: [E09 Documentation Browser](../epics/done/E09-documentation-browser.md)
 - Companion stories: S09-01, S09-02, S09-03, S09-04, S09-05, S09-06, S09-07
 
 ## Summary
@@ -103,7 +103,7 @@ It is the final story in epic E09.
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — add `/api/reload-token` route and live-reload description
+- [x] `docs/specs/09-tools.md` — add `/api/reload-token` route and live-reload description
 
 ## Build notes
 
@@ -125,7 +125,7 @@ It is the final story in epic E09.
 
 ## Epic
 
-- Epic: [E09 Documentation Browser](../epics/unplanned/E09-documentation-browser.md)
+- Epic: [E09 Documentation Browser](../epics/done/E09-documentation-browser.md)
 - Companion stories: S09-01, S09-02, S09-03, S09-04, S09-05, S09-06, S09-07
 
 ## Summary

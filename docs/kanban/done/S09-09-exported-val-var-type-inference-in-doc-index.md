@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E09 Documentation Browser (kestrel doc)](../epics/unplanned/E09-documentation-browser.md)
+- Epic: [E09 Documentation Browser (kestrel doc)](../epics/done/E09-documentation-browser.md)
 - Companion stories: S09-01, S09-02, S09-03, S09-04, S09-05, S09-07
 
 ## Summary

@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E09 Documentation Browser](../epics/unplanned/E09-documentation-browser.md)
+- Epic: [E09 Documentation Browser](../epics/done/E09-documentation-browser.md)
 - Companion stories: S09-02, S09-03, S09-04, S09-05, S09-06, S09-07, S09-08
 
 ## Summary
@@ -110,7 +110,7 @@ are consumed by the renderer (S09-04), the search index (S09-05), and the server
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` §2.1 (Comments) — add `///` and `//!` syntax rules and semantics
+- [x] `docs/specs/01-language.md` §2.1 (Comments) — add `///` and `//!` syntax rules and semantics
 - `kestrel:dev/parser/ast` — all `TopDecl` and `FunDecl` / `TypeDecl` variants.
 
 ## Risks / Notes
