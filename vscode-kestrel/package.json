@@ -1,0 +1,52 @@
+{
+  "name": "vscode-kestrel",
+  "displayName": "Kestrel",
+  "description": "Language support for Kestrel (.ks)",
+  "version": "0.0.1",
+  "publisher": "kestrel-lang",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:kestrel"
+  ],
+  "main": "./dist/src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "kestrel",
+        "aliases": [
+          "Kestrel",
+          "kestrel"
+        ],
+        "extensions": [
+          ".ks"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "kestrel",
+        "scopeName": "source.kestrel",
+        "path": "./syntaxes/kestrel.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/vscode": "^1.100.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.2.1"
+  }
+}

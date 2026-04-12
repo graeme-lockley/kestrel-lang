@@ -59,13 +59,13 @@ No `vscode-kestrel/` directory exists. Kestrel `.ks` files open in VS Code with 
 
 ## Tasks
 
-- [ ] Create `vscode-kestrel/package.json` with language contribution, activation events, scripts, and extension entry point.
-- [ ] Create `vscode-kestrel/tsconfig.json` and `src/extension.ts` with minimal activation/deactivation functions.
-- [ ] Create `vscode-kestrel/syntaxes/kestrel.tmLanguage.json` with keyword/operator/literal/comment/type/constructor rules.
-- [ ] Create `vscode-kestrel/language-configuration.json` with bracket/comment/autoclose settings.
-- [ ] Create `vscode-kestrel/README.md` with development and packaging notes.
-- [ ] Add grammar scope tests in `vscode-kestrel/test/unit/grammar.test.ts`.
-- [ ] Run `cd vscode-kestrel && npm install && npm run compile && npm test`.
+- [x] Create `vscode-kestrel/package.json` with language contribution, activation events, scripts, and extension entry point.
+- [x] Create `vscode-kestrel/tsconfig.json` and `src/extension.ts` with minimal activation/deactivation functions.
+- [x] Create `vscode-kestrel/syntaxes/kestrel.tmLanguage.json` with keyword/operator/literal/comment/type/constructor rules.
+- [x] Create `vscode-kestrel/language-configuration.json` with bracket/comment/autoclose settings.
+- [x] Create `vscode-kestrel/README.md` with development and packaging notes.
+- [x] Add grammar scope tests in `vscode-kestrel/test/unit/grammar.test.ts`.
+- [x] Run `cd vscode-kestrel && npm install && npm run compile && npm test`.
 
 ## Tests to add
 
@@ -76,5 +76,11 @@ No `vscode-kestrel/` directory exists. Kestrel `.ks` files open in VS Code with 
 
 ## Documentation and specs to update
 
-- [ ] `vscode-kestrel/README.md` — add setup, build, and extension-host run instructions.
-- [ ] `docs/specs/09-tools.md` — no change in this story; Editor Integration section is added in S10-09.
+- [x] `vscode-kestrel/README.md` — add setup, build, and extension-host run instructions.
+- [x] `docs/specs/09-tools.md` — no change in this story; Editor Integration section is added in S10-09.
+
+## Build notes
+
+- 2026-04-12: Implemented initial `vscode-kestrel/` scaffold with language contributions, TextMate grammar, language configuration, extension entry point, and grammar unit tests.
+- 2026-04-12: Verified local story checks with `cd vscode-kestrel && npm install && npm run compile && npm test`.
+- 2026-04-12: Repository-level `./scripts/kestrel test` currently fails on pre-existing parse errors in `stdlib/kestrel/tools/compiler/classfile.ks` (outside S10-01 scope).
