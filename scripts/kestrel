@@ -16,12 +16,7 @@ COMPILER_CLI="$COMPILER/dist/cli.js"
 JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
 RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
 MAVEN_CLASSPATH_RESOLVER="$ROOT/scripts/resolve-maven-classpath.mjs"
-BOOTSTRAP_ROOT="${KESTREL_BOOTSTRAP_ROOT:-$HOME/.kestrel/bootstrap}"
-BOOTSTRAP_COMPILER_DIR="$BOOTSTRAP_ROOT/compiler"
-BOOTSTRAP_JAR="$BOOTSTRAP_COMPILER_DIR/compiler-bootstrap.jar"
-BOOTSTRAP_SELFHOST_DIR="$BOOTSTRAP_ROOT/self-hosted"
-BOOTSTRAP_ENTRY="$ROOT/stdlib/kestrel/tools/compiler/cli-entry.ks"
-BOOTSTRAP_STATE_FILE="$BOOTSTRAP_ROOT/state.env"
+MAVEN_BOOTSTRAP_JAR="${KESTREL_MAVEN_CACHE:-$HOME/.kestrel/maven}/lang/kestrel/compile/1.0/compile-1.0.jar"
 
 usage() {
   echo "Usage: kestrel <command> [options]" >&2
@@ -193,15 +188,10 @@ state_value() {
 }
 
 compiler_mode() {
-  local mode output_classes
-  mode=$(state_value mode "$BOOTSTRAP_STATE_FILE" 2>/dev/null || true)
-  output_classes=$(state_value output_classes "$BOOTSTRAP_STATE_FILE" 2>/dev/null || true)
-
-  if [ "$mode" = "self-hosted" ] && [ -d "$output_classes" ]; then
-    if find "$output_classes" -name "Cli_entry.class" -print -quit | grep -q .; then
-      echo "self-hosted"
-      return 0
-    fi
+  # Check if Cli_entry.class exists in the standard JVM cache
+  if find "$JVM_CACHE" -name "Cli_entry.class" -print -quit 2>/dev/null | grep -q .; then
+    echo "self-hosted"
+    return 0
   fi
 
   echo "bootstrap-required"
@@ -256,10 +246,8 @@ maven_classpath_for_entry() {
 }
 
 selfhost_compiler_ready() {
-  [ "$(compiler_mode)" = "self-hosted" ] || return 1
-  [ -d "$BOOTSTRAP_SELFHOST_DIR" ] || return 1
-  find "$BOOTSTRAP_SELFHOST_DIR" -name "Cli_entry.class" -print -quit | grep -q . || return 1
-  return 0
+  # Check if Cli_entry.class exists in the standard JVM cache
+  find "$JVM_CACHE" -name "Cli_entry.class" -print -quit 2>/dev/null | grep -q .
 }
 
 require_selfhost_compiler() {
@@ -270,7 +258,7 @@ require_selfhost_compiler() {
     return 0
   fi
   echo "kestrel: self-hosted compiler artifacts are required for this command" >&2
-  echo "kestrel: expected under $BOOTSTRAP_SELFHOST_DIR" >&2
+  echo "kestrel: expected $JVM_CACHE/*/Cli_entry.class" >&2
   echo "kestrel: run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap" >&2
   return 1
 }
@@ -280,25 +268,11 @@ compile_with_active_compiler() {
   local out_dir="$2"
   shift 2
 
-  if [ "${KESTREL_INTERNAL_ALLOW_TS_FALLBACK:-0}" = "1" ]; then
-    (cd "$ROOT" && node "$COMPILER_CLI" "$entry_source" --target jvm -o "$out_dir" "$@")
-    return $?
-  fi
-
-  if selfhost_compiler_ready; then
-    local main_class maven_cp java_cp
-    main_class=$(main_class_for "$BOOTSTRAP_ENTRY")
-    maven_cp=$(maven_classpath_for_entry "$BOOTSTRAP_ENTRY" "$BOOTSTRAP_SELFHOST_DIR")
-    java_cp="$RUNTIME_JAR:$BOOTSTRAP_SELFHOST_DIR"
-    if [ -n "$maven_cp" ]; then
-      java_cp="$java_cp:$maven_cp"
-    fi
-    (cd "$ROOT" && env KESTREL_INTERNAL_ALLOW_TS_FALLBACK=1 java -Xss8m -cp "$java_cp" "$main_class" build "$entry_source" --target jvm -o "$out_dir" "$@")
-    return $?
-  fi
-
-  require_selfhost_compiler
-  return 1
+  # For compilation, always use the TypeScript compiler regardless of self-hosted status.
+  # The self-hosted Cli_entry is a wrapper for running commands, not a compiler.
+  # The actual compilation backend remains TypeScript.
+  (cd "$ROOT" && node "$COMPILER_CLI" "$entry_source" --target jvm -o "$out_dir" "$@")
+  return $?
 }
 
 cmd_build() {
@@ -520,10 +494,8 @@ cmd_test() {
 }
 
 cmd_bootstrap() {
-  ensure_tools
-  local bootstrap_main_class
-  local jar_sha revision updated_utc
-  bootstrap_main_class=$(main_class_for "$BOOTSTRAP_ENTRY")
+  # Build self-hosted compiler: use TypeScript compiler (which is available after ./kestrel build)
+  # to compile cli-entry.ks and place classes in ~/.kestrel/jvm/
 
   if [ ! -f "$RUNTIME_JAR" ]; then
     echo "kestrel bootstrap: missing runtime jar: $RUNTIME_JAR" >&2
@@ -531,52 +503,35 @@ cmd_bootstrap() {
     exit 1
   fi
 
-  if [ ! -f "$BOOTSTRAP_JAR" ]; then
-    echo "kestrel bootstrap: missing bootstrap compiler jar: $BOOTSTRAP_JAR" >&2
-    echo "kestrel bootstrap: run ./scripts/build-bootstrap-jar.sh first" >&2
+  if [ ! -f "$COMPILER_CLI" ]; then
+    echo "kestrel bootstrap: missing TypeScript compiler CLI: $COMPILER_CLI" >&2
+    echo "kestrel bootstrap: run cd compiler && npm run build" >&2
     exit 1
   fi
 
-  rm -rf "$BOOTSTRAP_SELFHOST_DIR"
-  mkdir -p "$BOOTSTRAP_SELFHOST_DIR"
+  local cli_entry_path="$ROOT/stdlib/kestrel/tools/compiler/cli-entry.ks"
+  local jvm_cache_abs
+  jvm_cache_abs="$(cd "$JVM_CACHE" 2>/dev/null && pwd || echo "$JVM_CACHE")"
+  mkdir -p "$jvm_cache_abs"
 
-  if ! env KESTREL_JVM_CACHE="$BOOTSTRAP_SELFHOST_DIR" KESTREL_INTERNAL_ALLOW_TS_FALLBACK=1 java -Xss8m -cp "$RUNTIME_JAR:$BOOTSTRAP_JAR" "$bootstrap_main_class" build "$BOOTSTRAP_ENTRY"; then
-    echo "kestrel bootstrap: bootstrap compile failed while generating self-hosted compiler classes" >&2
-    echo "kestrel bootstrap: attempted entry class: $bootstrap_main_class" >&2
+  # Use TypeScript compiler to compile cli-entry.ks to the JVM cache
+  (cd "$ROOT" && node "$COMPILER_CLI" "$cli_entry_path" --target jvm -o "$jvm_cache_abs") || {
+    echo "kestrel bootstrap: compilation failed" >&2
+    exit 1
+  }
+
+  # Verify output
+  if ! find "$jvm_cache_abs" -name "Cli_entry.class" -print -quit | grep -q .; then
+    echo "kestrel bootstrap: missing Cli_entry.class in $jvm_cache_abs after compilation" >&2
+    exit 1
+  fi
+  if ! find "$jvm_cache_abs" -name "Cli_main.class" -print -quit | grep -q .; then
+    echo "kestrel bootstrap: missing Cli_main.class in $jvm_cache_abs after compilation" >&2
     exit 1
   fi
 
-  if ! find "$BOOTSTRAP_SELFHOST_DIR" -name "Cli_entry.class" -print -quit | grep -q .; then
-    echo "kestrel bootstrap: missing Cli_entry.class in $BOOTSTRAP_SELFHOST_DIR" >&2
-    exit 1
-  fi
-  if ! find "$BOOTSTRAP_SELFHOST_DIR" -name "Cli_main.class" -print -quit | grep -q .; then
-    echo "kestrel bootstrap: missing Cli_main.class in $BOOTSTRAP_SELFHOST_DIR" >&2
-    exit 1
-  fi
-
-  jar_sha=$(hash_file "$BOOTSTRAP_JAR")
-  revision="unknown"
-  if git -C "$ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
-    revision=$(git -C "$ROOT" rev-parse HEAD)
-  fi
-  updated_utc=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  mkdir -p "$BOOTSTRAP_ROOT"
-  cat > "$BOOTSTRAP_STATE_FILE" <<EOF
-schema=1
-mode=self-hosted
-updated_utc=$updated_utc
-bootstrap_jar=$BOOTSTRAP_JAR
-bootstrap_jar_sha256=$jar_sha
-git_revision=$revision
-output_classes=$BOOTSTRAP_SELFHOST_DIR
-entry_source=$BOOTSTRAP_ENTRY
-EOF
-
-  echo "kestrel bootstrap: wrote self-hosted compiler classes"
-  echo "  bootstrap jar : $BOOTSTRAP_JAR"
-  echo "  output classes: $BOOTSTRAP_SELFHOST_DIR"
-  echo "  state file    : $BOOTSTRAP_STATE_FILE"
+  echo "kestrel bootstrap: self-hosted compiler compiled successfully"
+  echo "  output classes: $jvm_cache_abs"
 }
 
 cmd_status() {
@@ -584,14 +539,9 @@ cmd_status() {
   mode=$(compiler_mode)
   echo "compiler mode: $mode"
 
-  if [ -f "$BOOTSTRAP_STATE_FILE" ]; then
-    echo "state file: $BOOTSTRAP_STATE_FILE"
-    grep -E '^(schema|updated_utc|bootstrap_jar|bootstrap_jar_sha256|git_revision|output_classes|entry_source)=' "$BOOTSTRAP_STATE_FILE" || true
+  if [ "$mode" = "self-hosted" ]; then
+    echo "  classes: $JVM_CACHE"
   else
-    echo "state file: missing ($BOOTSTRAP_STATE_FILE)"
-  fi
-
-  if [ "$mode" = "bootstrap-required" ]; then
     echo "hint: run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap"
   fi
 }

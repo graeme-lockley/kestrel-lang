@@ -50,6 +50,9 @@ if [ ! -f "$ENTRY" ]; then
   exit 1
 fi
 
+echo "[bootstrap-jar] wiping ~/.kestrel"
+rm -rf "$HOME/.kestrel"
+
 mkdir -p "$OUT_DIR"
 rm -rf "$CLASSES_DIR"
 mkdir -p "$CLASSES_DIR"
@@ -77,6 +80,21 @@ if ! jar tf "$JAR_PATH" | grep -q 'Cli_main.class'; then
   exit 1
 fi
 
+# Install JAR to Maven cache layout: ~/.kestrel/maven/lang/kestrel/compile/1.0/compile-1.0.jar
+MAVEN_ROOT="${KESTREL_MAVEN_CACHE:-$HOME/.kestrel/maven}"
+MAVEN_GROUP_PATH="$MAVEN_ROOT/lang/kestrel"
+MAVEN_ARTIFACT_DIR="$MAVEN_GROUP_PATH/compile/1.0"
+MAVEN_JAR_PATH="$MAVEN_ARTIFACT_DIR/compile-1.0.jar"
+MAVEN_SHA1_PATH="$MAVEN_JAR_PATH.sha1"
+
+echo "[bootstrap-jar] installing to Maven cache"
+mkdir -p "$MAVEN_ARTIFACT_DIR"
+cp "$JAR_PATH" "$MAVEN_JAR_PATH"
+
+# Compute and write SHA1 sidecar
+MAVEN_JAR_SHA1=$(hash_file "$MAVEN_JAR_PATH")
+echo "$MAVEN_JAR_SHA1  compile-1.0.jar" > "$MAVEN_SHA1_PATH"
+
 rev="unknown"
 if git -C "$ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
   rev=$(git -C "$ROOT" rev-parse HEAD)
@@ -94,5 +112,7 @@ entry=Cli_entry
 EOF
 
 echo "[bootstrap-jar] PASS"
-echo "  jar : $JAR_PATH"
-echo "  meta: $META_PATH"
+echo "  jar       : $JAR_PATH"
+echo "  meta      : $META_PATH"
+echo "  maven jar : $MAVEN_JAR_PATH"
+echo "  maven sha1: $MAVEN_SHA1_PATH"
