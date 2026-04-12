@@ -60,12 +60,12 @@ No formatting provider exists. E08 introduces `kestrel fmt` with `--stdin` mode 
 
 ## Tasks
 
-- [ ] Add formatting provider implementation in `vscode-kestrel/src/server/providers/formatting.ts` using `kestrel fmt --stdin`.
-- [ ] Wire `documentFormattingProvider` and `documentRangeFormattingProvider` in `vscode-kestrel/src/server/server.ts`.
-- [ ] Plumb executable and formatter enabled settings through `vscode-kestrel/src/extension.ts` initialization options.
-- [ ] Add `kestrel.formatter.enabled` setting to `vscode-kestrel/package.json` contributions.
-- [ ] Add `vscode-kestrel/test/unit/formatting.test.ts` for success/no-op/error cases.
-- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+- [x] Add formatting provider implementation in `vscode-kestrel/src/server/providers/formatting.ts` using `kestrel fmt --stdin`.
+- [x] Wire `documentFormattingProvider` and `documentRangeFormattingProvider` in `vscode-kestrel/src/server/server.ts`.
+- [x] Plumb executable and formatter enabled settings through `vscode-kestrel/src/extension.ts` initialization options.
+- [x] Add `kestrel.formatter.enabled` setting to `vscode-kestrel/package.json` contributions.
+- [x] Add `vscode-kestrel/test/unit/formatting.test.ts` for success/no-op/error cases.
+- [x] Run `cd vscode-kestrel && npm run compile && npm test`.
 
 ## Tests to add
 
@@ -77,5 +77,17 @@ No formatting provider exists. E08 introduces `kestrel fmt` with `--stdin` mode 
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — verify formatter CLI invocation semantics remain aligned; no new textual changes expected.
-- [ ] `vscode-kestrel/README.md` — include formatter setting notes.
+- [x] `docs/specs/09-tools.md` — verified formatter CLI invocation semantics remain aligned; no new textual changes were required.
+- [x] `vscode-kestrel/README.md` — included formatter setting notes.
+
+## Build notes
+
+- 2026-04-12: Started implementation.
+- 2026-04-12: Added formatter provider invoking `kestrel fmt --stdin`, with graceful empty-edit behavior on formatter failures.
+- 2026-04-12: Wired document and range formatting handlers/capabilities in the language server.
+- 2026-04-12: Plumbed `kestrel.executable` and `kestrel.formatter.enabled` via client initialization options.
+- 2026-04-12: Added `formatting.test.ts` covering changed output, no-op, and failed formatter paths.
+- 2026-04-12: Verification status:
+	- `cd vscode-kestrel && npm run compile && npm test` passed.
+	- `cd compiler && npm run build && npm test` passed.
+	- `./scripts/kestrel test` passed (`1779 passed`).

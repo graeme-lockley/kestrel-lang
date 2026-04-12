@@ -28,6 +28,7 @@ function runTestCommand(testName: string, uri: string, debug: boolean): void {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  const config = vscode.workspace.getConfiguration('kestrel');
   const serverModule = context.asAbsolutePath(path.join('dist', 'src', 'server', 'server.js'));
 
   const serverOptions: ServerOptions = {
@@ -42,7 +43,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: 'file', language: 'kestrel' }],
     initializationOptions: {
-      debounceMs: vscode.workspace.getConfiguration('kestrel').get<number>('lsp.debounceMs', 250),
+      debounceMs: config.get<number>('lsp.debounceMs', 250),
+      executable: config.get<string>('executable', 'kestrel'),
+      formatterEnabled: config.get<boolean>('formatter.enabled', true),
     },
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher('**/*.ks'),

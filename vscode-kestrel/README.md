@@ -11,6 +11,13 @@ VS Code extension scaffold for Kestrel `.ks` files.
 - LSP-backed diagnostics, hover, definition, symbols, folding, semantic tokens, inlay hints
 - Quick-fix code actions for `type:unknown_variable` and `type:non_exhaustive_match`
 - Test CodeLens commands for `test("name", ...)` calls
+- Document/range formatting via `kestrel fmt --stdin`
+
+## Settings
+
+- `kestrel.executable` (default `kestrel`): CLI command/path used for test actions and formatting.
+- `kestrel.lsp.debounceMs` (default `250`): diagnostics debounce interval in milliseconds.
+- `kestrel.formatter.enabled` (default `true`): enables or disables formatter requests.
 
 ## Development
 

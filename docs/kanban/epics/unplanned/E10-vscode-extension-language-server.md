@@ -26,7 +26,7 @@ S10-04, S10-05, S10-06, S10-07, S10-08 are independent of each other once S10-02
 
 ### Deferred — implement after E09 completes
 
-10. [S10-10-format-on-save.md](../../unplanned/S10-10-format-on-save.md) — Document formatting via `kestrel fmt --stdin` (E08 complete — unblocked)
+10. [S10-10-format-on-save.md](../../done/S10-10-format-on-save.md) — Document formatting via `kestrel fmt --stdin` (done)
 11. [S10-11-hover-doc-comments.md](../../unplanned/S10-11-hover-doc-comments.md) — Hover shows `///` doc-comment prose (**blocked by E09**)
 12. [S10-12-cross-file-navigation-workspace-symbols.md](../../unplanned/S10-12-cross-file-navigation-workspace-symbols.md) — Cross-file go-to-definition, find-references, rename, workspace symbols (E04 + E07 complete — unblocked)
 

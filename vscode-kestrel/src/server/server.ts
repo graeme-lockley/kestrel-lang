@@ -16,6 +16,7 @@ import { collectTestCodeLenses } from './providers/codeLens';
 import { collectCompletions } from './providers/completion';
 import { findDefinition } from './providers/definition';
 import { collectFoldingRanges } from './providers/folding';
+import { formatDocument, formatDocumentRange } from './providers/formatting';
 import { buildHover } from './providers/hover';
 import { collectInlayHints } from './providers/inlayHints';
 import { collectSemanticTokens, semanticTokenLegend } from './providers/semanticTokens';
@@ -29,6 +30,8 @@ const debouncers = new Map<string, DebouncedScheduler>();
 
 const DEFAULT_DEBOUNCE_MS = 250;
 let debounceMs = DEFAULT_DEBOUNCE_MS;
+let kestrelExecutable = 'kestrel';
+let formatterEnabled = true;
 
 function scheduleDiagnostics(doc: TextDocument): void {
   const uri = doc.uri;
@@ -51,9 +54,18 @@ function scheduleDiagnostics(doc: TextDocument): void {
 }
 
 connection.onInitialize((params: InitializeParams) => {
-  const configuredDebounce = (params.initializationOptions as { debounceMs?: unknown } | undefined)?.debounceMs;
+  const init = params.initializationOptions as
+    | { debounceMs?: unknown; executable?: unknown; formatterEnabled?: unknown }
+    | undefined;
+  const configuredDebounce = init?.debounceMs;
   if (typeof configuredDebounce === 'number' && configuredDebounce > 0) {
     debounceMs = configuredDebounce;
+  }
+  if (typeof init?.executable === 'string' && init.executable.length > 0) {
+    kestrelExecutable = init.executable;
+  }
+  if (typeof init?.formatterEnabled === 'boolean') {
+    formatterEnabled = init.formatterEnabled;
   }
 
   return {
@@ -62,6 +74,8 @@ connection.onInitialize((params: InitializeParams) => {
       hoverProvider: true,
       documentSymbolProvider: true,
       foldingRangeProvider: true,
+      documentFormattingProvider: true,
+      documentRangeFormattingProvider: true,
       codeLensProvider: {
         resolveProvider: false,
       },
@@ -154,6 +168,22 @@ connection.onFoldingRanges((params) => {
     return [];
   }
   return collectFoldingRanges(doc.ast, doc.source);
+});
+
+connection.onDocumentFormatting(async (params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return [];
+  }
+  return formatDocument(doc.source, { executable: kestrelExecutable, enabled: formatterEnabled });
+});
+
+connection.onDocumentRangeFormatting(async (params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return [];
+  }
+  return formatDocumentRange(doc.source, { executable: kestrelExecutable, enabled: formatterEnabled }, params.range);
 });
 
 connection.onCodeLens((params) => {

@@ -38,6 +38,11 @@
           "default": 250,
           "minimum": 1,
           "description": "Debounce delay in milliseconds for on-change language server diagnostics."
+        },
+        "kestrel.formatter.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable Kestrel document formatting via kestrel fmt."
         }
       }
     },
