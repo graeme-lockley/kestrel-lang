@@ -49,3 +49,34 @@ No code action provider exists. The compiler publishes diagnostics with error co
 - The exhaustiveness-fix insertion point (where to add missing arms) must be derived from the last existing `match` arm's `span.end`. If spans are missing on `Case` nodes, a fallback of appending before the closing `}` of the `MatchExpr` is acceptable.
 - The stdlib module name → export-name index must be kept in sync with `stdlib/kestrel/`. A static map covering the most-used exports (`println`, `List`, `Option`, common math functions) is acceptable for Tier 1; a full dynamic index requires E07.
 - The `todo!()` placeholder in generated arms should be a call to a stdlib `todo` function if one exists, or the string literal `"TODO"` otherwise — whichever is defined in the stdlib at implementation time.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Code action provider | Add `vscode-kestrel/src/server/providers/codeActions.ts` to synthesize quick-fix edits from diagnostics. |
+| LSP server wiring | Register `codeActionProvider` capability and `onCodeAction` handler in `vscode-kestrel/src/server/server.ts`. |
+| Import resolution | Add a Tier 1 static export-to-module lookup map for high-value stdlib symbols used by add-import quick fix. |
+| Tests | Add `vscode-kestrel/test/unit/codeActions.test.ts` for exhaustiveness/add-import positive and negative cases. |
+
+## Tasks
+
+- [ ] Add `vscode-kestrel/src/server/providers/codeActions.ts` with `collectCodeActions` and helper builders for `type:non_exhaustive_match` and `type:unknown_variable`.
+- [ ] Implement non-exhaustive match quick-fix text generation from diagnostic hints (missing constructor names) and produce insertion edit near the target `match` block.
+- [ ] Implement unknown-variable add-import quick-fix with a Tier 1 static stdlib export index and insertion after existing imports.
+- [ ] Register `codeActionProvider` and `onCodeAction` in `vscode-kestrel/src/server/server.ts`.
+- [ ] Add `vscode-kestrel/test/unit/codeActions.test.ts` covering: exhaustiveness fix action, add-import action, and no-action for unrelated diagnostics.
+- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/codeActions.test.ts` | Verify `type:non_exhaustive_match` yields a quick-fix containing synthesized missing arms. |
+| Vitest unit | `vscode-kestrel/test/unit/codeActions.test.ts` | Verify `type:unknown_variable` for `println` yields import fix targeting `kestrel:io/console`. |
+| Vitest unit | `vscode-kestrel/test/unit/codeActions.test.ts` | Verify unrelated diagnostics produce no quick-fix actions. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/10-compile-diagnostics.md` — validate code-action assumptions against current diagnostic code/hint/message shapes; no textual change expected in this story.
+- [ ] `docs/specs/09-tools.md` — no change in this story; editor integration doc updates are grouped in S10-09.
