@@ -12,7 +12,7 @@
 ## Summary
 
 Port `compiler/src/compile-file-jvm.ts` (~1 139 lines) and `compiler/src/index.ts` (~71 lines)
-to `stdlib/kestrel/compiler/driver.ks`. The driver wires together the lexer (from
+to `stdlib/kestrel/tools/compiler/driver.ks`. The driver wires together the lexer (from
 `kestrel:dev/parser`), parser, type checker (S14-04), KTI reader/writer (S14-09),
 module resolver (S14-10), and code generator (S14-07/S14-08) into the full multi-module
 incremental compilation pipeline:
@@ -42,7 +42,7 @@ incremental compilation pipeline:
 
 ## Goals
 
-1. Create `stdlib/kestrel/compiler/driver.ks` with:
+1. Create `stdlib/kestrel/tools/compiler/driver.ks` with:
    - `CompileOptions` record mirroring `CompileFileJvmOptions`
    - `CompileResult` = `{ ok: Bool, diagnostics: List<Diagnostic> }`
    - `compileFile(entryPath: String, opts: CompileOptions): Task<CompileResult>`
@@ -53,13 +53,13 @@ incremental compilation pipeline:
 
 ## Acceptance Criteria
 
-- `stdlib/kestrel/compiler/driver.ks` compiles without errors.
+- `stdlib/kestrel/tools/compiler/driver.ks` compiles without errors.
 - End-to-end test: compile `hello.ks` (or a trivial Kestrel program) through the self-hosted
   driver pipeline and confirm the output `.class` file runs correctly under `java`.
 - A test verifies that re-compiling an unchanged module with a fresh KTI skips re-compilation
   (cache hit).
 - A test verifies that modifying a source file invalidates the KTI and triggers recompilation.
-- `./kestrel test stdlib/kestrel/compiler/driver.test.ks` passes.
+- `./kestrel test stdlib/kestrel/tools/compiler/driver.test.ks` passes.
 - `cd compiler && npm test` still passes.
 
 ## Spec References
@@ -79,3 +79,37 @@ incremental compilation pipeline:
   equivalent callback or async progress channel in the Kestrel driver.
 - Class output directory creation (`mkdirSync`) must use `Fs.mkdir` from `kestrel:io/fs`
   (available since E13).
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib compiler | Add `stdlib/kestrel/tools/compiler/driver.ks` as the self-hosted orchestration layer across parser, typecheck, resolve, kti, and codegen modules. |
+| Incremental compilation | Introduce KTI freshness checks and dependency-snapshot handling in a compile-file entrypoint API. |
+| Output generation | Emit class-file outputs to a target directory and surface compile diagnostics through a unified `CompileResult`. |
+| Kestrel tests | Add `stdlib/kestrel/tools/compiler/driver.test.ks` for basic pipeline execution and freshness behavior checks. |
+| CLI/bootstrap path | Provide the API surface required for S14-12 and S14-13 to invoke self-hosted compilation end-to-end. |
+
+## Tasks
+
+- [ ] Create `stdlib/kestrel/tools/compiler/driver.ks` with `CompileOptions`, `CompileResult`, and `compileFile` API.
+- [ ] Implement minimal module compile pipeline wiring parser + typecheck + resolve + codegen + kti interfaces with scaffold-grade behavior.
+- [ ] Implement `isFresh` helper and dependency hash comparison for incremental-skip decisions.
+- [ ] Add output directory + class write helpers and diagnostics aggregation for per-module failures.
+- [ ] Add `stdlib/kestrel/tools/compiler/driver.test.ks` for basic compile invocation and freshness-path checks.
+- [ ] Run `NODE_OPTIONS='--max-old-space-size=8192' ./kestrel test stdlib/kestrel/tools/compiler/driver.test.ks`.
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `./scripts/kestrel test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/tools/compiler/driver.test.ks` | Validate compileFile returns `ok=True` for a trivial module pipeline input. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/driver.test.ks` | Validate `isFresh` returns true for matching source/dependency hashes and false for mismatches. |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/driver.test.ks` | Validate stale-input path is detected and reported through compile result diagnostics. |
+| Vitest integration | `compiler/test/integration/kti-*.test.ts` and pipeline tests (existing) | Regression guard while self-hosted driver scaffold is introduced. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/07-modules.md` — review incremental compile pipeline and freshness semantics against scaffold implementation; update only if needed.
