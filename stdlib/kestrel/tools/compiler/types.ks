@@ -5,6 +5,7 @@
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
+import * as Res from "kestrel:data/result"
 
 /// A record field descriptor: field name, mutability flag, and field type.
 export type TypeField = { name: String, mut_: Bool, type_: InternalType }
@@ -31,6 +32,10 @@ export type InternalType =
   | TInter(InternalType, InternalType)
   | TScheme(List<Int>, InternalType)
   | TNamespace(Dict<String, InternalType>)
+
+/// Structured unification error payload as (leftType, rightType).
+fun mkUnifyError(left: InternalType, right: InternalType): (InternalType, InternalType) =
+  (left, right)
 
 val counter = { mut nextVarId = 0 }
 
@@ -233,3 +238,215 @@ export fun typeToString(t: InternalType): String =
     TScheme(vars, body) => "forall ${Lst.length(vars)} vars. ${typeToString(body)}"
     TNamespace(_) => "<namespace>"
   }
+
+fun occurs(id: Int, t: InternalType): Bool =
+  match (t) {
+    TVar(v) => v == id
+    TPrim(_) => False
+    TArrow(ps, r) => Lst.any(ps, (p: InternalType) => occurs(id, p)) | occurs(id, r)
+    TRecord(fields, rowOpt) => {
+      val inFields = Lst.any(fields, (f: TypeField) => occurs(id, f.type_))
+      if (rowOpt == None)
+        inFields
+      else
+        inFields | occurs(id, Opt.getOrElse(rowOpt, tUnit))
+    }
+    TApp(_, args) => Lst.any(args, (a: InternalType) => occurs(id, a))
+    TTuple(es) => Lst.any(es, (e: InternalType) => occurs(id, e))
+    TUnion(l, r) => occurs(id, l) | occurs(id, r)
+    TInter(l, r) => occurs(id, l) | occurs(id, r)
+    TScheme(vars, body) => if (Lst.any(vars, (v: Int) => v == id)) False else occurs(id, body)
+    TNamespace(_) => False
+  }
+
+/// Apply substitution and chase variable chains until fixed point.
+export fun applySubstFull(subst: Dict<Int, InternalType>, t: InternalType): InternalType =
+  match (t) {
+    TVar(id) => {
+      val found = Dict.get(subst, id)
+      if (found == None)
+        t
+      else {
+        val next = Opt.getOrElse(found, t)
+        if (next == t) t else applySubstFull(subst, next)
+      }
+    }
+    _ => applySubst(subst, t)
+  }
+
+fun bindVar(subst: Dict<Int, InternalType>, id: Int, t: InternalType): Result<Dict<Int, InternalType>, (InternalType, InternalType)> =
+  if (t == TVar(id))
+    Ok(subst)
+  else if (occurs(id, t))
+    Err(mkUnifyError(TVar(id), t))
+  else
+    Ok(Dict.insert(subst, id, t))
+
+fun unifyMany(subst: Dict<Int, InternalType>, left: List<InternalType>, right: List<InternalType>): Result<Dict<Int, InternalType>, (InternalType, InternalType)> =
+  match (left) {
+    [] =>
+      match (right) {
+        [] => Ok(subst)
+        _ => Err(mkUnifyError(TTuple(left), TTuple(right)))
+      }
+    lh :: lt =>
+      match (right) {
+        [] => Err(mkUnifyError(TTuple(left), TTuple(right)))
+        rh :: rt =>
+          Res.andThen(
+            unify(subst, lh, rh),
+            (s2: Dict<Int, InternalType>) => unifyMany(s2, lt, rt)
+          )
+      }
+  }
+
+fun unifyRecordFields(
+  subst: Dict<Int, InternalType>,
+  left: List<TypeField>,
+  right: List<TypeField>
+): Result<Dict<Int, InternalType>, (InternalType, InternalType)> =
+  match (left) {
+    [] =>
+      match (right) {
+        [] => Ok(subst)
+        _ => Err(mkUnifyError(TRecord(left, None), TRecord(right, None)))
+      }
+    lf :: lt =>
+      match (right) {
+        [] => Err(mkUnifyError(TRecord(left, None), TRecord(right, None)))
+        rf :: rt =>
+          if (lf.name != rf.name | lf.mut_ != rf.mut_)
+            Err(mkUnifyError(TRecord(left, None), TRecord(right, None)))
+          else
+            Res.andThen(
+              unify(subst, lf.type_, rf.type_),
+              (s2: Dict<Int, InternalType>) => unifyRecordFields(s2, lt, rt)
+            )
+      }
+  }
+
+/// Expand a generic alias head if present in aliases; otherwise keep application form.
+export fun expandGenericAliasHead(
+  name: String,
+  args: List<InternalType>,
+  aliases: Dict<String, InternalType>
+): InternalType = {
+  val found = Dict.get(aliases, name)
+  if (found == None) TApp(name, args) else Opt.getOrElse(found, TApp(name, args))
+}
+
+/// Structural unification with occurs check.
+export fun unify(subst: Dict<Int, InternalType>, t1: InternalType, t2: InternalType): Result<Dict<Int, InternalType>, (InternalType, InternalType)> = {
+  val l = applySubstFull(subst, t1)
+  val r = applySubstFull(subst, t2)
+  match (l) {
+    TVar(id) => bindVar(subst, id, r)
+    _ =>
+      match (r) {
+        TVar(id) => bindVar(subst, id, l)
+        _ =>
+          match (l) {
+            TPrim(a) =>
+              match (r) {
+                TPrim(b) => if (a == b) Ok(subst) else Err(mkUnifyError(l, r))
+                _ => Err(mkUnifyError(l, r))
+              }
+            TArrow(lp, lr) =>
+              match (r) {
+                TArrow(rp, rr) =>
+                  if (Lst.length(lp) != Lst.length(rp))
+                    Err(mkUnifyError(l, r))
+                  else
+                    Res.andThen(
+                      unifyMany(subst, lp, rp),
+                      (s2: Dict<Int, InternalType>) => unify(s2, lr, rr)
+                    )
+                _ => Err(mkUnifyError(l, r))
+              }
+            TApp(ln, la) =>
+              match (r) {
+                TApp(rn, ra) =>
+                  if (ln != rn | Lst.length(la) != Lst.length(ra))
+                    Err(mkUnifyError(l, r))
+                  else
+                    unifyMany(subst, la, ra)
+                _ => Err(mkUnifyError(l, r))
+              }
+            TTuple(le) =>
+              match (r) {
+                TTuple(re) =>
+                  if (Lst.length(le) != Lst.length(re))
+                    Err(mkUnifyError(l, r))
+                  else
+                    unifyMany(subst, le, re)
+                _ => Err(mkUnifyError(l, r))
+              }
+            TUnion(ll, lr) =>
+              match (r) {
+                TUnion(rl, rr) => Res.andThen(unify(subst, ll, rl), (s2: Dict<Int, InternalType>) => unify(s2, lr, rr))
+                _ => Err(mkUnifyError(l, r))
+              }
+            TInter(ll, lr) =>
+              match (r) {
+                TInter(rl, rr) => Res.andThen(unify(subst, ll, rl), (s2: Dict<Int, InternalType>) => unify(s2, lr, rr))
+                _ => Err(mkUnifyError(l, r))
+              }
+            TRecord(lf, lrow) =>
+              match (r) {
+                TRecord(rf, rrow) => {
+                  if (Lst.length(lf) != Lst.length(rf))
+                    Err(mkUnifyError(l, r))
+                  else
+                    Res.andThen(
+                      unifyRecordFields(subst, lf, rf),
+                      (s2: Dict<Int, InternalType>) =>
+                        if (lrow == None & rrow == None)
+                          Ok(s2)
+                        else if (lrow != None & rrow != None)
+                          unify(s2, Opt.getOrElse(lrow, tUnit), Opt.getOrElse(rrow, tUnit))
+                        else
+                          Err(mkUnifyError(l, r))
+                    )
+                }
+                _ => Err(mkUnifyError(l, r))
+              }
+            _ => Err(mkUnifyError(l, r))
+          }
+      }
+  }
+}
+
+fun fieldTypeByName(fields: List<TypeField>, name: String): Option<InternalType> =
+  match (fields) {
+    [] => None
+    f :: rest => if (f.name == name) Some(f.type_) else fieldTypeByName(rest, name)
+  }
+
+fun unifySubtypeFields(subst: Dict<Int, InternalType>, actualFields: List<TypeField>, expectedFields: List<TypeField>): Result<Dict<Int, InternalType>, (InternalType, InternalType)> =
+  match (expectedFields) {
+    [] => Ok(subst)
+    ef :: tail => {
+      val got = fieldTypeByName(actualFields, ef.name)
+      if (got == None)
+        Err(mkUnifyError(TRecord(actualFields, None), TRecord(expectedFields, None)))
+      else
+        Res.andThen(
+          unifySubtype(subst, Opt.getOrElse(got, ef.type_), ef.type_),
+          (s2: Dict<Int, InternalType>) => unifySubtypeFields(s2, actualFields, tail)
+        )
+    }
+  }
+
+/// Subtyping-focused unification for record extension and future checker rules.
+export fun unifySubtype(subst: Dict<Int, InternalType>, t1: InternalType, t2: InternalType): Result<Dict<Int, InternalType>, (InternalType, InternalType)> = {
+  val l = applySubstFull(subst, t1)
+  val r = applySubstFull(subst, t2)
+  match (l) {
+    TRecord(lf, _) =>
+      match (r) {
+        TRecord(rf, _) => unifySubtypeFields(subst, lf, rf)
+        _ => unify(subst, l, r)
+      }
+    _ => unify(subst, l, r)
+  }
+}

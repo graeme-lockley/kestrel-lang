@@ -23,6 +23,81 @@ export type AstType =
   | ATInter(AstType, AstType)          // intersection A & B
   | ATTuple(List<AstType>)             // tuple product A * B * C
 
+/// Stable tag for `AstType` nodes.
+export fun astTypeTag(t: AstType): String =
+  match (t) {
+    ATIdent(_) => "ident"
+    ATQualified(_, _) => "qualified"
+    ATPrim(_) => "prim"
+    ATArrow(_, _) => "arrow"
+    ATRecord(_) => "record"
+    ATRowVar(_) => "rowvar"
+    ATApp(_, _) => "app"
+    ATUnion(_, _) => "union"
+    ATInter(_, _) => "inter"
+    ATTuple(_) => "tuple"
+  }
+
+export fun astTypeIdentName(t: AstType): Option<String> =
+  match (t) {
+    ATIdent(name) => Some(name)
+    _ => None
+  }
+
+export fun astTypeQualifiedParts(t: AstType): Option<(String, String)> =
+  match (t) {
+    ATQualified(ns, name) => Some((ns, name))
+    _ => None
+  }
+
+export fun astTypePrimName(t: AstType): Option<String> =
+  match (t) {
+    ATPrim(name) => Some(name)
+    _ => None
+  }
+
+export fun astTypeArrowParts(t: AstType): Option<(List<AstType>, AstType)> =
+  match (t) {
+    ATArrow(params, ret) => Some((params, ret))
+    _ => None
+  }
+
+export fun astTypeRecordFields(t: AstType): Option<List<TypeField>> =
+  match (t) {
+    ATRecord(fields) => Some(fields)
+    _ => None
+  }
+
+export fun astTypeRowVarName(t: AstType): Option<String> =
+  match (t) {
+    ATRowVar(name) => Some(name)
+    _ => None
+  }
+
+export fun astTypeAppParts(t: AstType): Option<(String, List<AstType>)> =
+  match (t) {
+    ATApp(name, args) => Some((name, args))
+    _ => None
+  }
+
+export fun astTypeUnionParts(t: AstType): Option<(AstType, AstType)> =
+  match (t) {
+    ATUnion(left, right) => Some((left, right))
+    _ => None
+  }
+
+export fun astTypeInterParts(t: AstType): Option<(AstType, AstType)> =
+  match (t) {
+    ATInter(left, right) => Some((left, right))
+    _ => None
+  }
+
+export fun astTypeTupleElements(t: AstType): Option<List<AstType>> =
+  match (t) {
+    ATTuple(elements) => Some(elements)
+    _ => None
+  }
+
 // Param is a function or lambda parameter.
 export type Param = { name: String, type_: Option<AstType> }
 

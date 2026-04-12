@@ -17,17 +17,17 @@ and retire the TypeScript compiler as the primary build tool.
 
 ## Stories (ordered — implement sequentially)
 
-1. [S14-01-compiler-diagnostics-module.md](../../done/S14-01-compiler-diagnostics-module.md) — ✅ Diagnostics types and reporter (`kestrel:compiler/diagnostics`)
-2. [S14-02-internal-type-representation.md](../../done/S14-02-internal-type-representation.md) — ✅ InternalType ADT, fresh vars, generalize/instantiate (`kestrel:compiler/types`)
-3. [S14-03-type-unification-engine.md](../../unplanned/S14-03-type-unification-engine.md) — Unify, applySubst, astTypeToInternal
-4. [S14-04-hindley-milner-type-checker.md](../../unplanned/S14-04-hindley-milner-type-checker.md) — Full HM type checker with row polymorphism (`kestrel:compiler/typecheck`)
-5. [S14-05-jvm-opcode-table.md](../../done/S14-05-jvm-opcode-table.md) — ✅ JVM opcode constants and descriptor helpers (`kestrel:compiler/opcodes`)
-6. [S14-06-jvm-classfile-binary-writer.md](../../unplanned/S14-06-jvm-classfile-binary-writer.md) — ClassFileBuilder and MethodBuilder binary emitter (`kestrel:compiler/classfile`)
+1. [S14-01-compiler-diagnostics-module.md](../../done/S14-01-compiler-diagnostics-module.md) — ✅ Diagnostics types and reporter (`kestrel:tools/compiler/diagnostics`)
+2. [S14-02-internal-type-representation.md](../../done/S14-02-internal-type-representation.md) — ✅ InternalType ADT, fresh vars, generalize/instantiate (`kestrel:tools/compiler/types`)
+3. [S14-03-type-unification-engine.md](../../done/S14-03-type-unification-engine.md) — ✅ Unify, applySubst, astTypeToInternal
+4. [S14-04-hindley-milner-type-checker.md](../../unplanned/S14-04-hindley-milner-type-checker.md) — Full HM type checker with row polymorphism (`kestrel:tools/compiler/typecheck`)
+5. [S14-05-jvm-opcode-table.md](../../done/S14-05-jvm-opcode-table.md) — ✅ JVM opcode constants and descriptor helpers (`kestrel:tools/compiler/opcodes`)
+6. [S14-06-jvm-classfile-binary-writer.md](../../unplanned/S14-06-jvm-classfile-binary-writer.md) — ClassFileBuilder and MethodBuilder binary emitter (`kestrel:tools/compiler/classfile`)
 7. [S14-07-codegen-expressions-patterns.md](../../unplanned/S14-07-codegen-expressions-patterns.md) — Code generator: expressions, patterns, lambdas, match
 8. [S14-08-codegen-declarations-toplevel.md](../../unplanned/S14-08-codegen-declarations-toplevel.md) — Code generator: declarations, tail-call optimisation, async/await
-9. [S14-09-kti-interface-file-reader-writer.md](../../unplanned/S14-09-kti-interface-file-reader-writer.md) — KTI v4 reader/writer, serialisation (`kestrel:compiler/kti`)
-10. [S14-10-multi-module-resolver.md](../../unplanned/S14-10-multi-module-resolver.md) — Module specifier resolution, URL cache (`kestrel:compiler/resolve`)
-11. [S14-11-compiler-driver-pipeline.md](../../unplanned/S14-11-compiler-driver-pipeline.md) — Multi-module incremental compilation driver (`kestrel:compiler/driver`)
+9. [S14-09-kti-interface-file-reader-writer.md](../../unplanned/S14-09-kti-interface-file-reader-writer.md) — KTI v4 reader/writer, serialisation (`kestrel:tools/compiler/kti`)
+10. [S14-10-multi-module-resolver.md](../../unplanned/S14-10-multi-module-resolver.md) — Module specifier resolution, URL cache (`kestrel:tools/compiler/resolve`)
+11. [S14-11-compiler-driver-pipeline.md](../../unplanned/S14-11-compiler-driver-pipeline.md) — Multi-module incremental compilation driver (`kestrel:tools/compiler/driver`)
 12. [S14-12-kestrel-cli-replacement.md](../../unplanned/S14-12-kestrel-cli-replacement.md) — Kestrel-written CLI replacing the TypeScript shim
 13. [S14-13-stage0-bootstrap-verification.md](../../unplanned/S14-13-stage0-bootstrap-verification.md) — Stage-0 bootstrap: TypeScript compiles Kestrel compiler, verify output
 14. [S14-14-stage1-self-hosting-bootstrap.md](../../unplanned/S14-14-stage1-self-hosting-bootstrap.md) — Stage-1 self-hosting: Kestrel compiler compiles itself
@@ -71,22 +71,22 @@ compiler and the TypeScript compiler becomes an emergency fallback.
 | Lexer + tokens | `compiler/src/lexer/` | `kestrel:dev/parser/lexer` ✓ **done** |
 | AST types | `compiler/src/ast/` | `kestrel:dev/parser/ast` ✓ **done** |
 | Parser | `compiler/src/parser/parse.ts` (1 432 lines) | `kestrel:dev/parser/parser` ✓ **done** |
-| Type checker | `compiler/src/typecheck/check.ts` (1 878 lines) | `kestrel:compiler/typecheck` ← **to build** |
-| JVM class-file writer | `compiler/src/jvm-codegen/classfile.ts` (601 lines) | `kestrel:compiler/classfile` ← **to build** |
-| JVM opcode table | `compiler/src/jvm-codegen/opcodes.ts` (190 lines) | `kestrel:compiler/opcodes` ← **to build** |
-| Code generator | `compiler/src/jvm-codegen/codegen.ts` (3 640 lines) | `kestrel:compiler/codegen` ← **to build** |
-| KTI reader/writer | `compiler/src/kti.ts` (519 lines) | `kestrel:compiler/kti` ← **to build** |
-| Module resolver | `compiler/src/resolve.ts` + `dependency-paths.ts` | `kestrel:compiler/resolve` ← **to build** |
-| Diagnostics | `compiler/src/diagnostics/` | `kestrel:compiler/diagnostics` ← **to build** |
-| Compiler driver | `compiler/src/compile-file-jvm.ts` + `index.ts` | `kestrel:compiler/driver` ← **to build** |
+| Type checker | `compiler/src/typecheck/check.ts` (1 878 lines) | `kestrel:tools/compiler/typecheck` ← **to build** |
+| JVM class-file writer | `compiler/src/jvm-codegen/classfile.ts` (601 lines) | `kestrel:tools/compiler/classfile` ← **to build** |
+| JVM opcode table | `compiler/src/jvm-codegen/opcodes.ts` (190 lines) | `kestrel:tools/compiler/opcodes` ← **to build** |
+| Code generator | `compiler/src/jvm-codegen/codegen.ts` (3 640 lines) | `kestrel:tools/compiler/codegen` ← **to build** |
+| KTI reader/writer | `compiler/src/kti.ts` (519 lines) | `kestrel:tools/compiler/kti` ← **to build** |
+| Module resolver | `compiler/src/resolve.ts` + `dependency-paths.ts` | `kestrel:tools/compiler/resolve` ← **to build** |
+| Diagnostics | `compiler/src/diagnostics/` | `kestrel:tools/compiler/diagnostics` ← **to build** |
+| Compiler driver | `compiler/src/compile-file-jvm.ts` + `index.ts` | `kestrel:tools/compiler/driver` ← **to build** |
 | CLI | `compiler/cli.ts` | Kestrel CLI script replacing `scripts/kestrel` shim ← **to build** |
 
 ### Module layout
 
-All new Kestrel compiler modules live under `stdlib/kestrel/compiler/`:
+All new Kestrel compiler modules live under `stdlib/kestrel/tools/compiler/`:
 
 ```
-stdlib/kestrel/compiler/
+stdlib/kestrel/tools/compiler/
   diagnostics.ks    — Diagnostic type, severity, span, reporter
   types.ks          — Shared compiler types (Scheme, Env, KtiModule, …)
   typecheck.ks      — Hindley-Milner + row-poly inference engine
