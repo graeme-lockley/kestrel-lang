@@ -102,7 +102,7 @@ fun renderIndex(entries: List<DocEntry>): String = {
 }
 
 fun renderEntry(entry: DocEntry): String = {
-  val sig     = Sig.format(entry)
+  val sig     = Sig.formatWith(entry, { multilineFunctions = True })
   val docHtml = if (Str.isEmpty(entry.doc)) "" else Md.render(entry.doc)
   val docDiv  =
     if (Str.isEmpty(docHtml)) ""

@@ -1,6 +1,6 @@
 // Tests for kestrel:dev/doc/sig
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
-import { format } from "kestrel:dev/doc/sig"
+import { format, formatWith } from "kestrel:dev/doc/sig"
 import { DocEntry, DKFun, DKType, DKVal, DKVar, DKException, DKExternFun, DKExternType } from "kestrel:dev/doc/extract"
 import * as Str from "kestrel:data/string"
 
@@ -103,6 +103,25 @@ export async fun run(s: Suite): Task<Unit> =
       val out = format(e)
       isTrue(g, "length <= 120 + 2", Str.length(out) <= 122);
       isTrue(g, "ends with ellipsis", Str.endsWith(" …", out))
+    });
+
+    group(sg, "long function signature can be rendered as multiline", (g: Suite) => {
+      val longSig = "fun reallyLongFunctionName(parameterOne: SomeVeryLongTypeName, parameterTwo: AnotherLongTypeName): ResultTypeWithLongName"
+      val e = mkEntry(DKFun, "reallyLongFunctionName", longSig)
+      val out = formatWith(e, { multilineFunctions = True })
+      isTrue(g, "contains newline after open paren", Str.contains("(\n", out));
+      isTrue(g, "contains indented second parameter", Str.contains("\n  parameterTwo: AnotherLongTypeName", out));
+      isTrue(g, "closing line keeps return type", Str.contains("\n): ResultTypeWithLongName", out));
+      isFalse(g, "no ellipsis", Str.endsWith(" …", out))
+    });
+
+    group(sg, "short function signature can be rendered as multiline", (g: Suite) => {
+      val e = mkEntry(DKFun, "add", "fun add(a: Int, b: Int): Int")
+      val out = formatWith(e, { multilineFunctions = True })
+      isTrue(g, "contains newline after open paren", Str.contains("(\n", out));
+      isTrue(g, "contains first parameter line", Str.contains("\n  a: Int,\n", out));
+      isTrue(g, "contains second parameter line", Str.contains("\n  b: Int\n", out));
+      isTrue(g, "closing line keeps return type", Str.contains("\n): Int", out))
     });
 
     // ── Exactly 120 chars not truncated ──────────────────────────────────────

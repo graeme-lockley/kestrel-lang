@@ -16,6 +16,9 @@ fun mod1(): DocModule =
 fun mod2(): DocModule =
   mkMod("kestrel:data/bar", "//! Bar module.\nexport fun bar(): Unit = ()\n")
 
+fun modLongFun(): DocModule =
+  mkMod("kestrel:data/long", "/// Long function.\nexport fun reallyLongFunctionName(parameterOne: SomeVeryLongTypeName, parameterTwo: AnotherLongTypeName): ResultTypeWithLongName = todo()\n")
+
 export async fun run(s: Suite): Task<Unit> =
   group(s, "kestrel:dev/doc/render", (sg: Suite) => {
 
@@ -55,6 +58,20 @@ export async fun run(s: Suite): Task<Unit> =
       val out = renderModule(mod1())
       isTrue(g, "has kestrel code",  Str.contains("class=\"kestrel\"", out));
       isTrue(g, "has fun add sig",   Str.contains("fun add", out))
+    });
+
+    group(sg, "renderModule renders short function signatures as multiline", (g: Suite) => {
+      val out = renderModule(mod1())
+      isTrue(g, "has multiline short function", Str.contains("fun add(\n", out));
+      isTrue(g, "has indented short parameter", Str.contains("\n  a: Int,\n", out));
+      isTrue(g, "keeps return type on closing line", Str.contains("\n): Int", out))
+    });
+
+    group(sg, "renderModule renders long function signatures as multiline", (g: Suite) => {
+      val out = renderModule(modLongFun())
+      isTrue(g, "has multiline open paren", Str.contains("reallyLongFunctionName(\n", out));
+      isTrue(g, "has indented parameter line", Str.contains("\n  parameterTwo: AnotherLongTypeName", out));
+      isFalse(g, "does not use ellipsis", Str.contains(" …", out))
     });
 
     // ── renderModule: renders doc prose ───────────────────────────────────────
