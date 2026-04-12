@@ -2,13 +2,13 @@ import { Suite, group, eq } from "kestrel:dev/test"
 import * as Dict from "kestrel:data/dict"
 import * as Opt from "kestrel:data/option"
 import * as Ast from "kestrel:dev/parser/ast"
-import * as FA from "kestrel:tools/compiler/from-ast"
-import * as Ty from "kestrel:tools/compiler/types"
+import * as FA from "kestrel:dev/typecheck/from-ast"
+import * as Ty from "kestrel:dev/typecheck/types"
 
 fun emptySubst(): Dict<Int, Ty.InternalType> = Dict.emptyIntDict()
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "kestrel:tools/compiler/unify", (s1: Suite) => {
+  group(s, "kestrel:dev/typecheck/unify", (s1: Suite) => {
     group(s1, "unify primitives", (sg: Suite) => {
       val same = Ty.unify(emptySubst(), Ty.tInt, Ty.tInt)
       eq(sg, "identical primitive is Ok", match (same) { Ok(_) => True, Err(_) => False }, True)

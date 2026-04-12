@@ -80,7 +80,7 @@ The KTI format is documented in `docs/specs/kti-format.md`.
 | Area | Change |
 |------|--------|
 | Stdlib compiler | Add new module `stdlib/kestrel/tools/compiler/kti.ks` implementing KTI v4 records, type serialisation/deserialisation, read/write helpers, and codegen metadata extraction APIs for self-hosted compilation. |
-| Compiler type interop | Map `kestrel:tools/compiler/types.InternalType` <-> KTI `SerType` JSON representation with explicit coverage of `TVar`, `TPrim`, `TArrow`, `TRecord`, `TApp`, `TTuple`, `TUnion`, `TInter`, and `TScheme`. |
+| Compiler type interop | Map `kestrel:dev/typecheck/types.InternalType` <-> KTI `SerType` JSON representation with explicit coverage of `TVar`, `TPrim`, `TArrow`, `TRecord`, `TApp`, `TTuple`, `TUnion`, `TInter`, and `TScheme`. |
 | I/O and JSON | Use `kestrel:data/json` plus `kestrel:io/fs` for deterministic JSON emission and async read/write round-trips. |
 | Kestrel tests | Add `stdlib/kestrel/tools/compiler/kti.test.ks` to validate v4 shape, read/write round-trip, and deserialize/export metadata extraction expectations. |
 | Bootstrap compatibility | Keep TypeScript-side compiler tests passing and preserve top-level v4 shape compatibility (`version`, `functions`, `types`, `sourceHash`, `depHashes`, `codegenMeta`). |

@@ -6,7 +6,7 @@ import * as Lex from "kestrel:dev/parser/lexer"
 import { parseFromList } from "kestrel:dev/parser/parser"
 import * as Ast from "kestrel:dev/parser/ast"
 import * as Kti from "kestrel:tools/compiler/kti"
-import * as Ty from "kestrel:tools/compiler/types"
+import * as Ty from "kestrel:dev/typecheck/types"
 
 fun program(src: String): Ast.Program =
   match (parseFromList(Lex.lex(src))) {

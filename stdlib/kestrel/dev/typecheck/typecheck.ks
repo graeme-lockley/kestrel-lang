@@ -1,3 +1,14 @@
+//! Hindley-Milner type checker for parsed Kestrel programs.
+//!
+//! This module is the canonical self-hosted checker entry point used by
+//! compiler and tooling code. It performs declaration prebinding, expression
+//! inference, unification/subtyping checks, export-environment construction,
+//! and diagnostic emission.
+//!
+//! The checker records inferred expression types per invocation and exposes
+//! lookup through `TypecheckResult.getInferredType` so downstream consumers
+//! (for example codegen and documentation extraction) can query inferred
+//! information without relying on module-global mutable state.
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
@@ -14,14 +25,23 @@ import {
   TBAdt, TBAlias,
   TmplLit, TmplExpr
 } from "kestrel:dev/parser/ast"
-import * as Diag from "kestrel:tools/compiler/diagnostics"
-import * as FA from "kestrel:tools/compiler/from-ast"
-import * as Rep from "kestrel:tools/compiler/reporter"
-import * as Ty from "kestrel:tools/compiler/types"
-import { TArrow, TApp, TRecord, TTuple, TNamespace } from "kestrel:tools/compiler/types"
+import * as Diag from "kestrel:dev/typecheck/diagnostics"
+import * as FA from "kestrel:dev/typecheck/from-ast"
+import * as Rep from "kestrel:dev/typecheck/reporter"
+import * as Ty from "kestrel:dev/typecheck/types"
+import { TArrow, TApp, TRecord, TTuple, TNamespace } from "kestrel:dev/typecheck/types"
 
+/// Map of in-scope value bindings to internal types.
 export type TypeEnv = { items: Dict<String, Ty.InternalType> }
 
+/// Snapshot of externally provided dependency exports used during checking.
+///
+/// This mirrors the shape produced by multi-module compilation pipelines:
+///
+/// - `exports`: value bindings exported by the dependency
+/// - `exportedTypeAliases`: alias definitions exported by the dependency
+/// - `exportedConstructors`: ADT constructors exported by the dependency
+/// - `exportedTypeVisibility`: visibility map for exported type declarations
 export type DependencyExportSnapshot = {
   exports: TypeEnv,
   exportedTypeAliases: Dict<String, Ty.InternalType>,
@@ -29,6 +49,10 @@ export type DependencyExportSnapshot = {
   exportedTypeVisibility: Dict<String, String>
 }
 
+/// Inputs that configure a single typecheck run.
+///
+/// `importBindings` and `typeAliasBindings` allow callers to inject resolved
+/// bindings for cross-module checking. `sourceFile` is used in diagnostics.
 export type TypecheckOptions = {
   importBindings: Option<TypeEnv>,
   typeAliasBindings: Option<Dict<String, Ty.InternalType>>,
@@ -36,13 +60,23 @@ export type TypecheckOptions = {
   sourceFile: String
 }
 
+/// Output of a full typecheck run.
+///
+/// - `ok`: true when no error-severity diagnostics were emitted
+/// - `exports`: inferred/exported value environment for the module
+/// - `exportedTypeAliases`: exported type alias map
+/// - `exportedConstructors`: exported ADT constructor map
+/// - `exportedTypeVisibility`: type-name -> visibility map
+/// - `diagnostics`: collected diagnostics for this run
+/// - `getInferredType`: per-run expression lookup (no shared global state)
 export type TypecheckResult = {
   ok: Bool,
   exports: TypeEnv,
   exportedTypeAliases: Dict<String, Ty.InternalType>,
   exportedConstructors: Dict<String, Ty.InternalType>,
   exportedTypeVisibility: Dict<String, String>,
-  diagnostics: List<Diag.Diagnostic>
+  diagnostics: List<Diag.Diagnostic>,
+  getInferredType: (Ast.Expr) -> Option<Ty.InternalType>
 }
 
 type TcState = {
@@ -50,12 +84,11 @@ type TcState = {
   subst: mut Dict<Int, Ty.InternalType>,
   adtConstructors: Dict<String, List<String>>,
   ctorOwners: Dict<String, String>,
-  sourceFile: String
+  sourceFile: String,
+  inferredItems: mut List<InferredEntry>
 }
 
 type InferredEntry = { node: Ast.Expr, type_: Ty.InternalType }
-
-type InferredStore = { items: mut List<InferredEntry> }
 
 type TypeRegistry = {
   typeAliases: Dict<String, Ty.InternalType>,
@@ -66,8 +99,9 @@ type TypeRegistry = {
   exportedTypeVisibility: Dict<String, String>
 }
 
-val inferredState = { mut items = [] }
-
+/// Default options for standalone callers.
+///
+/// Most compiler code paths override imports and aliases explicitly.
 export val defaultTypecheckOptions: TypecheckOptions = {
   importBindings = None,
   typeAliasBindings = None,
@@ -107,8 +141,8 @@ fun apply(state: TcState, t: Ty.InternalType): Ty.InternalType = Ty.applySubstFu
 fun setInferredLoop(entries: List<InferredEntry>, node: Ast.Expr, t: Ty.InternalType): List<InferredEntry> =
   { node = node, type_ = t } :: entries
 
-fun putInferredType(node: Ast.Expr, t: Ty.InternalType): Unit = {
-  inferredState.items := setInferredLoop(inferredState.items, node, t);
+fun putInferredType(state: TcState, node: Ast.Expr, t: Ty.InternalType): Unit = {
+  state.inferredItems := setInferredLoop(state.inferredItems, node, t);
   ()
 }
 
@@ -118,11 +152,8 @@ fun getInferredLoop(entries: List<InferredEntry>, node: Ast.Expr): Option<Ty.Int
     h :: rest => if (h.node == node) Some(h.type_) else getInferredLoop(rest, node)
   }
 
-export fun getInferredType(node: Ast.Expr): Option<Ty.InternalType> =
-  getInferredLoop(inferredState.items, node)
-
-export fun setInferredType(node: Ast.Expr, t: Ty.InternalType): Unit =
-  putInferredType(node, t)
+fun setInferredType(state: TcState, node: Ast.Expr, t: Ty.InternalType): Unit =
+  putInferredType(state, node, t)
 
 fun unifyEq(state: TcState, left: Ty.InternalType, right: Ty.InternalType): Bool =
   match (Ty.unify(state.subst, left, right)) {
@@ -736,7 +767,7 @@ fun inferExpr(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.Interna
         Ty.freshVar()
       }
     }
-  setInferredType(expr, out);
+  setInferredType(state, expr, out);
   apply(state, out)
 }
 
@@ -929,7 +960,8 @@ fun makeTcState(reporter: Rep.Reporter, reg: TypeRegistry, sourceFile: String): 
   mut subst = Dict.emptyIntDict(),
   adtConstructors = reg.adtConstructors,
   ctorOwners = reg.ctorOwners,
-  sourceFile = sourceFile
+  sourceFile = sourceFile,
+  mut inferredItems = []
 }
 
 fun builtinTypeEnv(): TypeEnv = {
@@ -949,7 +981,7 @@ fun builtinTypeEnv(): TypeEnv = {
 fun typecheckSucceeded(reporter: Rep.Reporter): Bool =
   if (Rep.hasErrors(reporter)) False else True
 
-fun finishTypecheckResult(reporter: Rep.Reporter, reg: TypeRegistry, checked: (TypeEnv, TypeEnv, Dict<String, Ty.InternalType>)): TypecheckResult = {
+fun finishTypecheckResult(reporter: Rep.Reporter, reg: TypeRegistry, checked: (TypeEnv, TypeEnv, Dict<String, Ty.InternalType>), capturedItems: List<InferredEntry>): TypecheckResult = {
   val ok = typecheckSucceeded(reporter)
   val diagnostics = Rep.diagnostics(reporter)
   {
@@ -958,14 +990,18 @@ fun finishTypecheckResult(reporter: Rep.Reporter, reg: TypeRegistry, checked: (T
     exportedTypeAliases = checked.2,
     exportedConstructors = reg.exportedConstructors,
     exportedTypeVisibility = reg.exportedTypeVisibility,
-    diagnostics = diagnostics
+    diagnostics = diagnostics,
+    getInferredType = (node: Ast.Expr) => getInferredLoop(capturedItems, node)
   }
 }
 
+/// Typecheck a parsed program and return inferred exports plus diagnostics.
+///
+/// The checker resets type-variable allocation for deterministic ids per run,
+/// prebinds type and function declarations, then checks top-level declarations
+/// to produce export maps and diagnostics.
 export fun typecheck(prog: Ast.Program, opts: TypecheckOptions): TypecheckResult = {
   Ty.resetVarId();
-  inferredState.items := [];
-
   val reporter = Rep.newReporter()
   val reg0 = emptyTypeRegistry(opts)
   val reg = prebindTypeDecls(reg0, prog.body)
@@ -975,5 +1011,5 @@ export fun typecheck(prog: Ast.Program, opts: TypecheckOptions): TypecheckResult
   val env0 = envUnion(rawToEnv(reg.ctorEnv), envUnion(importEnv, builtinEnv))
   val env1 = rawToEnv(prebindFunDecls(env0.items, reg.typeAliases, prog.body))
   val checked = checkDecls(state, env1, reg.typeAliases, emptyTypeEnv(), Dict.emptyStringDict(), prog.body)
-  finishTypecheckResult(reporter, reg, checked)
+  finishTypecheckResult(reporter, reg, checked, state.inferredItems)
 }

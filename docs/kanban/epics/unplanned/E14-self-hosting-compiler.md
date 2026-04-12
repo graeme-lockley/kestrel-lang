@@ -17,10 +17,10 @@ and retire the TypeScript compiler as the primary build tool.
 
 ## Stories (ordered — implement sequentially)
 
-1. [S14-01-compiler-diagnostics-module.md](../../done/S14-01-compiler-diagnostics-module.md) — ✅ Diagnostics types and reporter (`kestrel:tools/compiler/diagnostics`)
-2. [S14-02-internal-type-representation.md](../../done/S14-02-internal-type-representation.md) — ✅ InternalType ADT, fresh vars, generalize/instantiate (`kestrel:tools/compiler/types`)
+1. [S14-01-compiler-diagnostics-module.md](../../done/S14-01-compiler-diagnostics-module.md) — ✅ Diagnostics types and reporter (`kestrel:dev/typecheck/diagnostics`)
+2. [S14-02-internal-type-representation.md](../../done/S14-02-internal-type-representation.md) — ✅ InternalType ADT, fresh vars, generalize/instantiate (`kestrel:dev/typecheck/types`)
 3. [S14-03-type-unification-engine.md](../../done/S14-03-type-unification-engine.md) — ✅ Unify, applySubst, astTypeToInternal
-4. [S14-04-hindley-milner-type-checker.md](../../done/S14-04-hindley-milner-type-checker.md) — ✅ Full HM type checker with row polymorphism (`kestrel:tools/compiler/typecheck`)
+4. [S14-04-hindley-milner-type-checker.md](../../done/S14-04-hindley-milner-type-checker.md) — ✅ Full HM type checker with row polymorphism (`kestrel:dev/typecheck/typecheck`)
 5. [S14-05-jvm-opcode-table.md](../../done/S14-05-jvm-opcode-table.md) — ✅ JVM opcode constants and descriptor helpers (`kestrel:tools/compiler/opcodes`)
 6. [S14-06-jvm-classfile-binary-writer.md](../../done/S14-06-jvm-classfile-binary-writer.md) — ✅ ClassFileBuilder and MethodBuilder binary emitter (`kestrel:tools/compiler/classfile`)
 7. [S14-07-codegen-expressions-patterns.md](../../done/S14-07-codegen-expressions-patterns.md) — ✅ Code generator: expressions, patterns, lambdas, match
@@ -71,13 +71,13 @@ compiler and the TypeScript compiler becomes an emergency fallback.
 | Lexer + tokens | `compiler/src/lexer/` | `kestrel:dev/parser/lexer` ✓ **done** |
 | AST types | `compiler/src/ast/` | `kestrel:dev/parser/ast` ✓ **done** |
 | Parser | `compiler/src/parser/parse.ts` (1 432 lines) | `kestrel:dev/parser/parser` ✓ **done** |
-| Type checker | `compiler/src/typecheck/check.ts` (1 878 lines) | `kestrel:tools/compiler/typecheck` ✓ **done** |
+| Type checker | `compiler/src/typecheck/check.ts` (1 878 lines) | `kestrel:dev/typecheck/typecheck` ✓ **done** |
 | JVM class-file writer | `compiler/src/jvm-codegen/classfile.ts` (601 lines) | `kestrel:tools/compiler/classfile` ✓ **done** |
 | JVM opcode table | `compiler/src/jvm-codegen/opcodes.ts` (190 lines) | `kestrel:tools/compiler/opcodes` ✓ **done** |
 | Code generator | `compiler/src/jvm-codegen/codegen.ts` (3 640 lines) | `kestrel:tools/compiler/codegen` ✓ **done** |
 | KTI reader/writer | `compiler/src/kti.ts` (519 lines) | `kestrel:tools/compiler/kti` ✓ **done** |
 | Module resolver | `compiler/src/resolve.ts` + `dependency-paths.ts` | `kestrel:tools/compiler/resolve` ✓ **done** |
-| Diagnostics | `compiler/src/diagnostics/` | `kestrel:tools/compiler/diagnostics` ✓ **done** |
+| Diagnostics | `compiler/src/diagnostics/` | `kestrel:dev/typecheck/diagnostics` ✓ **done** |
 | Compiler driver | `compiler/src/compile-file-jvm.ts` + `index.ts` | `kestrel:tools/compiler/driver` ✓ **done** |
 | CLI | `compiler/cli.ts` | Kestrel CLI script replacing `scripts/kestrel` shim ✓ **done** |
 

@@ -1,15 +1,27 @@
+//! AST type-expression conversion for the self-hosted type checker.
+//!
+//! Converts parser-level `AstType` nodes into checker `InternalType` values
+//! using a caller-provided scope for type variables and aliases.
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
 import * as Ast from "kestrel:dev/parser/ast"
-import * as Ty from "kestrel:tools/compiler/types"
+import * as Ty from "kestrel:dev/typecheck/types"
 
 fun lookupOrFresh(scope: Dict<String, Ty.InternalType>, name: String): Ty.InternalType = {
   val found = Dict.get(scope, name)
   if (found == None) Ty.freshVar() else Opt.getOrElse(found, Ty.freshVar())
 }
 
-/// Convert parsed AST type nodes to `InternalType` with a caller-provided scope map.
+/// Convert a parsed type node into an `InternalType` using `scope`.
+///
+/// Resolution rules:
+///
+/// - primitive nodes map to the corresponding `TPrim`
+/// - identifiers resolve via `scope`, falling back to fresh vars
+/// - qualified names map to `TApp("Ns.Name", [])`
+/// - arrow, record, app, union/intersection, and tuple recurse structurally
+/// - unsupported/unexpected forms fall back to a fresh type variable
 export fun astTypeToInternalWithScope(
   node: Ast.AstType,
   scope: Dict<String, Ty.InternalType>,
@@ -63,6 +75,8 @@ export fun astTypeToInternalWithScope(
   }
 }
 
-/// Convert parsed AST type nodes to `InternalType` with an empty type-parameter list.
+/// Convert a parsed type node with no extra type-parameter context.
+///
+/// Convenience wrapper over `astTypeToInternalWithScope`.
 export fun astTypeToInternal(node: Ast.AstType, scope: Dict<String, Ty.InternalType>): Ty.InternalType =
   astTypeToInternalWithScope(node, scope, [])

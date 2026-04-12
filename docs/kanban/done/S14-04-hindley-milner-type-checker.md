@@ -121,10 +121,11 @@ Attached type info is consumed by `jvmCodegen` via `getInferredType` helpers.
 
 ## Documentation and specs to update
 
-- [x] `docs/specs/06-typesystem.md` — extend the self-hosting parity note to include `kestrel:tools/compiler/typecheck` as the checker-side consumer of `types` / `from-ast` and its exported environment maps.
+- [x] `docs/specs/06-typesystem.md` — extend the self-hosting parity note to include `kestrel:dev/typecheck/typecheck` as the checker-side consumer of `types` / `from-ast` and its exported environment maps.
 - [x] `docs/specs/01-language.md` — reviewed; no updates required because no spec mismatch surfaced in expression typing, match exhaustiveness, `is` narrowing, loop control, or top-level recursion rules.
 
 ## Build notes
 
 - 2026-04-12: Story entered doing with implementation already present in `stdlib/kestrel/tools/compiler/typecheck.ks`; verified parity using story-specific harness tests plus full compiler/Kestrel suites.
 - 2026-04-12: Updated `docs/specs/06-typesystem.md` to include `kestrel:tools/compiler/typecheck` in the self-hosting parity note; `docs/specs/01-language.md` required no change after review.
+- 2026-04-12: Entire checker cluster (`typecheck.ks`, `types.ks`, `from-ast.ks`, `diagnostics.ks`, `reporter.ks`) physically relocated from `kestrel:tools/compiler/` to `kestrel:dev/typecheck/`; `inferredState` global replaced with a per-invocation `mut` field on `TcState`; `TypecheckResult` now carries a `getInferredType` closure. All 1796 Kestrel + 440 compiler tests pass.

@@ -4,7 +4,7 @@
 //! helpers for mapping `InternalType` values to JVM descriptor strings.
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
-import * as Ty from "kestrel:tools/compiler/types"
+import * as Ty from "kestrel:dev/typecheck/types"
 
 /// JVM bytecode opcode byte values (subset used by Kestrel codegen).
 /// Mirrors `compiler/src/jvm-codegen/opcodes.ts`.
@@ -210,6 +210,14 @@ export fun descriptorForType(t: Ty.InternalType): String = {
     descriptorForPrim(Opt.getOrElse(pn, ""))
 }
 
+/// Map a primitive Kestrel type name to its JVM descriptor.
+///
+/// Notes:
+///
+/// - `Int` maps to JVM `long` (`J`)
+/// - `Float` maps to JVM `double` (`D`)
+/// - `Bool` is represented as boxed `java.lang.Boolean`
+/// - `Char` and `Rune` map to JVM `int` (`I`)
 fun descriptorForPrim(name: String): String =
   match (name) {
     "Int"    => "J"
@@ -222,6 +230,7 @@ fun descriptorForPrim(name: String): String =
     _        => "Ljava/lang/Object;"
   }
 
+/// Concatenate descriptors for a parameter list in declaration order.
 fun buildParams(parts: List<Ty.InternalType>): String =
   match (parts) {
     [] => ""

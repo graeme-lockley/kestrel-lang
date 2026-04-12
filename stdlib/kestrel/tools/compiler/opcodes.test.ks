@@ -1,6 +1,6 @@
 import { Suite, group, eq } from "kestrel:dev/test"
 import * as Op from "kestrel:tools/compiler/opcodes"
-import * as Ty from "kestrel:tools/compiler/types"
+import * as Ty from "kestrel:dev/typecheck/types"
 
 // Tests for kestrel:tools/compiler/opcodes
 

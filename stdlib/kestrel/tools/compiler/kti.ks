@@ -9,7 +9,7 @@ import * as Ast from "kestrel:dev/parser/ast"
 import { TDFun, TDVar, TDVal, TDType, TBAdt, TDExternFun, TDException, TDExport, EIDecl } from "kestrel:dev/parser/ast"
 import * as Fs from "kestrel:io/fs"
 import { NotFound, PermissionDenied, IoError } from "kestrel:io/fs"
-import * as Ty from "kestrel:tools/compiler/types"
+import * as Ty from "kestrel:dev/typecheck/types"
 
 export type KtiFunctionEntry = { kind: String, function_index: Int, arity: Int, type_: Json.Value }
 export type KtiExportEntry = KtiFunction(KtiFunctionEntry)

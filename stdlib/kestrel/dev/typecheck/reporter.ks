@@ -3,7 +3,7 @@
 //! `Reporter` collects `Diagnostic` values emitted during a compilation pass
 //! and can render them in a human-readable format for CLI output.
 import * as Lst from "kestrel:data/list"
-import * as Diag from "kestrel:tools/compiler/diagnostics"
+import * as Diag from "kestrel:dev/typecheck/diagnostics"
 
 /// Mutable accumulator that collects `Diagnostic` values during a compiler pass.
 export type Reporter = { items: mut List<Diag.Diagnostic> }

@@ -1,5 +1,5 @@
 import * as Dict from "kestrel:data/dict"
-import * as Diag from "kestrel:tools/compiler/diagnostics"
+import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as Kti from "kestrel:tools/compiler/kti"
 
 export type CompileOptions = {

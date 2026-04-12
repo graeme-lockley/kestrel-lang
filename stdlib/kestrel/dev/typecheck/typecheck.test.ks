@@ -4,9 +4,9 @@ import * as Lst from "kestrel:data/list"
 import * as Lex from "kestrel:dev/parser/lexer"
 import { parseFromList } from "kestrel:dev/parser/parser"
 import * as Ast from "kestrel:dev/parser/ast"
-import * as Diag from "kestrel:tools/compiler/diagnostics"
-import * as TC from "kestrel:tools/compiler/typecheck"
-import * as Ty from "kestrel:tools/compiler/types"
+import * as Diag from "kestrel:dev/typecheck/diagnostics"
+import * as TC from "kestrel:dev/typecheck/typecheck"
+import * as Ty from "kestrel:dev/typecheck/types"
 
 fun program(src: String): Ast.Program =
   match (parseFromList(Lex.lex(src))) {
@@ -32,7 +32,7 @@ fun hasDiagCode(diags: List<Diag.Diagnostic>, code: String): Bool =
   Lst.any(diags, (d: Diag.Diagnostic) => d.code == code)
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "kestrel:tools/compiler/typecheck", (s1: Suite) => {
+  group(s, "kestrel:dev/typecheck/typecheck", (s1: Suite) => {
     group(s1, "literals", (sg: Suite) => {
       Ty.resetVarId()
       val res = runTc("export val x: Int = 42")
