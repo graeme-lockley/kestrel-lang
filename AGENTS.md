@@ -74,6 +74,9 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime wit
 # Build compiler (optionally compile a script)
 ./kestrel build [script.ks]
 
+# Seed self-hosted compiler classes from bootstrap JAR
+./kestrel bootstrap
+
 # Run Kestrel test suite
 ./kestrel test [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]
 ```

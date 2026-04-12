@@ -112,6 +112,20 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Success criteria:** Exits 0 and prints `PASS` when Stage-1 semantic output matches Stage-0 baseline.
 - **Current status:** The default `kestrel build` path still requires Node/TypeScript; Stage-1 script verifies parity and readiness but does not yet switch the primary build path.
 
+### 2.3.3 bootstrap
+
+**Usage:** `kestrel bootstrap`
+
+- **Purpose:** Seed self-hosted compiler classes using the bootstrap compiler JAR.
+- **Prerequisites:**
+  - Runtime JAR exists at `runtime/jvm/kestrel-runtime.jar`.
+  - Bootstrap compiler JAR exists at `.kestrel/bootstrap/compiler/compiler-bootstrap.jar` (produced by `./scripts/build-bootstrap-jar.sh`).
+- **Output directory:** `.kestrel/bootstrap/self-hosted/`.
+- **Execution model:** Runs the bootstrap compiler entry class (`Cli_entry`) on the JVM with classpath `kestrel-runtime.jar:compiler-bootstrap.jar` to compile `stdlib/kestrel/tools/compiler/cli-entry.ks` and its dependencies into self-hosted class artifacts.
+- **Validation:** Fails if required compiler entry classes (`Cli_entry.class`, `Cli_main.class`) are missing from bootstrap output.
+- **Failure diagnostics:** Emits explicit errors for missing runtime artifact, missing bootstrap JAR, and bootstrap compilation failures.
+- **Idempotence:** Repeated invocations refresh bootstrap output classes deterministically in place.
+
 ### 2.4 test
 
 **Usage:** `kestrel test [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]`

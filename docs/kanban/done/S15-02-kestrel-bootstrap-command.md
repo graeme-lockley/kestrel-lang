@@ -58,16 +58,16 @@ Introduce an explicit `./kestrel bootstrap` command that uses the bootstrap comp
 
 ## Tasks
 
-- [ ] Update `scripts/kestrel` usage/help and command dispatch to include `bootstrap`.
-- [ ] Implement `cmd_bootstrap` in `scripts/kestrel` that validates prerequisites and invokes the bootstrap compiler JAR against `stdlib/kestrel/tools/compiler/cli-entry.ks`.
-- [ ] Write bootstrap output classes to a canonical cache location (for example `.kestrel/bootstrap/self-hosted/`) used by subsequent stories.
-- [ ] Ensure `cmd_bootstrap` is idempotent and refreshes output safely.
-- [ ] Add clear, specific error messages for missing runtime/bootstrap artifacts and bootstrap compilation failures.
-- [ ] Update docs/spec guidance for `kestrel bootstrap` usage and expected outputs.
-- [ ] Run `./scripts/build-bootstrap-jar.sh`.
-- [ ] Run `./kestrel bootstrap`.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Update `scripts/kestrel` usage/help and command dispatch to include `bootstrap`.
+- [x] Implement `cmd_bootstrap` in `scripts/kestrel` that validates prerequisites and invokes the bootstrap compiler JAR against `stdlib/kestrel/tools/compiler/cli-entry.ks`.
+- [x] Write bootstrap output classes to a canonical cache location (for example `.kestrel/bootstrap/self-hosted/`) used by subsequent stories.
+- [x] Ensure `cmd_bootstrap` is idempotent and refreshes output safely.
+- [x] Add clear, specific error messages for missing runtime/bootstrap artifacts and bootstrap compilation failures.
+- [x] Update docs/spec guidance for `kestrel bootstrap` usage and expected outputs.
+- [x] Run `./scripts/build-bootstrap-jar.sh`.
+- [x] Run `./kestrel bootstrap`.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -78,7 +78,14 @@ Introduce an explicit `./kestrel bootstrap` command that uses the bootstrap comp
 | Compiler regression | `cd compiler && npm run build && npm test` | Ensure bootstrap command changes do not regress TypeScript compiler/test pipeline. |
 | Runtime regression | `./scripts/kestrel test` | Ensure runtime/stdlib behavior remains stable with new bootstrap command wiring. |
 
+## Build notes
+
+- 2026-04-12: Added `cmd_bootstrap` in `scripts/kestrel`, including usage/help wiring and explicit command dispatch.
+- 2026-04-12: Implemented bootstrap execution via runtime JAR + bootstrap compiler JAR with entry-class resolution from `main_class_for`, writing output to `.kestrel/bootstrap/self-hosted/`.
+- 2026-04-12: Added prerequisite and failure diagnostics for missing runtime JAR, missing bootstrap JAR, bootstrap compile failure, and missing bootstrap output entry classes.
+- 2026-04-12: Verified required gates pass: `./scripts/build-bootstrap-jar.sh`, `./kestrel bootstrap`, compiler build/tests, and `./scripts/kestrel test`.
+
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — add `kestrel bootstrap` command semantics, prerequisites, and output layout.
-- [ ] `AGENTS.md` — include `./kestrel bootstrap` in bootstrap verification guidance.
+- [x] `docs/specs/09-tools.md` — add `kestrel bootstrap` command semantics, prerequisites, and output layout.
+- [x] `AGENTS.md` — include `./kestrel bootstrap` in bootstrap verification guidance.

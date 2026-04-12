@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Kestrel CLI: kestrel <command> [options]
-# Commands: run, dis, build, test
+# Commands: run, dis, build, bootstrap, test, fmt, doc, lock
 set -euo pipefail
 
 SOURCE="${BASH_SOURCE[0]}"
@@ -16,12 +16,18 @@ COMPILER_CLI="$COMPILER/dist/cli.js"
 JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
 RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
 MAVEN_CLASSPATH_RESOLVER="$ROOT/scripts/resolve-maven-classpath.mjs"
+BOOTSTRAP_ROOT="$ROOT/.kestrel/bootstrap"
+BOOTSTRAP_COMPILER_DIR="$BOOTSTRAP_ROOT/compiler"
+BOOTSTRAP_JAR="$BOOTSTRAP_COMPILER_DIR/compiler-bootstrap.jar"
+BOOTSTRAP_SELFHOST_DIR="$BOOTSTRAP_ROOT/self-hosted"
+BOOTSTRAP_ENTRY="$ROOT/stdlib/kestrel/tools/compiler/cli-entry.ks"
 
 usage() {
   echo "Usage: kestrel <command> [options]" >&2
   echo "  run   [--exit-wait|--exit-no-wait] <script[.ks]> [args...]  Compile if needed, then execute on JVM" >&2
   echo "  dis   [--verbose|--code-only] <script[.ks]>  Compile if needed, then disassemble JVM bytecode" >&2
   echo "  build [script.ks]  Build compiler and JVM runtime; optionally compile script" >&2
+  echo "  bootstrap  Build self-hosted compiler classes from bootstrap compiler JAR" >&2
   echo "  test  [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]   Run unit tests on JVM (default: compact output)" >&2
   echo "  fmt   [--check] [--stdin] [files-or-dirs...]  Format Kestrel source files (default: all .ks files in current dir)" >&2
   echo "  doc   [--port PORT] [--project-root PATH]       Start the documentation browser (default port: 7070)" >&2
@@ -400,6 +406,46 @@ cmd_test() {
   KESTREL_BIN="$ROOT/kestrel" exec "$ROOT/kestrel" run "kestrel:tools/test" "$@"
 }
 
+cmd_bootstrap() {
+  ensure_tools
+  local bootstrap_main_class
+  bootstrap_main_class=$(main_class_for "$BOOTSTRAP_ENTRY")
+
+  if [ ! -f "$RUNTIME_JAR" ]; then
+    echo "kestrel bootstrap: missing runtime jar: $RUNTIME_JAR" >&2
+    echo "kestrel bootstrap: run ./kestrel build to generate runtime artifacts" >&2
+    exit 1
+  fi
+
+  if [ ! -f "$BOOTSTRAP_JAR" ]; then
+    echo "kestrel bootstrap: missing bootstrap compiler jar: $BOOTSTRAP_JAR" >&2
+    echo "kestrel bootstrap: run ./scripts/build-bootstrap-jar.sh first" >&2
+    exit 1
+  fi
+
+  rm -rf "$BOOTSTRAP_SELFHOST_DIR"
+  mkdir -p "$BOOTSTRAP_SELFHOST_DIR"
+
+  if ! env KESTREL_JVM_CACHE="$BOOTSTRAP_SELFHOST_DIR" java -Xss8m -cp "$RUNTIME_JAR:$BOOTSTRAP_JAR" "$bootstrap_main_class" build "$BOOTSTRAP_ENTRY"; then
+    echo "kestrel bootstrap: bootstrap compile failed while generating self-hosted compiler classes" >&2
+    echo "kestrel bootstrap: attempted entry class: $bootstrap_main_class" >&2
+    exit 1
+  fi
+
+  if ! find "$BOOTSTRAP_SELFHOST_DIR" -name "Cli_entry.class" -print -quit | grep -q .; then
+    echo "kestrel bootstrap: missing Cli_entry.class in $BOOTSTRAP_SELFHOST_DIR" >&2
+    exit 1
+  fi
+  if ! find "$BOOTSTRAP_SELFHOST_DIR" -name "Cli_main.class" -print -quit | grep -q .; then
+    echo "kestrel bootstrap: missing Cli_main.class in $BOOTSTRAP_SELFHOST_DIR" >&2
+    exit 1
+  fi
+
+  echo "kestrel bootstrap: wrote self-hosted compiler classes"
+  echo "  bootstrap jar : $BOOTSTRAP_JAR"
+  echo "  output classes: $BOOTSTRAP_SELFHOST_DIR"
+}
+
 cmd_fmt() {
   ensure_tools
   if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
@@ -444,6 +490,7 @@ case "${1:-}" in
   run)   shift; cmd_run "$@" ;;
   dis)   shift; cmd_dis "$@" ;;
   build) shift; cmd_build "$@" ;;
+  bootstrap) shift; cmd_bootstrap "$@" ;;
   test)       shift; cmd_test "$@" ;;
   fmt)   shift; cmd_fmt "$@" ;;
   doc)   shift; cmd_doc "$@" ;;
