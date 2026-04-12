@@ -464,44 +464,11 @@ cmd_test() {
 }
 
 cmd_bootstrap() {
-  # Build self-hosted compiler: use TypeScript compiler (which is available after ./kestrel build)
-  # to compile cli-entry.ks and place classes in ~/.kestrel/jvm/
-
-  if [ ! -f "$RUNTIME_JAR" ]; then
-    echo "kestrel bootstrap: missing runtime jar: $RUNTIME_JAR" >&2
-    echo "kestrel bootstrap: run ./kestrel build to generate runtime artifacts" >&2
-    exit 1
+  ensure_tools
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
+    build_compiler_jvm
   fi
-
-  if [ ! -f "$COMPILER_CLI" ]; then
-    echo "kestrel bootstrap: missing TypeScript compiler CLI: $COMPILER_CLI" >&2
-    echo "kestrel bootstrap: run cd compiler && npm run build" >&2
-    exit 1
-  fi
-
-  local cli_entry_path="$ROOT/stdlib/kestrel/tools/compiler/cli-entry.ks"
-  local jvm_cache_abs
-  jvm_cache_abs="$(cd "$JVM_CACHE" 2>/dev/null && pwd || echo "$JVM_CACHE")"
-  mkdir -p "$jvm_cache_abs"
-
-  # Use TypeScript compiler to compile cli-entry.ks to the JVM cache
-  (cd "$ROOT" && node "$COMPILER_CLI" "$cli_entry_path" --target jvm -o "$jvm_cache_abs") || {
-    echo "kestrel bootstrap: compilation failed" >&2
-    exit 1
-  }
-
-  # Verify output
-  if ! find "$jvm_cache_abs" -name "Cli_entry.class" -print -quit | grep -q .; then
-    echo "kestrel bootstrap: missing Cli_entry.class in $jvm_cache_abs after compilation" >&2
-    exit 1
-  fi
-  if ! find "$jvm_cache_abs" -name "Cli_main.class" -print -quit | grep -q .; then
-    echo "kestrel bootstrap: missing Cli_main.class in $jvm_cache_abs after compilation" >&2
-    exit 1
-  fi
-
-  echo "kestrel bootstrap: self-hosted compiler compiled successfully"
-  echo "  output classes: $jvm_cache_abs"
+  exec "$ROOT/kestrel" run "kestrel:tools/bootstrap" "$@"
 }
 
 cmd_status() {
