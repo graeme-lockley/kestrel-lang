@@ -1,9 +1,9 @@
 import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 import * as Dict from "kestrel:data/dict"
-import * as Ty from "kestrel:compiler/types"
+import * as Ty from "kestrel:tools/compiler/types"
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "kestrel:compiler/types", (s1: Suite) => {
+  group(s, "kestrel:tools/compiler/types", (s1: Suite) => {
     group(s1, "fresh vars", (sg: Suite) => {
       Ty.resetVarId()
       val v1 = Ty.freshVar()

@@ -1,11 +1,18 @@
+//! Compiler diagnostic types and location utilities.
+//!
+//! Defines `Severity`, `Diagnostic`, `SourceLocation`, `Span`, and `CODES` —
+//! the data structures shared by all compiler passes that produce or consume diagnostics.
 import * as Str from "kestrel:data/string"
 
+/// Diagnostic severity level.
 export type Severity =
     Error
   | Warning
   | Info
   | Hint
 
+/// A half-open byte-offset range `[startOffset, endOffset)` in a source file,
+/// with pre-computed start line/column.
 export type Span = {
   file: String,
   startOffset: Int,
@@ -14,6 +21,8 @@ export type Span = {
   startColumn: Int
 }
 
+/// A resolved source location, typically derived from a `Span`.
+/// Includes optional end position for range highlighting.
 export type SourceLocation = {
   file: String,
   line: Int,
@@ -24,8 +33,11 @@ export type SourceLocation = {
   endOffset: Option<Int>
 }
 
+/// A secondary location attached to a diagnostic, e.g. a previous declaration site.
 export type RelatedLocation = { message: String, location: SourceLocation }
 
+/// A single compiler diagnostic: severity, structured code, human-readable message,
+/// source location, and optional hint and suggestion.
 export type Diagnostic = {
   severity: Severity,
   code: String,
@@ -37,6 +49,7 @@ export type Diagnostic = {
   hint: Option<String>
 }
 
+/// Well-known diagnostic code strings, grouped by compiler phase.
 export val CODES = {
   parse = {
     unexpectedToken = "parse:unexpected_token",

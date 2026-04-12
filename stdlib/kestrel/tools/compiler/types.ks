@@ -1,9 +1,25 @@
+//! Hindley-Milner internal type representation and manipulation.
+//!
+//! Defines `InternalType` — the ADT used by the type checker — together with
+//! substitution, generalisation, instantiation, and free-variable utilities.
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
 
+/// A record field descriptor: field name, mutability flag, and field type.
 export type TypeField = { name: String, mut_: Bool, type_: InternalType }
 
+/// The internal type representation used throughout the Kestrel type checker.
+///
+/// - `TVar(id)` — unification variable with a unique integer id
+/// - `TPrim(name)` — primitive type (`Int`, `Float`, `Bool`, `String`, `Unit`, `Char`, `Rune`)
+/// - `TArrow(params, ret)` — function type
+/// - `TRecord(fields, rowVar?)` — record type; row variable is `Some(TVar(_))` for open records
+/// - `TApp(name, args)` — parameterised type application, e.g. `List<Int>`
+/// - `TTuple(elements)` — tuple type
+/// - `TUnion(l, r)` / `TInter(l, r)` — union / intersection types
+/// - `TScheme(vars, body)` — universally-quantified scheme (result of `generalize`)
+/// - `TNamespace(_)` — a module namespace; not a first-class value type
 export type InternalType =
     TVar(Int)
   | TPrim(String)
@@ -18,19 +34,24 @@ export type InternalType =
 
 val counter = { mut nextVarId = 0 }
 
+/// Allocate a fresh unification variable with a globally unique integer id.
 export fun freshVar(): InternalType = {
   val out = TVar(counter.nextVarId)
   counter.nextVarId := counter.nextVarId + 1;
   out
 }
 
+/// Reset the global unification-variable counter to 0.
+/// Call at the start of each type-check run to keep ids small and deterministic.
 export fun resetVarId(): Unit = {
   counter.nextVarId := 0;
   ()
 }
 
+/// Construct a `TPrim` by name. Prefer the pre-built constants below.
 export fun prim(name: String): InternalType = TPrim(name)
 
+/// Pre-built `InternalType` constants for the seven Kestrel primitives.
 export val tInt: InternalType = prim("Int")
 export val tFloat: InternalType = prim("Float")
 export val tBool: InternalType = prim("Bool")

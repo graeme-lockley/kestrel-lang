@@ -1,21 +1,30 @@
+//! Diagnostic accumulator for compiler passes.
+//!
+//! `Reporter` collects `Diagnostic` values emitted during a compilation pass
+//! and can render them in a human-readable format for CLI output.
 import * as Lst from "kestrel:data/list"
-import * as Diag from "kestrel:compiler/diagnostics"
+import * as Diag from "kestrel:tools/compiler/diagnostics"
 
+/// Mutable accumulator that collects `Diagnostic` values during a compiler pass.
 export type Reporter = { items: mut List<Diag.Diagnostic> }
 
+/// Create a new empty `Reporter`.
 export fun newReporter(): Reporter = { mut items = [] }
 
+/// Append `d` to the reporter's diagnostic list.
 export fun report(r: Reporter, d: Diag.Diagnostic): Unit =
   {
     r.items := Lst.append(r.items, [d]);
     ()
   }
 
+/// Return all diagnostics collected by `r` in insertion order.
 export fun diagnostics(r: Reporter): List<Diag.Diagnostic> = r.items
 
 fun isError(s: Diag.Severity): Bool =
   s == Diag.Error
 
+/// Return `True` if any collected diagnostic has severity `Error`.
 export fun hasErrors(r: Reporter): Bool =
   Lst.any(r.items, (d: Diag.Diagnostic) => isError(d.severity))
 

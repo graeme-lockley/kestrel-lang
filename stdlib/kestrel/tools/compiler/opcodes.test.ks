@@ -1,11 +1,11 @@
 import { Suite, group, eq } from "kestrel:dev/test"
-import * as Op from "kestrel:compiler/opcodes"
-import * as Ty from "kestrel:compiler/types"
+import * as Op from "kestrel:tools/compiler/opcodes"
+import * as Ty from "kestrel:tools/compiler/types"
 
-// Tests for kestrel:compiler/opcodes
+// Tests for kestrel:tools/compiler/opcodes
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "kestrel:compiler/opcodes", (s1: Suite) => {
+  group(s, "kestrel:tools/compiler/opcodes", (s1: Suite) => {
     group(s1, "opcode constants", (sg: Suite) => {
       eq(sg, "nop = 0",           Op.JvmOp.nop, 0)
       eq(sg, "areturn = 0xB0",    Op.JvmOp.areturn, 176)

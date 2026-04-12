@@ -1,6 +1,6 @@
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
-import * as Diag from "kestrel:compiler/diagnostics"
-import * as Rep from "kestrel:compiler/reporter"
+import * as Diag from "kestrel:tools/compiler/diagnostics"
+import * as Rep from "kestrel:tools/compiler/reporter"
 
 fun mkDiag(sev: Diag.Severity): Diag.Diagnostic = {
   severity = sev,
@@ -22,7 +22,7 @@ fun mkDiag(sev: Diag.Severity): Diag.Diagnostic = {
 }
 
 export async fun run(s: Suite): Task<Unit> =
-  group(s, "kestrel:compiler/diagnostics", (s1: Suite) => {
+  group(s, "kestrel:tools/compiler/diagnostics", (s1: Suite) => {
     group(s1, "diagnostic construction", (sg: Suite) => {
       val dErr = mkDiag(Diag.Error)
       val dWarn = mkDiag(Diag.Warning)

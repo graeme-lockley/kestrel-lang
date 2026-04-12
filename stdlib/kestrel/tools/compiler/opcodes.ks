@@ -1,11 +1,14 @@
+//! JVM bytecode opcode constants and type descriptor utilities for Kestrel codegen.
+//!
+//! Exports `JvmOp` (opcode byte values), `Acc` (access flag bitmasks), and
+//! helpers for mapping `InternalType` values to JVM descriptor strings.
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
-import * as Ty from "kestrel:compiler/types"
+import * as Ty from "kestrel:tools/compiler/types"
 
-// JVM bytecode opcode constants (subset needed for Kestrel codegen).
-// Mirrors compiler/src/jvm-codegen/opcodes.ts.
-// Access as Op.JvmOp.nop, Op.JvmOp.invokevirtual, etc.
-
+/// JVM bytecode opcode byte values (subset used by Kestrel codegen).
+/// Mirrors `compiler/src/jvm-codegen/opcodes.ts`.
+/// Access as `Op.JvmOp.nop`, `Op.JvmOp.invokevirtual`, etc.
 export val JvmOp = {
   nop              = 0,
   aconstNull       = 1,
@@ -173,9 +176,8 @@ export val JvmOp = {
   ifnonnull        = 199
 }
 
-// JVM class/member access flags.
-// Access as Op.Acc.public_, Op.Acc.static_, etc.
-
+/// JVM class and member access flag bitmask constants.
+/// Access as `Op.Acc.public_`, `Op.Acc.static_`, etc.
 export val Acc = {
   public_       = 1,
   private_      = 2,
@@ -209,14 +211,16 @@ export fun descriptorForType(t: Ty.InternalType): String = {
 }
 
 fun descriptorForPrim(name: String): String =
-  if (name == "Int")    "J"
-  else if (name == "Float")  "D"
-  else if (name == "Bool")   "Ljava/lang/Boolean;"
-  else if (name == "String") "Ljava/lang/String;"
-  else if (name == "Unit")   "V"
-  else if (name == "Char")   "I"
-  else if (name == "Rune")   "I"
-  else "Ljava/lang/Object;"
+  match (name) {
+    "Int"    => "J"
+    "Float"  => "D"
+    "Bool"   => "Ljava/lang/Boolean;"
+    "String" => "Ljava/lang/String;"
+    "Unit"   => "V"
+    "Char"   => "I"
+    "Rune"   => "I"
+    _        => "Ljava/lang/Object;"
+  }
 
 fun buildParams(parts: List<Ty.InternalType>): String =
   match (parts) {
