@@ -61,12 +61,12 @@ No code action provider exists. The compiler publishes diagnostics with error co
 
 ## Tasks
 
-- [ ] Add `vscode-kestrel/src/server/providers/codeActions.ts` with `collectCodeActions` and helper builders for `type:non_exhaustive_match` and `type:unknown_variable`.
-- [ ] Implement non-exhaustive match quick-fix text generation from diagnostic hints (missing constructor names) and produce insertion edit near the target `match` block.
-- [ ] Implement unknown-variable add-import quick-fix with a Tier 1 static stdlib export index and insertion after existing imports.
-- [ ] Register `codeActionProvider` and `onCodeAction` in `vscode-kestrel/src/server/server.ts`.
-- [ ] Add `vscode-kestrel/test/unit/codeActions.test.ts` covering: exhaustiveness fix action, add-import action, and no-action for unrelated diagnostics.
-- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+- [x] Add `vscode-kestrel/src/server/providers/codeActions.ts` with `collectCodeActions` and helper builders for `type:non_exhaustive_match` and `type:unknown_variable`.
+- [x] Implement non-exhaustive match quick-fix text generation from diagnostic hints (missing constructor names) and produce insertion edit near the target `match` block.
+- [x] Implement unknown-variable add-import quick-fix with a Tier 1 static stdlib export index and insertion after existing imports.
+- [x] Register `codeActionProvider` and `onCodeAction` in `vscode-kestrel/src/server/server.ts`.
+- [x] Add `vscode-kestrel/test/unit/codeActions.test.ts` covering: exhaustiveness fix action, add-import action, and no-action for unrelated diagnostics.
+- [x] Run `cd vscode-kestrel && npm run compile && npm test`.
 
 ## Tests to add
 
@@ -78,5 +78,16 @@ No code action provider exists. The compiler publishes diagnostics with error co
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/10-compile-diagnostics.md` — validate code-action assumptions against current diagnostic code/hint/message shapes; no textual change expected in this story.
-- [ ] `docs/specs/09-tools.md` — no change in this story; editor integration doc updates are grouped in S10-09.
+- [x] `docs/specs/10-compile-diagnostics.md` — validated code-action assumptions against current diagnostic code/hint/message shapes; no textual change required.
+- [x] `docs/specs/09-tools.md` — no change in this story; editor integration doc updates are grouped in S10-09.
+
+## Build notes
+
+- 2026-04-12: Started implementation.
+- 2026-04-12: Added `codeActions` provider with two quick fixes: missing match arms (`type:non_exhaustive_match`) and add-import (`type:unknown_variable`).
+- 2026-04-12: Wired `codeActionProvider` capability and `onCodeAction` handler in the language server.
+- 2026-04-12: Added `codeActions.test.ts` to cover add-import, missing-arm insertion, and no-op diagnostic filtering.
+- 2026-04-12: Verification status:
+   - `cd vscode-kestrel && npm run compile && npm test` passed.
+   - `cd compiler && npm run build && npm test` passed.
+   - `./scripts/kestrel test` currently fails in unrelated self-hosting story code (`kestrel:tools/compiler/kti` assertion mismatch in `stdlib/kestrel/tools/compiler/kti.test.ks`).

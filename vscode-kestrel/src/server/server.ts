@@ -11,6 +11,7 @@ import { compileSource } from './compiler-bridge';
 import { DebouncedScheduler } from './debounce';
 import { toLspDiagnostics } from './diagnostics';
 import { DocumentManager } from './document-manager';
+import { collectCodeActions } from './providers/codeActions';
 import { collectCompletions } from './providers/completion';
 import { findDefinition } from './providers/definition';
 import { collectFoldingRanges } from './providers/folding';
@@ -58,6 +59,9 @@ connection.onInitialize((_params: InitializeParams) => {
       completionProvider: {
         triggerCharacters: ['.'],
       },
+      codeActionProvider: {
+        codeActionKinds: ['quickfix'],
+      },
       signatureHelpProvider: {
         triggerCharacters: ['(', ','],
       },
@@ -84,6 +88,14 @@ connection.onCompletion((params) => {
     return [];
   }
   return collectCompletions(doc.ast);
+});
+
+connection.onCodeAction((params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return [];
+  }
+  return collectCodeActions(params.textDocument.uri, doc.source, params.context.diagnostics, doc.diagnostics);
 });
 
 connection.onSignatureHelp(async (params) => {
