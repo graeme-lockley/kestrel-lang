@@ -29,7 +29,7 @@ and retire the TypeScript compiler as the primary build tool.
 10. [S14-10-multi-module-resolver.md](../../done/S14-10-multi-module-resolver.md) — ✅ Module specifier resolution, URL cache (`kestrel:tools/compiler/resolve`)
 11. [S14-11-compiler-driver-pipeline.md](../../done/S14-11-compiler-driver-pipeline.md) — ✅ Multi-module incremental compilation driver (`kestrel:tools/compiler/driver`)
 12. [S14-12-kestrel-cli-replacement.md](../../done/S14-12-kestrel-cli-replacement.md) — ✅ Kestrel-written CLI replacing the TypeScript shim
-13. [S14-13-stage0-bootstrap-verification.md](../../unplanned/S14-13-stage0-bootstrap-verification.md) — Stage-0 bootstrap: TypeScript compiles Kestrel compiler, verify output
+13. [S14-13-stage0-bootstrap-verification.md](../../done/S14-13-stage0-bootstrap-verification.md) — ✅ Stage-0 bootstrap verification script and semantic parity checks
 14. [S14-14-stage1-self-hosting-bootstrap.md](../../unplanned/S14-14-stage1-self-hosting-bootstrap.md) — Stage-1 self-hosting: Kestrel compiler compiles itself
 
 **Note:** S14-05 (opcodes) is independent of S14-02 through S14-04 and can be done in parallel

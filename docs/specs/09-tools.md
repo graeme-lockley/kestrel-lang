@@ -79,6 +79,17 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
   Columns are aligned. Stale entries (older than `KESTREL_CACHE_TTL`) are marked ⚠. Entries not yet cached are marked ✗. Local (path/stdlib) dependencies are omitted from this report.
 - **`--status` with `--refresh`:** Not a valid combination; exits non-zero with a usage error.
 
+### 2.3.1 Stage-0 bootstrap verification
+
+**Usage:** `./scripts/bootstrap-stage0.sh [sample.ks]`
+
+- **Purpose:** Validate Stage-0 bootstrap wiring by compiling the self-hosted compiler CLI entrypoint with the TypeScript compiler, then comparing semantic output of a non-trivial sample against a TypeScript-compiled baseline.
+- **Default sample:** `samples/mandelbrot.ks`.
+- **Prerequisites:** `node`, `java`, and `javac` on `PATH`.
+- **Artifacts:** Writes temporary verification outputs under `.kestrel/bootstrap-stage0/`.
+- **Success criteria:** Exits 0 and prints `PASS` when baseline and post-bootstrap runtime outputs match.
+- **Current limitation:** The Stage-0 compiled CLI invocation in this flow is a build-command smoke check; sample compilation for semantic comparison still uses the canonical `./kestrel build` path while self-hosted argument forwarding stabilizes.
+
 ### 2.4 test
 
 **Usage:** `kestrel test [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]`

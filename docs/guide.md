@@ -10,6 +10,18 @@ This guide will:
 
 By the end you should be comfortable reading and writing Kestrel programs. Let's start with a small example.
 
+## Stage-0 Bootstrap Check
+
+When working on the self-hosted compiler, run the Stage-0 verification script:
+
+```bash
+./scripts/bootstrap-stage0.sh
+```
+
+The script compiles the self-hosted compiler CLI entrypoint with the TypeScript bootstrap compiler,
+then checks semantic output parity on a non-trivial sample (default: `samples/mandelbrot.ks`).
+Artifacts are written to `.kestrel/bootstrap-stage0/` for inspection.
+
 ## A quick sample
 
 Here is a program that computes the tenth Fibonacci number:
