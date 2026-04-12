@@ -53,3 +53,39 @@ Add `textDocument/hover` support to the language server. Hovering over any expre
 - `findNodeAtOffset` must handle the case where `span` is absent on a node (many synthetic nodes lack spans). It should skip span-less nodes and continue the walk.
 - Type variable ids in `{ kind: 'var'; id: number }` should be displayed as `'a`, `'b`, etc. (first free variable encountered → `'a`, second → `'b`) rather than the raw integer.
 - `{ kind: 'scheme' }` nodes should display their instantiated body (hide the `∀` quantifier) since the user is usually looking at a specific use-site.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Compiler type utilities | Add `compiler/src/types/print.ts` and export `printType` from `compiler/src/types/index.ts`. |
+| Compiler AST helpers | Add `compiler/src/ast/walk.ts` with span-based `findNodeAtOffset` traversal. |
+| LSP compiler bridge | Extend `vscode-kestrel/src/server/compiler-bridge.ts` to retain typed AST and query inferred type at cursor offset. |
+| LSP document state | Extend `DocumentManager` state to store AST data alongside source and diagnostics. |
+| LSP hover provider | Add `vscode-kestrel/src/server/providers/hover.ts` and register `textDocument/hover` capability in `server.ts`. |
+| Tests | Add compiler unit tests for `printType` and extension unit tests for hover response mapping. |
+
+## Tasks
+
+- [ ] Add `compiler/src/types/print.ts` implementing `printType(t: InternalType): string` for all `InternalType` variants.
+- [ ] Export `printType` from `compiler/src/types/index.ts`.
+- [ ] Add `compiler/src/ast/walk.ts` implementing `findNodeAtOffset(program, offset)` and export it from `compiler/src/ast/index.ts`.
+- [ ] Add compiler unit tests for `printType` under `compiler/test/unit/`.
+- [ ] Extend `vscode-kestrel/src/server/document-manager.ts` and `compiler-bridge.ts` to cache AST and return hover type text for a cursor offset.
+- [ ] Add `vscode-kestrel/src/server/providers/hover.ts` and wire hover capability + handler in `vscode-kestrel/src/server/server.ts`.
+- [ ] Add `vscode-kestrel/test/unit/hover.test.ts` covering hover hit/miss behavior.
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `cd vscode-kestrel && npm run compile && npm test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `compiler/test/unit/types-print.test.ts` | Verify canonical display of primitive, arrow, app, tuple, record, union/intersection, and scheme types. |
+| Vitest unit | `vscode-kestrel/test/unit/hover.test.ts` | Verify hover returns markdown code block type text for a valid node and `null` when no node/type exists. |
+| Manual extension smoke | VS Code extension host | Hover over `.ks` identifiers/expressions and confirm inferred type popup appears. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/06-typesystem.md` — verify printed type syntax used in hover matches spec notation; no textual spec change expected in this story.
+- [ ] `docs/specs/09-tools.md` — no change in this story; hover capability listing is documented in S10-09.
