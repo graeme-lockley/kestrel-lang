@@ -5,6 +5,8 @@
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
 import * as Arr from "kestrel:data/array"
+import * as Lex from "kestrel:dev/parser/lexer"
+import { Token, TkInt, TkFloat, TkStr, TkTemplate, TkChar, TkIdent, TkUpper, TkKw, TkOp, TkPunct, TkWs, TkLineComment, TkBlockComment, TkEof } from "kestrel:dev/parser/token"
 
 // ── HTML escaping ─────────────────────────────────────────────────────────────
 
@@ -13,6 +15,35 @@ fun escapeHtml(s: String): String =
 
 fun escapeAttr(s: String): String =
   Str.replace("\"", "&quot;", escapeHtml(s))
+
+fun span(cls: String, text: String): String =
+  "<span class=\"${cls}\">${escapeHtml(text)}</span>"
+
+fun renderKestrelToken(tok: Token): String =
+  match (tok.kind) {
+    TkKw           => span("tok-kw", tok.text),
+    TkUpper        => span("tok-type", tok.text),
+    TkInt          => span("tok-lit", tok.text),
+    TkFloat        => span("tok-lit", tok.text),
+    TkStr          => span("tok-lit", tok.text),
+    TkTemplate(_)  => span("tok-lit", tok.text),
+    TkChar         => span("tok-lit", tok.text),
+    TkLineComment  => span("tok-comment", tok.text),
+    TkBlockComment => span("tok-comment", tok.text),
+    TkOp           => span("tok-op", tok.text),
+    TkPunct        => span("tok-punct", tok.text),
+    TkIdent        => escapeHtml(tok.text),
+    TkWs           => escapeHtml(tok.text),
+    TkEof          => ""
+  }
+
+fun renderKestrelCode(code: String): String =
+  Str.join("", Lst.map(Lex.lex(code), (tok: Token) => renderKestrelToken(tok)))
+
+fun isKestrelFence(lang: String): Bool = {
+  val l = Str.toLower(Str.trim(lang))
+  l == "kestrel" | l == "ks"
+}
 
 // ── Inline rendering helpers ──────────────────────────────────────────────────
 
@@ -213,10 +244,14 @@ fun renderLinesArr(arr: Array<String>, n: Int): String = {
 
     if (inCode) {
       if (isFenceStart(line)) {
+        val langNorm = Str.toLower(Str.trim(codeLang))
         val langAttr =
-          if (Str.isEmpty(codeLang)) ""
-          else " class=\"language-${codeLang}\""
-        out      := "${out}<pre><code${langAttr}>${escapeHtml(codeBody)}</code></pre>\n"
+          if (Str.isEmpty(langNorm)) ""
+          else " class=\"language-${escapeAttr(langNorm)}\""
+        val bodyHtml =
+          if (isKestrelFence(langNorm)) renderKestrelCode(codeBody)
+          else escapeHtml(codeBody)
+        out      := "${out}<pre><code${langAttr}>${bodyHtml}</code></pre>\n"
         inCode   := False
         codeLang := ""
         codeBody := ""
@@ -278,7 +313,17 @@ fun renderLinesArr(arr: Array<String>, n: Int): String = {
   out := "${out}${flushPara(para)}"
   if (inUl) { out := "${out}</ul>\n"; () } else ()
   if (inOl) { out := "${out}</ol>\n"; () } else ()
-  if (inCode) { out := "${out}<pre><code>${escapeHtml(codeBody)}</code></pre>\n"; () } else ()
+  if (inCode) {
+    val langNorm = Str.toLower(Str.trim(codeLang))
+    val langAttr =
+      if (Str.isEmpty(langNorm)) ""
+      else " class=\"language-${escapeAttr(langNorm)}\""
+    val bodyHtml =
+      if (isKestrelFence(langNorm)) renderKestrelCode(codeBody)
+      else escapeHtml(codeBody)
+    out := "${out}<pre><code${langAttr}>${bodyHtml}</code></pre>\n";
+    ()
+  } else ()
   out
 }
 

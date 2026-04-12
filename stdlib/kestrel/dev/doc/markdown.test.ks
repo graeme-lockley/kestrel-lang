@@ -48,7 +48,18 @@ export async fun run(s: Suite): Task<Unit> =
       val src = "```kestrel\nfun f(): Int = 0\n```"
       val out = render(src)
       isTrue(g, "has lang class", Str.contains("class=\"language-kestrel\"", out));
-      isTrue(g, "has code",       Str.contains("fun f(): Int = 0", out))
+      isTrue(g, "has kw token",   Str.contains("<span class=\"tok-kw\">fun</span>", out));
+      isTrue(g, "has type token", Str.contains("<span class=\"tok-type\">Int</span>", out));
+      isTrue(g, "has lit token",  Str.contains("<span class=\"tok-lit\">0</span>", out))
+    });
+
+    // ── Fenced code block (ks alias) ─────────────────────────────────────────
+    group(sg, "fenced code block with ks alias", (g: Suite) => {
+      val src = "```ks\nval answer = 42\n```"
+      val out = render(src)
+      isTrue(g, "has lang class", Str.contains("class=\"language-ks\"", out));
+      isTrue(g, "has kw token",   Str.contains("<span class=\"tok-kw\">val</span>", out));
+      isTrue(g, "has lit token",  Str.contains("<span class=\"tok-lit\">42</span>", out))
     });
 
     // ── HTML entity escaping in code block ────────────────────────────────────
