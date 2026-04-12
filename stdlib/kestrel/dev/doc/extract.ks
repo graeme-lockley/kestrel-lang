@@ -212,7 +212,13 @@ fun collectTypeSig(arr: Array<Token>, startIdx: Int, n: Int): String = {
         i := i + 1
       }
     } else if (t.kind == TkLineComment | t.kind == TkBlockComment) {
-      i := i + 1  // skip inline comments
+      i := i + 1;  // skip inline comments
+      // Also skip the whitespace token immediately following the comment so
+      // that comment lines inside record bodies don't leave blank lines in
+      // the output (the whitespace *before* the comment is already in parts).
+      if (i < n & Arr.get(arr, i).kind == TkWs) {
+        i := i + 1
+      }
     } else {
       if (t.kind == TkPunct & Str.equals(t.text, "{")) {
         braceDepth := braceDepth + 1;
