@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E10 VSCode Extension — Language Server and Editor Integration](../epics/unplanned/E10-vscode-extension-language-server.md)
+- Epic: [E10 VSCode Extension — Language Server and Editor Integration](../epics/done/E10-vscode-extension-language-server.md)
 - Companion stories: S10-01, S10-02, S10-03, S10-04, S10-05, S10-06, S10-07, S10-08, S10-09, S10-11, S10-12
 
 ## Summary
