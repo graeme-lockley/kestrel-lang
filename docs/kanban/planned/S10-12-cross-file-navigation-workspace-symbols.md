@@ -53,3 +53,44 @@ Go-to-definition (S10-05) and completion (S10-05) work within a single file. Cro
 - Rename safety: the rename provider must verify that the new name does not clash with an existing binding in any reachable scope before applying the `WorkspaceEdit`.
 - URL-specifier modules (fetched from the internet) are navigable to a local cache copy; the `Location.uri` should point to the cached `.ks` source.
 - This story should be planned (moved to `planned/`) only after both E04 and E07 are in `done/`.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| LSP server capabilities | Register `referencesProvider`, `renameProvider`, and `workspaceSymbolProvider` in initialization response. |
+| Workspace indexing | Add workspace file discovery in `vscode-kestrel/src/server/compiler-bridge.ts` plus reusable compile/index helpers for `.ks` files. |
+| Providers | Add `references.ts`, `rename.ts`, and `workspaceSymbols.ts`; extend `definition.ts` and `completion.ts` to consume workspace index data. |
+| Tests | Add unit coverage for cross-file definition, references, rename edits, workspace symbols, and cross-file completions. |
+| Spec text | Update `docs/specs/09-tools.md` capability list for references/rename/workspace symbols and cross-file behavior notes. |
+
+## Tasks
+
+- [ ] Add workspace `.ks` discovery and compile/index helpers in `vscode-kestrel/src/server/compiler-bridge.ts`.
+- [ ] Extend `vscode-kestrel/src/server/document-manager.ts` with workspace-level state needed by cross-file providers.
+- [ ] Implement `vscode-kestrel/src/server/providers/references.ts` and wire `textDocument/references`.
+- [ ] Implement `vscode-kestrel/src/server/providers/rename.ts` and wire `textDocument/rename`.
+- [ ] Implement `vscode-kestrel/src/server/providers/workspaceSymbols.ts` and wire `workspace/symbol`.
+- [ ] Extend `vscode-kestrel/src/server/providers/definition.ts` for cross-file declaration targets.
+- [ ] Extend `vscode-kestrel/src/server/providers/completion.ts` with workspace-exported names.
+- [ ] Update `vscode-kestrel/src/server/server.ts` initialization capabilities and handlers.
+- [ ] Add/extend unit tests for definition, completion, references, rename, and workspace symbols providers.
+- [ ] Update `docs/specs/09-tools.md` to document cross-file navigation and symbol/search capabilities.
+- [ ] Run `cd vscode-kestrel && npm test`.
+- [ ] Run `cd compiler && npm run build && npm test`.
+- [ ] Run `./scripts/kestrel test`.
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Vitest unit | `vscode-kestrel/test/unit/definition.test.ts` | Verify go-to-definition can resolve imported names to declarations in another file. |
+| Vitest unit | `vscode-kestrel/test/unit/completion.test.ts` | Verify completion includes cross-file exported declarations. |
+| Vitest unit | `vscode-kestrel/test/unit/references.test.ts` | Verify references include declaration and use-sites across files. |
+| Vitest unit | `vscode-kestrel/test/unit/rename.test.ts` | Verify rename emits edits for declaration + all cross-file references and rejects invalid new names. |
+| Vitest unit | `vscode-kestrel/test/unit/workspaceSymbols.test.ts` | Verify workspace symbol query returns top-level declarations across files with URI/range metadata. |
+| Regression suite | `cd vscode-kestrel && npm test` | Validate extension behavior with new provider handlers. |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/09-tools.md` — add cross-file definition/completion notes and capability entries for references/rename/workspace symbols.
