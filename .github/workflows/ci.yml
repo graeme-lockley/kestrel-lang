@@ -47,6 +47,9 @@ jobs:
       - name: Kestrel unit tests
         run: ./scripts/kestrel test
 
+      - name: Compiler bootstrap chain (self-hosted smoke)
+        run: ./scripts/test-compiler-bootstrap --summary tests/unit/literals.test.ks
+
       - name: Sample - expr
         run: ./kestrel run samples/expr.ks
 
