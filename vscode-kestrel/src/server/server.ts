@@ -15,6 +15,8 @@ import { collectCompletions } from './providers/completion';
 import { findDefinition } from './providers/definition';
 import { collectFoldingRanges } from './providers/folding';
 import { buildHover } from './providers/hover';
+import { collectInlayHints } from './providers/inlayHints';
+import { collectSemanticTokens, semanticTokenLegend } from './providers/semanticTokens';
 import { collectDocumentSymbols } from './providers/symbols';
 
 const connection = createConnection(ProposedFeatures.all);
@@ -55,6 +57,11 @@ connection.onInitialize((_params: InitializeParams) => {
       completionProvider: {
         triggerCharacters: ['.'],
       },
+      semanticTokensProvider: {
+        full: true,
+        legend: semanticTokenLegend,
+      },
+      inlayHintProvider: true,
     },
   };
 });
@@ -73,6 +80,22 @@ connection.onCompletion((params) => {
     return [];
   }
   return collectCompletions(doc.ast);
+});
+
+connection.languages.semanticTokens.on(async (params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return { data: [] };
+  }
+  return collectSemanticTokens(doc.source);
+});
+
+connection.languages.inlayHint.on(async (params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return [];
+  }
+  return collectInlayHints(doc.ast);
 });
 
 connection.onHover(async (params) => {

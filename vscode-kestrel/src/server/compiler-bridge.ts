@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -35,7 +36,7 @@ async function loadCompileFn(): Promise<CompileFn> {
   }
 
   compileFnPromise = (async () => {
-    const compilerEntry = path.resolve(__dirname, '../../../../compiler/dist/index.js');
+    const compilerEntry = path.join(resolveCompilerDistSrcDir(), 'index.js');
     const moduleUrl = pathToFileURL(compilerEntry).href;
     const mod = (await import(moduleUrl)) as { compile: CompileFn };
     if (typeof mod.compile !== 'function') {
@@ -45,6 +46,23 @@ async function loadCompileFn(): Promise<CompileFn> {
   })();
 
   return compileFnPromise;
+}
+
+function resolveCompilerDistSrcDir(): string {
+  const candidates = [
+    path.resolve(__dirname, '../../compiler/dist/src'),
+    path.resolve(__dirname, '../../../../compiler/dist/src'),
+    path.resolve(__dirname, '../../../compiler/dist/src'),
+    path.resolve(process.cwd(), 'compiler/dist/src'),
+    path.resolve(process.cwd(), '../compiler/dist/src'),
+    path.resolve(process.cwd(), '../../compiler/dist/src'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(path.join(c, 'index.js'))) {
+      return c;
+    }
+  }
+  throw new Error('Unable to locate compiler/dist/src directory from vscode-kestrel server context');
 }
 
 export async function compileSource(source: string, sourceFile: string): Promise<CompileResult> {
@@ -77,11 +95,12 @@ async function loadHelperModules(): Promise<{
   }
 
   helperModulesPromise = (async () => {
-    const parserModule = pathToFileURL(path.resolve(__dirname, '../../../../compiler/dist/parser/index.js')).href;
-    const typecheckModule = pathToFileURL(path.resolve(__dirname, '../../../../compiler/dist/typecheck/index.js')).href;
-    const astModule = pathToFileURL(path.resolve(__dirname, '../../../../compiler/dist/ast/index.js')).href;
-    const typesModule = pathToFileURL(path.resolve(__dirname, '../../../../compiler/dist/types/index.js')).href;
-    const rootModule = pathToFileURL(path.resolve(__dirname, '../../../../compiler/dist/index.js')).href;
+    const compilerDist = resolveCompilerDistSrcDir();
+    const parserModule = pathToFileURL(path.join(compilerDist, 'parser', 'index.js')).href;
+    const typecheckModule = pathToFileURL(path.join(compilerDist, 'typecheck', 'index.js')).href;
+    const astModule = pathToFileURL(path.join(compilerDist, 'ast', 'index.js')).href;
+    const typesModule = pathToFileURL(path.join(compilerDist, 'types', 'index.js')).href;
+    const rootModule = pathToFileURL(path.join(compilerDist, 'index.js')).href;
 
     const [parser, typecheck, ast, types, root] = await Promise.all([
       import(parserModule),
@@ -119,4 +138,18 @@ export async function hoverTypeAtOffset(ast: unknown | null, offset: number): Pr
     return null;
   }
   return printType(inferred);
+}
+
+export async function inferredTypeText(node: unknown): Promise<string | null> {
+  const { getInferredType, printType } = await loadHelperModules();
+  const inferred = getInferredType(node);
+  if (inferred == null) {
+    return null;
+  }
+  return printType(inferred);
+}
+
+export async function tokenizeSource(source: string): Promise<unknown[]> {
+  const { tokenize } = await loadHelperModules();
+  return tokenize(source);
 }
