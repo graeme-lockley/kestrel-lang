@@ -16,7 +16,7 @@ Delivers a feature-rich Visual Studio Code extension for Kestrel (`.ks` files), 
 2. [S10-02-lsp-server-skeleton-diagnostics.md](../../done/S10-02-lsp-server-skeleton-diagnostics.md) — LSP client/server wired to compiler; live parse and type-error diagnostics (done)
 3. [S10-03-hover-type-printtype-utility.md](../../done/S10-03-hover-type-printtype-utility.md) — `textDocument/hover` showing inferred HM type; new `printType` compiler utility (done)
 4. [S10-04-document-symbols-folding-ranges.md](../../done/S10-04-document-symbols-folding-ranges.md) — OUTLINE panel (documentSymbol) and collapsible blocks (foldingRange) (done)
-5. [S10-05-goto-definition-completion.md](../../unplanned/S10-05-goto-definition-completion.md) — Same-file go-to-definition and keyword/local-name completion
+5. [S10-05-goto-definition-completion.md](../../done/S10-05-goto-definition-completion.md) — Same-file go-to-definition and keyword/local-name completion (done)
 6. [S10-06-semantic-tokens-inlay-hints.md](../../unplanned/S10-06-semantic-tokens-inlay-hints.md) — Semantic token coloring and inlay type hints for untyped bindings
 7. [S10-07-signature-help.md](../../unplanned/S10-07-signature-help.md) — `textDocument/signatureHelp` popup while typing a function call
 8. [S10-08-code-actions-exhaustiveness-add-import.md](../../unplanned/S10-08-code-actions-exhaustiveness-add-import.md) — Quick-fix code actions: exhaustiveness fix and add-import suggestion

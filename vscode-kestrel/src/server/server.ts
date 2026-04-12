@@ -11,6 +11,8 @@ import { compileSource } from './compiler-bridge';
 import { DebouncedScheduler } from './debounce';
 import { toLspDiagnostics } from './diagnostics';
 import { DocumentManager } from './document-manager';
+import { collectCompletions } from './providers/completion';
+import { findDefinition } from './providers/definition';
 import { collectFoldingRanges } from './providers/folding';
 import { buildHover } from './providers/hover';
 import { collectDocumentSymbols } from './providers/symbols';
@@ -49,8 +51,28 @@ connection.onInitialize((_params: InitializeParams) => {
       hoverProvider: true,
       documentSymbolProvider: true,
       foldingRangeProvider: true,
+      definitionProvider: true,
+      completionProvider: {
+        triggerCharacters: ['.'],
+      },
     },
   };
+});
+
+connection.onDefinition((params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return null;
+  }
+  return findDefinition(doc.ast, doc.source, params.textDocument.uri, params.position);
+});
+
+connection.onCompletion((params) => {
+  const doc = documentManager.get(params.textDocument.uri);
+  if (doc == null) {
+    return [];
+  }
+  return collectCompletions(doc.ast);
 });
 
 connection.onHover(async (params) => {
