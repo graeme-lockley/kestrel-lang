@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E14 Self-Hosting Compiler](../epics/unplanned/E14-self-hosting-compiler.md)
+- Epic: [E14 Self-Hosting Compiler](../epics/done/E14-self-hosting-compiler.md)
 - Companion stories: S14-01 through S14-12, S14-14
 
 ## Summary

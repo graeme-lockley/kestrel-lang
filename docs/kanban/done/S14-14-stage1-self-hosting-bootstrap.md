@@ -6,8 +6,16 @@
 
 ## Epic
 
-- Epic: [E14 Self-Hosting Compiler](../epics/unplanned/E14-self-hosting-compiler.md)
+- Epic: [E14 Self-Hosting Compiler](../epics/done/E14-self-hosting-compiler.md)
 - Companion stories: S14-01 through S14-13
+
+## Historical note
+
+This story captured an interim Stage-1 parity checkpoint during the E14 porting phase.
+Canonical bootstrap architecture and command-mode gating were later formalized in
+`docs/specs/11-bootstrap.md` and delivered under E15 (`E15-bootstrap-jar-self-hosting-handoff`).
+Any remaining drift between current implementation and that spec is tracked in
+`S15-06-bootstrap-spec-implementation-reconciliation`.
 
 ## Summary
 
@@ -62,7 +70,10 @@ explicitly account for this dependency before switching the default build path.
 
 - Epic E14 completion criteria
 - `docs/specs/09-tools.md`
+- `docs/specs/11-bootstrap.md`
 - `AGENTS.md`
+- `docs/kanban/epics/done/E15-bootstrap-jar-self-hosting-handoff.md`
+- `docs/kanban/unplanned/S15-06-bootstrap-spec-implementation-reconciliation.md`
 
 ## Risks / Notes
 
@@ -112,6 +123,7 @@ explicitly account for this dependency before switching the default build path.
 - 2026-04-12: Added `scripts/bootstrap-stage1.sh` as a Stage-1 parity and readiness check that reuses Stage-0 baseline artifacts and validates semantic output parity on `samples/mandelbrot.ks`.
 - 2026-04-12: Updated docs/spec guidance to reflect that fallback topology remains active; default `kestrel build` still depends on Node/TypeScript until full self-hosted compile delegation is implemented.
 - 2026-04-12: Verified all required suites pass (`bootstrap-stage1`, compiler tests, `./kestrel test`, `./scripts/run-e2e.sh`).
+- 2026-04-12: Marked as historical transition context; ongoing bootstrap/spec reconciliation moved to S15-06 under E15.
 
 ## Documentation and specs to update
 

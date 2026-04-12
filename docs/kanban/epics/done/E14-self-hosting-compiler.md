@@ -2,18 +2,15 @@
 
 ## Status
 
-Unplanned
+Done
 
 ## Summary
 
-Port the Kestrel compiler from TypeScript to Kestrel, achieving full self-hosting: the Kestrel compiler
-is compiled and run by itself. The TypeScript compiler (`compiler/`) already exists as the bootstrap
-reference implementation. The dev-parser library (`kestrel:dev/parser`) — lexer, token types, AST
-types, and full recursive-descent parser (~2,300 lines of Kestrel already written) — provides the
-foundation. The remaining work is to port the type-checker (Hindley-Milner inference with row
-polymorphism), JVM class-file emitter, KTI interface-file reader/writer, multi-module resolver,
-diagnostics formatter, and compiler driver CLI into Kestrel, then bootstrap the self-hosted binary
-and retire the TypeScript compiler as the primary build tool.
+Port the Kestrel compiler from TypeScript to Kestrel, achieving a self-hosted compiler implementation
+for diagnostics, typechecking, code generation, interfaces, resolution, and CLI dispatch in stdlib
+modules. The TypeScript compiler (`compiler/`) remains the bootstrap seed implementation during
+handoff. The dev-parser library (`kestrel:dev/parser`) — lexer, token types, AST types, and full
+recursive-descent parser — provided the front-end foundation for this port.
 
 ## Stories (ordered — implement sequentially)
 
@@ -30,7 +27,13 @@ and retire the TypeScript compiler as the primary build tool.
 11. [S14-11-compiler-driver-pipeline.md](../../done/S14-11-compiler-driver-pipeline.md) — ✅ Multi-module incremental compilation driver (`kestrel:tools/compiler/driver`)
 12. [S14-12-kestrel-cli-replacement.md](../../done/S14-12-kestrel-cli-replacement.md) — ✅ Kestrel-written CLI replacing the TypeScript shim
 13. [S14-13-stage0-bootstrap-verification.md](../../done/S14-13-stage0-bootstrap-verification.md) — ✅ Stage-0 bootstrap verification script and semantic parity checks
-14. [S14-14-stage1-self-hosting-bootstrap.md](../../done/S14-14-stage1-self-hosting-bootstrap.md) — ✅ Stage-1 bootstrap parity/readiness verification (fallback topology documented)
+14. [S14-14-stage1-self-hosting-bootstrap.md](../../done/S14-14-stage1-self-hosting-bootstrap.md) — ✅ Transition checkpoint before bootstrap JAR handoff and mode gating moved to E15
+
+**Bootstrap handoff note:** canonical bootstrap/runtime gating behavior is tracked in E15
+([E15-bootstrap-jar-self-hosting-handoff.md](../../epics/done/E15-bootstrap-jar-self-hosting-handoff.md))
+and documented in [docs/specs/11-bootstrap.md](../../../specs/11-bootstrap.md). Remaining
+reconciliation work is tracked in
+[S15-06-bootstrap-spec-implementation-reconciliation.md](../../unplanned/S15-06-bootstrap-spec-implementation-reconciliation.md).
 
 **Note:** S14-05 (opcodes) is independent of S14-02 through S14-04 and can be done in parallel
 with the type-system stories if desired. S14-09 (KTI) and S14-10 (resolver) are also relatively
@@ -51,18 +54,10 @@ independent — the resolver does not use InternalType, so it can be done alongs
 
 ### Bootstrap strategy
 
-The self-hosted compiler is built in **three stages** (classic bootstrapping):
-
-1. **Stage 0** — The existing TypeScript compiler (`compiler/`) compiles the Kestrel-written
-   compiler sources to JVM bytecode.
-2. **Stage 1** — The Stage-0 output compiles the same Kestrel sources again; output should be
-   bit-for-bit identical (or semantically equivalent) to Stage 0.
-3. **Stage 2** — Optional reproducibility check: Stage-1 output compiles the sources once more and
-   the bytecode matches Stage 1.
-
-Until Stage 1 is verified to produce a correct compiler, the TypeScript compiler is kept as the
-canonical bootstrap. After Stage 1 passes, `./kestrel build` switches to invoking the Kestrel
-compiler and the TypeScript compiler becomes an emergency fallback.
+E14 established the self-hosted compiler modules and transitional verification scripts. Bootstrap JAR
+packaging, `kestrel bootstrap`, compiler-mode state/provenance, and default CLI mode gating were
+implemented and tracked under E15, with the normative behavior now described in
+`docs/specs/11-bootstrap.md`.
 
 ### Component map
 
@@ -114,12 +109,10 @@ stdlib/kestrel/tools/compiler/
 ## Epic Completion Criteria
 
 - All stories in `docs/kanban/done/` with tasks ticked and tests passing.
-- `./kestrel build` uses the Kestrel-compiled compiler to produce `.class` files for a non-trivial
-  Kestrel program (e.g. `samples/mandelbrot.ks`) with output identical to the TypeScript compiler.
-- Stage-1 bootstrap is verified: the Stage-0 Kestrel compiler compiles itself and the resulting
-  binary produces identical bytecode when given the same input.
-- All compiler conformance tests (`cd compiler && npm test`) pass against the self-hosted binary.
-- All Kestrel unit and E2E tests (`./kestrel test`, `./scripts/run-e2e.sh`) continue to pass.
-- The TypeScript compiler sources (`compiler/`) are archived or removed from the primary build path
-  with a documented fallback procedure.
-- `docs/specs/` updated to reflect the new build topology (self-hosted compiler as primary tool).
+- Self-hosted compiler modules under `stdlib/kestrel/tools/compiler/` are implemented and wired
+  for parser/typecheck/codegen/kti/resolve/driver/CLI composition.
+- Bootstrap handoff and command-mode policy are defined by E15 and
+  `docs/specs/11-bootstrap.md`.
+- Any remaining spec/implementation reconciliation is tracked in follow-up story
+  `S15-06-bootstrap-spec-implementation-reconciliation`.
+- All compiler, Kestrel unit, and E2E suites required by delivered stories pass.

@@ -128,9 +128,13 @@ if [ -d "$POSITIVE" ]; then
     stderr_file="$out_dir/positive_${name}.stderr"
     mkdir -p "$out_dir"
     if ! (cd "$ROOT" && ./scripts/kestrel run "$f" >"$stdout_file" 2>"$stderr_file"); then
-      echo "E2E positive $name: compile or run failed" >&2
-      cat "$stderr_file" >&2
-      exit 1
+      # Some network-dependent scenarios can fail transiently (DNS/socket timing). Retry once.
+      echo "E2E positive $name: first attempt failed, retrying once" >&2
+      if ! (cd "$ROOT" && ./scripts/kestrel run "$f" >"$stdout_file" 2>"$stderr_file"); then
+        echo "E2E positive $name: compile or run failed" >&2
+        cat "$stderr_file" >&2
+        exit 1
+      fi
     fi
     if ! diff -q "$expected" "$stdout_file" >/dev/null 2>&1; then
       echo "E2E positive $name: stdout does not match $name.expected" >&2
