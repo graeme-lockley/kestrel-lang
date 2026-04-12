@@ -8,9 +8,27 @@ Unplanned
 
 Delivers a feature-rich Visual Studio Code extension for Kestrel (`.ks` files), built on the Language Server Protocol (LSP). The extension bundles a dedicated Kestrel Language Server that imports the compiler directly (Node.js), providing sub-second diagnostics, hover-type popups, code completion, go-to-definition, find-references, rename, and code actions — all powered by the inferred-type annotations and source-span metadata already present in the compiler's typed AST. Later stories layer in document formatting (via `kestrel fmt` from E08), doc-comment hover (via the `///` syntax and `/api/index` endpoint from E09), cross-file navigation (depending on E04 and E07), and refactoring actions such as exhaustiveness quick-fix, extract-function, and organize-imports. The extension is distributed as a `.vsix` package and published to the VS Code Marketplace.
 
-## Stories
+## Stories (ordered — implement sequentially within each tier)
 
-(None yet — use plan-epic to decompose, or story-create to add individual stories.)
+### Tier 1 — No external epic dependencies (implement in order)
+
+1. [S10-01-vscode-extension-scaffold-textmate-grammar.md](../../unplanned/S10-01-vscode-extension-scaffold-textmate-grammar.md) — Bootstrap `vscode-kestrel/` project with TextMate grammar and language configuration
+2. [S10-02-lsp-server-skeleton-diagnostics.md](../../unplanned/S10-02-lsp-server-skeleton-diagnostics.md) — LSP client/server wired to compiler; live parse and type-error diagnostics
+3. [S10-03-hover-type-printtype-utility.md](../../unplanned/S10-03-hover-type-printtype-utility.md) — `textDocument/hover` showing inferred HM type; new `printType` compiler utility
+4. [S10-04-document-symbols-folding-ranges.md](../../unplanned/S10-04-document-symbols-folding-ranges.md) — OUTLINE panel (documentSymbol) and collapsible blocks (foldingRange)
+5. [S10-05-goto-definition-completion.md](../../unplanned/S10-05-goto-definition-completion.md) — Same-file go-to-definition and keyword/local-name completion
+6. [S10-06-semantic-tokens-inlay-hints.md](../../unplanned/S10-06-semantic-tokens-inlay-hints.md) — Semantic token coloring and inlay type hints for untyped bindings
+7. [S10-07-signature-help.md](../../unplanned/S10-07-signature-help.md) — `textDocument/signatureHelp` popup while typing a function call
+8. [S10-08-code-actions-exhaustiveness-add-import.md](../../unplanned/S10-08-code-actions-exhaustiveness-add-import.md) — Quick-fix code actions: exhaustiveness fix and add-import suggestion
+9. [S10-09-codelens-task-runner-package.md](../../unplanned/S10-09-codelens-task-runner-package.md) — Test CodeLens, VS Code task definitions, `.vsix` package, spec update
+
+S10-04, S10-05, S10-06, S10-07, S10-08 are independent of each other once S10-02 and S10-03 are done and may be done in any order.
+
+### Tier 2 — Requires external epics (implement after blockers complete)
+
+10. [S10-10-format-on-save.md](../../unplanned/S10-10-format-on-save.md) — Document formatting via `kestrel fmt --stdin` (**blocked by E08**)
+11. [S10-11-hover-doc-comments.md](../../unplanned/S10-11-hover-doc-comments.md) — Hover shows `///` doc-comment prose (**blocked by E09**)
+12. [S10-12-cross-file-navigation-workspace-symbols.md](../../unplanned/S10-12-cross-file-navigation-workspace-symbols.md) — Cross-file go-to-definition, find-references, rename, workspace symbols (**blocked by E04 + E07**)
 
 ## Dependencies
 
