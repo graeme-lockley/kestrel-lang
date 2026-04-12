@@ -55,7 +55,7 @@ cache, and security-sensitive cross-origin restrictions.
   - `resolveSpecifier("../outside.ks", ...)` from a URL-cached module returns a cross-origin error
   - An unknown stdlib specifier returns an error
 - `./kestrel test stdlib/kestrel/tools/compiler/resolve.test.ks` passes.
-- `cd compiler && npm test` still passes.
+- `cd compiler && npm run build && npm test` still passes.
 
 ## Spec References
 
@@ -87,15 +87,15 @@ cache, and security-sensitive cross-origin restrictions.
 
 ## Tasks
 
-- [ ] Create `stdlib/kestrel/tools/compiler/resolve.ks` with exported `ResolveOptions`, `ResolvedDep`, `resolveSpecifier`, and `uniqueDependencyPaths` APIs.
-- [ ] Implement stdlib specifier mapping (`kestrel:*`) and local relative path mapping (`./`, `../`) for file-based modules.
-- [ ] Implement URL specifier handling scaffolding (`https://` and optional `http://` with `allowHttp`) and cache path helper stubs.
-- [ ] Add cross-origin relative import guard for URL-cached modules.
-- [ ] Add helper to deduplicate specifiers in source order and produce `ResolvedDep` list.
-- [ ] Add `stdlib/kestrel/tools/compiler/resolve.test.ks` for stdlib, relative, unknown-stdlib, and cross-origin rejection cases.
-- [ ] Run `NODE_OPTIONS='--max-old-space-size=8192' ./kestrel test stdlib/kestrel/tools/compiler/resolve.test.ks`.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Create `stdlib/kestrel/tools/compiler/resolve.ks` with exported `ResolveOptions`, `ResolvedDep`, `resolveSpecifier`, and `uniqueDependencyPaths` APIs.
+- [x] Implement stdlib specifier mapping (`kestrel:*`) and local relative path mapping (`./`, `../`) for file-based modules.
+- [x] Implement URL specifier handling scaffolding (`https://` and optional `http://` with `allowHttp`) and cache path helper stubs.
+- [x] Add cross-origin relative import guard for URL-cached modules.
+- [x] Add helper to deduplicate specifiers in source order and produce `ResolvedDep` list.
+- [x] Add `stdlib/kestrel/tools/compiler/resolve.test.ks` for stdlib, relative, unknown-stdlib, and cross-origin rejection cases.
+- [x] Run `NODE_OPTIONS='--max-old-space-size=8192' ./kestrel test stdlib/kestrel/tools/compiler/resolve.test.ks`.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -109,4 +109,10 @@ cache, and security-sensitive cross-origin restrictions.
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/07-modules.md` — review resolver behavior (stdlib, relative, URL security checks); update only if behavior differs from documented rules.
+- [x] `docs/specs/07-modules.md` — reviewed resolver behavior (stdlib, relative, URL security checks); no spec text changes required for this scaffold step.
+
+## Build notes
+
+- 2026-04-12: Added `kestrel:tools/compiler/resolve` scaffold with stdlib/relative/URL resolution APIs, URL cache path helpers, and dependency deduplication in source order.
+- 2026-04-12: Added cross-origin relative import guard for cache-backed modules (`../` escape from cached URLs returns an explicit rejection).
+- 2026-04-12: Added `stdlib/kestrel/tools/compiler/resolve.test.ks` and verified focused plus full regression suites (`compiler` tests and `./scripts/kestrel test`) passed.
