@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { compileWorkspace } from '../../src/server/compiler-bridge';
 import { findDefinition } from '../../src/server/providers/definition';
+import { createTempWorkspace } from './workspaceTestUtils';
 
 describe('findDefinition', () => {
   it('resolves top-level function definitions', () => {
@@ -25,29 +27,23 @@ describe('findDefinition', () => {
     expect(def).toBeNull();
   });
 
-  it('resolves definitions from workspace index when not local', () => {
-    const source = 'import { parseInt } from "kestrel:data/string"\nval x = parseInt("1")\n';
-    const ast = { kind: 'Program', imports: [], body: [] };
-    const workspaceIndex = {
-      decls: [],
-      exportedNames: ['parseInt'],
-      sourcesByUri: new Map<string, string>(),
-      declsByName: new Map([
-        ['parseInt', [{
-          name: 'parseInt',
-          kind: 'fun',
-          exported: true,
-          uri: 'file:///tmp/string.ks',
-          line: 4,
-          column: 12,
-          endLine: 4,
-          endColumn: 20,
-        }]],
-      ]),
-    };
+  it('resolves imported named symbols to their defining file instead of the import statement', async () => {
+    const workspace = createTempWorkspace({
+      'stdlib/kestrel/data/string.ks': '/// Converts text to an integer\nexport fun parseInt(s: String): Int = 0\n',
+      'main.ks': 'import { parseInt } from "kestrel:data/string"\nval x = parseInt("1")\n',
+    });
 
-    const def = findDefinition(ast, source, 'file:///tmp/main.ks', { line: 1, character: 12 }, workspaceIndex);
-    expect(def?.uri).toBe('file:///tmp/string.ks');
-    expect(def?.range.start.line).toBe(3);
+    try {
+      const workspaceIndex = await compileWorkspace(workspace.rootDir);
+      const source = 'import { parseInt } from "kestrel:data/string"\nval x = parseInt("1")\n';
+      const ast = workspaceIndex.modulesByUri.get(workspace.uriFor('main.ks'))?.ast ?? null;
+
+      const def = findDefinition(ast, source, workspace.uriFor('main.ks'), { line: 1, character: 9 }, workspaceIndex);
+      expect(def?.uri).toBe(workspace.uriFor('stdlib/kestrel/data/string.ks'));
+      expect(def?.range.start.line).toBe(1);
+      expect(def?.range.start.character).toBe(11);
+    } finally {
+      workspace.dispose();
+    }
   });
 });

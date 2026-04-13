@@ -1,6 +1,6 @@
-import type { Location, Position, Range } from 'vscode-languageserver/node';
+import type { Location, Position } from 'vscode-languageserver/node';
 
-import type { WorkspaceIndex } from '../compiler-bridge';
+import { resolveWorkspaceSymbolAtOffset, type WorkspaceIndex } from '../compiler-bridge';
 
 function offsetFromPosition(source: string, pos: Position): number {
   let line = 0;
@@ -19,30 +19,6 @@ function offsetFromPosition(source: string, pos: Position): number {
   return source.length;
 }
 
-function identifierAt(source: string, offset: number): string | null {
-  if (offset < 0 || offset > source.length) {
-    return null;
-  }
-
-  const isWord = (ch: string) => /[A-Za-z0-9_]/.test(ch);
-  let left = offset;
-  let right = offset;
-
-  while (left > 0 && isWord(source[left - 1] ?? '')) {
-    left--;
-  }
-  while (right < source.length && isWord(source[right] ?? '')) {
-    right++;
-  }
-
-  if (left === right) {
-    return null;
-  }
-
-  const ident = source.slice(left, right);
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(ident) ? ident : null;
-}
-
 function offsetToPosition(source: string, offset: number): Position {
   let line = 0;
   let col = 0;
@@ -57,42 +33,28 @@ function offsetToPosition(source: string, offset: number): Position {
   return { line, character: col };
 }
 
-function findIdentifierRanges(source: string, ident: string): Range[] {
-  const out: Range[] = [];
-  if (ident.length === 0) {
-    return out;
-  }
-
-  const re = new RegExp(`\\b${ident}\\b`, 'g');
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(source)) != null) {
-    const start = match.index;
-    const end = start + ident.length;
-    out.push({
-      start: offsetToPosition(source, start),
-      end: offsetToPosition(source, end),
-    });
-  }
-  return out;
-}
-
 export function findReferences(
+  uri: string,
   source: string,
   position: Position,
   workspaceIndex: WorkspaceIndex,
 ): Location[] {
-  const offset = offsetFromPosition(source, position);
-  const ident = identifierAt(source, offset);
-  if (ident == null) {
+  const resolved = resolveWorkspaceSymbolAtOffset(uri, source, offsetFromPosition(source, position), workspaceIndex);
+  if (resolved == null) {
     return [];
   }
 
-  const out: Location[] = [];
-  for (const [uri, fileSource] of workspaceIndex.sourcesByUri) {
-    const ranges = findIdentifierRanges(fileSource, ident);
-    for (const range of ranges) {
-      out.push({ uri, range });
+  return resolved.occurrences.flatMap((occurrence) => {
+    const occurrenceSource = workspaceIndex.sourcesByUri.get(occurrence.uri);
+    if (occurrenceSource == null) {
+      return [];
     }
-  }
-  return out;
+    return [{
+      uri: occurrence.uri,
+      range: {
+        start: offsetToPosition(occurrenceSource, occurrence.start),
+        end: offsetToPosition(occurrenceSource, occurrence.end),
+      },
+    }];
+  });
 }

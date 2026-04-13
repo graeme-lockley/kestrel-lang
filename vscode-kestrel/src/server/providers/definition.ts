@@ -1,6 +1,6 @@
 import type { Location, Position, Range } from 'vscode-languageserver/node';
 
-import type { WorkspaceIndex } from '../compiler-bridge';
+import { resolveWorkspaceSymbolAtOffset, type WorkspaceIndex } from '../compiler-bridge';
 
 function rangeFromSpan(span: { line: number; column: number; endLine?: number; endColumn?: number }): Range {
   const startLine = Math.max(0, span.line - 1);
@@ -28,6 +28,20 @@ function offsetFromPosition(source: string, pos: Position): number {
     }
   }
   return source.length;
+}
+
+function positionFromOffset(source: string, offset: number): Position {
+  let line = 0;
+  let character = 0;
+  for (let index = 0; index < offset && index < source.length; index++) {
+    if (source.charCodeAt(index) === 10) {
+      line++;
+      character = 0;
+    } else {
+      character++;
+    }
+  }
+  return { line, character };
 }
 
 function identifierAt(source: string, offset: number): string | null {
@@ -105,6 +119,20 @@ export function findDefinition(
   position: Position,
   workspaceIndex?: WorkspaceIndex,
 ): Location | null {
+  if (workspaceIndex != null) {
+    const resolved = resolveWorkspaceSymbolAtOffset(uri, source, offsetFromPosition(source, position), workspaceIndex);
+    if (resolved?.declaration != null) {
+      const declSource = workspaceIndex.sourcesByUri.get(resolved.declaration.uri) ?? source;
+      return {
+        uri: resolved.declaration.uri,
+        range: {
+          start: positionFromOffset(declSource, resolved.declaration.start),
+          end: positionFromOffset(declSource, resolved.declaration.end),
+        },
+      };
+    }
+  }
+
   if (ast == null) {
     return null;
   }

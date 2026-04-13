@@ -1,24 +1,37 @@
 import { describe, expect, it } from 'vitest';
 
+import { compileWorkspace } from '../../src/server/compiler-bridge';
 import { findReferences } from '../../src/server/providers/references';
+import { createTempWorkspace } from './workspaceTestUtils';
 
 describe('findReferences', () => {
-  it('collects references across workspace files', () => {
-    const workspaceIndex = {
-      decls: [],
-      declsByName: new Map(),
-      exportedNames: [],
-      sourcesByUri: new Map([
-        ['file:///tmp/a.ks', 'export fun add(a: Int, b: Int): Int = a + b\n'],
-        ['file:///tmp/b.ks', 'val n = add(1, 2)\n'],
-      ]),
-    };
+  it('collects only binding-correct references across workspace files', async () => {
+    const workspace = createTempWorkspace({
+      'lib.ks': 'export fun add(a: Int, b: Int): Int = a + b\n',
+      'main.ks': [
+        'import { add } from "./lib.ks"',
+        'val note = "add"',
+        'fun demo(x: Int): Int = {',
+        '  val add = x',
+        '  add',
+        '}',
+        'val result = add(1, 2)',
+        '// add',
+      ].join('\n'),
+    });
 
-    const refs = findReferences('val n = add(1, 2)\n', { line: 0, character: 9 }, workspaceIndex);
-    const uris = new Set(refs.map((r) => r.uri));
+    try {
+      const workspaceIndex = await compileWorkspace(workspace.rootDir);
+      const mainUri = workspace.uriFor('main.ks');
+      const source = workspaceIndex.sourcesByUri.get(mainUri) ?? '';
+      const refs = findReferences(mainUri, source, { line: 6, character: 14 }, workspaceIndex);
 
-    expect(uris.has('file:///tmp/a.ks')).toBe(true);
-    expect(uris.has('file:///tmp/b.ks')).toBe(true);
-    expect(refs.length).toBeGreaterThanOrEqual(2);
+      const refsInMain = refs.filter((ref) => ref.uri === mainUri);
+      expect(refs).toHaveLength(3);
+      expect(refs.some((ref) => ref.uri === workspace.uriFor('lib.ks'))).toBe(true);
+      expect(refsInMain).toHaveLength(2);
+    } finally {
+      workspace.dispose();
+    }
   });
 });

@@ -1,6 +1,6 @@
 import type { Position, TextEdit, WorkspaceEdit } from 'vscode-languageserver/node';
 
-import type { WorkspaceIndex } from '../compiler-bridge';
+import { resolveWorkspaceSymbolAtOffset, type WorkspaceIndex } from '../compiler-bridge';
 import { findReferences } from './references';
 
 function offsetFromPosition(source: string, pos: Position): number {
@@ -49,6 +49,7 @@ function isValidIdentifier(name: string): boolean {
 }
 
 export function buildRenameEdit(
+  uri: string,
   source: string,
   position: Position,
   newName: string,
@@ -63,11 +64,25 @@ export function buildRenameEdit(
     return null;
   }
 
-  if ((workspaceIndex.declsByName.get(newName) ?? []).length > 0) {
+  const resolved = resolveWorkspaceSymbolAtOffset(uri, source, offsetFromPosition(source, position), workspaceIndex);
+  if (resolved?.declaration == null) {
     return null;
   }
 
-  const refs = findReferences(source, position, workspaceIndex);
+  if (resolved.declaration.kind === 'top-level') {
+    const conflicts = (workspaceIndex.declsByName.get(newName) ?? []).filter((decl) => decl.bindingKey !== resolved.key);
+    if (conflicts.length > 0) {
+      return null;
+    }
+  } else {
+    for (const declaration of workspaceIndex.bindingDeclarations.values()) {
+      if (declaration.uri === resolved.declaration.uri && declaration.name === newName && declaration.key !== resolved.declaration.key) {
+        return null;
+      }
+    }
+  }
+
+  const refs = findReferences(uri, source, position, workspaceIndex);
   if (refs.length === 0) {
     return null;
   }

@@ -1,6 +1,6 @@
 import type { Hover, Position } from 'vscode-languageserver/node';
 
-import { hoverDocAtOffset, hoverTypeAtOffset } from '../compiler-bridge';
+import { hoverDocAtOffset, hoverTypeAtOffset, type WorkspaceIndex } from '../compiler-bridge';
 
 function offsetFromPosition(source: string, pos: Position): number {
   let line = 0;
@@ -22,14 +22,20 @@ function offsetFromPosition(source: string, pos: Position): number {
   return source.length;
 }
 
-export async function buildHover(source: string, ast: unknown | null, position: Position): Promise<Hover | null> {
+export async function buildHover(
+  source: string,
+  uri: string,
+  ast: unknown | null,
+  position: Position,
+  workspaceIndex?: WorkspaceIndex,
+): Promise<Hover | null> {
   const offset = offsetFromPosition(source, position);
   const typeText = await hoverTypeAtOffset(ast, offset);
   if (typeText == null) {
     return null;
   }
 
-  const docText = await hoverDocAtOffset(source, offset);
+  const docText = await hoverDocAtOffset(source, offset, uri, workspaceIndex);
   const body = docText == null || docText.trim() === ''
     ? `\`\`\`kestrel\n${typeText}\n\`\`\``
     : `\`\`\`kestrel\n${typeText}\n\`\`\`\n---\n${docText}`;

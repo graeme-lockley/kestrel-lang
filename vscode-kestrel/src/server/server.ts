@@ -139,7 +139,7 @@ connection.onReferences(async (params) => {
     return [];
   }
   const workspaceIndex = await buildWorkspaceIndex();
-  return findReferences(doc.source, params.position, workspaceIndex);
+  return findReferences(params.textDocument.uri, doc.source, params.position, workspaceIndex);
 });
 
 connection.onRenameRequest(async (params) => {
@@ -148,7 +148,7 @@ connection.onRenameRequest(async (params) => {
     return null;
   }
   const workspaceIndex = await buildWorkspaceIndex();
-  return buildRenameEdit(doc.source, params.position, params.newName, workspaceIndex);
+  return buildRenameEdit(params.textDocument.uri, doc.source, params.position, params.newName, workspaceIndex);
 });
 
 connection.onWorkspaceSymbol(async (params: WorkspaceSymbolParams) => {
@@ -193,7 +193,8 @@ connection.onHover(async (params) => {
   if (doc == null) {
     return null;
   }
-  return buildHover(doc.source, doc.ast, params.position);
+  const workspaceIndex = await buildWorkspaceIndex();
+  return buildHover(doc.source, params.textDocument.uri, doc.ast, params.position, workspaceIndex);
 });
 
 connection.onDocumentSymbol((params) => {
