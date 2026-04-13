@@ -284,8 +284,18 @@ Supported capabilities in the current integration:
 Hover payloads include inferred type markdown and, when available, `///` declaration doc-comment prose appended beneath the type block.
 Definition and completion also include workspace-exported declarations from `.ks` files under the active workspace root.
 
-Supported settings:
+**Symbol Resolution for Imported Bindings:**
 
+Definition and hover now perform binding-aware resolution instead of text matching, allowing:
+
+- **Definition of imported symbols:** Go-to-definition on an imported name like `foo` in `import { foo } from "..."` now lands on the source declaration in the target module, not the import statement itself.
+- **Hover docs for imported symbols:** Hovering over an imported binding displays the inferred type and declaration documentation (`///` comments) from the defining module.
+- **References ignores text matches:** Find references on a symbol now returns only true binding occurrences; stray text matches, comments, and strings are excluded.
+- **Rename respects shadowing:** Symbol rename correctly handles local shadowing (e.g., a local `x` hiding an imported `x`), preventing unsafe cross-name edits and respecting scope boundaries. Top-level exports and local/imported bindings are checked separately to allow shadowing imports with locals.
+
+This behaviour is implemented through a workspace-wide binding index that tracks import resolutions, declaration sites, and scope-aware occurrence positions for each compilation unit.
+
+Supported settings:
 - `kestrel.executable` — path or command name for the `kestrel` CLI used by extension commands.
 - `kestrel.lsp.debounceMs` — debounce delay (ms) for on-change diagnostics scheduling in the language server.
 
