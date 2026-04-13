@@ -59,6 +59,9 @@ mkdir -p "$CLASSES_DIR"
 echo "[bootstrap-jar] building TypeScript compiler"
 (cd "$COMPILER_DIR" && npm run build >/dev/null)
 
+echo "[bootstrap-jar] building JVM runtime"
+(cd "$ROOT/runtime/jvm" && ./build.sh >/dev/null)
+
 echo "[bootstrap-jar] compiling executable compiler entrypoint"
 "$ROOT/kestrel" --allow-ts-compiler __ts-compile "$ENTRY" "$CLASSES_DIR"
 
