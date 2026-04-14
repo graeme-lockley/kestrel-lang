@@ -91,8 +91,8 @@ because the Bash launcher uses `exec java …`.
 
 ## Tasks
 
-- [ ] Add `java.net.URL`, `java.net.URLClassLoader`, and `java.lang.reflect.Method` imports to `KRuntime.java`
-- [ ] Add `KRuntime.runInProcess(Object classpath, Object mainClass, Object args)` to `KRuntime.java`:
+- [x] Add `java.net.URL`, `java.net.URLClassLoader`, and `java.lang.reflect.Method` imports to `KRuntime.java`
+- [x] Add `KRuntime.runInProcess(Object classpath, Object mainClass, Object args)` to `KRuntime.java`:
   - Build `List<URL>` from the `KList<String>` classpath argument
   - Create `URLClassLoader(urls, Thread.currentThread().getContextClassLoader())` (fallback: `ClassLoader.getSystemClassLoader()`)
   - Load `mainClass` via `cl.loadClass(mainClass.replace('.', '/'))` — handle '.' vs '/' conversion for JVM internal names
@@ -101,10 +101,10 @@ because the Bash launcher uses `exec java …`.
   - Create `Thread(null, runnable, "kestrel-run", 8 * 1024 * 1024)` (platform thread with 8 MiB stack)
   - Start thread, join; on normal return (no System.exit): call `System.exit(0)`
   - Return `KUnit.INSTANCE`
-- [ ] Export `runInProcess` in `stdlib/kestrel/sys/process.ks` as `extern fun runInProcess(classpath: List<String>, mainClass: String, args: List<String>): Unit`
-- [ ] `cd runtime/jvm && bash build.sh`
-- [ ] `cd compiler && npm run build && npm test`
-- [ ] `./scripts/kestrel test`
+- [x] Export `runInProcess` in `stdlib/kestrel/sys/process.ks` as `extern fun runInProcess(classpath: List<String>, mainClass: String, args: List<String>): Unit`
+- [x] `cd runtime/jvm && bash build.sh`
+- [x] `cd compiler && npm run build && npm test`
+- [x] `./scripts/kestrel test`
 
 ## Tests to add
 
@@ -117,3 +117,19 @@ because the Bash launcher uses `exec java …`.
 ## Documentation and specs to update
 
 - [ ] `docs/specs/09-tools.md` §2.1 — deferred to S16-05 (no spec change in this story)
+
+## Build notes
+
+- 2026-04-14: Implemented `KRuntime.runInProcess` using `URLClassLoader` with the current thread's
+  context classloader as parent (falling back to `ClassLoader.getSystemClassLoader()`). Invokes
+  `main(String[])` via reflection on a platform Thread with explicit 8 MiB stack. After the thread
+  joins, calls `System.exit(0)` so the JVM always terminates — whether or not the user program
+  called `exit()` explicitly. The `System.exit` path from `InvocationTargetException` is not
+  reachable at runtime (the JVM terminates before unwinding), but the catch re-throws correctly
+  for any non-exit error.
+- 2026-04-14: mainClass input uses dots (Java convention); any '/' are normalised with `.replace('/', '.')`.
+  The `$init` method is the internal Kestrel init method; `main(String[])` is what's actually
+  invoked so KRuntime.runMain handles async quiescence correctly for the user program.
+- 2026-04-14: Runtime build produced "unchecked or unsafe operations" warning — this is pre-existing
+  in KRuntime.java (raw KList/KCons generics) and not introduced by this change.
+- 2026-04-14: All 440 compiler tests and 1837 Kestrel tests pass.

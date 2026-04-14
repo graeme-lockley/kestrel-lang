@@ -3,6 +3,9 @@ package kestrel.runtime;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.lang.reflect.Method;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -2692,6 +2695,95 @@ public final class KRuntime {
 
     public static Long floatToRawIntBits(Object f) {
         return (long) Float.floatToRawIntBits((float) ((Number) f).doubleValue());
+    }
+
+    /**
+     * Execute a compiled Kestrel program in-process by loading it through a URLClassLoader.
+     * The loaded class's {@code main(String[])} method is invoked on a new platform thread
+     * with an explicit 8 MiB stack (matching the {@code -Xss8m} JVM flag used when spawning
+     * a child process).  The method does not return: the user program terminates the JVM
+     * via {@code System.exit()} (or, if {@code main} returns normally, {@code System.exit(0)}
+     * is called automatically).
+     *
+     * @param classpathObj  KList&lt;String&gt; of JAR/class-dir paths to include.
+     * @param mainClassObj  String — fully-qualified Java class name (dots, not slashes).
+     * @param argsObj       KList&lt;String&gt; of command-line arguments for the program.
+     */
+    public static KUnit runInProcess(Object classpathObj, Object mainClassObj, Object argsObj) {
+        // Build URL array from the classpath list.
+        List<URL> urls = new ArrayList<>();
+        if (classpathObj instanceof KList) {
+            KList xs = (KList) classpathObj;
+            while (xs instanceof KCons) {
+                String path = formatOne(((KCons) xs).head);
+                try {
+                    urls.add(Paths.get(path).toUri().toURL());
+                } catch (Exception e) {
+                    throw new RuntimeException("runInProcess: invalid classpath entry: " + path, e);
+                }
+                xs = ((KCons) xs).tail;
+            }
+        }
+
+        // Resolve the main class name (dots, not slashes).
+        String mainClass = formatOne(mainClassObj).replace('/', '.');
+
+        // Build args array.
+        List<String> argsList = new ArrayList<>();
+        if (argsObj instanceof KList) {
+            KList xs = (KList) argsObj;
+            while (xs instanceof KCons) {
+                argsList.add(formatOne(((KCons) xs).head));
+                xs = ((KCons) xs).tail;
+            }
+        }
+        final String[] args = argsList.toArray(new String[0]);
+
+        // Build URLClassLoader with the system classloader as parent so that
+        // kestrel.runtime.* classes (already on the classpath) are shared.
+        ClassLoader parent = Thread.currentThread().getContextClassLoader();
+        if (parent == null) parent = ClassLoader.getSystemClassLoader();
+        URLClassLoader cl = new URLClassLoader(urls.toArray(new URL[0]), parent);
+
+        // Load and locate the main method.
+        final Class<?> cls;
+        final Method mainMethod;
+        try {
+            cls = cl.loadClass(mainClass);
+            mainMethod = cls.getDeclaredMethod("main", String[].class);
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("runInProcess: class not found: " + mainClass, e);
+        } catch (NoSuchMethodException e) {
+            throw new RuntimeException("runInProcess: no main(String[]) in: " + mainClass, e);
+        }
+
+        // Dispatch on a platform thread with an explicit 8 MiB stack.
+        Thread t = new Thread(null, () -> {
+            try {
+                mainMethod.invoke(null, (Object) args);
+                // main returned normally without calling System.exit — exit 0.
+                System.exit(0);
+            } catch (java.lang.reflect.InvocationTargetException e) {
+                Throwable cause = e.getCause();
+                // System.exit() surfaces as the JVM terminating — it never reaches here.
+                // Any other exception is a program error.
+                if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+                if (cause instanceof Error) throw (Error) cause;
+                throw new RuntimeException("runInProcess: program failed", cause);
+            } catch (Exception e) {
+                throw new RuntimeException("runInProcess: invocation failed", e);
+            }
+        }, "kestrel-run", 8L * 1024L * 1024L);
+
+        t.start();
+        try {
+            t.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        // Reached only if the thread exited without calling System.exit.
+        System.exit(0);
+        return KUnit.INSTANCE; // unreachable
     }
 }
 

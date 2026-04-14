@@ -46,3 +46,6 @@ export fun runProcess(program: String, args: List<String>): Task<Result<ProcessR
 
 export fun runProcessStream(program: String, args: List<String>): Task<Result<Int, ProcessError>> =
   map(runProcessStreamAsync(program, args), (result: Result<Int, String>) => Res.mapError(result, mapProcessError))
+
+export extern fun runInProcess(classpath: List<String>, mainClass: String, args: List<String>): Unit =
+  jvm("kestrel.runtime.KRuntime#runInProcess(java.lang.Object,java.lang.Object,java.lang.Object)")
