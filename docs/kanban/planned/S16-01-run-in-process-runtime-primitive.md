@@ -80,3 +80,40 @@ because the Bash launcher uses `exec java …`.
 - **`mainClass` derivation**: the class-name derivation logic (`classNameForPath`) is currently
   duplicated in the Bash script and in `resolve-maven-classpath.mjs`. The Kestrel CLI (S16-03)
   will port it to Kestrel string functions; `runInProcess` itself just takes the pre-derived name.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| JVM runtime | `runtime/jvm/src/kestrel/runtime/KRuntime.java` — add `runInProcess(Object, Object, Object)` static method (~45 lines); add `java.net.URL`, `java.net.URLClassLoader`, `java.lang.reflect.Method` imports |
+| Stdlib | `stdlib/kestrel/sys/process.ks` — add `extern fun runInProcess(...)` declaration |
+| JVM build | Rebuild `kestrel-runtime.jar` via `cd runtime/jvm && bash build.sh` |
+
+## Tasks
+
+- [ ] Add `java.net.URL`, `java.net.URLClassLoader`, and `java.lang.reflect.Method` imports to `KRuntime.java`
+- [ ] Add `KRuntime.runInProcess(Object classpath, Object mainClass, Object args)` to `KRuntime.java`:
+  - Build `List<URL>` from the `KList<String>` classpath argument
+  - Create `URLClassLoader(urls, Thread.currentThread().getContextClassLoader())` (fallback: `ClassLoader.getSystemClassLoader()`)
+  - Load `mainClass` via `cl.loadClass(mainClass.replace('.', '/'))` — handle '.' vs '/' conversion for JVM internal names
+  - Locate `main(String[])` via `cls.getDeclaredMethod("main", String[].class)` (or `$init` via `cls.getDeclaredMethod("$init")`)
+  - Construct args `String[]` from `KList<String>` argsObj
+  - Create `Thread(null, runnable, "kestrel-run", 8 * 1024 * 1024)` (platform thread with 8 MiB stack)
+  - Start thread, join; on normal return (no System.exit): call `System.exit(0)`
+  - Return `KUnit.INSTANCE`
+- [ ] Export `runInProcess` in `stdlib/kestrel/sys/process.ks` as `extern fun runInProcess(classpath: List<String>, mainClass: String, args: List<String>): Unit`
+- [ ] `cd runtime/jvm && bash build.sh`
+- [ ] `cd compiler && npm run build && npm test`
+- [ ] `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness (integration) | `tests/unit/process.test.ks` | Verify `runInProcess` can be called; since System.exit terminates the process, integration relies on S16-03 cmd_run tests |
+
+*Note: a direct unit test for `runInProcess` is deferred to S16-03 integration (it would terminate the test process). The critical verification is that the symbol compiles and is reachable from Kestrel.*
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/09-tools.md` §2.1 — deferred to S16-05 (no spec change in this story)
