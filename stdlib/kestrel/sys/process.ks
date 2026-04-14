@@ -49,3 +49,6 @@ export fun runProcessStream(program: String, args: List<String>): Task<Result<In
 
 export extern fun runInProcess(classpath: List<String>, mainClass: String, args: List<String>): Unit =
   jvm("kestrel.runtime.KRuntime#runInProcess(java.lang.Object,java.lang.Object,java.lang.Object)")
+
+export extern fun setSystemProperty(key: String, value: String): Unit =
+  jvm("kestrel.runtime.KRuntime#setSystemProperty(java.lang.Object,java.lang.Object)")

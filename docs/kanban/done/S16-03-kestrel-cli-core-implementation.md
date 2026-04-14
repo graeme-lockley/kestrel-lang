@@ -102,3 +102,49 @@ Environment variables consumed (set by Bash shim):
   (`command -v javap`) should be replicated before spawning.
 - **`KESTREL_ROOT` must be set**: the Kestrel CLI cannot resolve its own location; it must error
   clearly if `KESTREL_ROOT` is absent rather than silently using an empty string.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib | New `stdlib/kestrel/tools/cli.ks` (~350 lines) — all user commands |
+| Tests | New `stdlib/kestrel/tools/cli.test.ks` — unit tests for `needsCompile` and `mainClassFor` delegation |
+
+## Tasks
+
+- [x] Write `stdlib/kestrel/tools/cli.ks`:
+  - Read `KESTREL_ROOT`, `KESTREL_JVM_CACHE`, `KESTREL_MAVEN_CACHE` from env
+  - `fun resolveScript(arg: String, cwd: String): Option<String>` — resolve `.ks` path or module specifier
+  - `fun needsCompile(classFile: String, depsFile: String): Task<Bool>` — mtime staleness check
+  - `fun compileEntry(entrySource, outDir, flags): Task<Int>` — invoke `node $COMPILER_CLI` via `runProcessStream`
+  - `fun cmdRun(args)`, `fun cmdDis(args)`, `fun cmdBuild(args)`, `fun cmdStatus()`, `fun cmdTest(args)`, `fun cmdFmt(args)`, `fun cmdDoc(args)`, `fun cmdLock(args)`, `fun cmdTsCompile(args)`
+  - `export async fun main(args: List<String>): Task<Unit>`
+- [x] Write `stdlib/kestrel/tools/cli.test.ks` — unit tests
+- [x] `cd compiler && npm run build && npm test`
+- [x] `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/tools/cli.test.ks` | Helper function unit tests |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/09-tools.md` — deferred to S16-05
+- [ ] `docs/specs/11-bootstrap.md` — deferred to S16-05
+
+## Build notes
+
+**2026-03-07**
+
+- Added `setSystemProperty(key, value)` to `KRuntime.java` and `stdlib/kestrel/sys/process.ks`;
+  needed by `--exit-no-wait` flag which must set `kestrel.exitWait=false` before `runInProcess`.
+- `ProcessSpawnError(msg)` patterns in nested match arms cause JVM codegen "unknown variable" errors
+  — must use `ProcessSpawnError(_)` with wildcards (same pattern seen in `bootstrap/compiler.ks`
+  and `test/runner.ks`).
+- Kestrel does not support inner `fun` definitions inside block expressions; extracted
+  `parseBuildFlags` to module level.
+- String concatenation with `++` is not available; used `Str.concat([...])` for multi-line usage string.
+- `resolveArg` must be `async fun` (not plain `fun`) because it calls async helpers that use `await`.
+- cli.ks compiles to ~390 lines. All 8 new unit tests pass. Total: 1854 Kestrel tests.

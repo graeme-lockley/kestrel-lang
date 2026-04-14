@@ -2785,6 +2785,10 @@ public final class KRuntime {
         System.exit(0);
         return KUnit.INSTANCE; // unreachable
     }
+
+    public static void setSystemProperty(Object keyObj, Object valueObj) {
+        System.setProperty((String) keyObj, (String) valueObj);
+    }
 }
 
 
