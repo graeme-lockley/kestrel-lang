@@ -102,8 +102,8 @@ translations from JavaScript to Kestrel.
 
 ## Tasks
 
-- [ ] Create `stdlib/kestrel/tools/cli/` directory
-- [ ] Write `stdlib/kestrel/tools/cli/maven.ks`:
+- [x] Create `stdlib/kestrel/tools/cli/` directory
+- [x] Write `stdlib/kestrel/tools/cli/maven.ks`:
   - `fun isIdentChar(c: Int): Bool` — accepts a-z, A-Z, 0-9, `_`
   - `fun sanitizeIdent(s: String): String` — replace non-ident chars with `_`
   - `fun sanitizeDirPart(s: String): String` — replace non-`[a-zA-Z0-9_/]` with `_`
@@ -111,13 +111,13 @@ translations from JavaScript to Kestrel.
   - `export fun mainClassFor(absSourcePath: String): String` — dot-separated Java class name
   - `export fun classFileForSource(classDir: String, absSourcePath: String): String` — `.class` file path
   - `export async fun resolveMavenClasspath(entrySource, classDir, mavenCache): Task<Result<List<String>, String>>` — BFS resolver
-- [ ] Write `stdlib/kestrel/tools/cli/maven.test.ks`:
+- [x] Write `stdlib/kestrel/tools/cli/maven.test.ks`:
   - Test `mainClassFor` on `/foo/bar/hello.ks` returns `foo.bar.Hello`
   - Test `mainClassFor` on absolute path in root `/hello.ks` returns `Hello`
   - Test `mainClassFor` sanitization of hyphens → `_`
   - Test `classFileForSource` returns expected `.class` path
-- [ ] `cd compiler && npm run build && npm test`
-- [ ] `./scripts/kestrel test`
+- [x] `cd compiler && npm run build && npm test`
+- [x] `./scripts/kestrel test`
 
 ## Tests to add
 
@@ -128,3 +128,14 @@ translations from JavaScript to Kestrel.
 ## Documentation and specs to update
 
 - [ ] `docs/specs/09-tools.md` §2.1 — deferred to S16-05
+
+## Build notes
+
+- 2026-04-14: Kestrel does not support tuple destructuring in list cons patterns (`(a, b) :: rest`
+  is a parse error). Used `h :: rest` with `h.0`/`h.1` field access throughout.
+- 2026-04-14: Recursive `async fun` calls need the recursive call assigned to a typed `val` first
+  (e.g. `val next: Task<...> = f(...)`) before `await next`; without the type annotation the
+  compiler cannot resolve the recursive type. Pattern observed in `fs.ks` `listDirAllLoop`.
+- 2026-04-14: `Lst.member(xs, x)` — list is first argument. Had the argument order reversed initially.
+- 2026-04-14: `kestrel:dev/test` does not export `assert`; only `eq`, `group`, `isOk`, `isErr`.
+- 2026-04-14: All 1846 Kestrel tests pass (9 new maven tests added).
