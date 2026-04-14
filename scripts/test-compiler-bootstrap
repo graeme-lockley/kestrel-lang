@@ -11,7 +11,7 @@ ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 
 COMPILER_DIR="$ROOT/compiler"
 COMPILER_CLI="$COMPILER_DIR/dist/cli.js"
-RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
+RUNTIME_JAR="${KESTREL_MAVEN_CACHE:-$HOME/.kestrel/maven}/lang/kestrel/runtime/1.0/runtime-1.0.jar"
 SELFHOST_ENTRY="$ROOT/stdlib/kestrel/tools/compiler/cli-main.ks"
 SELFHOST_EXEC_ENTRY="$ROOT/stdlib/kestrel/tools/compiler/cli-entry.ks"
 WORK_ROOT="$ROOT/.kestrel/compiler-bootstrap-test"

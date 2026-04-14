@@ -59,6 +59,9 @@ mkdir -p "$CLASSES_DIR"
 echo "[bootstrap-jar] building TypeScript compiler"
 (cd "$COMPILER_DIR" && npm run build >/dev/null)
 
+echo "[bootstrap-jar] building JVM runtime"
+(cd "$ROOT/runtime/jvm" && bash build.sh >/dev/null)
+
 echo "[bootstrap-jar] compiling executable compiler entrypoint"
 "$ROOT/kestrel" --allow-ts-compiler __ts-compile "$ENTRY" "$CLASSES_DIR"
 
@@ -94,6 +97,18 @@ cp "$JAR_PATH" "$MAVEN_JAR_PATH"
 MAVEN_JAR_SHA1=$(hash_file "$MAVEN_JAR_PATH")
 echo "$MAVEN_JAR_SHA1  compile-1.0.jar" > "$MAVEN_SHA1_PATH"
 
+# Install runtime JAR to Maven cache: ~/.kestrel/maven/lang/kestrel/runtime/1.0/runtime-1.0.jar
+MAVEN_RUNTIME_ARTIFACT_DIR="$MAVEN_GROUP_PATH/runtime/1.0"
+MAVEN_RUNTIME_JAR_PATH="$MAVEN_RUNTIME_ARTIFACT_DIR/runtime-1.0.jar"
+MAVEN_RUNTIME_SHA1_PATH="$MAVEN_RUNTIME_JAR_PATH.sha1"
+
+echo "[bootstrap-jar] installing runtime to Maven cache"
+mkdir -p "$MAVEN_RUNTIME_ARTIFACT_DIR"
+cp "$ROOT/runtime/jvm/kestrel-runtime.jar" "$MAVEN_RUNTIME_JAR_PATH"
+
+MAVEN_RUNTIME_SHA1=$(hash_file "$MAVEN_RUNTIME_JAR_PATH")
+echo "$MAVEN_RUNTIME_SHA1  runtime-1.0.jar" > "$MAVEN_RUNTIME_SHA1_PATH"
+
 rev="unknown"
 if git -C "$ROOT" rev-parse --verify HEAD >/dev/null 2>&1; then
   rev=$(git -C "$ROOT" rev-parse HEAD)
@@ -103,5 +118,7 @@ fi
 rm -rf "$BOOTSTRAP_ROOT"
 
 echo "[bootstrap-jar] PASS"
-echo "  maven jar : $MAVEN_JAR_PATH"
-echo "  maven sha1: $MAVEN_SHA1_PATH"
+echo "  maven jar       : $MAVEN_JAR_PATH"
+echo "  maven sha1      : $MAVEN_SHA1_PATH"
+echo "  runtime jar     : $MAVEN_RUNTIME_JAR_PATH"
+echo "  runtime sha1    : $MAVEN_RUNTIME_SHA1_PATH"

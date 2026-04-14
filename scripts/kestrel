@@ -16,7 +16,7 @@ TS_COMPILER_GATE_FLAG="--allow-ts-compiler"
 ALLOW_TS_COMPILER=0
 # Cache root: .class files under ~/.kestrel/jvm (clean: rm -rf ~/.kestrel)
 JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
-RUNTIME_JAR="$ROOT/runtime/jvm/kestrel-runtime.jar"
+MAVEN_RUNTIME_JAR="${KESTREL_MAVEN_CACHE:-$HOME/.kestrel/maven}/lang/kestrel/runtime/1.0/runtime-1.0.jar"
 MAVEN_CLASSPATH_RESOLVER="$ROOT/scripts/resolve-maven-classpath.mjs"
 MAVEN_BOOTSTRAP_JAR="${KESTREL_MAVEN_CACHE:-$HOME/.kestrel/maven}/lang/kestrel/compile/1.0/compile-1.0.jar"
 
@@ -71,6 +71,11 @@ build_compiler_jvm() {
     echo "kestrel: JVM runtime build failed" >&2
     exit 1
   }
+  # Install runtime JAR to Maven cache so the classpath always resolves outside the project tree.
+  local runtime_maven_dir
+  runtime_maven_dir="$(dirname "$MAVEN_RUNTIME_JAR")"
+  mkdir -p "$runtime_maven_dir"
+  cp "$ROOT/runtime/jvm/kestrel-runtime.jar" "$MAVEN_RUNTIME_JAR"
 }
 
 # Return 0 (true) if the compiler or runtime needs to be (re)built.
@@ -79,11 +84,11 @@ build_compiler_jvm() {
 # Java source file (or build.sh) is newer than the runtime jar.
 compiler_build_needed() {
   [ ! -f "$COMPILER_CLI" ] && return 0
-  [ ! -f "$RUNTIME_JAR" ] && return 0
+  [ ! -f "$MAVEN_RUNTIME_JAR" ] && return 0
   find "$COMPILER/src" -name "*.ts" -newer "$COMPILER_CLI" -print -quit 2>/dev/null | grep -q . && return 0
   [ "$COMPILER/cli.ts" -nt "$COMPILER_CLI" ] && return 0
-  find "$ROOT/runtime/jvm/src" -name "*.java" -newer "$RUNTIME_JAR" -print -quit 2>/dev/null | grep -q . && return 0
-  [ "$ROOT/runtime/jvm/build.sh" -nt "$RUNTIME_JAR" ] && return 0
+  find "$ROOT/runtime/jvm/src" -name "*.java" -newer "$MAVEN_RUNTIME_JAR" -print -quit 2>/dev/null | grep -q . && return 0
+  [ "$ROOT/runtime/jvm/build.sh" -nt "$MAVEN_RUNTIME_JAR" ] && return 0
   return 1
 }
 
@@ -314,8 +319,8 @@ cmd_build() {
     build_compiler_jvm
     return 0
   fi
-  if [ ! -f "$RUNTIME_JAR" ]; then
-    echo "kestrel build: missing runtime jar: $RUNTIME_JAR" >&2
+  if [ ! -f "$MAVEN_RUNTIME_JAR" ]; then
+    echo "kestrel build: missing runtime jar: $MAVEN_RUNTIME_JAR" >&2
     echo "kestrel build: run ./kestrel build to generate runtime artifacts" >&2
     exit 1
   fi
@@ -405,8 +410,8 @@ cmd_run() {
     usage
   fi
   ensure_tools
-  if [ ! -f "$RUNTIME_JAR" ]; then
-    echo "kestrel run: missing runtime jar: $RUNTIME_JAR" >&2
+  if [ ! -f "$MAVEN_RUNTIME_JAR" ]; then
+    echo "kestrel run: missing runtime jar: $MAVEN_RUNTIME_JAR" >&2
     exit 1
   fi
   if ! require_selfhost_compiler; then
@@ -445,7 +450,7 @@ cmd_run() {
   main_class=$(main_class_for "$resolved")
   local maven_cp=""
   maven_cp=$(maven_classpath_for_entry "$resolved" "$class_dir")
-  local java_cp="$RUNTIME_JAR:$class_dir"
+  local java_cp="$MAVEN_RUNTIME_JAR:$class_dir"
   if [ -n "$maven_cp" ]; then
     java_cp="$java_cp:$maven_cp"
   fi
@@ -478,8 +483,8 @@ cmd_dis() {
     echo "kestrel: javap not found" >&2
     exit 1
   fi
-  if [ ! -f "$RUNTIME_JAR" ]; then
-    echo "kestrel dis: missing runtime jar: $RUNTIME_JAR" >&2
+  if [ ! -f "$MAVEN_RUNTIME_JAR" ]; then
+    echo "kestrel dis: missing runtime jar: $MAVEN_RUNTIME_JAR" >&2
     exit 1
   fi
   if ! require_selfhost_compiler; then
@@ -502,7 +507,7 @@ cmd_dis() {
   fi
   main_class=$(main_class_for "$resolved")
 
-  local args=("-classpath" "$RUNTIME_JAR:$class_dir")
+  local args=("-classpath" "$MAVEN_RUNTIME_JAR:$class_dir")
   if $verbose; then
     args+=("-verbose")
   fi
@@ -516,8 +521,8 @@ cmd_dis() {
 
 cmd_test() {
   ensure_tools
-  if [ ! -f "$RUNTIME_JAR" ]; then
-    echo "kestrel test: missing runtime jar: $RUNTIME_JAR" >&2
+  if [ ! -f "$MAVEN_RUNTIME_JAR" ]; then
+    echo "kestrel test: missing runtime jar: $MAVEN_RUNTIME_JAR" >&2
     exit 1
   fi
   if ! require_selfhost_compiler; then
@@ -532,8 +537,8 @@ cmd_bootstrap() {
     echo "kestrel bootstrap: jar tool not found" >&2
     exit 1
   fi
-  if [ ! -f "$RUNTIME_JAR" ]; then
-    echo "kestrel bootstrap: missing runtime jar: $RUNTIME_JAR" >&2
+  if [ ! -f "$MAVEN_RUNTIME_JAR" ]; then
+    echo "kestrel bootstrap: missing runtime jar: $MAVEN_RUNTIME_JAR" >&2
     echo "kestrel bootstrap: run ./kestrel build to generate runtime artifacts" >&2
     exit 1
   fi
@@ -581,7 +586,7 @@ cmd_status() {
 
 cmd_fmt() {
   ensure_tools
-  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$MAVEN_RUNTIME_JAR" ]; then
     build_compiler_jvm
   fi
   local fmt_script="$ROOT/stdlib/kestrel/tools/format.ks"
@@ -590,7 +595,7 @@ cmd_fmt() {
 
 cmd_doc() {
   ensure_tools
-  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$RUNTIME_JAR" ]; then
+  if [ ! -f "$COMPILER_CLI" ] || [ ! -f "$MAVEN_RUNTIME_JAR" ]; then
     build_compiler_jvm
   fi
   local doc_script="$ROOT/stdlib/kestrel/tools/doc.ks"
