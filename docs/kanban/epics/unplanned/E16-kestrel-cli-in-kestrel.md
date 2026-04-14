@@ -54,6 +54,8 @@ references at execution time.
 - `kestrel status` reports compiler mode as before.
 - The `KESTREL_ROOT` environment variable is set by the Bash shim and consumed by the Kestrel CLI
   so the CLI does not need to resolve its own source location.
+- `kestrel run` executes compiled programs in-process via `URLClassLoader` (no child JVM spawned);
+  `System.exit()` from the user program terminates the CLI JVM with the correct exit code.
 - All existing E2E tests pass.
 - specs in `docs/specs/11-bootstrap.md` and `docs/specs/09-tools.md` are updated to reflect the
   new bootstrap flow and CLI architecture.
@@ -82,8 +84,24 @@ references at execution time.
 - `./kestrel build stdlib/kestrel/tools/cli.ks` — recompiles only the CLI program into
   `~/.kestrel/jvm/` so the shim picks up the updated class immediately.
 
-### Two-JVM tradeoff
+### In-process execution (no second JVM)
 
-After this change, `kestrel run foo.ks` starts a JVM for the CLI which then spawns a second JVM
-for the compiled script. The extra cold-start cost (~200 ms) is negligible for long-running
-programs; a future GraalVM native-image build of the CLI can eliminate it.
+The initial implementation of `kestrel run` can use `runProcessStream` to spawn the compiled
+program as a child process — simple and correct. A follow-on story within this epic replaces that
+with **in-process execution via `URLClassLoader`**, eliminating the second JVM entirely:
+
+1. `KRuntime.runInProcess(classpath, mainClass, args)` (~30 lines of Java) builds a
+   `URLClassLoader` from `[runtime-jar, class-dir, maven-jars…]`, loads the compiled main class,
+   and dispatches it on a new platform thread with an explicit 8 MiB stack (equivalent to
+   `-Xss8m`) so the Kestrel stack depth contract is honoured.
+2. The compiled program calls `System.exit(code)` when done (via `exit()` in
+   `sys/process.ks`), which terminates the whole JVM with the correct exit code — exactly the
+   desired behaviour.
+3. `KRuntime.runMain()` and the virtual-thread async executor are already in the parent
+   classloader and are reused correctly; no runtime lifecycle changes are needed.
+4. The new primitive is exposed as a single `extern fun runInProcess(…)` in `sys/process.ks`
+   (or a new `sys/classload.ks`).
+
+This approach is the same mechanism used by Maven `exec:java`, Gradle `JavaExec(fork=false)`,
+and every application server. GraalVM native image remains an option for further cold-start
+improvement but is not required to achieve single-JVM execution.
