@@ -91,3 +91,40 @@ translations from JavaScript to Kestrel.
 - **`classNameForPath` duplication**: currently in the Bash script, `resolve-maven-classpath.mjs`,
   and (for the internal compiler gate) in TypeScript. This story introduces a canonical Kestrel
   implementation; S16-03 will use the same function for the CLI's own class-name derivation.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib | New file `stdlib/kestrel/tools/cli/maven.ks` — exports `resolveMavenClasspath`, `mainClassFor`, `classFileForSource` |
+| Tests | New file `stdlib/kestrel/tools/cli/maven.test.ks` — covers `mainClassFor`, conflict detection, missing kdeps |
+| `scripts/resolve-maven-classpath.mjs` | Retained (still used by current Bash shim); no changes until S16-04 |
+
+## Tasks
+
+- [ ] Create `stdlib/kestrel/tools/cli/` directory
+- [ ] Write `stdlib/kestrel/tools/cli/maven.ks`:
+  - `fun isIdentChar(c: Int): Bool` — accepts a-z, A-Z, 0-9, `_`
+  - `fun sanitizeIdent(s: String): String` — replace non-ident chars with `_`
+  - `fun sanitizeDirPart(s: String): String` — replace non-`[a-zA-Z0-9_/]` with `_`
+  - `fun classInternalName(absPath: String): String` — derive slash-separated internal name from abs path
+  - `export fun mainClassFor(absSourcePath: String): String` — dot-separated Java class name
+  - `export fun classFileForSource(classDir: String, absSourcePath: String): String` — `.class` file path
+  - `export async fun resolveMavenClasspath(entrySource, classDir, mavenCache): Task<Result<List<String>, String>>` — BFS resolver
+- [ ] Write `stdlib/kestrel/tools/cli/maven.test.ks`:
+  - Test `mainClassFor` on `/foo/bar/hello.ks` returns `foo.bar.Hello`
+  - Test `mainClassFor` on absolute path in root `/hello.ks` returns `Hello`
+  - Test `mainClassFor` sanitization of hyphens → `_`
+  - Test `classFileForSource` returns expected `.class` path
+- [ ] `cd compiler && npm run build && npm test`
+- [ ] `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/tools/cli/maven.test.ks` | `mainClassFor` derivation, `classFileForSource` path |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/09-tools.md` §2.1 — deferred to S16-05
