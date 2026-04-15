@@ -102,3 +102,42 @@ the `kestrel bootstrap` Bash implementation is needed.
 - **`maybe_exec_selfhost_cli`**: the current Bash script contains a stub
   `maybe_exec_selfhost_cli() { return 0; }` that was pre-wired for this moment. The new shim
   replaces this with the unconditional `exec java` delegation.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `scripts/kestrel` | Rewrite to ≤50 lines; delegates all non-bootstrap/build commands to Kestrel CLI |
+| `scripts/build-bootstrap-jar.sh` | Add compilation of `cli.ks` after `cli-entry.ks`; verify `tools/Cli.class` in JAR |
+
+## Tasks
+
+- [x] Rewrite `scripts/kestrel` to ≤50 lines:
+  - Keep ROOT/env setup, `--allow-ts-compiler __ts-compile`, `bootstrap`, and `build` (no args)
+  - Replace all other commands with: find Cli.class → exec java
+- [x] Update `scripts/build-bootstrap-jar.sh`:
+  - Add compilation of `stdlib/kestrel/tools/cli.ks` after `cli-entry.ks`
+  - Add verification: `jar tf "$JAR_PATH" | grep -q 'tools/Cli.class'` 
+- [x] `cd compiler && npm run build && npm test`
+- [x] `./scripts/kestrel test`
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/09-tools.md` — deferred to S16-05
+- [ ] `docs/specs/11-bootstrap.md` — deferred to S16-05
+
+## Build notes
+
+- **`set -euo pipefail` + non-existent JVM cache**: `find` returns exit status 1 on a non-existent
+  directory even with `2>/dev/null`. With `pipefail`, the `CLI_CLASS=$(find ... | ...)` pipeline
+  inherits this non-zero status and `set -e` aborts the script before the guard `[ -n "$CLI_CLASS" ]`
+  fires — so the error message was never printed. Fixed by appending `|| CLI_CLASS=""` to the
+  command substitution.
+- **`runInProcess` void return**: the Kestrel compiler generates `INVOKESTATIC` expecting `void`
+  return for `Unit` extern funs. Changed `KRuntime.runInProcess` from `KUnit` return to `void`
+  and removed the unreachable `return KUnit.INSTANCE` (done in S16-04 work continuing from S16-03).
+- **Dynamic Cli.class lookup**: the JVM cache path contains the full absolute path of the source
+  file baked in (e.g. `Users/graemelockley/.../kestrel/tools/Cli.class`). The shim resolves this
+  dynamically with `find "$JVM_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class"` to
+  avoid hardcoding per-machine paths.
+- Final shim: 45 lines (well within ≤50 limit). All 440 compiler tests and 1854 Kestrel tests pass.

@@ -65,6 +65,10 @@ echo "[bootstrap-jar] building JVM runtime"
 echo "[bootstrap-jar] compiling executable compiler entrypoint"
 "$ROOT/kestrel" --allow-ts-compiler __ts-compile "$ENTRY" "$CLASSES_DIR"
 
+echo "[bootstrap-jar] compiling self-hosted CLI (kestrel:tools/cli)"
+"$ROOT/kestrel" --allow-ts-compiler __ts-compile \
+    "$ROOT/stdlib/kestrel/tools/cli.ks" "$CLASSES_DIR"
+
 echo "[bootstrap-jar] packaging JAR"
 rm -f "$JAR_PATH"
 (
@@ -79,6 +83,10 @@ if ! jar tf "$JAR_PATH" | grep -q 'Cli_entry.class'; then
 fi
 if ! jar tf "$JAR_PATH" | grep -q 'Cli_main.class'; then
   echo "build-bootstrap-jar: Cli_main.class missing from bootstrap JAR" >&2
+  exit 1
+fi
+if ! jar tf "$JAR_PATH" | grep -q 'tools/Cli.class'; then
+  echo "build-bootstrap-jar: tools/Cli.class missing from bootstrap JAR" >&2
   exit 1
 fi
 

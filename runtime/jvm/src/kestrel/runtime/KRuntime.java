@@ -2709,7 +2709,7 @@ public final class KRuntime {
      * @param mainClassObj  String — fully-qualified Java class name (dots, not slashes).
      * @param argsObj       KList&lt;String&gt; of command-line arguments for the program.
      */
-    public static KUnit runInProcess(Object classpathObj, Object mainClassObj, Object argsObj) {
+    public static void runInProcess(Object classpathObj, Object mainClassObj, Object argsObj) {
         // Build URL array from the classpath list.
         List<URL> urls = new ArrayList<>();
         if (classpathObj instanceof KList) {
@@ -2783,7 +2783,6 @@ public final class KRuntime {
         }
         // Reached only if the thread exited without calling System.exit.
         System.exit(0);
-        return KUnit.INSTANCE; // unreachable
     }
 
     public static void setSystemProperty(Object keyObj, Object valueObj) {

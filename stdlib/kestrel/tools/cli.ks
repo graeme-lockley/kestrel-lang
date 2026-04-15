@@ -642,3 +642,7 @@ export async fun main(allArgs: List<String>): Task<Unit> = {
     }
   exit(code)
 }
+
+// ─── Entry point ─────────────────────────────────────────────────────────────
+
+main(getProcess().args)
