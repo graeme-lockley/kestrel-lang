@@ -20,11 +20,11 @@ references at execution time.
 
 ## Stories (ordered — implement sequentially)
 
-1. [S16-01-run-in-process-runtime-primitive.md](../../unplanned/S16-01-run-in-process-runtime-primitive.md) — Add `KRuntime.runInProcess` + stdlib `extern fun` for in-process class loading
-2. [S16-02-maven-classpath-resolver-in-kestrel.md](../../unplanned/S16-02-maven-classpath-resolver-in-kestrel.md) — Replace `resolve-maven-classpath.mjs` with `kestrel:tools/cli/maven.ks`
-3. [S16-03-kestrel-cli-core-implementation.md](../../unplanned/S16-03-kestrel-cli-core-implementation.md) — Implement `kestrel:tools/cli` with all user commands (run, dis, build, status, test, fmt, doc, lock)
-4. [S16-04-bash-shim-reduction-and-bootstrap-pipeline.md](../../unplanned/S16-04-bash-shim-reduction-and-bootstrap-pipeline.md) — Trim `scripts/kestrel` to ≤ 50 lines; add `cli.ks` compilation to bootstrap JAR
-5. [S16-05-spec-updates-cli-in-kestrel.md](../../unplanned/S16-05-spec-updates-cli-in-kestrel.md) — Update `docs/specs/09-tools.md` and `docs/specs/11-bootstrap.md`
+1. [x] [S16-01-run-in-process-runtime-primitive.md](../../done/S16-01-run-in-process-runtime-primitive.md) — Add `KRuntime.runInProcess` + stdlib `extern fun` for in-process class loading
+2. [x] [S16-02-maven-classpath-resolver-in-kestrel.md](../../done/S16-02-maven-classpath-resolver-in-kestrel.md) — Replace `resolve-maven-classpath.mjs` with `kestrel:tools/cli/maven.ks`
+3. [x] [S16-03-kestrel-cli-core-implementation.md](../../done/S16-03-kestrel-cli-core-implementation.md) — Implement `kestrel:tools/cli` with all user commands (run, dis, build, status, test, fmt, doc, lock)
+4. [x] [S16-04-bash-shim-reduction-and-bootstrap-pipeline.md](../../done/S16-04-bash-shim-reduction-and-bootstrap-pipeline.md) — Trim `scripts/kestrel` to ≤ 50 lines; add `cli.ks` compilation to bootstrap JAR
+5. [x] [S16-05-spec-updates-cli-in-kestrel.md](../../done/S16-05-spec-updates-cli-in-kestrel.md) — Update `docs/specs/09-tools.md` and `docs/specs/11-bootstrap.md`
 
 **S16-01 and S16-02 are independent and can be built in parallel.** S16-03 requires both.
 S16-04 requires S16-03. S16-05 requires S16-04.

@@ -13,9 +13,19 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Name:** `kestrel`
 - **Usage:** `kestrel <command> [options]`
 - **Location:** A single entry point at the repository root (`./kestrel` or `scripts/kestrel`) exposes all commands. The root script delegates to `scripts/kestrel`.
-- **Topology:** In `self-hosted` mode (see `kestrel status`), `scripts/kestrel` gates normal commands (`run`, `dis`, `build`, `test`, `fmt`, `doc`, `lock`) on the presence of self-hosted compiler classes in `~/.kestrel/jvm/` by default. Set `KESTREL_JVM_CACHE` to override the JVM class cache root. Script compilation is currently orchestrated via `compiler/dist/cli.js` (`compile_with_active_compiler`) after the gate passes. See [11-bootstrap.md](11-bootstrap.md) for full bootstrap architecture details.
+- **Topology:** `scripts/kestrel` is a minimal Bash shim (target: ≤50 lines) that resolves `KESTREL_ROOT`, handles only bootstrap-critical paths (`bootstrap`, no-arg `build`, and internal `--allow-ts-compiler __ts-compile`), and delegates all normal commands to the self-hosted JVM CLI class via:
+  `java -Xss8m -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE" <resolved Cli class> "$@"`.
+  The shim resolves the CLI class by searching for `*/kestrel/tools/Cli.class` under the JVM cache. If missing, it exits non-zero with remediation instructions to rebuild bootstrap artifacts. Set `KESTREL_JVM_CACHE` to override the JVM class cache root. See [11-bootstrap.md](11-bootstrap.md) for full bootstrap architecture details.
 - **Fallback:** Normal command execution does not fall back to an unbootstrapped state. Users must restore self-hosted artifacts with `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
 - **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` for full toolchain flows.
+
+### 1.1 Entry-point environment variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `KESTREL_ROOT` | Derived by shim from script location | Project root used by CLI modules for stdlib/tool discovery |
+| `KESTREL_JVM_CACHE` | `~/.kestrel/jvm` | JVM class cache root (contains self-hosted classes and compiled user classes) |
+| `KESTREL_MAVEN_CACHE` | `~/.kestrel/maven` | Maven cache root for runtime/bootstrap jars and downloaded artifacts |
 
 ---
 
@@ -34,8 +44,8 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **`--clean`:** Delete all `.kti` incremental-compilation cache files from the output directory (recursively) before compiling. Forces a full recompile from source for all packages in the dependency graph. If no output directory is configured, silently ignored. `--clean --refresh` combines both: deletes `.kti` files and re-fetches URL dependencies.
 - **Cache:**
   - Compiled `.class` files are stored under `~/.kestrel/jvm/`, mirroring the absolute path of the source. For example, `/Users/me/proj/foo.ks` → `~/.kestrel/jvm/Users/me/proj/foo.class`. This avoids cluttering the project directory. Override with `KESTREL_JVM_CACHE` (e.g. `KESTREL_JVM_CACHE=/tmp/jvm kestrel run foo.ks`).
-- **Execution:** `kestrel` runs `java` with a classpath containing `kestrel-runtime.jar` and the JVM cache root, and uses a main class derived from the entry source file path (strip leading `/`, remove `.ks`, capitalize the last path segment; convert `/` to `.` for the Java binary name). Entry-point discovery is implementation-defined, but the derived class name is stable for a given absolute source path.
-- **Maven classpath:** when modules in the run graph emit `.kdeps` sidecars (from `maven:` imports), `kestrel run` reads those sidecars transitively, appends resolved jars to the JVM classpath, and validates coordinate version consistency.
+- **Execution:** `kestrel run` executes user programs in-process (single JVM) through `runInProcess`/`URLClassLoader` rather than spawning a second `java` child process. The target main class is derived from the entry source file path (strip leading `/`, remove `.ks`, capitalize the last path segment; convert `/` to `.`). Because execution is in-process, a user `System.exit(code)` exits the CLI JVM with that exit code.
+- **Maven classpath:** when modules in the run graph emit `.kdeps` sidecars (from `maven:` imports), `kestrel run` reads those sidecars transitively, appends resolved jars to the JVM classpath, and validates coordinate version consistency. Maven sidecar resolution is implemented in Kestrel (`kestrel:tools/cli/maven`) rather than Node.js helper scripts.
 - **Dependency conflicts:** if two modules require different versions of the same Maven coordinate (`groupId:artifactId`), `kestrel run` reports a conflict and exits non-zero before launching the JVM.
 - **Exit mode flags:**
   - **`--exit-wait` (default):** wait for pending async runtime work to quiesce before process exit, then perform orderly executor shutdown.

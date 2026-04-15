@@ -10,37 +10,38 @@ This document specifies the Kestrel bootstrap system: the process by which the T
 
 ## 1. Overview
 
-Kestrel is a self-hosted language: the compiler is written in Kestrel and compiles to JVM bytecode. To break the chicken-and-egg cycle, a TypeScript compiler bootstraps the first generation of self-hosted compiler classes. After bootstrap, normal CLI commands (`run`, `build`, `test`, `dis`) require installed self-hosted compiler artifacts.
+Kestrel is a self-hosted language: the compiler is written in Kestrel and compiles to JVM bytecode. To break the chicken-and-egg cycle, a TypeScript compiler bootstraps the first generation of self-hosted compiler classes.
 
-**Current invariant:** `kestrel bootstrap` installs classes from the bootstrap JAR and does not invoke the TypeScript compiler directly. Normal command compilation is currently orchestrated through `compile_with_active_compiler` in `scripts/kestrel` and still invokes `compiler/dist/cli.js`.
+**Current invariant:** `kestrel bootstrap` installs classes from the bootstrap JAR and does not invoke the TypeScript compiler directly. After bootstrap, the Bash shim delegates normal commands to `kestrel/tools/Cli.class`, and the Kestrel CLI orchestrates command execution.
 
 ### 1.1 Architecture Stages
 
 ```
 ┌─────────────────────────┐
 │  TypeScript Compiler     │  compiler/dist/cli.js
-│  (Node.js)               │
+│  (Node.js seed)          │
 └────────────┬────────────┘
              │ 1. build-bootstrap-jar.sh
-             │    compiles cli-entry.ks → .class files → JAR
+             │    compiles cli-entry.ks + cli.ks → .class files → JAR
              ▼
 ┌─────────────────────────┐
 │  Bootstrap JAR           │  ~/.kestrel/maven/lang/kestrel/compile/1.0/compile-1.0.jar
-│  (Maven cache)           │
+│  (Maven cache)           │  includes Cli_entry.class, Cli_main.class, tools/Cli.class
 └────────────┬────────────┘
              │ 2. kestrel bootstrap
-             │    compiles cli-entry.ks → .class files in JVM cache
+             │    extracts JAR into JVM cache
              ▼
 ┌─────────────────────────┐
 │  Self-Hosted Classes     │  ~/.kestrel/jvm/
-│  (Cli_entry.class, etc.) │
+│  (Cli_entry, Cli_main,   │
+│   tools/Cli, etc.)       │
 └────────────┬────────────┘
              │ 3. Normal commands
-             │    java -cp runtime.jar:jvm-cache Cli_main ...
+             │    shim execs java ... <resolved tools.Cli> ...
              ▼
 ┌─────────────────────────┐
-│  User Programs           │  run, build, test, dis
-│  (gated by self-hosted)  │
+│  User Programs           │  run, build <script>, test, dis, fmt, doc, lock, status
+│  (driven by Kestrel CLI) │
 └─────────────────────────┘
 ```
 
@@ -48,6 +49,28 @@ Kestrel is a self-hosted language: the compiler is written in Kestrel and compil
 
 - **`stdlib/kestrel/tools/compiler/cli-entry.ks`**: Executable entry point compiled to `Cli_entry.class`. Imports and invokes `main()` from `cli-main.ks`.
 - **`stdlib/kestrel/tools/compiler/cli-main.ks`**: Command dispatcher. Parses CLI commands (`run`, `build`, `dis`, `test`, `fmt`, `doc`, `lock`) and either handles them directly (e.g. `build` calls `Driver.compileFile()`) or delegates to the shell wrapper for commands that need additional orchestration.
+- **`stdlib/kestrel/tools/cli.ks`**: Self-hosted CLI shim target compiled to `kestrel/tools/Cli.class`. After bootstrap, `scripts/kestrel` delegates normal commands to this class via `exec java`.
+
+### 1.3 Clean-Machine Install Flow
+
+The supported clean-machine path is:
+
+1. `./scripts/build-bootstrap-jar.sh`
+2. `./kestrel bootstrap`
+3. `./kestrel status`
+
+Expected outcome:
+
+- Maven cache contains bootstrap/runtime jars under `~/.kestrel/maven/lang/kestrel/...`.
+- JVM cache contains extracted self-hosted classes including `kestrel/tools/Cli.class`.
+- `kestrel status` reports self-hosted mode.
+
+### 1.4 Developer Re-Compile Flow
+
+- Rebuild seed toolchain and runtime JAR: `./kestrel build` (no script argument).
+- Rebuild CLI class only: `./kestrel build stdlib/kestrel/tools/cli.ks`.
+
+The first command updates TypeScript compiler output and runtime artifacts; the second refreshes `kestrel/tools/Cli.class` in the JVM cache without requiring a full re-bootstrap.
 
 ---
 
@@ -94,11 +117,12 @@ Kestrel is a self-hosted language: the compiler is written in Kestrel and compil
    ```
    node compiler/dist/cli.js cli-entry.ks --target jvm -o <classes-dir>
    ```
-4. Package all `.class` files into a JAR (`compiler-bootstrap.jar`).
-5. Verify `Cli_entry.class` and `Cli_main.class` are present in the JAR.
-6. Install the JAR to the Maven cache at `~/.kestrel/maven/lang/kestrel/compile/1.0/compile-1.0.jar`.
-7. Compute and write a SHA1 sidecar (`compile-1.0.jar.sha1`).
-8. Delete the intermediate `~/.kestrel/bootstrap/` working directory.
+4. Compile `stdlib/kestrel/tools/cli.ks` into the same classes directory.
+5. Package all `.class` files into a JAR (`compiler-bootstrap.jar`).
+6. Verify `Cli_entry.class`, `Cli_main.class`, and `tools/Cli.class` are present in the JAR.
+7. Install the JAR to the Maven cache at `~/.kestrel/maven/lang/kestrel/compile/1.0/compile-1.0.jar`.
+8. Compute and write a SHA1 sidecar (`compile-1.0.jar.sha1`).
+9. Delete the intermediate `~/.kestrel/bootstrap/` working directory.
 
 **Prerequisites:** `node`, `java`, `javac`, `jar` on `PATH`.
 
@@ -113,7 +137,7 @@ Kestrel is a self-hosted language: the compiler is written in Kestrel and compil
 **Purpose:** Seed self-hosted compiler classes into the JVM cache from the bootstrap JAR. The JAR contains the Kestrel compiler already compiled to JVM bytecode (produced by `build-bootstrap-jar.sh` using the TypeScript compiler). The bootstrap command itself does not invoke the TypeScript compiler.
 
 **Steps:**
-1. Validate runtime JAR exists at `runtime/jvm/kestrel-runtime.jar`.
+1. Validate runtime JAR exists in Maven cache at `~/.kestrel/maven/lang/kestrel/runtime/1.0/runtime-1.0.jar`.
 2. Validate bootstrap compiler JAR exists in Maven cache at `~/.kestrel/maven/lang/kestrel/compile/1.0/compile-1.0.jar`.
 3. Extract and install self-hosted compiler classes from the bootstrap JAR into the JVM cache.
 4. Verify `Cli_entry.class` and `Cli_main.class` are present in the JVM cache.
@@ -153,37 +177,33 @@ hint: run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap
 
 ### 4.1 Gate Check
 
-Before executing `run`, `build <script>`, `test`, or `dis`, the CLI wrapper calls `require_selfhost_compiler`, which fails if `Cli_entry.class` is not found in the JVM cache.
+Before executing normal commands, `scripts/kestrel` resolves `kestrel/tools/Cli.class` under the JVM cache and exits non-zero if it cannot be found.
 
-**Gate function:** `selfhost_compiler_ready()` — returns true if `find "$JVM_CACHE" -name "Cli_entry.class"` finds a match.
+Once delegated, command-specific self-hosted checks (for example `Cli_entry.class` presence for status reporting and bootstrap diagnostics) are handled by Kestrel CLI code.
 
 **Failure message:**
 ```
 kestrel: self-hosted compiler artifacts are required for this command
-kestrel: expected $JVM_CACHE/*/Cli_entry.class
-kestrel: run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap
+   run: ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap
 ```
 
 ### 4.2 Commands Subject to the Gate
 
 | Command | Gated? | Notes |
 |---------|--------|-------|
-| `run <script>` | Yes | |
+| `run <script>` | Yes | Delegated to `kestrel/tools/Cli.class` |
 | `build <script>` | Yes | `build` with no arguments (rebuild compiler/runtime) is not gated |
-| `test` | Yes | |
-| `dis <script>` | Yes | |
+| `test` | Yes | Delegated to Kestrel CLI |
+| `dis <script>` | Yes | Delegated to Kestrel CLI |
 | `bootstrap` | No | Creates the gated artifacts |
-| `status` | No | Reports gate state |
+| `status` | Yes | Delegated to Kestrel CLI class |
 | `build` (no args) | No | Rebuilds TypeScript compiler and JVM runtime |
-| `fmt` | Indirect | Delegates to `kestrel run`, which is gated |
-| `doc` | Indirect | Delegates to `kestrel run`, which is gated |
+| `fmt` | Yes | Delegated to Kestrel CLI |
+| `doc` | Yes | Delegated to Kestrel CLI |
 
 ### 4.3 Compilation Path
 
-After passing the gate, `compile_with_active_compiler` compiles scripts using the TypeScript compiler via Node.js:
-```
-node compiler/dist/cli.js <script> --target jvm -o <jvm-cache>
-```
+After passing shim-level gating, script compilation is orchestrated by the Kestrel CLI (`stdlib/kestrel/tools/cli.ks`) in self-hosted mode.
 
 The self-hosted compiler classes (`Cli_main`) are installed and gate command availability. They are also exercised directly by bootstrap-parity tooling (for example `scripts/test-compiler-bootstrap`) via:
 `java -cp <runtime>:<classes> Cli_main <command> <args>`.

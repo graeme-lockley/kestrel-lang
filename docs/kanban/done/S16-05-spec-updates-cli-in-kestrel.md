@@ -74,3 +74,48 @@ Both spec files were written when the CLI was entirely Bash-based:
 - Spec-only story; no code changes. Low risk.
 - The spec updates should be done as a single commit with a clear `docs(specs):` message so they
   can be reviewed or reverted independently of code changes.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| `docs/specs/09-tools.md` | Update entry-point topology to reflect the minimal Bash shim and delegation to `kestrel.tools.Cli`; document `KESTREL_ROOT`; update `run` execution and Maven resolver details |
+| `docs/specs/11-bootstrap.md` | Update architecture stages to include `kestrel/tools/Cli.class`; document CLI handoff after bootstrap; add clean-machine install and developer re-compile flow |
+| Kanban records | Move story through `planned/` and `doing/` to `done/` with checklist completion and build notes |
+
+## Tasks
+
+- [x] Expand `docs/specs/09-tools.md` §1 Entry Point:
+   - Describe the ≤50-line Bash shim contract and `KESTREL_ROOT` export
+   - Document delegation to self-hosted `kestrel.tools.Cli` for normal commands
+- [x] Update `docs/specs/09-tools.md` §2.1 run:
+   - Replace child-JVM wording with in-process `URLClassLoader` execution semantics
+   - State that Maven classpath resolution is implemented in Kestrel (`kestrel:tools/cli/maven`)
+- [x] Update `docs/specs/11-bootstrap.md`:
+   - Revise architecture stage diagram/text to include `kestrel/tools/Cli.class` in bootstrap JAR and JVM cache
+   - Extend entry point section with `stdlib/kestrel/tools/cli.ks` handoff role
+   - Add clean-machine install walkthrough and developer re-compile workflow sections
+- [x] Verify consistency between `09-tools.md` and `11-bootstrap.md` for bootstrap, status, and command delegation behavior
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| N/A (spec-only) | N/A | No new runtime/compiler behavior introduced; verification is consistency review plus existing full test suite runs |
+
+## Documentation and specs to update
+
+- [x] `docs/specs/09-tools.md` — update §1 Entry Point topology and §2.1 `run` execution/classpath language to match post-E16 architecture
+- [x] `docs/specs/11-bootstrap.md` — update architecture stages, entry-point ownership, clean-machine install flow, and developer re-compile workflow
+
+## Build notes
+
+- 2026-04-15: Updated both spec documents to reflect the post-E16 architecture where `scripts/kestrel`
+   is a minimal bootstrap/build shim and normal commands delegate to `kestrel/tools/Cli.class`.
+- 2026-04-15: Corrected stale bootstrap wording that implied `kestrel bootstrap` recompiles sources;
+   it now documents extraction from the Maven-cached bootstrap JAR and includes `tools/Cli.class`.
+- 2026-04-15: Verification runs completed: compiler suite `440 passed`. Kestrel test suite reported
+   `1854 passed`; command exits non-zero due existing async-quiescence warning behavior unrelated to
+   this spec-only change.
