@@ -142,7 +142,7 @@ async fun runScript(
     }
     Ok(mavenJars) => {
       val classpath = Lst.append([mavenRuntimeJar, jvmCache], mavenJars)
-      if (exitNoWait) setSystemProperty("kestrel.exitWait", "false") else ()
+      if (exitNoWait) setSystemProperty("kestrel.exitWait", "false") else setSystemProperty("kestrel.exitWait", "true")
       runInProcess(classpath, mainClass, userArgs)
     }
   }
@@ -491,11 +491,11 @@ async fun cmdTest(
       val code = await compileScript(testScript, jvmCache, compilerCli, [])
       if (code != 0) code
       else {
-        await runScript(testScript, jvmCache, mavenCache, mavenRuntimeJar, args, False);
+        await runScript(testScript, jvmCache, mavenCache, mavenRuntimeJar, args, True);
         0
       }
     } else {
-      await runScript(testScript, jvmCache, mavenCache, mavenRuntimeJar, args, False);
+      await runScript(testScript, jvmCache, mavenCache, mavenRuntimeJar, args, True);
       0
     }
   }

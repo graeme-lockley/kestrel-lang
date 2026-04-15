@@ -42,4 +42,4 @@ fi
 CLI_CLASS=$(find "$JVM_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null \
   | head -1 | sed "s|$JVM_CACHE/||;s|\.class\$||" | tr '/' '.') || CLI_CLASS=""
 [ -n "$CLI_CLASS" ] || { echo "kestrel: self-hosted compiler artifacts are required for this command" >&2; echo "  run: ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap" >&2; exit 1; }
-exec java -Xss8m -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE" "$CLI_CLASS" "$@"
+exec java -Xss8m -Dkestrel.exitWait=false -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE" "$CLI_CLASS" "$@"

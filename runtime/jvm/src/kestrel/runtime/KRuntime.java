@@ -85,6 +85,10 @@ public final class KRuntime {
         ExecutorService executor = asyncExecutor;
         asyncExecutor = null;
         if (executor == null) return;
+        if (Boolean.parseBoolean(System.getProperty("kestrel.inProcessChild", "false"))) {
+            executor.shutdownNow();
+            return;
+        }
         executor.shutdown();
         try {
             if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
@@ -106,6 +110,15 @@ public final class KRuntime {
 
     private static boolean exitWaitEnabled() {
         return Boolean.parseBoolean(System.getProperty("kestrel.exitWait", "true"));
+    }
+
+    private static long exitWaitBaseline() {
+        String prop = System.getProperty("kestrel.exitWaitBaseline", "0");
+        try {
+            return Long.parseLong(prop);
+        } catch (NumberFormatException e) {
+            return 0L;
+        }
     }
 
     public static KTask submitAsync(KFunction fn, Object[] args) {
@@ -170,10 +183,11 @@ public final class KRuntime {
 
     private static void awaitAsyncQuiescence() {
         long timeoutMs = getExitWaitTimeoutMs();
+        long baseline = Math.max(0L, exitWaitBaseline());
         if (timeoutMs == 0 || parkActive) {
             // Infinite wait: either explicitly requested or parkAsync was already called.
             synchronized (quiescenceSignal) {
-                while (asyncTasksInFlight.get() > 0) {
+                while (asyncTasksInFlight.get() > baseline) {
                     try {
                         quiescenceSignal.wait();
                     } catch (InterruptedException e) {
@@ -186,7 +200,7 @@ public final class KRuntime {
         }
         long deadline = System.currentTimeMillis() + timeoutMs;
         synchronized (quiescenceSignal) {
-            while (asyncTasksInFlight.get() > 0) {
+            while (asyncTasksInFlight.get() > baseline) {
                 if (parkActive) {
                     // parkAsync was called while we were waiting; switch to indefinite wait.
                     try {
@@ -199,7 +213,7 @@ public final class KRuntime {
                 }
                 long remaining = deadline - System.currentTimeMillis();
                 if (remaining <= 0) {
-                    long inFlight = asyncTasksInFlight.get();
+                    long inFlight = Math.max(0L, asyncTasksInFlight.get() - baseline);
                     System.err.println("[kestrel] warning: exiting with " + inFlight
                             + " async task(s) still in flight (quiescence timeout)");
                     System.exit(1);
@@ -2710,6 +2724,10 @@ public final class KRuntime {
      * @param argsObj       KList&lt;String&gt; of command-line arguments for the program.
      */
     public static void runInProcess(Object classpathObj, Object mainClassObj, Object argsObj) {
+        // Ignore currently in-flight parent tasks while waiting for child-program quiescence.
+        System.setProperty("kestrel.exitWaitBaseline", Long.toString(Math.max(0L, asyncTasksInFlight.get())));
+        System.setProperty("kestrel.inProcessChild", "true");
+
         // Build URL array from the classpath list.
         List<URL> urls = new ArrayList<>();
         if (classpathObj instanceof KList) {

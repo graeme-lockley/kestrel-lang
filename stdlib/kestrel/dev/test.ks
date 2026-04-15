@@ -11,6 +11,7 @@ val _red = if (_isTty) Console.RED else ""
 val _yel = if (_isTty) Console.YELLOW else ""
 val _dim = if (_isTty) Console.DIM else ""
 val _rst = if (_isTty) Console.RESET else ""
+val _asyncInFlightBaseline = asyncTasksInFlight()
 
 // ─── Harness types and output modes ──────────────────────────────────────────
 
@@ -243,8 +244,8 @@ export fun printSummary(root: Suite): Unit = {
   val p = counts.passed;
   val f = counts.failed;
   val totalElapsed = Basics.nowMs() - counts.startTime;
-  // Subtract 1 for the current (main) async task.
-  val leaked = asyncTasksInFlight() - 1;
+  // Ignore inherited parent-process tasks when running in-process via CLI delegation.
+  val leaked = asyncTasksInFlight() - _asyncInFlightBaseline;
   val leakedSuffix =
     if (leaked > 0) " ${_yel}(${leaked} async task(s) still in flight)${_rst}"
     else "";
