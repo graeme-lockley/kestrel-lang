@@ -77,8 +77,21 @@ export fun classFileForSource(classDir: String, absSourcePath: String): String =
 
 fun isKsFile(line: String): Bool = Str.endsWith(".ks", Str.trim(line))
 
+fun isJarFile(line: String): Bool = Str.endsWith(".jar", Str.trim(line))
+
 fun ksDepsLines(content: String): List<String> =
   Lst.filter(Lst.map(Str.lines(content), Str.trim), (s: String) => Str.length(s) > 0 & isKsFile(s))
+
+fun jarDepsLines(content: String): List<String> =
+  Lst.filter(Lst.map(Str.lines(content), Str.trim), (s: String) => Str.length(s) > 0 & isJarFile(s))
+
+fun addMissingJarPaths(candidates: List<String>, jarPaths: List<String>): List<String> =
+  match (candidates) {
+    [] => jarPaths
+    jar :: rest =>
+      if (hasJar(jarPaths, jar)) addMissingJarPaths(rest, jarPaths)
+      else addMissingJarPaths(rest, Lst.append(jarPaths, [jar]))
+  }
 
 // ── JSON kdeps helpers ────────────────────────────────────────────────────────
 
@@ -241,13 +254,18 @@ async fun resolveLoop(
           Err(_) => []
           Ok(content) => ksDepsLines(content)
         }
+        val moreJarPaths: List<String> = match (depsResult) {
+          Err(_) => []
+          Ok(content) => jarDepsLines(content)
+        }
         val newQueue = Lst.append(moreSources, rest)
+        val jarPathsFromDeps = addMissingJarPaths(moreJarPaths, jarPaths)
 
         // Read .kdeps JSON sidecar to find Maven coordinates.
         val kdepsPath = Str.replace(".class", ".kdeps", classFile)
         val kdepsExists = await fileExists(kdepsPath)
         if (!kdepsExists) {
-          val next: Task<Result<List<String>, String>> = resolveLoop(newQueue, newSeen, classDir, mavenCache, gaVersions, gaSources, jarPaths)
+          val next: Task<Result<List<String>, String>> = resolveLoop(newQueue, newSeen, classDir, mavenCache, gaVersions, gaSources, jarPathsFromDeps)
           await next
         }
         else {
@@ -275,7 +293,7 @@ async fun resolveLoop(
                     None => []
                     Some(v) => objectStringPairs(v)
                   }
-                  val result = processMavenList(mavenPairs, jarsMap, source, mavenCache, gaVersions, gaSources, jarPaths)
+                  val result = processMavenList(mavenPairs, jarsMap, source, mavenCache, gaVersions, gaSources, jarPathsFromDeps)
                   match (result) {
                     Err(msg) => Err(msg)
                     Ok(newState) => {

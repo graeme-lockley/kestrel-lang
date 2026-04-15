@@ -82,13 +82,11 @@ public final class KRuntime {
     }
 
     public static synchronized void shutdownAsyncRuntime() {
+        // In-process children share the parent's executor — don't shut it down.
+        if (Boolean.parseBoolean(System.getProperty("kestrel.inProcessChild", "false"))) return;
         ExecutorService executor = asyncExecutor;
         asyncExecutor = null;
         if (executor == null) return;
-        if (Boolean.parseBoolean(System.getProperty("kestrel.inProcessChild", "false"))) {
-            executor.shutdownNow();
-            return;
-        }
         executor.shutdown();
         try {
             if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
@@ -102,6 +100,8 @@ public final class KRuntime {
     }
 
     public static synchronized void shutdownAsyncRuntimeNow() {
+        // In-process children share the parent's executor — don't shut it down.
+        if (Boolean.parseBoolean(System.getProperty("kestrel.inProcessChild", "false"))) return;
         ExecutorService executor = asyncExecutor;
         asyncExecutor = null;
         if (executor == null) return;
@@ -156,13 +156,11 @@ public final class KRuntime {
         return KTask.fromFuture(future);
     }
 
-    /** Decrement the in-flight counter and notify quiescence waiters if it reaches zero. */
+    /** Decrement the in-flight counter and notify quiescence waiters. */
     private static void decrementAndSignal() {
-        long remaining = asyncTasksInFlight.decrementAndGet();
-        if (remaining <= 0) {
-            synchronized (quiescenceSignal) {
-                quiescenceSignal.notifyAll();
-            }
+        asyncTasksInFlight.decrementAndGet();
+        synchronized (quiescenceSignal) {
+            quiescenceSignal.notifyAll();
         }
     }
 
@@ -465,11 +463,16 @@ public final class KRuntime {
         if (t instanceof KException) {
             return ((KException) t).getPayload();
         }
+        // Use the thread's context classloader so that in-process child runs
+        // (child-first URLClassLoader) resolve ADT singletons from the correct
+        // classloader, matching the compiled code's instanceof checks.
+        ClassLoader cl = Thread.currentThread().getContextClassLoader();
+        if (cl == null) cl = ClassLoader.getSystemClassLoader();
         if (t instanceof ArithmeticException && arithmeticOverflowClass != null && divideByZeroClass != null) {
             String msg = t.getMessage();
             String className = "division by zero".equals(msg) ? divideByZeroClass : arithmeticOverflowClass;
             try {
-                Class<?> cls = Class.forName(className.replace('/', '.'));
+                Class<?> cls = Class.forName(className.replace('/', '.'), true, cl);
                 return cls.getField("INSTANCE").get(null);
             } catch (ReflectiveOperationException ex) {
                 throw t;
@@ -477,7 +480,7 @@ public final class KRuntime {
         }
         if (t instanceof CancellationException && cancelledClass != null) {
             try {
-                Class<?> cls = Class.forName(cancelledClass.replace('/', '.'));
+                Class<?> cls = Class.forName(cancelledClass.replace('/', '.'), true, cl);
                 return cls.getField("INSTANCE").get(null);
             } catch (ReflectiveOperationException ex) {
                 throw t;
@@ -2756,12 +2759,40 @@ public final class KRuntime {
             }
         }
         final String[] args = argsList.toArray(new String[0]);
+        final java.util.concurrent.atomic.AtomicReference<Throwable> childFailure =
+            new java.util.concurrent.atomic.AtomicReference<>();
 
-        // Build URLClassLoader with the system classloader as parent so that
-        // kestrel.runtime.* classes (already on the classpath) are shared.
+        // Build a child-first URLClassLoader for user classes so entry classes from
+        // the JVM cache resolve against this run's URL set (including Maven JARs).
+        // Keep parent-first delegation for JDK + kestrel.runtime.* so runtime singletons
+        // and host classes remain shared.
         ClassLoader parent = Thread.currentThread().getContextClassLoader();
         if (parent == null) parent = ClassLoader.getSystemClassLoader();
-        URLClassLoader cl = new URLClassLoader(urls.toArray(new URL[0]), parent);
+        URLClassLoader cl = new URLClassLoader(urls.toArray(new URL[0]), parent) {
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (name.startsWith("java.")
+                    || name.startsWith("javax.")
+                    || name.startsWith("jdk.")
+                    || name.startsWith("sun.")
+                    || name.startsWith("kestrel.runtime.")) {
+                    return super.loadClass(name, resolve);
+                }
+
+                synchronized (getClassLoadingLock(name)) {
+                    Class<?> loaded = findLoadedClass(name);
+                    if (loaded == null) {
+                        try {
+                            loaded = findClass(name);
+                        } catch (ClassNotFoundException e) {
+                            loaded = super.loadClass(name, false);
+                        }
+                    }
+                    if (resolve) resolveClass(loaded);
+                    return loaded;
+                }
+            }
+        };
 
         // Load and locate the main method.
         final Class<?> cls;
@@ -2776,20 +2807,20 @@ public final class KRuntime {
         }
 
         // Dispatch on a platform thread with an explicit 8 MiB stack.
+        // Set the context classloader so virtual threads spawned from the
+        // async executor inherit the child-first classloader, enabling
+        // normalizeCaught to resolve ADT singletons from the correct loader.
         Thread t = new Thread(null, () -> {
+            Thread.currentThread().setContextClassLoader(cl);
             try {
                 mainMethod.invoke(null, (Object) args);
                 // main returned normally without calling System.exit — exit 0.
-                System.exit(0);
             } catch (java.lang.reflect.InvocationTargetException e) {
                 Throwable cause = e.getCause();
-                // System.exit() surfaces as the JVM terminating — it never reaches here.
-                // Any other exception is a program error.
-                if (cause instanceof RuntimeException) throw (RuntimeException) cause;
-                if (cause instanceof Error) throw (Error) cause;
-                throw new RuntimeException("runInProcess: program failed", cause);
+                // Preserve the real program failure and let the outer thread decide exit code.
+                childFailure.set(cause != null ? cause : e);
             } catch (Exception e) {
-                throw new RuntimeException("runInProcess: invocation failed", e);
+                childFailure.set(new RuntimeException("runInProcess: invocation failed", e));
             }
         }, "kestrel-run", 8L * 1024L * 1024L);
 
@@ -2799,7 +2830,12 @@ public final class KRuntime {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
-        // Reached only if the thread exited without calling System.exit.
+        Throwable failure = childFailure.get();
+        if (failure != null) {
+            failure.printStackTrace(System.err);
+            System.exit(1);
+        }
+        // Reached only if child main returned normally without explicit exit.
         System.exit(0);
     }
 

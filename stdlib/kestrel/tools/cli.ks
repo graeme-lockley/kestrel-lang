@@ -9,6 +9,7 @@ import * as Str from "kestrel:data/string"
 import * as Opt from "kestrel:data/option"
 import * as Res from "kestrel:data/result"
 import * as Fs from "kestrel:io/fs"
+import { eprintln } from "kestrel:io/console"
 import * as Path from "kestrel:sys/path"
 import { getProcess, getEnv, runProcessStream, runInProcess, setSystemProperty, ProcessSpawnError, exit } from "kestrel:sys/process"
 import * as Maven from "kestrel:tools/cli/maven"
@@ -17,6 +18,31 @@ import * as Maven from "kestrel:tools/cli/maven"
 
 fun envOr(name: String, fallback: String): String =
   match (getEnv(name)) { Some(v) => v  None => fallback }
+
+fun uniqueAppend(paths: List<String>, extras: List<String>): List<String> =
+  match (extras) {
+    [] => paths
+    p :: rest =>
+      if (Lst.member(paths, p)) uniqueAppend(paths, rest)
+      else uniqueAppend(Lst.append(paths, [p]), rest)
+  }
+
+fun jarLines(content: String): List<String> =
+  Lst.filter(
+    Lst.map(Str.lines(content), Str.trim),
+    (s: String) => Str.length(s) > 0 & Str.endsWith(".jar", s)
+  )
+
+// Fallback for runtimes where .kdeps sidecars are absent: .class.deps already contains
+// transitive source and JAR dependencies for the current entry source.
+async fun jarDepsFromClassDeps(absKsPath: String, jvmCache: String): Task<List<String>> = {
+  val classFile = Maven.classFileForSource(jvmCache, absKsPath)
+  val depsPath = "${classFile}.deps"
+  match (await Fs.readText(depsPath)) {
+    Err(_) => []
+    Ok(content) => jarLines(content)
+  }
+}
 
 // ── Script resolution ─────────────────────────────────────────────────────────
 
@@ -141,7 +167,13 @@ async fun runScript(
       exit(1)
     }
     Ok(mavenJars) => {
-      val classpath = Lst.append([mavenRuntimeJar, jvmCache], mavenJars)
+      val depsJars = await jarDepsFromClassDeps(absKsPath, jvmCache)
+      val resolvedJars = uniqueAppend(mavenJars, depsJars)
+      val classpath = Lst.append([mavenRuntimeJar, jvmCache], resolvedJars)
+      if (envOr("KESTREL_DEBUG_CLASSPATH", "") == "1") {
+        println("kestrel debug classpath:")
+        println(classpath)
+      }
       if (exitNoWait) setSystemProperty("kestrel.exitWait", "false") else setSystemProperty("kestrel.exitWait", "true")
       runInProcess(classpath, mainClass, userArgs)
     }
@@ -161,6 +193,7 @@ async fun isSelfhostReady(kestrelRoot: String, jvmCache: String): Task<Bool> = {
 
 type RunOpts = {
   exitNoWait: Bool,
+  exitModeSet: Bool,
   refresh: Bool,
   allowHttp: Bool,
   clean: Bool
@@ -170,18 +203,18 @@ fun parseRunArgs(args: List<String>, opts: RunOpts): Result<(RunOpts, String, Li
   match (args) {
     [] => Err("kestrel run: script path required")
     arg :: rest =>
-      if (arg == "--help" | arg == "-h")
-        Err("Usage: kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] [--clean] <script.ks> [args...]")
-      else if (arg == "--exit-wait")
-        parseRunArgs(rest, { exitNoWait = False, refresh = opts.refresh, allowHttp = opts.allowHttp, clean = opts.clean })
+      if (arg == "--exit-wait")
+        if (opts.exitModeSet) Err("kestrel run: --exit-wait and --exit-no-wait are mutually exclusive")
+        else parseRunArgs(rest, { exitNoWait = False, exitModeSet = True, refresh = opts.refresh, allowHttp = opts.allowHttp, clean = opts.clean })
       else if (arg == "--exit-no-wait")
-        parseRunArgs(rest, { exitNoWait = True, refresh = opts.refresh, allowHttp = opts.allowHttp, clean = opts.clean })
+        if (opts.exitModeSet) Err("kestrel run: --exit-wait and --exit-no-wait are mutually exclusive")
+        else parseRunArgs(rest, { exitNoWait = True, exitModeSet = True, refresh = opts.refresh, allowHttp = opts.allowHttp, clean = opts.clean })
       else if (arg == "--refresh")
-        parseRunArgs(rest, { exitNoWait = opts.exitNoWait, refresh = True, allowHttp = opts.allowHttp, clean = opts.clean })
+        parseRunArgs(rest, { exitNoWait = opts.exitNoWait, exitModeSet = opts.exitModeSet, refresh = True, allowHttp = opts.allowHttp, clean = opts.clean })
       else if (arg == "--allow-http")
-        parseRunArgs(rest, { exitNoWait = opts.exitNoWait, refresh = opts.refresh, allowHttp = True, clean = opts.clean })
+        parseRunArgs(rest, { exitNoWait = opts.exitNoWait, exitModeSet = opts.exitModeSet, refresh = opts.refresh, allowHttp = True, clean = opts.clean })
       else if (arg == "--clean")
-        parseRunArgs(rest, { exitNoWait = opts.exitNoWait, refresh = opts.refresh, allowHttp = opts.allowHttp, clean = True })
+        parseRunArgs(rest, { exitNoWait = opts.exitNoWait, exitModeSet = opts.exitModeSet, refresh = opts.refresh, allowHttp = opts.allowHttp, clean = True })
       else Ok((opts, arg, rest))
   }
 
@@ -202,10 +235,14 @@ async fun cmdRun(
   mavenRuntimeJar: String,
   compilerCli: String
 ): Task<Int> = {
-  val defaultOpts = { exitNoWait = False, refresh = False, allowHttp = False, clean = False }
+  if (Lst.member(args, "--help") | Lst.member(args, "-h")) {
+    println("Usage: kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] [--clean] <script.ks> [args...]");
+    0
+  } else {
+  val defaultOpts = { exitNoWait = False, exitModeSet = False, refresh = False, allowHttp = False, clean = False }
   match (parseRunArgs(args, defaultOpts)) {
     Err(msg) => {
-      println(msg);
+      eprintln(msg);
       1
     }
     Ok(parsed) => {
@@ -236,6 +273,7 @@ async fun cmdRun(
         }
       }
     }
+  }
   }
 }
 
