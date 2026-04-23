@@ -470,7 +470,7 @@ export fun parse(s: String): Result<Value, JsonParseError> = {
   if (j0 >= Str.length(s)) Err(EmptyInput)
   else
     Res.andThen(parseValue(s, j0), (pair: (Value, Int)) => {
-      val j1 = pair.1
+      val j1 = skipWs(s, pair.1)
       if (j1 < Str.length(s)) Err(TrailingGarbage(j1)) else Ok(pair.0)
     })
 }

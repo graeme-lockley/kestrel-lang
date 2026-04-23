@@ -88,8 +88,9 @@ export async fun run(s: Suite): Task<Unit> =
     })
 
     group(s1, "trailing garbage", (sg: Suite) => {
-      isTrue(sg, "describeParse notes garbage", parseErrContains("null ", "trailing"));
-      isTrue(sg, "garbage after object", parseErrContains("{\"a\":1} ", "trailing"));
+      isTrue(sg, "trailing whitespace accepted", Res.isOk(parse("null \n\t")));
+      isTrue(sg, "trailing text rejected", parseErrContains("null x", "trailing"));
+      isTrue(sg, "garbage after object", parseErrContains("{\"a\":1} x", "trailing"));
     })
 
     group(s1, "round-trip", (sg: Suite) => {
