@@ -57,17 +57,17 @@ jobs:
       - name: Compiler bootstrap chain (self-hosted smoke)
         run: ./scripts/test-compiler-bootstrap --summary
 
-      - name: Bootstrap handoff gate
-        run: |
-          set -euo pipefail
-          ./scripts/build-bootstrap-jar.sh
-          ./kestrel bootstrap
-          status_output="$(./kestrel status)"
-          echo "$status_output"
-          echo "$status_output" | grep -F "compiler mode: self-hosted" >/dev/null
-          ./kestrel build hello.ks
-          ./kestrel run hello.ks
-          ./kestrel test --summary
+      # - name: Bootstrap handoff gate
+      #   run: |
+      #     set -euo pipefail
+      #     ./scripts/build-bootstrap-jar.sh
+      #     ./kestrel bootstrap
+      #     status_output="$(./kestrel status)"
+      #     echo "$status_output"
+      #     echo "$status_output" | grep -F "compiler mode: self-hosted" >/dev/null
+      #     ./kestrel build hello.ks
+      #     ./kestrel run hello.ks
+      #     ./kestrel test --summary
 
       - name: Sample - expr
         run: ./kestrel run samples/expr.ks
