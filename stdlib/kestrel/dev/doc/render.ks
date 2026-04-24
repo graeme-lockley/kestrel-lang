@@ -267,7 +267,7 @@ export fun staticCss(): String =
     ".module-list a:hover { text-decoration: underline; }",
     ".module-title { font-family: monospace; font-size: 1.4rem; }",
     ".module-prose { margin-bottom: 2rem; }",
-    ".decl { margin: 2rem 0; padding-top: 1rem; border-top: 1px solid #eee; }",
+    ".decl { margin: 2rem 0; padding-top: 1rem; border-top: 1px solid #eee; scroll-margin-top: 64px; }",
     ".decl-name { font-family: monospace; font-size: 1.1rem; margin: 0 0 0.5rem; }",
     "pre { background: #f4f4f8; padding: 0.8rem 1rem; border-radius: 4px; overflow-x: auto; }",
     "code { font-family: 'Fira Code', 'Cascadia Code', Consolas, monospace; font-size: 0.92rem; }",
