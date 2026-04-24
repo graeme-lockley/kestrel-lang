@@ -8,10 +8,10 @@ import * as Str  from "kestrel:data/string"
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 fun mkEntry(k: DocKind, n: String, sig: String, doc: String): DocEntry =
-  { name = n, kind = k, signature = sig, doc = doc }
+  { name = n, kind = k, signature = sig, doc = doc, line = 0 }
 
 fun mkMod(spec: String, entries: List<DocEntry>): DocModule =
-  { moduleSpec = spec, moduleProse = "", entries = entries }
+  { moduleSpec = spec, moduleProse = "", entries = entries, sourcePath = "" }
 
 // ── Module fixture ────────────────────────────────────────────────────────────
 

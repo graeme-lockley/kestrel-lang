@@ -216,6 +216,22 @@ async fun dispatch(live: LiveState, req: Http.Request, _params: Dict<String, Str
         }
       }
     }
+  } else if (Str.startsWith("/source/", path)) {
+    val modSpec = Str.dropLeft(path, 8);
+    match (Dict.get(state.modDict, modSpec)) {
+      Some(m) => {
+        val lineNum = match (Http.queryParam(req, "line")) {
+          Some(s) => match (Str.toInt(s)) { Some(n) => n, None => 0 }
+          None => 0
+        };
+        val result = await readText(m.sourcePath);
+        match (result) {
+          Ok(source) => htmlResp(200, Render.renderSourcePage(source, lineNum, modSpec))
+          Err(_) => htmlResp(404, "<html><body><h1>404 Not Found</h1><p>Source file not available.</p></body></html>")
+        }
+      }
+      None => htmlResp(404, "<html><body><h1>404 Not Found</h1><p>Module not found: ${modSpec}</p></body></html>")
+    }
   } else
     Http.makeResponse(404, "Not Found")
 }

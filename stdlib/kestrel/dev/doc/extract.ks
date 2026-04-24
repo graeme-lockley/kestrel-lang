@@ -46,14 +46,16 @@ export type DocEntry = {
   name:      String,
   kind:      DocKind,
   signature: String,   // declaration head up to (not incl.) `=` or `{`
-  doc:       String    // concatenated doc-comment lines; "" if none
+  doc:       String,   // concatenated doc-comment lines; "" if none
+  line:      Int       // 1-based source line of the `export` keyword
 }
 
 /// The documentation for one source module.
 export type DocModule = {
   moduleSpec:   String,         // e.g. "kestrel:data/list"
   moduleProse:  String,         // //! lines from file top; "" if none
-  entries:      List<DocEntry>  // one per exported declaration, in order
+  entries:      List<DocEntry>, // one per exported declaration, in order
+  sourcePath:   String          // absolute file path; "" if unknown
 }
 
 // Fallback marker for inferred binding signatures when inference is unavailable.
@@ -110,7 +112,8 @@ fun applyInferredBindingType(entry: DocEntry, inferredTypes: Dict<String, String
       name = entry.name,
       kind = entry.kind,
       signature = "${entry.signature}: ${inferredText}",
-      doc = entry.doc
+      doc = entry.doc,
+      line = entry.line
     }
   }
 }
@@ -397,11 +400,12 @@ fun tryExtractEntry(arr: Array<Token>, exportIdx: Int, doc: String, n: Int): (Op
         guard := guard + 1
       };
 
-      val sig   = match (k) {
+      val sig      = match (k) {
         DKType => collectTypeSig(arr, sigStart, n)
         _      => collectSig(arr, sigStart, n)
       };
-      val entry = { name = nameStr, kind = k, signature = sig, doc = doc };
+      val exportLine = Arr.get(arr, exportIdx).span.line;
+      val entry = { name = nameStr, kind = k, signature = sig, doc = doc, line = exportLine };
       (Some(entry), exportIdx + 1)
     }
   }
@@ -490,7 +494,7 @@ export fun extract(source: String, spec: String): DocModule = {
     }
   };
 
-  { moduleSpec = spec, moduleProse = moduleProse, entries = Arr.toList(entries) }
+  { moduleSpec = spec, moduleProse = moduleProse, entries = Arr.toList(entries), sourcePath = "" }
 }
 
 /// extractFile: read a source file and call extract.
@@ -498,7 +502,10 @@ export fun extract(source: String, spec: String): DocModule = {
 export async fun extractFile(path: String, spec: String): Task<Result<DocModule, String>> = {
   val result = await readText(path);
   match (result) {
-    Ok(source)  => Ok(extract(source, spec)),
+    Ok(source)  => {
+      val m = extract(source, spec);
+      Ok({ moduleSpec = m.moduleSpec, moduleProse = m.moduleProse, entries = m.entries, sourcePath = path })
+    },
     Err(err)    => match (err) {
       NotFound         => Err("not_found: ${path}"),
       PermissionDenied => Err("permission_denied: ${path}"),

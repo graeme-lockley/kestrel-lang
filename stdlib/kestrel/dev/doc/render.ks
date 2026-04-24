@@ -3,9 +3,11 @@
 //! values into ready-to-serve HTML pages.
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
+import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import { DocModule, DocEntry, DKFun, DKType, DKVal, DKVar, DKException, DKExternType, DKExternFun } from "kestrel:dev/doc/extract"
 import * as Md from "kestrel:dev/doc/markdown"
+import * as Lex from "kestrel:dev/parser/lexer"
 import * as Sig from "kestrel:dev/doc/sig"
 import { Token } from "kestrel:dev/parser/token"
 
@@ -142,7 +144,11 @@ fun renderEntry(mod: DocModule, entry: DocEntry, globalLinks: Dict<String, Strin
   val docDiv  =
     if (Str.isEmpty(docHtml)) ""
     else "  <div class=\"doc-body\">${docHtml}</div>\n"
-  "<section class=\"decl\" id=\"${escapeAttr(entry.name)}\">\n  <h2 class=\"decl-name\">${escapeHtml(entry.name)}</h2>\n  <pre><code class=\"kestrel\">${sigHtml}</code></pre>\n${docDiv}</section>"
+  val srcLink =
+    if (!Str.isEmpty(mod.sourcePath) & entry.line > 0)
+      " <a class=\"src-link\" href=\"/source/${escapeAttr(mod.moduleSpec)}?line=${Str.fromInt(entry.line)}\" title=\"View source\">source</a>"
+    else ""
+  "<section class=\"decl\" id=\"${escapeAttr(entry.name)}\">\n  <h2 class=\"decl-name\">${escapeHtml(entry.name)}${srcLink}</h2>\n  <pre><code class=\"kestrel\">${sigHtml}</code></pre>\n${docDiv}</section>"
 }
 
 /// Render a full HTML page for a single `DocModule`.
@@ -185,6 +191,39 @@ export fun renderDeclarationPageWithLinks(mod: DocModule, name: String, allModul
     None    => "<p class=\"not-found\">Declaration <code>${escapeHtml(name)}</code> not found in <code>${escapeHtml(mod.moduleSpec)}</code>.</p>"
   }
   page("${mod.moduleSpec}/${name} — Kestrel Docs", body)
+}
+
+// ── Source viewer ─────────────────────────────────────────────────────────────
+
+fun renderSourceLines(lines: Array<String>, n: Int, targetLine: Int): String = {
+  val parts: Array<String> = Arr.new();
+  var i = 0;
+  while (i < n) {
+    val lineText = Arr.get(lines, i);
+    val lineNum  = i + 1;
+    val numStr   = Str.fromInt(lineNum);
+    val cls      = if (lineNum == targetLine) "src-line src-line-target" else "src-line";
+    val codeHtml = Md.renderKestrelCode(lineText);
+    Arr.push(parts, "<span id=\"L${numStr}\" class=\"${cls}\"><span class=\"src-lnum\">${escapeHtml(numStr)}</span>${codeHtml}</span>");
+    i := i + 1
+  };
+  Str.join("", Arr.toList(parts))
+}
+
+/// Render a full HTML source-viewer page for a Kestrel file.
+/// `targetLine` is the 1-based line to highlight and scroll to (0 = none).
+export fun renderSourcePage(source: String, targetLine: Int, moduleSpec: String): String = {
+  val lines    = Arr.fromList(Str.split(source, "\n"));
+  val n        = Arr.length(lines);
+  val linesHtml = renderSourceLines(lines, n, targetLine);
+  val title    = "Source: ${moduleSpec}";
+  val backBtn  = "<button class=\"src-back-btn\" onclick=\"history.back()\" title=\"Back\">&#8592; back</button>";
+  val scrollJs =
+    if (targetLine > 0)
+      "<script>var el=document.getElementById('L${Str.fromInt(targetLine)}');if(el)el.scrollIntoView({block:'center'});</script>"
+    else "";
+  val body = "<h1 class=\"module-title src-page-title\">${escapeHtml(title)}</h1><pre class=\"src-view\"><code class=\"kestrel\">${linesHtml}</code></pre>${backBtn}${scrollJs}";
+  page(title, body)
 }
 
 // ── Static CSS ────────────────────────────────────────────────────────────────
@@ -253,6 +292,17 @@ export fun staticCss(): String =
     ".decl-index a:focus-visible { outline: 2px solid #0057b7; outline-offset: 2px; border-radius: 2px; background: #eef4ff; }",
     ".idx-kind { display: inline-block; min-width: 4ch; color: #777; font-size: 0.82rem; }",
     ".not-found { color: #c00; }",
+    ".decl-name { display: flex; align-items: baseline; gap: 0.5rem; }",
+    ".src-link { font-size: 0.75rem; font-weight: normal; color: #777; text-decoration: none; border: 1px solid #ccc; border-radius: 3px; padding: 0 0.35rem; font-family: monospace; }",
+    ".src-link:hover { color: #0057b7; border-color: #0057b7; }",
+    ".src-view { counter-reset: src-line; padding: 0; line-height: 1.45; }",
+    ".src-line { display: block; padding: 0 0.8rem; white-space: pre; }",
+    ".src-line:hover { background: #f0f4ff; }",
+    ".src-line-target { background: #fff8c5; border-left: 3px solid #f5a623; padding-left: calc(0.8rem - 3px); }",
+    ".src-lnum { display: inline-block; min-width: 4ch; margin-right: 1.2rem; color: #999; font-size: 0.85em; user-select: none; text-align: right; }",
+    ".src-back-btn { position: fixed; bottom: 1.5rem; right: 1.5rem; padding: 0.5rem 1rem; background: #1a1a2e; color: #eee; border: none; border-radius: 6px; font-size: 0.9rem; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.25); opacity: 0.85; transition: opacity 0.15s; }",
+    ".src-back-btn:hover { opacity: 1; }",
+    ".src-page-title { font-size: 1.1rem; margin-bottom: 0.75rem; }",
     "@media (max-width: 900px) {",
     "  .module-layout { flex-direction: column; }",
     "  .module-sidebar { width: 100%; }",
