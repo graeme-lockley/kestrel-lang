@@ -1,13 +1,13 @@
 // Tests for kestrel:dev/doc/sig
 import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
 import { format, formatWith } from "kestrel:dev/doc/sig"
-import { DocEntry, DKFun, DKType, DKVal, DKVar, DKException, DKExternFun, DKExternType } from "kestrel:dev/doc/extract"
+import { DocKind, DocEntry, DKFun, DKType, DKVal, DKVar, DKException, DKExternFun, DKExternType } from "kestrel:dev/doc/extract"
 import * as Str from "kestrel:data/string"
 
 // ── Helper: build a DocEntry ──────────────────────────────────────────────────
 
 fun mkEntry(kind: DocKind, name: String, sig: String): DocEntry =
-  { name = name, kind = kind, signature = sig, doc = "" }
+  { name = name, kind = kind, signature = sig, doc = "", line = 0 }
 
 export async fun run(s: Suite): Task<Unit> =
   group(s, "kestrel:dev/doc/sig", (sg: Suite) => {
