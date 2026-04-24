@@ -72,8 +72,8 @@ fun kindLabel(e: DocEntry): String = match (e.kind) {
   DKVal        => "val"
   DKVar        => "var"
   DKException  => "exception"
-  DKExternType => "extern type"
-  DKExternFun  => "extern fun"
+  DKExternType => "type"
+  DKExternFun  => "fun"
 }
 
 // Character-level string comparator (needed because < is not defined on String).
@@ -251,7 +251,7 @@ export fun staticCss(): String =
     ".decl-index a { text-decoration: none; color: #0057b7; font-family: monospace; font-size: 0.85rem; display: flex; align-items: baseline; gap: 0.25rem; white-space: nowrap; min-width: max-content; }",
     ".decl-index a:hover { text-decoration: underline; }",
     ".decl-index a:focus-visible { outline: 2px solid #0057b7; outline-offset: 2px; border-radius: 2px; background: #eef4ff; }",
-    ".idx-kind { display: inline-block; min-width: 4.6rem; color: #777; font-size: 0.82rem; }",
+    ".idx-kind { display: inline-block; min-width: 4ch; color: #777; font-size: 0.82rem; }",
     ".not-found { color: #c00; }",
     "@media (max-width: 900px) {",
     "  .module-layout { flex-direction: column; }",
