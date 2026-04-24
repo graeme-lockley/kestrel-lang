@@ -1,4 +1,4 @@
-//! Unordered membership sets backed by `kestrel:data/dict`.
+//! Unordered membership sets backed by [`kestrel:data/dict`](/docs/kestrel:data/dict).
 //!
 //! `Set<E>` is an opaque wrapper around `Dict<E, Unit>`, inheriting O(1) average
 //! insert, remove, and membership test. All operations return new sets; the
@@ -9,6 +9,20 @@
 //! `(K, K) -> Bool`. For `String` or `Int` elements use the convenience
 //! constructors (`emptyStringSet`, `fromIntList`, etc.) that hard-code the
 //! correct hash/eq pair.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Set from "kestrel:data/set"
+//!
+//! val s1 = Set.fromIntList([1, 2, 2, 3])
+//! val s2 = Set.insert(s1, 4)
+//! val has3 = Set.member(s2, 3)                // True
+//! val onlyEven = Set.filter(s2, (n: Int) => n % 2 == 0)
+//! val both = Set.intersect(s2, Set.fromIntList([2, 4, 9]))
+//! val allVals = Set.toList(Set.union(s2, both))
+//! ```
+//!
 
 import * as List from "kestrel:data/list"
 import * as D from "kestrel:data/dict"

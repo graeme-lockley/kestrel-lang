@@ -15,6 +15,20 @@
 //!
 //! String interpolation (`"${expr}"`) is the idiomatic way to build strings;
 //! prefer it over `append` for readability.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Str from "kestrel:data/string"
+//!
+//! val raw = "  hello, kestrel  "
+//! val clean = raw |> Str.trim |> Str.toUpper
+//! val parts = Str.split(clean, ",")
+//! val joined = Str.join(" | ", parts)
+//! val hasKel = Str.contains("KEL", joined)
+//! val n = Str.toInt("42")
+//! ```
+//!
 
 /// Number of code units (not Unicode scalar values) in `s`. O(1) because
 /// Java strings store their length.

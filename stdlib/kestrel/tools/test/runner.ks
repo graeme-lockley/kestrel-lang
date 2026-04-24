@@ -1,5 +1,7 @@
-// kestrel:tools/test/runner — code generation and subprocess execution for `kestrel test`.
-// Builds the generated runner source, writes it (updating only when changed), and runs it.
+//! Generated-runner builder/executor for `kestrel test`.
+//!
+//! Produces the synthetic test runner source, writes only when changed, and
+//! invokes subprocess execution with selected compiler/runtime flags.
 
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"

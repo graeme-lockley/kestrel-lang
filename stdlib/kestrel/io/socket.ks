@@ -1,28 +1,18 @@
-// kestrel:io/socket — TCP and TLS socket library (S03-02).
-// Provides plain TCP and TLS client/server sockets backed by JDK
-// java.net.Socket / javax.net.ssl.SSLSocket via extern type / extern fun.
-// All I/O operations return Task<T> and run on virtual threads.
-//
-// Usage (TCP client):
-//   import * as Socket from "kestrel:io/socket"
-//   val sock = await Socket.tcpConnect("example.com", 80)
-//   await Socket.sendText(sock, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n")
-//   val resp = await Socket.readAll(sock)
-//   await Socket.close(sock)
-//
-// Usage (TLS client):
-//   val sock = await Socket.tlsConnect("example.com", 443)
-//   await Socket.sendText(sock, "GET / HTTP/1.1\r\nHost: example.com\r\nConnection: close\r\n\r\n")
-//   val resp = await Socket.readAll(sock)
-//   await Socket.close(sock)
-//
-// Usage (TCP server):
-//   val ss = await Socket.listen("127.0.0.1", 0)
-//   val port = Socket.serverPort(ss)
-//   val conn = await Socket.accept(ss)
-//   val data = await Socket.readAll(conn)
-//   await Socket.close(conn)
-//   await Socket.serverClose(ss)
+//! TCP and TLS socket I/O with async `Task` APIs.
+//!
+//! Supports client connects (`tcpConnect`, `tlsConnect`) and server sockets
+//! (`listen`, `accept`) backed by JDK socket implementations.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Socket from "kestrel:io/socket"
+//!
+//! val sock = await Socket.tcpConnect("example.com", 80)
+//! await Socket.sendText(sock, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n")
+//! val resp = await Socket.readAll(sock)
+//! await Socket.close(sock)
+//! ```
 
 // ---------------------------------------------------------------------------
 // Opaque types

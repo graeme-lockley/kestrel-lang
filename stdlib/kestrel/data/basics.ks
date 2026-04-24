@@ -9,6 +9,19 @@
 //! for floored modulo whose result sign always matches the divisor (Python-style),
 //! and `remainderBy` for truncated remainder whose sign matches the dividend
 //! (C-style `%`).
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as B from "kestrel:data/basics"
+//!
+//! val bounded = B.clamp(0, 100, 140) // 100
+//! val m1 = B.modBy(10, -13)          // 7
+//! val r1 = B.remainderBy(10, -13)    // -3
+//! val ok = B.xor(True, False)        // True
+//! val ms = B.nowMs()
+//! ```
+//!
 
 /// The identity function; returns its argument unchanged.
 /// Useful as a no-op callback or default transform.

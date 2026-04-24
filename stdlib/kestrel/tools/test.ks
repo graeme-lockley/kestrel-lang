@@ -1,5 +1,14 @@
-// kestrel:tools/test — discover and run Kestrel unit tests.
-// Usage: kestrel test [--verbose|--summary] [--generate] [--clean] [--refresh] [--allow-http] [files...]
+//! `kestrel test` command implementation.
+//!
+//! Discovers test modules, configures runner generation, and executes tests with
+//! selectable output modes.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! // CLI usage:
+//! // kestrel test --summary
+//! ```
 
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"

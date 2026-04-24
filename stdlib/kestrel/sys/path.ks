@@ -1,3 +1,18 @@
+//! Cross-platform path utilities.
+//!
+//! Includes join/split, dirname/basename, extension helpers, normalize, and
+//! absolute/relative resolution primitives.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Path from "kestrel:sys/path"
+//!
+//! val p = Path.join(["/tmp", "kestrel", "demo.ks"])
+//! val dir = Path.dirname(p)
+//! val base = Path.basename(p)
+//! ```
+
 extern fun pathJoinImpl(parts: List<String>): String =
   jvm("kestrel.runtime.KRuntime#pathJoin(java.lang.Object)")
 

@@ -1,4 +1,18 @@
-// kestrel:stack — format, print (VM primitives); trace via captureTrace (spec 02).
+//! Runtime formatting and stack-trace capture helpers.
+//!
+//! Wraps VM/runtime primitives for formatting values, printing, and capturing
+//! stack frames for diagnostics and testing.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Stk from "kestrel:dev/stack"
+//!
+//! val text = Stk.format({ name = "kestrel" })
+//! val trace = Stk.trace("boom")
+//! Stk.print(text)
+//! ```
+
 import * as List from "kestrel:data/list"
 
 export type StackFrame = { file: String, line: Int, function: String }

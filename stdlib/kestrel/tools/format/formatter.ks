@@ -1,5 +1,8 @@
-// kestrel:tools/format/formatter — pure Kestrel source code formatting engine.
-// Converts AST to pretty-printed source text via a Doc intermediate representation.
+//! Pure Kestrel source formatter engine.
+//!
+//! Parses source, builds formatted `Doc` trees using
+//! [`kestrel:dev/text/prettyprinter`](/docs/kestrel:dev/text/prettyprinter), and
+//! emits normalized source text.
 
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"

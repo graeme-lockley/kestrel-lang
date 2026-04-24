@@ -1,17 +1,18 @@
-// kestrel:io/web — Lightweight routing framework (S03-04).
-// Sinatra-style multi-route HTTP server built on top of kestrel:http.
-// Pure Kestrel implementation — no new JVM primitives.
-//
-// Usage:
-//   import * as Web from "kestrel:io/web"
-//   import * as Http from "kestrel:io/http"
-//
-//   val router =
-//     Web.newRouter()
-//     |> Web.get("/hello", (req, _params) => Http.makeResponse(200, "Hello!"))
-//
-//   val server = await Http.createServer(Web.serve(router));
-//   await Http.listen(server, { host = "127.0.0.1", port = 8080 });
+//! Lightweight HTTP routing built on [`kestrel:io/http`](/docs/kestrel:io/http).
+//!
+//! Provides method-specific route registration and path-parameter extraction,
+//! then turns a `Router` into a request handler via `serve`.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Web from "kestrel:io/web"
+//! import * as Http from "kestrel:io/http"
+//!
+//! val router =
+//!   Web.newRouter()
+//!   |> Web.get("/hello", (_req, _params) => Http.makeResponse(200, "Hello"))
+//! ```
 
 import * as Http from "kestrel:io/http"
 import * as List from "kestrel:data/list"

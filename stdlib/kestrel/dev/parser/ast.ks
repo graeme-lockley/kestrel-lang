@@ -1,3 +1,10 @@
+//! AST definitions for the Kestrel development parser.
+//!
+//! This module defines type-level AST nodes (`AstType`), expression and statement
+//! nodes, declaration nodes, import/export nodes, and the top-level `Program` shape.
+//! It is consumed by [`kestrel:dev/parser/parser`](/docs/kestrel:dev/parser/parser)
+//! and downstream tools such as formatter, typechecker, and code generators.
+
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"
 import * as Token from "kestrel:dev/parser/token"

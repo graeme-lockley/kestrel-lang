@@ -1,3 +1,8 @@
+//! Import/dependency resolution for compiler inputs.
+//!
+//! Resolves stdlib/project/url specifiers to concrete paths and computes unique
+//! dependency path sets for build planning.
+
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"

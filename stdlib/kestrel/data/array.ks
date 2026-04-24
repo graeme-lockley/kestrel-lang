@@ -3,11 +3,25 @@
 //! `Array<T>` provides constant-time random access and in-place mutation — the right
 //! choice when you need to build a collection incrementally, fill slots at known
 //! indices, or avoid the allocation overhead of recursive list construction.
-//! For functional, immutable sequences use `kestrel:data/list` instead.
+//! For functional, immutable sequences use [`kestrel:data/list`](/docs/kestrel:data/list) instead.
 //!
 //! All mutating operations (`set`, `push`) act on the same underlying object in
 //! place. Copying is explicit: `fromList(toList(arr))`.
 //! Convert freely between `Array<T>` and `List<T>` using `fromList` and `toList`.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Arr from "kestrel:data/array"
+//!
+//! val xs = Arr.fromList([10, 20, 30])
+//! Arr.set(xs, 1, 99)
+//! Arr.push(xs, 42)
+//! val n = Arr.length(xs)      // 4
+//! val first = Arr.get(xs, 0)  // 10
+//! val asList = Arr.toList(xs) // [10, 99, 30, 42]
+//! ```
+//!
 
 import * as List from "kestrel:data/list"
 

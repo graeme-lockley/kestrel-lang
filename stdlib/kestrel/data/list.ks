@@ -6,11 +6,24 @@
 //!
 //! Performance: `length`, `reverse`, `append`, `map`, `filter`, `foldl`, and most
 //! traversals are O(n). `head`, `tail`, and `::` (cons) are O(1).
-//! For O(1) random access and in-place mutation use `kestrel:data/array`.
+//! For O(1) random access and in-place mutation use [`kestrel:data/array`](/docs/kestrel:data/array).
 //!
 //! Sorting: `sort` works on `List<Int>` only. For other element types use
 //! `sortWith` (provide a comparator returning negative/zero/positive) or
 //! `sortBy` (map each element to an `Int` key).
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as L from "kestrel:data/list"
+//!
+//! val xs = [1, 2, 3, 4]
+//! val ys = L.map(xs, (n: Int) => n * 2)         // [2, 4, 6, 8]
+//! val keep = L.filter(ys, (n: Int) => n >= 4)   // [4, 6, 8]
+//! val total = L.foldl(keep, 0, (a: Int, b: Int) => a + b)
+//! val zipped = L.zip(["a", "b"], [10, 20])
+//! ```
+//!
 
 /// Number of elements. O(n) — avoid calling in a tight loop; prefer structural descent.
 export extern fun length<X>(xs: List<X>): Int =

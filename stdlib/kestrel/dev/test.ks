@@ -1,3 +1,21 @@
+//! Lightweight test harness used by stdlib and project tests.
+//!
+//! Provides grouped assertions, summary/verbose output modes, and utility checks.
+//! Integrates with [`kestrel:io/console`](/docs/kestrel:io/console) for terminal
+//! output and [`kestrel:dev/stack`](/docs/kestrel:dev/stack) for value formatting.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import { Suite, group, eq, isTrue } from "kestrel:dev/test"
+//!
+//! export async fun run(s: Suite): Task<Unit> =
+//!   group(s, "math", (g: Suite) => {
+//!     eq(g, "2+2", 2 + 2, 4)
+//!     isTrue(g, "positive", 4 > 0)
+//!   })
+//! ```
+
 import * as Basics from "kestrel:data/basics"
 import * as Console from "kestrel:io/console"
 import * as Lst from "kestrel:data/list"

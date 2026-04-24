@@ -1,4 +1,7 @@
-// kestrel:tools/bootstrap/compiler — compile cli-entry.ks to the JVM class cache.
+//! Bootstrap compiler support helpers.
+//!
+//! Resolves bootstrap paths, invokes the compiler process, and verifies expected
+//! output classes are present in the JVM cache.
 
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"

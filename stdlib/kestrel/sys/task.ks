@@ -1,5 +1,16 @@
-// kestrel:task — Task combinator stdlib module.
-// Provides map, all, race, and cancel API for Task<T> values.
+//! Task combinators for asynchronous workflows.
+//!
+//! Provides mapping and coordination primitives (`map`, `all`, `race`) plus
+//! cancellation and runtime async-flight introspection.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Task from "kestrel:sys/task"
+//!
+//! val both = await Task.all([taskA, taskB])
+//! val first = await Task.race([taskA, taskB])
+//! ```
 
 export exception Cancelled
 

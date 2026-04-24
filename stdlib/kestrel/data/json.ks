@@ -15,6 +15,20 @@
 //! extractors to inspect a parsed value without a full pattern-match.
 //!
 //! No host JSON hooks are used; the entire implementation is written in Kestrel.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Json from "kestrel:data/json"
+//!
+//! val src = "{\"name\":\"kestrel\",\"count\":2}"
+//! val parsed = Json.parse(src)
+//! val text = match (parsed) {
+//!   Ok(v) => Json.stringify(v)
+//!   Err(e) => Json.errorAsString(e)
+//! }
+//! ```
+//!
 
 import * as Str from "kestrel:data/string"
 import * as List from "kestrel:data/list"

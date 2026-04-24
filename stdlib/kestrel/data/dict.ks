@@ -13,6 +13,22 @@
 //!
 //! Pre-built hash/equality helpers exported by this module:
 //! `hashInt`, `eqInt`, `hashString`, `eqString`.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as D from "kestrel:data/dict"
+//!
+//! val users = D.emptyStringDict()
+//! val users2 = users
+//!   |> (d => D.insert(d, "a", 10))
+//!   |> (d => D.insert(d, "b", 20))
+//! val a = D.get(users2, "a")         // Some(10)
+//! val hasB = D.member(users2, "b")   // True
+//! val keys = D.keys(users2)
+//! val pairs = D.toList(users2)
+//! ```
+//!
 
 import * as List from "kestrel:data/list"
 import * as Str from "kestrel:data/string"

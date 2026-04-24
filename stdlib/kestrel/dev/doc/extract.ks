@@ -1,11 +1,20 @@
-// kestrel:dev/doc/extract — Doc-comment extractor for Kestrel source files.
-//
-// Re-lexes a source string and produces a DocModule ADT describing the
-// module's doc prose, exported declarations, and their attached doc-comment
-// strings.  Supports /// per-declaration comments, //! module-level prose,
-// and /** … */ block doc-comments.
-//
-// S09-01 — no compiler changes required; uses kestrel:dev/parser/lexer only.
+//! Extract doc comments from Kestrel source into structured documentation data.
+//!
+//! Re-lexes source and produces `DocModule` values containing module prose,
+//! declaration signatures, and attached declaration docs.
+//!
+//! Supports `///` declaration comments, `//!` module prose, and `/** ... */`
+//! block docs. Uses [`kestrel:dev/parser/lexer`](/docs/kestrel:dev/parser/lexer)
+//! and [`kestrel:dev/parser/parser`](/docs/kestrel:dev/parser/parser).
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Extract from "kestrel:dev/doc/extract"
+//!
+//! val src = "//! Hello\n/// Adds\nexport fun add(a: Int, b: Int): Int = a + b\n"
+//! val mod = Extract.extract(src, "project:demo")
+//! ```
 
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"

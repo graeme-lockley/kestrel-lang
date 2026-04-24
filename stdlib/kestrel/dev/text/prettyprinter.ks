@@ -1,5 +1,17 @@
-// kestrel:dev/text/prettyprinter — Wadler–Lindig combinatorial pretty-printer.
-// Based on "A prettier printer" (Wadler 1998) / Lindig (2000) bounded variant.
+//! Wadler-Lindig style combinatorial pretty-printer.
+//!
+//! Build `Doc` trees with combinators, then render with `pretty(width, doc)` to
+//! produce line-broken, indented output.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as PP from "kestrel:dev/text/prettyprinter"
+//!
+//! val d = PP.group(PP.hsep([PP.text("fun"), PP.text("main()")]))
+//! val out = PP.pretty(80, d)
+//! ```
+
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
 import * as Arr from "kestrel:data/array"

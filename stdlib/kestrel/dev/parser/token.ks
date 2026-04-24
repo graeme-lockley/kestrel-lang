@@ -1,3 +1,8 @@
+//! Token model shared by lexer and parser.
+//!
+//! Defines source spans, token kinds, template-literal parts, and the `Token`
+//! record used throughout parsing and formatting.
+
 import * as Lst from "kestrel:data/list"
 
 // Span records the source location of a token.

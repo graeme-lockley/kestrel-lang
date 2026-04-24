@@ -7,6 +7,20 @@
 //! All predicates (`isDigit`, `isUpper`, etc.) cover only the Basic Latin block
 //! (ASCII, U+0000–U+007F). For broader Unicode classification obtain the code point
 //! via `codePoint` and compare against explicit ranges.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Ch from "kestrel:data/char"
+//!
+//! val c = Ch.intToChar(97)      // 'a'
+//! val n = Ch.charToInt(c)       // 97
+//! val upper = Ch.toUpper(c)     // 'A'
+//! val alpha = Ch.isAlpha(c)     // True
+//! val hex = Ch.isHexDigit('f')  // True
+//! val s = Ch.charToString(upper)
+//! ```
+//!
 
 /// The Unicode code point of `c` as an `Int` (0–1114111).
 export extern fun codePoint(c: Char): Int = 

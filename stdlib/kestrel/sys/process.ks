@@ -1,3 +1,18 @@
+//! Process and environment access utilities.
+//!
+//! Exposes process metadata (args/cwd/os/env), subprocess execution helpers,
+//! and exit control for command-line tools.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Proc from "kestrel:sys/process"
+//!
+//! val p = Proc.getProcess()
+//! val who = Proc.getEnv("USER")
+//! val r = await Proc.runProcess("echo", ["hello"])
+//! ```
+
 import * as Res from "kestrel:data/result"
 import * as Str from "kestrel:data/string"
 import { map } from "kestrel:sys/task"

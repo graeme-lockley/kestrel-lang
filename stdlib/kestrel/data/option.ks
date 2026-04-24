@@ -8,6 +8,19 @@
 //! an `Option`. Use `map` when the transform cannot itself fail. Use `map2`–`map5`
 //! to combine multiple independent `Option` values; the result is `None` if any
 //! input is `None`.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Opt from "kestrel:data/option"
+//!
+//! val name = Some("kestrel")
+//! val upper = Opt.map(name, (s: String) => "${s}!")
+//! val fallback = Opt.withDefault(None, "unknown")
+//! val chained = Opt.andThen(Some(21), (n: Int) => Some(n * 2))
+//! val both = Opt.map2(Some(2), Some(3), (a: Int, b: Int) => a + b)
+//! ```
+//!
 
 /// Return the value inside `o`, or `default` if `o` is `None`.
 export fun getOrElse<A>(o: Option<A>, default: A): A = match (o) {

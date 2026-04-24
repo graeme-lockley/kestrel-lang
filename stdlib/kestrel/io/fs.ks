@@ -1,3 +1,18 @@
+//! Filesystem I/O helpers with `Task<Result<...>>` APIs.
+//!
+//! Covers reading/writing text and bytes, directory listing/walking, file stat,
+//! rename/delete utilities, and directory watching.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Fs from "kestrel:io/fs"
+//!
+//! val w = await Fs.writeText("/tmp/demo.txt", "hello")
+//! val r = await Fs.readText("/tmp/demo.txt")
+//! val files = await Fs.collectFiles("/tmp", (p: String) => True, (p: String) => False)
+//! ```
+
 import * as Res from "kestrel:data/result"
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"

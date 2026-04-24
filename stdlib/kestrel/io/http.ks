@@ -1,8 +1,18 @@
-// kestrel:http — HTTP server and client (spec 02 §kestrel:http, runtime model 05 §2–3).
-// S03-05: get, bodyText, statusCode, makeResponse implemented.
-// S03-06: createServer, listen, queryParam, requestId, requestBodyText,
-//         serverPort, serverStop implemented.
-// S03-03: request (any method/headers/body), responseHeaders, responseHeader implemented.
+//! HTTP client and server primitives.
+//!
+//! Provides request execution, response accessors, and server lifecycle helpers.
+//! Higher-level routing is available in [`kestrel:io/web`](/docs/kestrel:io/web).
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Http from "kestrel:io/http"
+//!
+//! val resp = await Http.get("https://example.com")
+//! val code = Http.statusCode(resp)
+//! val body = Http.bodyText(resp)
+//! ```
+
 import * as Basics from "kestrel:data/basics"
 
 // ---------------------------------------------------------------------------

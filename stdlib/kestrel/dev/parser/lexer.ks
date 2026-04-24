@@ -1,3 +1,11 @@
+//! Tokenizer for Kestrel source text.
+//!
+//! Produces [`Token`](/docs/kestrel:dev/parser/token) values with raw text and
+//! source spans, preserving trivia tokens so tools can choose whether to keep or
+//! ignore whitespace/comments.
+//!
+//! Use `lex` for whole-source tokenization and `nextToken` for streaming usage.
+
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
 import * as Arr from "kestrel:data/array"

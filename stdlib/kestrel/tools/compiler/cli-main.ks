@@ -1,3 +1,8 @@
+//! Main command dispatcher for the self-hosted compiler CLI.
+//!
+//! Parses supported top-level commands and either forwards to shell wrapper
+//! behavior or invokes compiler driver paths directly.
+
 import * as Lst from "kestrel:data/list"
 import { getProcess, getEnv, runProcessStream, ProcessSpawnError, exit } from "kestrel:sys/process"
 import * as Opt from "kestrel:data/option"

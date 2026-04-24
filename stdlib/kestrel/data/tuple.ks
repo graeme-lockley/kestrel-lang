@@ -4,6 +4,19 @@
 //! are the primary API for pairs. This module adds named constructors and mapping
 //! functions for cases where passing a function over a pair is cleaner than
 //! pattern-matching with a destructure.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Tup from "kestrel:data/tuple"
+//!
+//! val t = Tup.pair("kestrel", 7)
+//! val a = Tup.first(t)
+//! val b = Tup.second(t)
+//! val bumped = Tup.mapSecond(t, (n: Int) => n + 1)
+//! val both = Tup.mapBoth(t, (s: String) => "${s}!", (n: Int) => n * 10)
+//! ```
+//!
 
 /// Construct a pair `(a, b)`. Useful as a higher-order function.
 export fun pair<A, B>(a: A, b: B): (A, B) = (a, b)

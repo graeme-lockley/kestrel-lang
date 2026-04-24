@@ -1,9 +1,14 @@
-// kestrel:tools/doc — Documentation browser HTTP server.
-// Usage: kestrel doc [--port PORT] [--project-root PATH]
-//
-// Discovers all kestrel:* stdlib modules and project modules, extracts doc
-// comments, builds a search index, and serves an HTML documentation browser
-// on the given port (default 7070).
+//! `kestrel doc` command server implementation.
+//!
+//! Discovers stdlib/project modules, extracts docs, builds search/index data,
+//! and serves the documentation UI and JSON APIs.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! // CLI usage:
+//! // kestrel doc --port 7070
+//! ```
 
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"

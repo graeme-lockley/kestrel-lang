@@ -1,3 +1,20 @@
+//! Console/TTY helpers for color and diagnostic output.
+//!
+//! Exposes ANSI constants and terminal capability detection used by tools and
+//! test runners.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Console from "kestrel:io/console"
+//!
+//! val info = Console.terminalInfo()
+//! if (info.isTty) {
+//!   println("${Console.GREEN}ok${Console.RESET}")
+//! }
+//! Console.eprintln("error line")
+//! ```
+
 export val ESC = "\u{1b}"
 export val GREEN = "${ESC}[32m"
 export val RED = "${ESC}[31m"

@@ -1,5 +1,7 @@
-// kestrel:tools/bootstrap — compile the self-hosted Kestrel compiler entry point.
-// Usage: kestrel bootstrap
+//! `kestrel bootstrap` command implementation.
+//!
+//! Compiles and seeds self-hosted compiler classes into the JVM cache so normal
+//! CLI commands can run in self-hosted mode.
 
 import * as Opt from "kestrel:data/option"
 import { getProcess, getEnv, exit } from "kestrel:sys/process"

@@ -1,3 +1,8 @@
+//! KTI (Kestrel Type Interface) serialization/deserialization helpers.
+//!
+//! Encodes and decodes exported type information and codegen metadata to a JSON-
+//! based interchange format used by compiler caching and dependency reuse.
+
 import * as Dict from "kestrel:data/dict"
 import * as Json from "kestrel:data/json"
 import { Null, Bool, Int, Float, StrVal, Array, Object } from "kestrel:data/json"

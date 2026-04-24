@@ -8,6 +8,20 @@
 //! success value without the possibility of further failure, and `mapError` to
 //! transform or wrap the error side. Convert between `Result` and `Option` with
 //! `toOption` and `fromOption`.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Res from "kestrel:data/result"
+//!
+//! val parsed = Ok(41)
+//! val next = Res.map(parsed, (n: Int) => n + 1)          // Ok(42)
+//! val checked = Res.andThen(next, (n: Int) =>
+//!   if (n > 0) Ok(n) else Err("non-positive")
+//! )
+//! val msg = Res.mapError(Err("bad"), (e: String) => "error: ${e}")
+//! ```
+//!
 
 /// Return the success value, or `default` if the result is `Err(_)`.
 export fun getOrElse<T, E>(r: Result<T, E>, default: T): T = match (r) {

@@ -5,7 +5,22 @@
 //! in the range 0–255.
 //!
 //! For generic mutable sequences of arbitrary element types see
-//! `kestrel:data/array`.  For high-level file I/O see `kestrel:io/fs`.
+//! [`kestrel:data/array`](/docs/kestrel:data/array). For high-level file I/O see
+//! [`kestrel:io/fs`](/docs/kestrel:io/fs).
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as BA from "kestrel:data/bytearray"
+//!
+//! val bytes = BA.fromList([72, 101, 108, 108, 111])
+//! BA.set(bytes, 0, 104)
+//! val head = BA.get(bytes, 0)            // 104
+//! val part = BA.slice(bytes, 1, 4)
+//! val both = BA.concat(part, BA.fromList([33]))
+//! val out = BA.toList(both)
+//! ```
+//!
 
 extern type JByteArray = jvm("java.lang.Object")
 

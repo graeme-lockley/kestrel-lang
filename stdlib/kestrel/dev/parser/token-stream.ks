@@ -1,3 +1,8 @@
+//! Utility wrapper around token arrays for parser-style indexed access.
+//!
+//! Filters trivia by default and provides bounds-safe indexed reads plus token
+//! kind predicates. Useful for analysis tools that operate over lexed source.
+
 import * as Lst from "kestrel:data/list"
 import * as Arr from "kestrel:data/array"
 import * as Token from "kestrel:dev/parser/token"

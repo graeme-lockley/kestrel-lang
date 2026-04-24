@@ -1,3 +1,8 @@
+//! Compiler driver types and freshness checks.
+//!
+//! Defines compile options/result payloads and utility predicates used by the
+//! self-hosted compiler pipeline.
+
 import * as Dict from "kestrel:data/dict"
 import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as Kti from "kestrel:tools/compiler/kti"

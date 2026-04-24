@@ -14,6 +14,20 @@
 //! - You do not want to write a custom hash/eq pair.
 //! When to prefer `Dict`:
 //! - Keys are primitive (`Int`, `String`) and performance matters.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as SD from "kestrel:data/structdict"
+//!
+//! type UserKey = { org: String, id: Int }
+//! val d0 = SD.empty()
+//! val d1 = SD.insert(d0, { org = "acme", id = 10 }, "alice")
+//! val d2 = SD.insert(d1, { org = "acme", id = 11 }, "bob")
+//! val who = SD.get(d2, { org = "acme", id = 10 })
+//! val names = SD.values(d2)
+//! ```
+//!
 
 import * as List from "kestrel:data/list"
 import * as Dict from "kestrel:data/dict"

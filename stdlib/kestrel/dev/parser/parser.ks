@@ -1,3 +1,9 @@
+//! Recursive-descent parser for Kestrel tokens.
+//!
+//! Parses token streams from [`kestrel:dev/parser/lexer`](/docs/kestrel:dev/parser/lexer)
+//! into AST values from [`kestrel:dev/parser/ast`](/docs/kestrel:dev/parser/ast).
+//! Entry points: `parse`, `parseExpr`, and `parseFromList`.
+
 import * as Str from "kestrel:data/string"
 import * as Lst from "kestrel:data/list"
 import * as Arr from "kestrel:data/array"

@@ -1,4 +1,24 @@
-// kestrel:dev/cli — declarative CLI argument parser for Kestrel tools.
+//! Declarative CLI argument parser used by Kestrel tools.
+//!
+//! Define a `CliSpec`, then parse argv with `parse` to obtain options and
+//! positional arguments as a structured `ParsedArgs` value.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Cli from "kestrel:dev/cli"
+//! import { CliSpec, Flag, Value } from "kestrel:dev/cli"
+//!
+//! val spec: CliSpec = {
+//!   name = "my-tool",
+//!   version = "0.1.0",
+//!   description = "Example",
+//!   usage = "my-tool [--port PORT]",
+//!   options = [{ short = None, long = "--port", kind = Value("PORT"), description = "Port" }],
+//!   args = []
+//! }
+//! val parsed = Cli.parse(spec, ["--port", "8080"])
+//! ```
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
 import * as Dict from "kestrel:data/dict"

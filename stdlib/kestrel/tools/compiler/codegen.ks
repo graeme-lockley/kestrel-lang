@@ -1,3 +1,9 @@
+//! JVM bytecode code generator for Kestrel AST.
+//!
+//! Emits classfiles, methods, and supporting metadata from parsed declarations.
+//! This module is an internal compiler component used by
+//! [`kestrel:tools/compiler/driver`](/docs/kestrel:tools/compiler/driver).
+
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Opt from "kestrel:data/option"

@@ -1,3 +1,16 @@
+//! Hashing helpers for strings.
+//!
+//! Provides SHA-256, SHA-1, and MD5 wrappers for non-cryptographic identity,
+//! checksums, and interoperability. Prefer SHA-256 for new code.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! import * as Crypto from "kestrel:io/crypto"
+//!
+//! val digest = Crypto.sha256("kestrel")
+//! ```
+
 extern fun sha256Impl(s: String): String =
   jvm("kestrel.runtime.KRuntime#sha256(java.lang.Object)")
 

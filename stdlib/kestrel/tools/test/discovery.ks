@@ -1,5 +1,7 @@
-// kestrel:tools/test/discovery — file-discovery helpers for `kestrel test`.
-// Finds *.test.ks files under tests/unit/ and stdlib/kestrel/ (up to 3 levels deep).
+//! File discovery helpers for `kestrel test`.
+//!
+//! Resolves requested paths, traverses configured test roots, and filters
+//! `*.test.ks` files for runner generation.
 
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"

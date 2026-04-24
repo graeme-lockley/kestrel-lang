@@ -1,5 +1,14 @@
-// kestrel:tools/format — opinionated Kestrel source code formatter.
-// Usage: kestrel fmt [--check] [--stdin] [files-or-dirs...]
+//! `kestrel fmt` command implementation.
+//!
+//! Resolves target files, runs formatter checks or rewrites, and reports summary
+//! status for CLI usage.
+//!
+//! ## Quick Start
+//!
+//! ```kestrel
+//! // CLI usage:
+//! // kestrel fmt --check stdlib/kestrel/data/list.ks
+//! ```
 
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
