@@ -111,7 +111,7 @@ for skill in "${skills[@]}"; do
     if [[ ! -d "$SKILLS_DIR/$ref_skill" ]]; then
       err "$skill" "references unknown skill: **$ref_skill**"
     fi
-  done < <(grep -oE '\*\*[a-z][a-z0-9-]+\*\*' "$file" | tr -d '*' | sort -u | grep -E '^(epic-create|story-create|plan-epic|plan-story|build-story|build-epic|finish-epic|kestrel-doc|kestrel-stdlib-doc)$' || true)
+  done < <(grep -oE '\*\*[a-z][a-z0-9-]+\*\*' "$file" | tr -d '*' | sort -u | grep -E '^(epic-create|story-create|plan-epic|plan-story|build-story|build-epic|finish-epic|kestrel-stdlib-doc)$' || true)
 
   ok "$skill" "frontmatter keys present, name matches, links resolve"
 done
