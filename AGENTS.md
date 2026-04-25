@@ -291,7 +291,14 @@ Use the **`build-story`** skill to execute planned work. Key steps:
 
 1. Ensure all tasks are ticked and acceptance criteria are met.
 2. Confirm tests pass (`npm test`, `./scripts/kestrel test`, and any story-specific suites).
-3. Move the story from `docs/kanban/doing/` to `docs/kanban/done/`.
+3. Run `./scripts/check-story.sh <S##-##>` (authoritative gate). It must exit 0.
+4. Move the story from `docs/kanban/doing/` to `docs/kanban/done/`.
+
+### Verification scripts
+
+- `./scripts/check-story.sh <S##-##>` — validates story shape and required ticks per phase. Used by `plan-story`, `build-story`, and `build-epic` as the authoritative gate.
+- `./scripts/check-epic.sh <EXX>` — validates an epic's closure preconditions (all member stories pass `check-story.sh`, no unticked Epic Completion Criteria). Used by `finish-epic`.
+- `./scripts/lint-skills.sh` — lints every skill's frontmatter and link references; CI runs it on PRs touching `.github/skills/**`.
 
 ---
 
