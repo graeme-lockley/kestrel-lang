@@ -1,0 +1,26 @@
+name: Skills lint
+
+on:
+  pull_request:
+    paths:
+      - '.github/skills/**'
+      - 'docs/kanban/README.md'
+      - 'scripts/check-story.sh'
+      - 'scripts/check-epic.sh'
+      - 'scripts/lint-skills.sh'
+      - '.github/workflows/skills-lint.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/skills/**'
+      - 'scripts/check-story.sh'
+      - 'scripts/check-epic.sh'
+      - 'scripts/lint-skills.sh'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run lint-skills.sh
+        run: bash scripts/lint-skills.sh
