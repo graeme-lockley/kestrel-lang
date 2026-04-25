@@ -306,7 +306,7 @@ Use the **`build-story`** skill to execute planned work. Key steps:
 - **Self-hosted CLI entrypoint**: `stdlib/kestrel/tools/compiler/cli-main.ks`
 - **Specs**: `docs/specs/` (01-language, 09-tools, etc.)
 - **Kestrel tests**: `tests/e2e/`, `tests/conformance/`
-- **Kanban**: `docs/kanban/README.md` (phases and gates); skills `.github/skills/epic-create/`, `story-create/`, `plan-epic/`, `plan-story/`, `build-story/`, `build-epic/`, `finish-epic/`; subagents `.cursor/agents/kanban-*.md`
+- **Kanban**: `docs/kanban/README.md` (phases and gates); skills in `.github/skills/` (see [`.github/skills/README.md`](.github/skills/README.md) for the skill index, runtime enforcement, and shared assets); verification scripts `scripts/check-story.sh`, `scripts/check-epic.sh`, `scripts/lint-skills.sh`.
 
 ---
 
