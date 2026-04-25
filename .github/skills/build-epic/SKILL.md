@@ -1,11 +1,20 @@
 ---
 name: build-epic
+version: 1.0.0
 description: >-
   Builds a Kestrel kanban epic end-to-end: reviews and refreshes the epic plan,
   then iterates through every member story in sequence — planning each to
   planned/, committing it, building it with build-story, verifying tests pass
   and specs are updated, and committing the result. Stops short of closing the
   epic so the author can review before marking done.
+inputs:
+  - epic_id: "epic identifier (EXX)"
+outputs:
+  - "plans and builds every member story sequentially"
+  - "creates conventional-commit commits per planned story and per built story"
+  - "leaves the epic file in epics/unplanned/ for author review"
+allowed-tools: [read_file, list_dir, file_search, grep_search, semantic_search, create_file, replace_string_in_file, multi_replace_string_in_file, run_in_terminal, get_errors, manage_todo_list]
+forbids: ["git push", "git push --force", "git reset --hard", "git commit --amend", "git rebase", "rm -rf"]
 ---
 
 # Kestrel kanban — build an epic
@@ -15,6 +24,17 @@ Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**.
 This skill drives a full epic from planning through implementation, one story at a time, leaving the epic open for author review. It delegates story planning to **plan-story** and story implementation to **build-story**. Do **not** call **finish-epic** at the end — the author reviews and closes manually.
 
 When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
+
+## Inputs
+
+- **epic_id** — the epic identifier (e.g. `E02`).
+
+## Outputs / Side effects
+
+- Plans every unplanned member story (delegating to **plan-story**) and commits each plan.
+- Builds every planned member story (delegating to **build-story**) and commits each implementation.
+- Leaves the epic file in `docs/kanban/epics/unplanned/` for the author to close with **finish-epic**.
+- **Does not push** to any remote.
 
 ## Input
 

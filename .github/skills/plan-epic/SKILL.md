@@ -1,5 +1,6 @@
 ---
 name: plan-epic
+version: 1.0.0
 description: >-
   Decomposes a Kestrel kanban epic into an ordered set of feature stories.
   Reads the epic, explores the codebase and relevant specs, identifies the
@@ -7,11 +8,28 @@ description: >-
   docs/kanban/unplanned/, and updates the epic's story list. Use when an epic
   exists but has no stories yet, or when an epic needs to be fully decomposed
   before planning begins.
+inputs:
+  - epic_id: "epic identifier (EXX)"
+outputs:
+  - "creates one docs/kanban/unplanned/S##-##-slug.md per story"
+  - "updates the epic's ## Stories section with the ordered list"
+allowed-tools: [read_file, list_dir, file_search, grep_search, semantic_search, create_file, replace_string_in_file, multi_replace_string_in_file, manage_todo_list]
+forbids: ["git push", "git push --force", "git reset --hard", "rm -rf"]
 ---
 
 # Kestrel kanban — plan an epic
 
 Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill produces a set of ordered, unplanned stories from an epic. Each resulting story is ready for **plan-story** to flesh out into a fully-planned implementation.
+
+## Inputs
+
+- **epic_id** — the epic identifier (e.g. `E03`).
+
+## Outputs / Side effects
+
+- Creates one `docs/kanban/unplanned/S##-##-slug.md` per decomposed story, using [`_templates/story-unplanned.md`](../_templates/story-unplanned.md).
+- Updates the epic's `## Stories` section with the ordered list.
+- No commits. The author commits.
 
 ## 1. Read the epic
 

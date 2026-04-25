@@ -1,11 +1,21 @@
 ---
 name: finish-epic
+version: 1.0.0
 description: >-
   Closes a Kestrel kanban epic by auditing every member story for completed
   tasks and satisfied acceptance criteria, validating epic-level objectives,
   running the required full test suites, and moving the epic from
   docs/kanban/epics/unplanned/ to docs/kanban/epics/done/ only when all gates
   are green. Accepts an epic identifier (for example E01).
+inputs:
+  - epic_id: "epic identifier (EXX)"
+outputs:
+  - "verifies every member story is in done/ with all tasks ticked"
+  - "runs the verification matrix (Epic close trigger)"
+  - "moves docs/kanban/epics/unplanned/EXX-*.md to docs/kanban/epics/done/ when all gates pass"
+  - "creates a single docs(kanban): close epic EXX commit"
+allowed-tools: [read_file, list_dir, file_search, grep_search, replace_string_in_file, run_in_terminal, manage_todo_list]
+forbids: ["git push", "git push --force", "git reset --hard", "git commit --amend", "git rebase", "rm -rf"]
 ---
 
 # Kestrel kanban - finish an epic
@@ -15,6 +25,19 @@ Canonical rules: [docs/kanban/README.md](docs/kanban/README.md).
 Use this skill to close an epic only after story-level and epic-level completion criteria are objectively satisfied.
 
 When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
+
+## Inputs
+
+- **epic_id** — the epic identifier (e.g. `E01`).
+
+## Outputs / Side effects
+
+- Verifies every member story is in `done/` with all tasks/acceptance/docs ticked.
+- Runs the verification matrix under the **Epic close** trigger.
+- Moves `docs/kanban/epics/unplanned/EXX-*.md` → `docs/kanban/epics/done/` only when all gates pass.
+- Creates one `docs(kanban): close epic EXX <slug>` commit.
+- **Does not push** to any remote.
+- **Never** auto-ticks a story's checkboxes.
 
 ## Input
 

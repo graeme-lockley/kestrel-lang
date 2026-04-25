@@ -1,10 +1,20 @@
 ---
 name: build-story
+version: 1.0.0
 description: >-
   Implements a Kestrel kanban story end-to-end: locates the story, runs
   plan-story first if it is still in unplanned/, then confirms the impact
   analysis, executes all tasks, records decisions as build notes, verifies
   tests pass, and moves the story to done/.
+inputs:
+  - story_id: "story identifier (S##-##)"
+outputs:
+  - "edits source, tests, and specs to satisfy the planned tasks"
+  - "appends Build notes entries"
+  - "moves the story to docs/kanban/done/"
+  - "creates one or more conventional-commit commits"
+allowed-tools: [read_file, list_dir, file_search, grep_search, semantic_search, create_file, replace_string_in_file, multi_replace_string_in_file, run_in_terminal, get_errors, manage_todo_list]
+forbids: ["git push", "git push --force", "git reset --hard", "git commit --amend", "git rebase", "rm -rf"]
 ---
 
 # Kestrel kanban — build a story
@@ -12,6 +22,18 @@ description: >-
 Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill drives a story from any phase to **`done/`**.
 
 Gate criteria for `planned/ → doing/ → done/` are defined inline in §B below. When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
+
+## Inputs
+
+- **story_id** — the story identifier (e.g. `S03-04`).
+
+## Outputs / Side effects
+
+- Edits source, tests, and specs to satisfy the planned tasks.
+- Appends entries to the story's `## Build notes` section.
+- Moves the story file from `planned/` (via `doing/`) to `done/`.
+- Creates one or more conventional-commit commits (see [`_templates/commit-messages.md`](../_templates/commit-messages.md)).
+- **Does not push** to any remote.
 
 ## 0. Locate the story and determine phase
 

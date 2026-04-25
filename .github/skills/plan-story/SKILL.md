@@ -1,11 +1,19 @@
 ---
 name: plan-story
+version: 1.0.0
 description: >-
   Plans a Kestrel kanban story: takes a feature story from unplanned/, explores
   the codebase and specs, adds a complete implementation plan (impact analysis,
   tasks, tests to add, docs to update), and moves the story to planned/. Use
   when a story needs to move from unplanned to planned with a substantive,
   build-ready implementation plan.
+inputs:
+  - story_id: "story identifier (S##-##)"
+outputs:
+  - "adds Impact analysis, Tasks, Tests to add, Documentation and specs to update sections to the story"
+  - "moves docs/kanban/unplanned/S##-##-slug.md to docs/kanban/planned/"
+allowed-tools: [read_file, list_dir, file_search, grep_search, semantic_search, replace_string_in_file, multi_replace_string_in_file, run_in_terminal, manage_todo_list]
+forbids: ["git push", "git push --force", "git reset --hard", "git commit --amend", "rm -rf", "npm test", "./scripts/kestrel test"]
 ---
 
 # Kestrel kanban — plan a story
@@ -13,6 +21,17 @@ description: >-
 Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill produces the `planned/` content for a story in `unplanned/`.
 
 When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
+
+## Inputs
+
+- **story_id** — the story identifier (e.g. `S03-04`).
+
+## Outputs / Side effects
+
+- Adds `## Impact analysis`, `## Tasks`, `## Tests to add`, and `## Documentation and specs to update` sections to the story.
+- Moves `docs/kanban/unplanned/S##-##-slug.md` → `docs/kanban/planned/S##-##-slug.md`.
+- **Does not run tests.** Test execution belongs to **build-story**.
+- No commits.
 
 ## §A. Gate criteria — `unplanned/ → planned/`
 

@@ -1,15 +1,31 @@
 ---
 name: epic-create
+version: 1.0.0
 description: >-
   Creates a new Kestrel kanban epic in docs/kanban/epics/unplanned/ from a
   description. Assigns the next free epic id, writes the required sections, and
   leaves the story list empty for plan-epic or story-create to fill. Use when
   starting a new area of work that will span multiple stories.
+inputs:
+  - title: "epic title and one-paragraph description"
+outputs:
+  - "creates docs/kanban/epics/unplanned/EXX-slug.md from the epic template"
+allowed-tools: [read_file, list_dir, file_search, create_file, replace_string_in_file, manage_todo_list]
+forbids: ["git push", "git push --force", "git reset --hard", "rm -rf"]
 ---
 
 # Kestrel kanban — create an epic
 
 Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**.
+
+## Inputs
+
+- **title** — epic title and a paragraph describing what it delivers.
+
+## Outputs / Side effects
+
+- Creates `docs/kanban/epics/unplanned/EXX-slug.md` using [`_templates/epic.md`](../_templates/epic.md).
+- No commits. The author commits the new file.
 
 ## 1. Choose the epic id
 

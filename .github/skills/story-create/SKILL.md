@@ -1,14 +1,34 @@
 ---
 name: story-create
+version: 1.0.0
 description: >-
   Creates a new Kestrel kanban story in docs/kanban/unplanned/ or
   docs/kanban/future/, linked to an existing epic. Use when adding a roadmap
   item to an existing epic, splitting a story, or capturing a pre-roadmap idea.
+inputs:
+  - epic_id: "owning epic id (EXX); omit for a future/ idea"
+  - title: "story title"
+outputs:
+  - "creates docs/kanban/unplanned/S##-##-slug.md (roadmap) or docs/kanban/future/slug.md (idea)"
+  - "appends the new story to the owning epic's ## Stories list (roadmap only)"
+allowed-tools: [read_file, list_dir, file_search, create_file, replace_string_in_file, manage_todo_list]
+forbids: ["git push", "git push --force", "git reset --hard", "rm -rf"]
 ---
 
 # Kestrel kanban — create a story
 
 Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**.
+
+## Inputs
+
+- **epic_id** — owning epic (`EXX`). Omit for a `future/` idea.
+- **title** — story title.
+
+## Outputs / Side effects
+
+- Roadmap: creates `docs/kanban/unplanned/S##-##-slug.md` and appends the story to the owning epic's `## Stories` list.
+- Future: creates `docs/kanban/future/slug.md` only.
+- No commits.
 
 ---
 

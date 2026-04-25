@@ -1,16 +1,34 @@
 ---
 name: kestrel-doc
+version: 1.0.0
 description: >-
   Improve Kestrel stdlib/module documentation with practical examples: add
   module-level overview docs (`//!`), quick-start usage blocks, and clear
   per-function doc comments (`///`) that describe behavior, edge cases, and
   common usage patterns.
+inputs:
+  - module_path: "path to a .ks module (e.g. stdlib/kestrel/data/list.ks)"
+outputs:
+  - "adds or refreshes //! module docs and /// declaration docs in the target module"
+  - "never modifies runtime behaviour"
+allowed-tools: [read_file, list_dir, file_search, grep_search, replace_string_in_file, multi_replace_string_in_file, run_in_terminal]
+forbids: ["git push", "git push --force", "git reset --hard", "rm -rf"]
 ---
 
 # Kestrel documentation workflow
 
 Use this skill when you are documenting Kestrel source modules (`.ks`) and want
 high-signal docs that are useful in both source files and `kestrel doc` output.
+
+## Inputs
+
+- **module_path** — a `.ks` module to document.
+
+## Outputs / Side effects
+
+- Adds or refreshes `//!` module docs and `///` declaration docs.
+- Never modifies runtime behaviour.
+- No commits.
 
 ## Goals
 
