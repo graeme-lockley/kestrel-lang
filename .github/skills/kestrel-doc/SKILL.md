@@ -102,6 +102,10 @@ Before finishing:
   instead of plain code formatting.
 - Do not include "see test file" referrals in module docs.
 
+## Example
+
+For a model stdlib module with the documentation level this skill targets, see [stdlib/kestrel/data/list.ks](../../../stdlib/kestrel/data/list.ks). It has a rich `//!` module block with Performance and Sorting subsections, a runnable Quick Start example, and concise per-function `///` docs covering behaviour, complexity, and edge cases.
+
 ## Suggested patch strategy
 
 1. Read module header and exported declarations.

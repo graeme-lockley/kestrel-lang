@@ -87,6 +87,10 @@ Replace the `## Stories` section with the ordered list:
 
 Include a note after the list if any stories are independent and can be done in parallel.
 
+## Examples
+
+For a model decomposed epic, see [docs/kanban/epics/done/E14-self-hosting-compiler.md](../../../docs/kanban/epics/done/E14-self-hosting-compiler.md). It demonstrates good story boundaries (14 stories), explicit parallelism notes, and a Key-design-decisions section motivating the ordering.
+
 ## Related
 
 - Create the epic first: skill **epic-create**

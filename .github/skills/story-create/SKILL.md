@@ -63,6 +63,10 @@ Use the canonical shape in [`_templates/story-unplanned.md`](../_templates/story
 - Add the story to the owning epic's **Stories** list with a markdown link and one-line description.
 - Ensure the story meets unplanned exit criteria before promoting to `planned/` (see **plan-story §A**).
 
+## Examples
+
+For a model unplanned story, see [docs/kanban/done/S01-17-task-cancellation-api.md](../../../docs/kanban/done/S01-17-task-cancellation-api.md). The original unplanned sections (Summary, Current State, Goals, Acceptance Criteria, Spec References, Risks) demonstrate the level of concreteness expected.
+
 ## Related
 
 - Create the epic first: skill **epic-create**

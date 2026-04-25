@@ -88,6 +88,10 @@ Provide:
 - Test commands executed and pass/fail result
 - Any follow-up items (if epic was not moved)
 
+## Examples
+
+For a model closed epic, see [docs/kanban/epics/done/E15-bootstrap-jar-self-hosting-handoff.md](../../../docs/kanban/epics/done/E15-bootstrap-jar-self-hosting-handoff.md). Status is Done, every member story link points into `done/`, and every Epic Completion Criterion is verifiably satisfied by the listed stories.
+
 ## Guardrails
 
 - Never move an epic to `done/` if any member story is outside `done/`.

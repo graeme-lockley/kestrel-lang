@@ -132,6 +132,10 @@ A story may move from `doing/` to `done/` only when:
 - All required test suites listed in the verification matrix pass.
 - All `## Acceptance Criteria` are observably satisfied.
 
+## Examples
+
+For a model completed story with substantive build notes, see [docs/kanban/done/S16-03-kestrel-cli-core-implementation.md](../../../docs/kanban/done/S16-03-kestrel-cli-core-implementation.md). Its Build notes record real implementation discoveries (codegen quirks, missing operators, async propagation) — not boilerplate. Aim for that signal-to-noise ratio.
+
 ## Related
 
 - Plan a story (unplanned → planned): skill **plan-story**

@@ -29,6 +29,10 @@ Do not invent additional sections. The optional **Implementation Approach** sect
 - Run **plan-epic** to decompose the epic into ordered stories, or add stories one at a time with **story-create**.
 - Move the epic to `docs/kanban/epics/done/` only when all member stories are in `docs/kanban/done/`.
 
+## Examples
+
+For a model epic file, see [docs/kanban/epics/done/E15-bootstrap-jar-self-hosting-handoff.md](../../../docs/kanban/epics/done/E15-bootstrap-jar-self-hosting-handoff.md). It has a compact Summary, concrete Dependencies referencing prior epics, and six precise Epic Completion Criteria.
+
 ## Related
 
 - Decompose into stories: skill **plan-epic**

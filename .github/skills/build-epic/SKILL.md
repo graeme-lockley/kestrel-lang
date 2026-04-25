@@ -160,6 +160,10 @@ Do **not** move the epic file to `docs/kanban/epics/done/`. Do **not** call **fi
 
 ---
 
+## Examples
+
+For a model closed epic, see [docs/kanban/epics/done/E14-self-hosting-compiler.md](../../../docs/kanban/epics/done/E14-self-hosting-compiler.md) and one of its built stories, e.g. [S14-11-compiler-driver-pipeline.md](../../../docs/kanban/done/S14-11-compiler-driver-pipeline.md). The pair shows what an epic looks like after every member story has been built and committed.
+
 ## Related
 
 - Plan a single story: skill **plan-story**

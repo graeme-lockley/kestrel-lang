@@ -81,6 +81,10 @@ Move `docs/kanban/unplanned/S##-##-slug.md` → `docs/kanban/planned/S##-##-slug
 
 The story is now ready for **build-story** to implement.
 
+## Examples
+
+For a model planned story, see [docs/kanban/done/S15-03-compiler-mode-and-provenance-state.md](../../../docs/kanban/done/S15-03-compiler-mode-and-provenance-state.md). It shows a focused Impact analysis table, well-decomposed Tasks, a complete Tests-to-add table, and a Documentation-and-specs checklist — all the artefacts this skill produces.
+
 ## Related
 
 - Create an epic: skill **epic-create**
