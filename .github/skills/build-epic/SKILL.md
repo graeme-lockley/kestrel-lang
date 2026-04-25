@@ -14,6 +14,8 @@ Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**.
 
 This skill drives a full epic from planning through implementation, one story at a time, leaving the epic open for author review. It delegates story planning to **plan-story** and story implementation to **build-story**. Do **not** call **finish-epic** at the end — the author reviews and closes manually.
 
+When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
+
 ## Input
 
 Epic identifier: `EXX` (example: `E02`)

@@ -12,6 +12,8 @@ description: >-
 
 Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill produces the `planned/` content for a story in `unplanned/`.
 
+When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
+
 ## §A. Gate criteria — `unplanned/ → planned/`
 
 A story may move from `unplanned/` to `planned/` only when:

@@ -11,7 +11,7 @@ description: >-
 
 Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill drives a story from any phase to **`done/`**.
 
-Gate criteria for `planned/ → doing/ → done/` are defined inline in §B below.
+Gate criteria for `planned/ → doing/ → done/` are defined inline in §B below. When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
 
 ## 0. Locate the story and determine phase
 

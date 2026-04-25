@@ -14,6 +14,8 @@ Canonical rules: [docs/kanban/README.md](docs/kanban/README.md).
 
 Use this skill to close an epic only after story-level and epic-level completion criteria are objectively satisfied.
 
+When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
+
 ## Input
 
 - Epic identifier: `EXX` (example: `E01`)
