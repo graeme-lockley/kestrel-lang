@@ -54,31 +54,24 @@ When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../
    - `## Epic Completion Criteria` (or equivalent objectives/acceptance section)
 4. Extract all member story IDs from the epic story list (for example `S01-01` ... `S01-11`).
 
-## 2. Verify story phase and checklist completeness
+## 2. Run deterministic epic gate
 
-For every member story id, run:
+Run exactly one authoritative command:
 
 ```bash
-scripts/check-story.sh <S##-##>
+scripts/check-epic.sh EXX
 ```
 
-It must exit 0 for every member. The script enforces:
+It must exit 0 before this skill can continue. This gate is deterministic and already includes per-story validation by calling `scripts/check-story.sh` for each member listed in `## Stories`.
 
-- The story file lives in `docs/kanban/done/`.
-- Every required section for the `done` phase exists.
-- Every `- [ ]` in `## Tasks`, `## Acceptance Criteria`, and `## Documentation and specs to update` is ticked.
-- The epic link resolves.
-
-If any story fails, halt and report — do not close the epic.
-
-Authoritative gate: run `scripts/check-epic.sh EXX`. It must exit 0 before the epic moves to `epics/done/`. The script verifies:
+`scripts/check-epic.sh` enforces:
 
 - Every required epic section exists.
 - Every member story is in `done/` and passes `check-story.sh`.
 - No `- [ ]` boxes remain in `## Epic Completion Criteria`.
-- `## Status` line is set to `Done` (warned, not enforced — finish-epic itself flips it to `Done`).
+- `## Status` is exactly `Done`.
 
-If the script reports any failure, halt and report. Do not bypass.
+If it exits non-zero, halt and report blockers. Do not bypass or replace this with manual checklist review.
 
 ## 4. Run required verification suites
 
@@ -86,13 +79,13 @@ Run all suites listed in [`_shared/verify.md`](../_shared/verify.md) under the *
 
 If any suite fails, do not move the epic; report the failing command and blocker details per [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
 
-## 5. Confirm all stories already closed
+## 5. Keep closure mechanical
 
-A story is closed only by **build-story** ticking its own checkboxes. **finish-epic** must never auto-tick on a story's behalf.
+Do not manually tick story checkboxes or hand-approve closure criteria. Story/epic closure is mechanical:
 
-1. If any member story is still in `doing/`, halt and report. The author must run **build-story** (or equivalent) to close it.
-2. If any member story has unticked `- [ ]` items in `## Tasks`, `## Acceptance Criteria`, or `## Documentation and specs to update`, halt and report — even if the file is in `done/`.
-3. Ensure story `## Epic` links still resolve after the epic move.
+1. `scripts/check-epic.sh EXX` must pass.
+2. Required verification suites under **Epic close** in [`_shared/verify.md`](../_shared/verify.md) must pass.
+3. Only then may the epic be moved to `epics/done/`.
 
 ## 6. Move epic to done
 
