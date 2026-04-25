@@ -118,11 +118,7 @@ check_sections() {
     if has_section "$s"; then
       ok "section '## $s' present"
     else
-      if [[ "$KIND" == "legacy" ]]; then
-        warn "section '## $s' missing ($label) — legacy story, not enforced"
-      else
-        err "section '## $s' missing ($label)"
-      fi
+      err "section '## $s' missing ($label)"
     fi
   done
 }
@@ -156,11 +152,7 @@ if [[ "$PHASE" == "done" || "$PHASE" == "doing" ]]; then
     if has_section "$sec"; then
       n=$(count_unchecked_in_section "$sec")
       if [[ "$n" -gt 0 ]]; then
-        if [[ "$KIND" == "legacy" && "$PHASE" == "done" ]]; then
-          warn "$n unchecked box(es) in '## $sec' — legacy story, not enforced"
-        else
-          err "$n unchecked '- [ ]' in '## $sec' (must be ticked at $PHASE)"
-        fi
+        err "$n unchecked '- [ ]' in '## $sec' (must be ticked at $PHASE)"
       else
         ok "no unchecked boxes in '## $sec'"
       fi
@@ -196,11 +188,7 @@ if has_section "Epic"; then
       err "Epic link does not resolve: $epic_link"
     fi
   else
-    if [[ "$KIND" == "legacy" ]]; then
-      warn "no Epic link found — legacy story, not enforced"
-    else
-      err "no Epic link found in '## Epic' section"
-    fi
+    err "no Epic link found in '## Epic' section"
   fi
 fi
 

@@ -60,14 +60,6 @@ err()  { echo "  ERROR: $*"; errors=$((errors+1)); }
 warn() { echo "  WARN : $*"; warn=$((warn+1)); }
 ok()   { echo "  ok   : $*"; }
 
-# --- If already in done/, just report ----------------------------------------
-
-if [[ "$EPIC_PHASE" == "done" ]]; then
-  echo "Epic is already in epics/done/. Nothing to validate."
-  echo "PASS (0 warnings)"
-  exit 0
-fi
-
 # --- Required sections -------------------------------------------------------
 
 required=( "Status" "Summary" "Stories" "Dependencies" "Epic Completion Criteria" )
@@ -155,7 +147,7 @@ status_line=$(awk '
 if [[ "$status_line" == "Done" ]]; then
   ok "Status: Done"
 else
-  warn "Status is '$status_line' (will need to be 'Done' before move to epics/done/)"
+  err "Status must be 'Done' (found '$status_line')"
 fi
 
 # --- Summary ------------------------------------------------------------------
