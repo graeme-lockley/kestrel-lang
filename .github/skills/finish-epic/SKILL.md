@@ -22,9 +22,7 @@ forbids: ["git push", "git push --force", "git reset --hard", "git commit --amen
 
 Canonical rules: [docs/kanban/README.md](docs/kanban/README.md).
 
-Use this skill to close an epic only after story-level and epic-level completion criteria are objectively satisfied.
-
-When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
+Use this skill to close an epic. The closure is fully mechanical — a single script enforces every gate, runs all required test suites, updates links, moves the epic, and commits.
 
 ## Inputs
 
@@ -32,83 +30,41 @@ When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../
 
 ## Outputs / Side effects
 
-- Verifies every member story is in `done/` with all tasks/acceptance/docs ticked.
-- Runs the verification matrix under the **Epic close** trigger.
-- Moves `docs/kanban/epics/unplanned/EXX-*.md` → `docs/kanban/epics/done/` only when all gates pass.
+- Sets `## Status` to `Done` in the epic file.
+- Verifies every member story passes `scripts/check-story.sh`.
+- Runs all Epic close test suites from [`_shared/verify.md`](../_shared/verify.md).
+- Moves `docs/kanban/epics/unplanned/EXX-*.md` → `docs/kanban/epics/done/`.
+- Updates all story files that link to the epic (unplanned → done).
 - Creates one `docs(kanban): close epic EXX <slug>` commit.
 - **Does not push** to any remote.
 - **Never** auto-ticks a story's checkboxes.
 
-## Input
-
-- Epic identifier: `EXX` (example: `E01`)
-
-## 1. Locate epic and member stories
-
-1. Find the epic file in:
-   - `docs/kanban/epics/unplanned/EXX-*.md` (active epic)
-   - or `docs/kanban/epics/done/EXX-*.md` (already complete)
-2. If epic is already in `epics/done/`, stop and report no action needed.
-3. Read the epic fully, including:
-   - `## Stories`
-   - `## Epic Completion Criteria` (or equivalent objectives/acceptance section)
-4. Extract all member story IDs from the epic story list (for example `S01-01` ... `S01-11`).
-
-## 2. Run deterministic epic gate
-
-Run exactly one authoritative command:
+## 1. Run the finish-epic script
 
 ```bash
-scripts/check-epic.sh EXX
+scripts/finish-epic.sh EXX
 ```
 
-It must exit 0 before this skill can continue. This gate is deterministic and already includes per-story validation by calling `scripts/check-story.sh` for each member listed in `## Stories`.
+The script runs the following non-skippable sequence and exits non-zero on the first failure:
 
-`scripts/check-epic.sh` enforces:
+1. Locate epic file (must be in `epics/unplanned/`).
+2. Set `## Status` to `Done`.
+3. Pre-flight gate: `scripts/check-epic.sh` must exit 0.
+4. Test suites (all four from the Epic close trigger in `_shared/verify.md`).
+5. Move epic file to `epics/done/`.
+6. Update story epic links (`unplanned` → `done`) in all kanban phase folders.
+7. Postcondition gate: `scripts/check-epic.sh` must exit 0.
+8. Commit with message `docs(kanban): close epic EXX <slug>`.
 
-- Every required epic section exists.
-- Every member story is in `done/` and passes `check-story.sh`.
-- No `- [ ]` boxes remain in `## Epic Completion Criteria`.
-- `## Status` is exactly `Done`.
+If the script exits non-zero, read its output, fix the reported blocker, and re-run. Do not attempt manual workarounds.
 
-If it exits non-zero, halt and report blockers. Do not bypass or replace this with manual checklist review.
+## 2. Report outcome
 
-## 4. Run required verification suites
+After the script exits 0, report:
 
-Run all suites listed in [`_shared/verify.md`](../_shared/verify.md) under the **Epic close** trigger. Every suite must pass for the epic to close.
-
-If any suite fails, do not move the epic; report the failing command and blocker details per [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
-
-## 5. Keep closure mechanical
-
-Do not manually tick story checkboxes or hand-approve closure criteria. Story/epic closure is mechanical:
-
-1. `scripts/check-epic.sh EXX` must pass.
-2. Required verification suites under **Epic close** in [`_shared/verify.md`](../_shared/verify.md) must pass.
-3. Only then may the epic be moved to `epics/done/`.
-
-## 6. Move epic to done
-
-Only when all gates above are green:
-
-1. Update epic status to `Done`.
-2. Ensure epic story list entries are marked complete and links point to `../../done/S##-##-*.md`.
-3. Move epic file:
-
-```bash
-mv docs/kanban/epics/unplanned/EXX-*.md docs/kanban/epics/done/
-```
-
-4. Update any affected story epic links from `../epics/unplanned/...` to `../epics/done/...` where necessary.
-
-## 7. Report outcome
-
-Provide:
-
-- Epic ID and final location
-- Story audit summary (all member stories done + checklist status)
-- Test commands executed and pass/fail result
-- Any follow-up items (if epic was not moved)
+- Epic ID and final file location.
+- Exit output from the script (step results).
+- Any follow-up items (e.g. stories with pre-existing issues caught by the gate).
 
 ## Examples
 

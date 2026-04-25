@@ -130,7 +130,7 @@ done
 
 # --- Verify check-* scripts are executable -----------------------------------
 
-for script in check-story.sh check-epic.sh; do
+for script in check-story.sh check-epic.sh finish-epic.sh; do
   path="$REPO_ROOT/scripts/$script"
   if [[ -x "$path" ]]; then
     ok "scripts" "$script exists and is executable"
