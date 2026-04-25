@@ -1,5 +1,5 @@
 ---
-name: kestrel-doc
+name: kestrel-stdlib-doc
 version: 1.0.0
 description: >-
   Improve Kestrel stdlib/module documentation with practical examples: add
