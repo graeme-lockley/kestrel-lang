@@ -63,36 +63,16 @@ Order the stories so that:
 
 ## 6. Create each story file
 
-For each story, create `docs/kanban/unplanned/S##-##-slug.md` using the **story-create** template. Required sections:
+For each story, create `docs/kanban/unplanned/S##-##-slug.md` using the canonical shape in [`_templates/story-unplanned.md`](../_templates/story-unplanned.md).
 
-```markdown
-# <Title>
+Required sections (load-bearing — do not rename):
 
-## Sequence: S##-##
-## Tier: <tier>
-## Former ID: (none)
+- `# <Title>`, `## Sequence: S##-##`, `## Tier:`, `## Former ID: (none)`
+- `## Epic` (with `Companion stories: <list sibling S##-## ids>`)
+- `## Summary`, `## Current State`, `## Relationship to other stories`, `## Goals`
+- `## Acceptance Criteria`, `## Spec References`, `## Risks / Notes`
 
-## Epic
-
-- Epic: [EXX Name](../epics/unplanned/EXX-name.md)
-- Companion stories: <list sibling S##-## ids>
-
-## Summary
-
-## Current State
-
-## Relationship to other stories
-
-## Goals
-
-## Acceptance Criteria
-
-## Spec References
-
-## Risks / Notes
-```
-
-Write concrete, accurate content for every section based on what you found in steps 2–4. **Do not** add Tasks, Impact analysis, or Tests to add — those go in `planned/` via **plan-story**.
+Write concrete, accurate content for every section based on what you found in steps 2–4. **Do not** add Tasks, Impact analysis, or Tests to add — those go in `planned/` via **plan-story** (see [`_templates/story-planned-additions.md`](../_templates/story-planned-additions.md)).
 
 ## 7. Update the epic file
 

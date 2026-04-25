@@ -51,7 +51,7 @@ Compare the epic's current content against the state of the codebase and the sta
 - Are the dependencies listed in the epic still accurate?
 - Are there risks or notes that are now invalidated or need updating?
 
-Make any necessary edits to the epic file. Commit the updated epic if anything changed:
+Make any necessary edits to the epic file. Commit the updated epic if anything changed using the commit-message style in [`_templates/commit-messages.md`](../_templates/commit-messages.md):
 
 ```bash
 git add docs/kanban/epics/unplanned/EXX-*.md
@@ -141,14 +141,12 @@ If any check fails, do not move the story to `done/` until it is resolved.
 
 Move `docs/kanban/doing/S##-##-slug.md` → `docs/kanban/done/S##-##-slug.md`.
 
-Commit all implementation changes and the story move together:
+Commit all implementation changes and the story move together using a meaningful conventional-commit type (see [`_templates/commit-messages.md`](../_templates/commit-messages.md)) that reflects the dominant change. Do **not** use a generic message like "build story S##-##".
 
 ```bash
 git add -A
 git commit -m "<type>(<scope>): <concise description of what the story implements>"
 ```
-
-Use a meaningful commit type (`feat`, `fix`, `refactor`, `test`, `docs`) that reflects the dominant change. Do **not** use a generic message like "build story S##-##".
 
 ---
 

@@ -42,13 +42,7 @@ If any section is thin, run **plan-story** to fill the gaps before proceeding.
 
 Move `docs/kanban/planned/S##-##-slug.md` → `docs/kanban/doing/S##-##-slug.md`.
 
-Add a **Build notes** section at the end of the story:
-
-```markdown
-## Build notes
-
-- YYYY-MM-DD: Started implementation.
-```
+Add a **Build notes** section at the end of the story using the shape in [`_templates/build-notes-entry.md`](../_templates/build-notes-entry.md). The first entry is always `Started implementation.`
 
 ## 3. Confirm impact against the codebase
 

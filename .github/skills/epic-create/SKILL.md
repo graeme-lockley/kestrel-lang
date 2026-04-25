@@ -17,35 +17,11 @@ List `docs/kanban/epics/unplanned/` and `docs/kanban/epics/done/` to find all us
 
 ## 2. Write the epic file
 
-Path: `docs/kanban/epics/unplanned/EXX-slug.md`
+Path: `docs/kanban/epics/unplanned/EXX-slug.md`.
 
-Required sections:
+Use the canonical shape in [`_templates/epic.md`](../_templates/epic.md). Fill in title, summary, dependencies, and epic completion criteria. Leave the **Stories** section as `(None yet — use plan-epic to decompose, or story-create to add individual stories.)` until stories exist.
 
-```markdown
-# Epic EXX: <Title>
-
-## Status
-
-Unplanned
-
-## Summary
-
-<One paragraph: what this epic delivers and why it matters.>
-
-## Stories
-
-(None yet — use plan-epic to decompose, or story-create to add individual stories.)
-
-## Dependencies
-
-<Other epics or external requirements this epic depends on, or "None".>
-
-## Epic Completion Criteria
-
-- <Bullet per observable outcome that proves the epic is done.>
-```
-
-Optional section **`## Implementation Approach`** — add when the epic has a significant architectural approach worth recording (e.g. "uses Project Loom virtual threads").
+Do not invent additional sections. The optional **Implementation Approach** section may be added when an architectural choice is worth recording (see the template).
 
 ## 3. After the file exists
 

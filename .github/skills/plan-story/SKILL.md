@@ -48,15 +48,7 @@ Open every file listed in **Spec References** and read the affected sections. Un
 
 ## 4. Write the impact analysis
 
-Add this section to the story. One row per component that changes:
-
-```markdown
-## Impact analysis
-
-| Area | Change |
-|------|--------|
-| ... | ... |
-```
+Add this section to the story using the shape in [`_templates/story-planned-additions.md`](../_templates/story-planned-additions.md) § 1.
 
 - Cover: compiler, JVM codegen, JVM runtime, stdlib, tests, scripts.
 - State the nature of the change (new function, modified type, new test file, spec update).
@@ -65,53 +57,23 @@ Add this section to the story. One row per component that changes:
 
 ## 5. Write the tasks
 
-Tasks must be concrete enough to execute without further research.
-
-```markdown
-## Tasks
-
-- [ ] <implementation change — file and function level>
-- [ ] ...
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `./scripts/kestrel test`
-```
+Add this section using the shape in [`_templates/story-planned-additions.md`](../_templates/story-planned-additions.md) § 2. Tasks must be concrete enough to execute without further research.
 
 Rules:
 - One `- [ ]` per discrete file-level or function-level change.
 - Preserve pipeline order: parser → typecheck → codegen → JVM codegen → JVM runtime → stdlib → CLI.
-- Add `cd runtime/jvm && bash build.sh` and `./scripts/run-e2e.sh` when the story modifies JVM runtime code or user-visible behaviour.
+- Add the verification commands as their own tasks per the trigger matrix in [`_shared/verify.md`](../_shared/verify.md).
 
 ## 6. Write the tests to add
 
-```markdown
-## Tests to add
-
-| Layer | Path | Intent |
-|-------|------|--------|
-| Vitest unit | `compiler/test/unit/…` | … |
-| Vitest integration | `compiler/test/integration/…` | … |
-| Kestrel harness | `tests/unit/<feature>.test.ks` | … |
-| Conformance typecheck | `tests/conformance/typecheck/…` | … |
-| Conformance runtime | `tests/conformance/runtime/…` | … |
-| E2E positive | `tests/e2e/scenarios/positive/…` | … |
-| E2E negative | `tests/e2e/scenarios/negative/…` | … |
-```
-
-Include only relevant layers. For each entry state *what* the test asserts:
+Add this section using the shape in [`_templates/story-planned-additions.md`](../_templates/story-planned-additions.md) § 3. Include only relevant layers. For each entry state *what* the test asserts:
 - Happy-path acceptance criteria.
 - Boundary and edge conditions (empty, zero, max, recursive, cross-module).
 - Regression guards for each behaviour the feature introduces.
 
 ## 7. Write documentation and specs to update
 
-```markdown
-## Documentation and specs to update
-
-- [ ] `docs/specs/<file>.md` — <what section and what to change>
-- [ ] ...
-```
-
-Every file listed in **Spec References** needs an entry. Add other docs (AGENTS.md, guide.md) only if they already document the affected feature.
+Add this section using the shape in [`_templates/story-planned-additions.md`](../_templates/story-planned-additions.md) § 4. Every file listed in **Spec References** needs an entry. Add other docs (AGENTS.md, guide.md) only if they already document the affected feature.
 
 ## 8. Move the story to planned/
 

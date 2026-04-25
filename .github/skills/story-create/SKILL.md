@@ -16,8 +16,10 @@ Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**.
 
 Use **`docs/kanban/future/`** when the work is **not** ready for the prioritized queue: spikes, observations, or "maybe later" ideas without clear acceptance criteria.
 
+Use the canonical shape in [`_templates/story-future.md`](../_templates/story-future.md):
+
 1. Filename: **`slug.md`** only — no `S##-##-` prefix, no story id.
-2. Content: free-form. Include a **`## Kind`** line (e.g. `investigation / idea / spike`).
+2. Include a **`## Kind`** line (e.g. `investigation / idea / spike`).
 3. Do **not** add **Sequence**, **Tier**, or full unplanned sections until promoting the file from `future/` to `unplanned/` (rename to `S##-##-slug.md` and add the sections listed in section B).
 
 ---
@@ -39,33 +41,22 @@ Use **`docs/kanban/future/`** when the work is **not** ready for the prioritized
 
 ### Required sections
 
-```markdown
-# <Title>
+Use the canonical shape in [`_templates/story-unplanned.md`](../_templates/story-unplanned.md). Required sections (load-bearing — do not rename):
 
-## Sequence: S##-##
-## Tier: <tier or Optional>
-## Former ID: (none)
+- `# <Title>`
+- `## Sequence: S##-##`
+- `## Tier: <tier or Optional>`
+- `## Former ID: (none)`
+- `## Epic`
+- `## Summary`
+- `## Current State`
+- `## Relationship to other stories`
+- `## Goals`
+- `## Acceptance Criteria`
+- `## Spec References`
+- `## Risks / Notes`
 
-## Epic
-
-- Epic: [EXX Name](../epics/unplanned/EXX-name.md)
-
-## Summary
-
-## Current State
-
-## Relationship to other stories
-
-## Goals
-
-## Acceptance Criteria
-
-## Spec References
-
-## Risks / Notes
-```
-
-**Do not add yet:** Impact analysis, Tasks, Tests to add, Documentation and specs to update — those belong in `planned/` (added by **plan-story**).
+**Do not add yet:** Impact analysis, Tasks, Tests to add, Documentation and specs to update — those belong in `planned/` (added by **plan-story**, see [`_templates/story-planned-additions.md`](../_templates/story-planned-additions.md)).
 
 ### After the file exists
 
