@@ -21,7 +21,7 @@ forbids: ["git push", "git push --force", "git reset --hard", "git commit --amen
 
 Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill drives a story from any phase to **`done/`**.
 
-Gate criteria for `planned/ → doing/ → done/` are defined inline in §B below. When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
+Gate criteria for `planned/ → doing/ → done/` are defined inline in §B below. When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md). Cross-cutting conventions (date sourcing, no batching, push policy) are in [`_shared/conventions.md`](../_shared/conventions.md).
 
 ## Inputs
 
