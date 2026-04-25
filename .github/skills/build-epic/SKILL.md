@@ -64,7 +64,13 @@ If nothing needed changing, skip the commit and note that the epic plan was revi
 
 ## 3. Build each story in sequence
 
-Extract the **ordered story list** from the epic's `## Stories` section. For each story `S##-##-slug.md`, in order:
+Extract the **ordered story list** from the epic's `## Stories` section. Process stories **strictly sequentially** — never in parallel, even if **plan-epic** marked them as independent. Sequential execution is required so that:
+
+- Test suites run in a known state.
+- Build notes form a coherent timeline.
+- Failures halt the epic at a deterministic point.
+
+For each story `S##-##-slug.md`, in order:
 
 ### 3a. Determine current phase
 

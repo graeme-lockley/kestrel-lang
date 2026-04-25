@@ -9,7 +9,9 @@ description: >-
 
 # Kestrel kanban — build a story
 
-Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill drives a story from any phase to **`done/`**. See **kanban-story-migrate** for the formal gates.
+Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill drives a story from any phase to **`done/`**.
+
+Gate criteria for `planned/ → doing/ → done/` are defined inline in §B below.
 
 ## 0. Locate the story and determine phase
 
@@ -17,7 +19,7 @@ Find the story file in `docs/kanban/`:
 
 | Story is in | Action |
 |-------------|--------|
-| `future/` | Not roadmap-ready — use **story-create** or **kanban-story-migrate** to promote to `unplanned/` first |
+| `future/` | Not roadmap-ready — use **story-create** to promote to `unplanned/` first |
 | `unplanned/` | Run **plan-story** first, then continue from step 1 |
 | `planned/` | Continue from step 1 |
 | `doing/` | Continue from step 2 (already in progress) |
@@ -132,10 +134,25 @@ cd runtime/jvm && bash build.sh
    - Mark this story complete in the story list.
    - If all member stories are now in `done/`, report back to the user that all epic stories are complete.
 
+## §B. Gate criteria — `planned/ → doing/ → done/`
+
+A story may move from `planned/` to `doing/` only when:
+
+- File lives in `docs/kanban/planned/` with the correct `S##-##-slug.md` name.
+- `## Impact analysis`, `## Tasks`, `## Tests to add`, and `## Documentation and specs to update` sections all exist and are non-trivial.
+- The owning `## Epic` link resolves.
+
+A story may move from `doing/` to `done/` only when:
+
+- Every `## Tasks` checkbox is `- [x]`.
+- Every `## Documentation and specs to update` checkbox is `- [x]`.
+- A `## Build notes` section exists with at least one dated entry.
+- All required test suites listed in the verification matrix pass.
+- All `## Acceptance Criteria` are observably satisfied.
+
 ## Related
 
 - Plan a story (unplanned → planned): skill **plan-story**
-- Phase gates: skill **kanban-story-migrate**
 - Create a story: skill **story-create**
 - Create an epic: skill **epic-create**
 - Kanban rules: `docs/kanban/README.md`

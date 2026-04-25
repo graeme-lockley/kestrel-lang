@@ -72,14 +72,13 @@ Rules:
 - All required suites must pass to close the epic.
 - If any suite fails, do not move epic; report the failing command and blocker details.
 
-## 5. Close remaining story bookkeeping (if needed)
+## 5. Confirm all stories already closed
 
-If all tests pass and only bookkeeping remains:
+A story is closed only by **build-story** ticking its own checkboxes. **finish-epic** must never auto-tick on a story's behalf.
 
-1. For any member story still in `doing/` but otherwise complete:
-   - mark final task/acceptance checkboxes as complete where evidence exists,
-   - move story file to `docs/kanban/done/`.
-2. Ensure story `## Epic` links still resolve after epic move.
+1. If any member story is still in `doing/`, halt and report. The author must run **build-story** (or equivalent) to close it.
+2. If any member story has unticked `- [ ]` items in `## Tasks`, `## Acceptance Criteria`, or `## Documentation and specs to update`, halt and report — even if the file is in `done/`.
+3. Ensure story `## Epic` links still resolve after the epic move.
 
 ## 6. Move epic to done
 

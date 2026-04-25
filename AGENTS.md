@@ -259,7 +259,7 @@ Epics live in `docs/kanban/epics/` with folders: **unplanned** and **done**.
 | Create an epic | `epic-create` |
 | Decompose epic into stories | `plan-epic` |
 | Capture idea | `story-create` |
-| `future/` → `unplanned/` | `story-create` + `kanban-story-migrate` |
+| `future/` → `unplanned/` | `story-create` (then add full unplanned sections) |
 | `unplanned/` → `planned/` | **`plan-story`** |
 | `planned/` → `doing/` → `done/` | **`build-story`** |
 | End-to-end (any phase → done) | **`build-story`** |
@@ -306,7 +306,7 @@ Use the **`build-story`** skill to execute planned work. Key steps:
 - **Self-hosted CLI entrypoint**: `stdlib/kestrel/tools/compiler/cli-main.ks`
 - **Specs**: `docs/specs/` (01-language, 09-tools, etc.)
 - **Kestrel tests**: `tests/e2e/`, `tests/conformance/`
-- **Kanban**: `docs/kanban/README.md` (phases and gates); skills `.github/skills/epic-create/`, `story-create/`, `plan-epic/`, `kanban-story-migrate/`, `plan-story/`, `build-story/`, `build-epic/`; subagents `.cursor/agents/kanban-*.md`
+- **Kanban**: `docs/kanban/README.md` (phases and gates); skills `.github/skills/epic-create/`, `story-create/`, `plan-epic/`, `plan-story/`, `build-story/`, `build-epic/`, `finish-epic/`; subagents `.cursor/agents/kanban-*.md`
 
 ---
 

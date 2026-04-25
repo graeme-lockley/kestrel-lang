@@ -246,7 +246,7 @@ When actionable: move to `unplanned/S##-##-<slug>.md` with full unplanned sectio
 ## Automation and agents
 
 - Cursor rule: `.cursor/rules/kanban-workflow.mdc`
-- Skills: `.github/skills/epic-create/`, `story-create/`, `plan-epic/`, `kanban-story-migrate/`, `plan-story/`, `build-story/`
+- Skills: `.github/skills/epic-create/`, `story-create/`, `plan-epic/`, `plan-story/`, `build-story/`, `build-epic/`, `finish-epic/`
 - Subagents: `.cursor/agents/kanban-*.md` (including **`kanban-future-author`** for **`future/`** items)
 
 ## Deprecated: `backlog/`

@@ -10,7 +10,16 @@ description: >-
 
 # Kestrel kanban — plan a story
 
-Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill produces the `planned/` content for a story in `unplanned/`. See **kanban-story-migrate §A** for the formal gate.
+Canonical rules: **[docs/kanban/README.md](docs/kanban/README.md)**. This skill produces the `planned/` content for a story in `unplanned/`.
+
+## §A. Gate criteria — `unplanned/ → planned/`
+
+A story may move from `unplanned/` to `planned/` only when:
+
+- File lives in `docs/kanban/unplanned/` with the correct `S##-##-slug.md` name.
+- All required unplanned sections exist: `## Sequence`, `## Tier`, `## Epic`, `## Summary`, `## Current State`, `## Goals`, `## Acceptance Criteria`, `## Spec References`, `## Risks / Notes`.
+- The owning `## Epic` link resolves.
+- This skill has added `## Impact analysis`, `## Tasks`, `## Tests to add`, and `## Documentation and specs to update` (steps 4–7 below).
 
 ## 1. Read the story
 
@@ -114,5 +123,5 @@ The story is now ready for **build-story** to implement.
 
 - Create an epic: skill **epic-create**
 - Create a story: skill **story-create**
-- Phase gates: skill **kanban-story-migrate** (§A for the unplanned → planned gate)
 - Implement: skill **build-story**
+- Kanban rules: `docs/kanban/README.md`

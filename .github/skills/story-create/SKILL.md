@@ -18,7 +18,7 @@ Use **`docs/kanban/future/`** when the work is **not** ready for the prioritized
 
 1. Filename: **`slug.md`** only — no `S##-##-` prefix, no story id.
 2. Content: free-form. Include a **`## Kind`** line (e.g. `investigation / idea / spike`).
-3. Do **not** add **Sequence**, **Tier**, or full unplanned sections until promoting to `unplanned/` (use **kanban-story-migrate**).
+3. Do **not** add **Sequence**, **Tier**, or full unplanned sections until promoting the file from `future/` to `unplanned/` (rename to `S##-##-slug.md` and add the sections listed in section B).
 
 ---
 
@@ -70,11 +70,10 @@ Use **`docs/kanban/future/`** when the work is **not** ready for the prioritized
 ### After the file exists
 
 - Add the story to the owning epic's **Stories** list with a markdown link and one-line description.
-- Ensure the story meets unplanned exit criteria before promoting to `planned/` (use **kanban-story-migrate**).
+- Ensure the story meets unplanned exit criteria before promoting to `planned/` (see **plan-story §A**).
 
 ## Related
 
 - Create the epic first: skill **epic-create**
-- Promote future → unplanned: skill **kanban-story-migrate** (section 0)
 - Plan the story (add tasks, tests, impact): skill **plan-story**
 - Kanban rules: `docs/kanban/README.md`
