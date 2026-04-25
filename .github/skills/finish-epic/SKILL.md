@@ -53,24 +53,9 @@ For each member story:
 
 ## 4. Run required verification suites
 
-Run from repository root:
+Run all suites listed in [`_shared/verify.md`](../_shared/verify.md) under the **Epic close** trigger. Every suite must pass for the epic to close.
 
-```bash
-cd compiler && npm run build && npm test
-./scripts/kestrel test
-./scripts/run-e2e.sh
-```
-
-Optional (when runtime/JVM changes are part of epic scope):
-
-```bash
-cd runtime/jvm && bash build.sh
-```
-
-Rules:
-
-- All required suites must pass to close the epic.
-- If any suite fails, do not move epic; report the failing command and blocker details.
+If any suite fails, do not move the epic; report the failing command and blocker details per [`_shared/failure-protocol.md`](../_shared/failure-protocol.md).
 
 ## 5. Confirm all stories already closed
 

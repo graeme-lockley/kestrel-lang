@@ -115,25 +115,13 @@ Use the **build-story** skill to implement the story:
 
 ### 3d. Verify
 
-Run the required test suites. Fix all failures before continuing to the next story.
-
-```bash
-cd compiler && npm run build && npm test
-./scripts/kestrel test
-```
-
-Add these when the story modifies JVM runtime code or user-visible E2E behaviour:
-
-```bash
-cd runtime/jvm && bash build.sh
-./scripts/run-e2e.sh
-```
+Run the suites listed in [`_shared/verify.md`](../_shared/verify.md) for the triggers this story hit. Fix all failures before continuing to the next story.
 
 Confirm:
 
 - [ ] All **Tasks** are `[x]`.
 - [ ] All **Documentation and specs to update** items are `[x]`.
-- [ ] All test suites pass.
+- [ ] All required test suites pass.
 
 If any check fails, do not move the story to `done/` until it is resolved.
 

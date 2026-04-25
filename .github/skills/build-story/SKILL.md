@@ -104,19 +104,7 @@ Specs are the source of truth; keep them accurate.
 
 ## 7. Verify
 
-Run the required suites. Fix all failures before closing.
-
-```bash
-cd compiler && npm run build && npm test
-./scripts/kestrel test
-```
-
-Add these when the story modifies JVM runtime code or user-visible E2E behaviour:
-
-```bash
-cd runtime/jvm && bash build.sh
-./scripts/run-e2e.sh
-```
+Run the suites listed in [`_shared/verify.md`](../_shared/verify.md) for the triggers this story hit. Fix all failures before closing — do not advance the story phase on a red suite.
 
 ## 8. Close the story
 
