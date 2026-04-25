@@ -144,6 +144,7 @@ Confirm:
 - [ ] All **Tasks** are `[x]`.
 - [ ] All **Documentation and specs to update** items are `[x]`.
 - [ ] All required test suites pass.
+- [ ] `scripts/check-story.sh S##-##` exits 0.
 
 If any check fails, do not move the story to `done/` until it is resolved.
 

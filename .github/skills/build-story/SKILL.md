@@ -130,6 +130,10 @@ Run the suites listed in [`_shared/verify.md`](../_shared/verify.md) for the tri
 
 ## 8. Close the story
 
+Authoritative gate: run `scripts/check-story.sh S##-##`. If it exits non-zero, follow [`_shared/failure-protocol.md`](../_shared/failure-protocol.md) §7 — fix the underlying cause and re-run; never override.
+
+The prose checklist below documents what the script enforces:
+
 1. Every **Task** is `[x]` (including any added during implementation).
 2. Every **Documentation and specs to update** item is ticked.
 3. **Build notes** capture material decisions.

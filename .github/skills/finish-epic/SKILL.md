@@ -56,25 +56,29 @@ When anything goes wrong at any step, follow [`_shared/failure-protocol.md`](../
 
 ## 2. Verify story phase and checklist completeness
 
-For each member story:
+For every member story id, run:
 
-1. Locate the story file across:
-   - `docs/kanban/unplanned/`
-   - `docs/kanban/planned/`
-   - `docs/kanban/doing/`
-   - `docs/kanban/done/`
-2. Fail epic closure if any member story is not in `docs/kanban/done/`.
-3. Read each story and verify:
-   - `## Tasks` has no unchecked `- [ ]` items.
-   - `## Acceptance Criteria` has no unchecked `- [ ]` items (or each criterion is explicitly satisfied in the story text/build notes).
-   - Any required docs/spec updates in story checklists are complete.
-4. If any story fails these checks, do not close epic; report blockers by file and line.
+```bash
+scripts/check-story.sh <S##-##>
+```
 
-## 3. Verify epic-level criteria
+It must exit 0 for every member. The script enforces:
 
-1. Reconcile epic-level completion criteria/objectives against current story outcomes.
-2. Confirm no unresolved epic-level blockers remain (for example deferred scope not tracked by follow-up).
-3. If epic criteria are not fully satisfied, stop and report exactly what is missing.
+- The story file lives in `docs/kanban/done/`.
+- Every required section for the `done` phase exists.
+- Every `- [ ]` in `## Tasks`, `## Acceptance Criteria`, and `## Documentation and specs to update` is ticked.
+- The epic link resolves.
+
+If any story fails, halt and report — do not close the epic.
+
+Authoritative gate: run `scripts/check-epic.sh EXX`. It must exit 0 before the epic moves to `epics/done/`. The script verifies:
+
+- Every required epic section exists.
+- Every member story is in `done/` and passes `check-story.sh`.
+- No `- [ ]` boxes remain in `## Epic Completion Criteria`.
+- `## Status` line is set to `Done` (warned, not enforced — finish-epic itself flips it to `Done`).
+
+If the script reports any failure, halt and report. Do not bypass.
 
 ## 4. Run required verification suites
 

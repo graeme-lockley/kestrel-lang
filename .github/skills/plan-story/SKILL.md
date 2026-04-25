@@ -100,6 +100,8 @@ Add this section using the shape in [`_templates/story-planned-additions.md`](..
 
 Move `docs/kanban/unplanned/S##-##-slug.md` → `docs/kanban/planned/S##-##-slug.md` (same filename, different folder). Do not change any other content.
 
+Authoritative gate: run `scripts/check-story.sh S##-##`. It must exit 0 before this skill is considered complete. If it exits non-zero, fix the underlying cause and re-run.
+
 The story is now ready for **build-story** to implement.
 
 ## Examples
