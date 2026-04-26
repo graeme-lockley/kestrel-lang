@@ -1,4 +1,6 @@
 # Build artifacts
+--target/
+
 out/
 compiler/dist/
 compiler/node_modules/
