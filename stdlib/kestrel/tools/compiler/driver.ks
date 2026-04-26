@@ -151,6 +151,17 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
       Err(_) =>
         failResult(entryPath, Diag.CODES.file.readError, "cannot read file: ${entryPath}")
       Ok(source) => {
+        // Check freshness before full compilation
+        val moduleName = classNameForPath(entryPath);
+        val srcHash = Kti.sourceHash(source);
+        val ktiPath = "${opts.outDir}/${moduleName}.kti";
+        val isAlreadyFresh: Bool = match (await Kti.readKtiFile(ktiPath)) {
+          Err(_) => False
+          Ok(existingKti) => isFresh(existingKti, srcHash, Dict.emptyStringDict())
+        };
+        if (isAlreadyFresh) {
+          { ok = True, diagnostics = [] }
+        } else {
         // 2. Lex + Parse
         val tokens = Lex.lex(source);
         match (parseOutcome(tokens)) {
@@ -169,7 +180,6 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
               failWithDiags(tc.diagnostics)
             } else {
               // 5. Code generate
-              val moduleName = classNameForPath(entryPath);
               val codegenResult = Codegen.jvmCodegen(moduleName, prog);
               // 6. Write class files
               match (await Fs.mkdirAll(opts.outDir)) {
@@ -185,7 +195,6 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
                         { ok = True, diagnostics = [] }
                       } else {
                         val kti = Kti.buildKtiV4(prog, tc.exports.items, source, Dict.emptyStringDict());
-                        val ktiPath = "${opts.outDir}/${moduleName}.kti";
                         match (await Kti.writeKtiFile(ktiPath, kti)) {
                           Err(ktiErr) => failResult(entryPath, Diag.CODES.file.readError, "cannot write KTI: ${ktiErr}")
                           Ok(()) => { ok = True, diagnostics = [] }
@@ -197,6 +206,7 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
               }
             }
           }
+        }
         }
       }
     }

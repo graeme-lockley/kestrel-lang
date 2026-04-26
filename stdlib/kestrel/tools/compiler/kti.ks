@@ -42,6 +42,10 @@ export type KtiV4 = {
 
 fun pseudoHash(s: String): String = "len:${Str.fromInt(Str.length(s))}"
 
+/// Compute the source hash for a Kestrel source string.
+/// This must match the hash stored in KTI files by `buildKtiV4`.
+export fun sourceHash(s: String): String = pseudoHash(s)
+
 export fun serializeType(t: Ty.InternalType): Json.Value =
   StrVal(Ty.typeToString(t))
 

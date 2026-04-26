@@ -206,6 +206,81 @@ export async fun run(s: Suite): Task<Unit> = {
         }
       }
     })
+
+    await asyncGroup(s1, "compileFile - fresh path skips recompile", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_fresh_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_fresh_out"
+      val srcPath = "${srcDir}/freshtest.ks"
+      val src = "export fun greet(): String = \"hello\""
+      val ktiOpts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True
+      }
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(srcPath, src)) {
+                Err(_) => isTrue(sg, "writeText failed", False)
+                Ok(()) => {
+                  val r1 = await Driver.compileFile(srcPath, ktiOpts)
+                  isTrue(sg, "first compile ok", r1.ok)
+                  // Second compile with same source should be fresh
+                  val r2 = await Driver.compileFile(srcPath, ktiOpts)
+                  isTrue(sg, "second compile (fresh) ok", r2.ok)
+                  isTrue(sg, "fresh compile no diagnostics", Lst.isEmpty(r2.diagnostics))
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - stale KTI triggers recompile", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_stale_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_stale_out"
+      val srcPath = "${srcDir}/staletest.ks"
+      val src1 = "export fun v1(): Int = 1"
+      val src2 = "export fun v2(): Int = 2"
+      val ktiOpts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True
+      }
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(srcPath, src1)) {
+                Err(_) => isTrue(sg, "writeText v1 failed", False)
+                Ok(()) => {
+                  val r1 = await Driver.compileFile(srcPath, ktiOpts)
+                  isTrue(sg, "compile v1 ok", r1.ok)
+                  // Change source — KTI becomes stale
+                  match (await Fs.writeText(srcPath, src2)) {
+                    Err(_) => isTrue(sg, "writeText v2 failed", False)
+                    Ok(()) => {
+                      val r2 = await Driver.compileFile(srcPath, ktiOpts)
+                      isTrue(sg, "compile v2 (stale) ok", r2.ok)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
   })
 }
 
