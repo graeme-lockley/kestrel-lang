@@ -8,7 +8,8 @@ fun ktiOpts(outDir: String): Driver.CompileOptions = {
   stdlibDir = "/nonexistent/stdlib",
   cacheRoot = "/tmp/kestrel_cache",
   allowHttp = False,
-  writeKti = True
+  writeKti = True,
+  refresh = False
 }
 
 export async fun run(s: Suite): Task<Unit> = {
@@ -58,7 +59,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = False
+        writeKti = False,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(s1, "mkdirAll src failed", False)

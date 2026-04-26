@@ -156,6 +156,12 @@ For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashM
 
 **Self-hosted compiler behavior:** The JVM self-hosted driver (`kestrel:tools/compiler/driver`) resolves and parses the full import graph from the entry module, then compiles modules in deterministic dependency-first order (DFS post-order; each absolute path compiled at most once per invocation). Import cycles are rejected at compile time with a diagnostic that includes the cycle member paths.
 
+**URL dependency fetch wiring (S17-09):** Before the driver begins compiling a module's resolved dependencies, it iterates the dep list and, for any dep whose original specifier starts with `https://` or `http://`, ensures the cache file is populated:
+- If `CompileOptions.refresh` is `false` and the cache file already exists on disk (`Fs.fileExists`), the fetch is skipped (cache-hit fast path).
+- If `CompileOptions.refresh` is `true`, or the cache file does not exist, `Resolve.fetchUrl(url, cacheRoot, allowHttp)` is called. The current implementation is a stub that returns the cache path without performing a network request; future versions will perform real HTTP fetches.
+- If `fetchUrl` returns an error (e.g. `allowHttp=false` for an `http://` URL), compilation fails immediately with a `moduleNotFound` diagnostic referencing the URL specifier.
+- The `CompileOptions.refresh` flag (default `false`) is the mechanism for forcing re-download of all URL dependencies in a build invocation.
+
 ### 4.4 Failure cases
 
 - **Module not found:** The specifier could not be resolved to any artifact (path does not exist, URL unreachable, stdlib name unknown). → **Compile error** (or implementation-defined error reporting).

@@ -37,7 +37,8 @@ fun defaultCompileOptions(cwd: String): Driver.CompileOptions = {
   stdlibDir = "${cwd}/stdlib",
   cacheRoot = "${cwd}/.kestrel/cache",
   allowHttp = False,
-  writeKti = True
+  writeKti = True,
+  refresh = False
 }
 
 async fun runBuildScaffold(args: List<String>, cwd: String): Task<Int> =

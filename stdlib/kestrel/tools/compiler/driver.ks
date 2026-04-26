@@ -26,7 +26,8 @@ export type CompileOptions = {
   stdlibDir: String,
   cacheRoot: String,
   allowHttp: Bool,
-  writeKti: Bool
+  writeKti: Bool,
+  refresh: Bool
 }
 
 export type CompileResult = {
@@ -123,6 +124,37 @@ fun mkParseErrDiag(file: String, msg: String, offset: Int, ln: Int, col: Int): D
   suggestion = None,
   hint = None
 }
+
+/// Ensure a URL dep's cache file exists, fetching if needed.
+/// Returns None on success, Some(error) if fetch fails.
+async fun ensureUrlDep(dep: Resolve.ResolvedDep, opts: CompileOptions): Task<Option<CompileResult>> =
+  if (!Str.startsWith("https://", dep.spec) & !Str.startsWith("http://", dep.spec)) None
+  else {
+    val cacheFile = dep.path
+    val cachedExists = await Fs.fileExists(cacheFile)
+    val needFetch: Bool = opts.refresh | !cachedExists
+    if (!needFetch) None
+    else {
+      match (await Resolve.fetchUrl(dep.spec, opts.cacheRoot, opts.allowHttp)) {
+        Err(e) => Some(failResult(dep.spec, Diag.CODES.resolve.moduleNotFound, e))
+        Ok(_) => None
+      }
+    }
+  }
+
+async fun ensureUrlDeps(deps: List<Resolve.ResolvedDep>, opts: CompileOptions): Task<Option<CompileResult>> =
+  match (deps) {
+    [] => None
+    h :: rest => {
+      match (await ensureUrlDep(h, opts)) {
+        Some(err) => Some(err)
+        None => {
+          val next: Task<Option<CompileResult>> = ensureUrlDeps(rest, opts)
+          await next
+        }
+      }
+    }
+  }
 
 fun failWithDiags(ds: List<Diag.Diagnostic>): CompileResult = {
   Rep.printDiagnosticsErr(ds);
@@ -325,18 +357,23 @@ async fun compileGraph(path: String, opts: CompileOptions, visiting: List<String
               Err(resolveErr) =>
                 GraphCompileErr(failWithDiags([diag(p, Diag.CODES.resolve.moduleNotFound, resolveErr)]))
               Ok(deps) => {
-                val next: Task<GraphCompileResult> = compileDepsInOrder(deps, opts, p :: visiting, state)
-                match (await next) {
-                  GraphCompileErr(e) => GraphCompileErr(e)
-                  GraphCompileOk(stateAfterDeps) => {
-                    match (await compileOneModule(p, source, prog, deps, opts, stateAfterDeps)) {
-                      ModuleCompileErr(e) => GraphCompileErr(e)
-                      ModuleCompileOk(ktiText) => {
-                        val ktiTexts = if (Str.isEmpty(ktiText)) stateAfterDeps.ktiTexts else Dict.insert(stateAfterDeps.ktiTexts, p, ktiText)
-                        GraphCompileOk({
-                          compiled = Dict.insert(stateAfterDeps.compiled, p, True),
-                          ktiTexts = ktiTexts
-                        })
+                match (await ensureUrlDeps(deps, opts)) {
+                  Some(fetchErr) => GraphCompileErr(fetchErr)
+                  None => {
+                    val next: Task<GraphCompileResult> = compileDepsInOrder(deps, opts, p :: visiting, state)
+                    match (await next) {
+                      GraphCompileErr(e) => GraphCompileErr(e)
+                      GraphCompileOk(stateAfterDeps) => {
+                        match (await compileOneModule(p, source, prog, deps, opts, stateAfterDeps)) {
+                          ModuleCompileErr(e) => GraphCompileErr(e)
+                          ModuleCompileOk(ktiText) => {
+                            val ktiTexts = if (Str.isEmpty(ktiText)) stateAfterDeps.ktiTexts else Dict.insert(stateAfterDeps.ktiTexts, p, ktiText)
+                            GraphCompileOk({
+                              compiled = Dict.insert(stateAfterDeps.compiled, p, True),
+                              ktiTexts = ktiTexts
+                            })
+                          }
+                        }
                       }
                     }
                   }

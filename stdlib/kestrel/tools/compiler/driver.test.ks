@@ -10,6 +10,7 @@ import * as Kti from "kestrel:tools/compiler/kti"
 import * as Crypto from "kestrel:io/crypto"
 import * as Ty from "kestrel:dev/typecheck/types"
 import * as Fs from "kestrel:io/fs"
+import * as Resolve from "kestrel:tools/compiler/resolve"
 import { getProcess } from "kestrel:sys/process"
 
 fun program(src: String): Ast.Program =
@@ -23,7 +24,8 @@ fun defaultOpts(outDir: String): Driver.CompileOptions = {
   stdlibDir = "/nonexistent/stdlib",
   cacheRoot = "/tmp/kestrel_cache",
   allowHttp = False,
-  writeKti = False
+  writeKti = False,
+  refresh = False
 }
 
 async fun fileMtimeMs(path: String): Task<Int> =
@@ -51,7 +53,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/tmp/stdlib",
         cacheRoot = "/tmp/cache",
         allowHttp = False,
-        writeKti = True
+        writeKti = True,
+        refresh = False
       }
       isTrue(sg, "options outDir set", opts.outDir == "/tmp/out")
       isTrue(sg, "options allowHttp set", opts.allowHttp == False)
@@ -171,7 +174,8 @@ export async fun run(s: Suite): Task<Unit> = {
                     stdlibDir = "/nonexistent/stdlib",
                     cacheRoot = "/tmp/kestrel_cache",
                     allowHttp = False,
-                    writeKti = True
+                    writeKti = True,
+                    refresh = False
                   }
                   val result = await Driver.compileFile(srcPath, ktiOpts)
                   isTrue(sg, "writeKti compile ok", result.ok)
@@ -225,7 +229,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = True
+        writeKti = True,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(sg, "mkdirAll src failed", False)
@@ -261,7 +266,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = True
+        writeKti = True,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(sg, "mkdirAll src failed", False)
@@ -326,7 +332,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = False
+        writeKti = False,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(sg, "mkdirAll src failed", False)
@@ -360,7 +367,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = True
+        writeKti = True,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(sg, "mkdirAll src failed", False)
@@ -402,7 +410,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = True
+        writeKti = True,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(sg, "mkdirAll src failed", False)
@@ -452,7 +461,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = True
+        writeKti = True,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(sg, "mkdirAll src failed", False)
@@ -507,7 +517,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = True
+        writeKti = True,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(sg, "mkdirAll src failed", False)
@@ -567,7 +578,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = True
+        writeKti = True,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(sg, "mkdirAll src failed", False)
@@ -675,7 +687,8 @@ export async fun run(s: Suite): Task<Unit> = {
         stdlibDir = "/nonexistent/stdlib",
         cacheRoot = "/tmp/kestrel_cache",
         allowHttp = False,
-        writeKti = True
+        writeKti = True,
+        refresh = False
       }
       match (await Fs.mkdirAll(srcDir)) {
         Err(_) => isTrue(sg, "mkdirAll src failed", False)
@@ -721,6 +734,149 @@ export async fun run(s: Suite): Task<Unit> = {
                               }
                             }
                           }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+    await asyncGroup(s1, "URL fetch — cache hit skips fetch", async (sg: Suite) => {
+      val cacheRoot = "/tmp/kestrel_driver_url_cache"
+      val outDir = "/tmp/kestrel_driver_url_out"
+      val srcDir = "/tmp/kestrel_driver_url_src"
+      val url = "https://example.com/urlmod.ks"
+      val cachePath = Resolve.urlCachePath(url, cacheRoot)
+      val libSrc = "export fun urlAnswer(): Int = 99"
+      val mainSrc = "import * as Lib from \"${url}\"\nexport fun go(): Int = Lib.urlAnswer()"
+      val mainPath = "${srcDir}/main.ks"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = cacheRoot,
+        allowHttp = False,
+        writeKti = True,
+        refresh = False
+      }
+      match (await Fs.mkdirAll(cacheRoot)) {
+        Err(_) => isTrue(sg, "mkdirAll cacheRoot failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll outDir failed", False)
+            Ok(()) => {
+              match (await Fs.mkdirAll(srcDir)) {
+                Err(_) => isTrue(sg, "mkdirAll srcDir failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(cachePath, libSrc)) {
+                    Err(_) => isTrue(sg, "write cache file failed", False)
+                    Ok(()) => {
+                      match (await Fs.writeText(mainPath, mainSrc)) {
+                        Err(_) => isTrue(sg, "write main failed", False)
+                        Ok(()) => {
+                          val result = await Driver.compileFile(mainPath, opts)
+                          isTrue(sg, "cache-hit compile ok", result.ok)
+                          isTrue(sg, "cache-hit no diagnostics", Lst.isEmpty(result.diagnostics))
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "URL fetch — http disallowed returns ok=False", async (sg: Suite) => {
+      val cacheRoot = "/tmp/kestrel_driver_url_http_cache"
+      val outDir = "/tmp/kestrel_driver_url_http_out"
+      val srcDir = "/tmp/kestrel_driver_url_http_src"
+      val url = "http://example.com/httpmod.ks"
+      val mainSrc = "import * as Lib from \"${url}\"\nexport fun go(): Int = 1"
+      val mainPath = "${srcDir}/main.ks"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = cacheRoot,
+        allowHttp = False,
+        writeKti = False,
+        refresh = False
+      }
+      match (await Fs.mkdirAll(cacheRoot)) {
+        Err(_) => isTrue(sg, "mkdirAll cacheRoot failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll outDir failed", False)
+            Ok(()) => {
+              match (await Fs.mkdirAll(srcDir)) {
+                Err(_) => isTrue(sg, "mkdirAll srcDir failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(mainPath, mainSrc)) {
+                    Err(_) => isTrue(sg, "write main failed", False)
+                    Ok(()) => {
+                      val result = await Driver.compileFile(mainPath, opts)
+                      isTrue(sg, "http disallowed ok=False", !result.ok)
+                      isTrue(sg, "http disallowed has diagnostic", Lst.length(result.diagnostics) > 0)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "URL fetch — refresh=True re-fetches cache", async (sg: Suite) => {
+      val cacheRoot = "/tmp/kestrel_driver_url_refresh_cache"
+      val outDir = "/tmp/kestrel_driver_url_refresh_out"
+      val srcDir = "/tmp/kestrel_driver_url_refresh_src"
+      val url = "https://example.com/refreshmod.ks"
+      val cachePath = Resolve.urlCachePath(url, cacheRoot)
+      val libSrc = "export fun refreshAnswer(): Int = 7"
+      val mainSrc = "import * as Lib from \"${url}\"\nexport fun go(): Int = Lib.refreshAnswer()"
+      val mainPath = "${srcDir}/main.ks"
+      val baseOpts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = cacheRoot,
+        allowHttp = False,
+        writeKti = True,
+        refresh = False
+      }
+      val refreshOpts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = cacheRoot,
+        allowHttp = False,
+        writeKti = True,
+        refresh = True
+      }
+      match (await Fs.mkdirAll(cacheRoot)) {
+        Err(_) => isTrue(sg, "mkdirAll cacheRoot failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll outDir failed", False)
+            Ok(()) => {
+              match (await Fs.mkdirAll(srcDir)) {
+                Err(_) => isTrue(sg, "mkdirAll srcDir failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(cachePath, libSrc)) {
+                    Err(_) => isTrue(sg, "write cache failed", False)
+                    Ok(()) => {
+                      match (await Fs.writeText(mainPath, mainSrc)) {
+                        Err(_) => isTrue(sg, "write main failed", False)
+                        Ok(()) => {
+                          val r1 = await Driver.compileFile(mainPath, baseOpts)
+                          isTrue(sg, "first compile ok", r1.ok)
+                          val r2 = await Driver.compileFile(mainPath, refreshOpts)
+                          isTrue(sg, "refresh compile ok", r2.ok)
+                          isTrue(sg, "refresh no diagnostics", Lst.isEmpty(r2.diagnostics))
                         }
                       }
                     }

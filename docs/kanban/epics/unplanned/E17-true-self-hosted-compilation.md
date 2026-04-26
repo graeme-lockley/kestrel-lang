@@ -71,7 +71,7 @@ independently testable. No story should touch more than one concern at a time.
    recompile modules whose source has changed or whose dependencies have changed. Dep hashes
    are SHA-256 hashes of direct dependency `.kti` contents, matching the TS compiler's scheme.
 
-9. [S17-09] URL dependency fetch integration
+9. ✅ [S17-09] URL dependency fetch integration
    — For `https://` (and optionally `http://` with `--allow-http`) specifiers, call
    `Resolve.fetchUrl` to populate the URL cache before attempting to resolve the path. Wire
    `--refresh` flag to force re-fetch. Verify cached-hit path skips the network.
