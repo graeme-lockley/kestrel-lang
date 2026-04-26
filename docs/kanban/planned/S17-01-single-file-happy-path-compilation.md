@@ -70,3 +70,36 @@ The individual pieces needed:
   parent directories step by step.
 - The `Fs.writeBytes` function must accept a `List<Int>` (bytes); verify the signature matches
   what `jvmCodegen` produces.
+
+## Impact analysis
+
+| Area | Change |
+|------|--------|
+| Stdlib driver | Replace stub `compileFile` in `stdlib/kestrel/tools/compiler/driver.ks` with real lex→parse→typecheck→codegen→write pipeline. Add `classNameForPath` helper. |
+| Stdlib imports | Add imports for `Lex`, `Par`, `TC` (typecheck), `Codegen`, `Fs`, `Char`, `Dict`, `Lst`, `Str` in driver.ks. |
+| Kestrel tests | Extend `driver.test.ks` with a happy-path test that compiles a minimal single-file program and verifies `ok=True`. |
+| Spec refs | No spec change; this implements what was already described. |
+
+## Tasks
+
+- [ ] Add imports to `driver.ks`: `Lex`, `Par` (parser), `TC` (typecheck), `Codegen` (jvmCodegen), `Fs`, `Char`, `Dict`, `Lst`, `Str`
+- [ ] Implement `classNameForPath(path: String): String` in `driver.ks` (matches `classNameForPath` in TS compiler)
+- [ ] Rewrite `compileFile` to: read source with `Fs.readText`; lex with `Lex.lex`; parse with `Par.parseFromList`; typecheck with `TC.typecheck`; codegen with `Codegen.jvmCodegen`; write classes with `Fs.writeBytes` after `Fs.mkdirAll`
+- [ ] Handle parse failure: return `{ ok = False, diagnostics = [] }` when parse returns `Err`
+- [ ] Handle file-read failure: return `{ ok = False, diagnostics = [diag(...readError...)] }`
+- [ ] Handle typecheck failure: return `{ ok = False, diagnostics = [] }` when `tc.ok = False` (full diagnostic surface in S17-02)
+- [ ] Add happy-path test in `driver.test.ks`: compile a valid single-file program, assert `ok=True`
+- [ ] Add failure test: compile a parse-invalid program, assert `ok=False`
+- [ ] Run `cd compiler && npm run build && npm test`
+- [ ] Run `./scripts/kestrel test`
+
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| Kestrel harness | `stdlib/kestrel/tools/compiler/driver.test.ks` | Happy path: `compileFile` on `"export fun id(x: Int): Int = x"` → `ok=True` |
+| Kestrel harness | `stdlib/kestrel/tools/compiler/driver.test.ks` | Failure path: `compileFile` on unparseable source → `ok=False` |
+
+## Documentation and specs to update
+
+- [ ] `docs/specs/11-bootstrap.md` — no change needed for this story; mark reviewed
