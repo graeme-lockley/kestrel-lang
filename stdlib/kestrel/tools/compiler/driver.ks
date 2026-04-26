@@ -9,11 +9,12 @@ import * as Str from "kestrel:data/string"
 import * as Chr from "kestrel:data/char"
 import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as Lex from "kestrel:dev/parser/lexer"
-import * as Par from "kestrel:dev/parser/parser"
+import { parseFromList, ParseError } from "kestrel:dev/parser/parser"
 import * as TC from "kestrel:dev/typecheck/typecheck"
 import * as Codegen from "kestrel:tools/compiler/codegen"
 import * as Kti from "kestrel:tools/compiler/kti"
 import * as Fs from "kestrel:io/fs"
+import * as Rep from "kestrel:dev/typecheck/reporter"
 
 export type CompileOptions = {
   outDir: String,
@@ -42,7 +43,20 @@ fun diag(file: String, code: String, message: String): Diag.Diagnostic = {
 export fun isFresh(kti: Kti.KtiV4, srcHash: String, depHashes: Dict<String, String>): Bool =
   kti.sourceHash == srcHash & kti.depHashes == depHashes
 
-/// Derives the JVM class name from an absolute source path.
+/// Internal result of a parse attempt — wraps either the program or the parse error fields
+/// so that the async `compileFile` function can branch on it without allocating exception
+/// pattern-binding locals inside the async state machine (which can cause JVM VerifyError).
+type ParseOutcome =
+    ParseOk(Ast.Program)
+  | ParseFail(String, Int, Int, Int)
+
+fun parseOutcome(tokens: List<Token.Token>): ParseOutcome =
+  match (parseFromList(tokens)) {
+    Ok(prog) => ParseOk(prog)
+    Err(e) => match (e) {
+      ParseError(msg, off, ln, col) => ParseFail(msg, off, ln, col)
+    }
+  }
 /// Mirrors `classNameForPath` in `compiler/src/compile-file-jvm.ts`:
 /// strip leading `/`, remove `.ks` extension, split on `/`, sanitize each segment
 /// (replace non-alphanumeric chars with `_`), capitalize the last segment, re-join.
@@ -67,6 +81,28 @@ export fun classNameForPath(path: String): String = {
 fun failResult(file: String, code: String, message: String): CompileResult = {
   ok = False,
   diagnostics = [diag(file, code, message)]
+}
+
+fun mkParseErrDiag(file: String, msg: String, offset: Int, ln: Int, col: Int): Diag.Diagnostic = {
+  severity = Diag.Error,
+  code = Diag.CODES.parse.unexpectedToken,
+  message = msg,
+  location = Diag.locationFromSpan(file, {
+    file = file,
+    startOffset = offset,
+    endOffset = offset,
+    startLine = ln,
+    startColumn = col
+  }, None),
+  sourceLine = None,
+  related = [],
+  suggestion = None,
+  hint = None
+}
+
+fun failWithDiags(ds: List<Diag.Diagnostic>): CompileResult = {
+  Rep.printDiagnosticsErr(ds);
+  { ok = False, diagnostics = ds }
 }
 
 fun classDirName(classPath: String): String = {
@@ -115,12 +151,12 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
       Err(_) =>
         failResult(entryPath, Diag.CODES.file.readError, "cannot read file: ${entryPath}")
       Ok(source) => {
-        // 2. Lex
+        // 2. Lex + Parse
         val tokens = Lex.lex(source);
-        // 3. Parse
-        match (Par.parseFromList(tokens)) {
-          Err(_parseErr) => { ok = False, diagnostics = [] }
-          Ok(prog) => {
+        match (parseOutcome(tokens)) {
+          ParseFail(msg, off, ln, col) =>
+            failWithDiags([mkParseErrDiag(entryPath, msg, off, ln, col)])
+          ParseOk(prog) => {
             // 4. Typecheck (no imports in this story)
             val tcOpts = {
               importBindings = None,
@@ -130,7 +166,7 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
             };
             val tc = TC.typecheck(prog, tcOpts);
             if (!tc.ok) {
-              { ok = False, diagnostics = [] }
+              failWithDiags(tc.diagnostics)
             } else {
               // 5. Code generate
               val moduleName = classNameForPath(entryPath);

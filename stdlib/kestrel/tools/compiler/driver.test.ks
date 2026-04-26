@@ -110,6 +110,32 @@ export async fun run(s: Suite): Task<Unit> = {
                 Ok(()) => {
                   val result = await Driver.compileFile(srcPath, defaultOpts(outDir))
                   isTrue(sg, "invalid source ok=False", !result.ok)
+                  isTrue(sg, "parse error has diagnostic", Lst.length(result.diagnostics) > 0)
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - type error returns ok=False with diagnostics", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_type_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_type_out"
+      val srcPath = "${srcDir}/typeerr.ks"
+      val src = "export fun bad(): Int = \"this is not an int\""
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(srcPath, src)) {
+                Err(_) => isTrue(sg, "writeText failed", False)
+                Ok(()) => {
+                  val result = await Driver.compileFile(srcPath, defaultOpts(outDir))
+                  isTrue(sg, "type error ok=False", !result.ok)
+                  isTrue(sg, "type error has diagnostics", Lst.length(result.diagnostics) > 0)
                 }
               }
             }

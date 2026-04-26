@@ -4,6 +4,7 @@
 //! and can render them in a human-readable format for CLI output.
 import * as Lst from "kestrel:data/list"
 import * as Diag from "kestrel:dev/typecheck/diagnostics"
+import { eprintln } from "kestrel:io/console"
 
 /// Mutable accumulator that collects `Diagnostic` values during a compiler pass.
 export type Reporter = { items: mut List<Diag.Diagnostic> }
@@ -68,3 +69,34 @@ fun printLoop(ds: List<Diag.Diagnostic>): Unit =
 /// Human-readable diagnostic output.
 export fun printDiagnostics(ds: List<Diag.Diagnostic>, _source: Option<String>): Unit =
   printLoop(ds)
+
+fun printOneErr(d: Diag.Diagnostic): Unit = {
+  val loc = d.location
+  val path = if (loc.file == "") "<source>" else loc.file
+  eprintln("  --> ${path}:${loc.line}:${loc.column}${rangeSuffix(loc)}")
+  eprintln("   |")
+  eprintln(" ${loc.line} | ")
+  eprintln("    ^ ${d.message}")
+  match (d.hint) {
+    Some(h) => eprintln("   = hint: ${h}")
+    None => ()
+  };
+  match (d.suggestion) {
+    Some(n) => eprintln("   = note: ${n}")
+    None => ()
+  };
+  eprintln("")
+}
+
+fun printLoopErr(ds: List<Diag.Diagnostic>): Unit =
+  match (ds) {
+    [] => ()
+    d :: rest => {
+      printOneErr(d);
+      printLoopErr(rest)
+    }
+  }
+
+/// Print diagnostics to stderr in the same format as the TypeScript compiler output.
+export fun printDiagnosticsErr(ds: List<Diag.Diagnostic>): Unit =
+  printLoopErr(ds)
