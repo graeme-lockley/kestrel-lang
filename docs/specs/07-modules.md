@@ -154,6 +154,8 @@ For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashM
 - **Order:** The order in which the current module’s distinct specifiers are resolved is **implementation-defined** but must be **deterministic** (e.g. order of first occurrence in source, or lexicographic order of specifier).
 - **Cycles:** If module A imports B and B (transitively) imports A, the dependency graph has a cycle. The implementation may (1) **reject** circular dependencies at compile time, or (2) **allow** them and define a deterministic load order (e.g. load A, then when A’s resolution needs B, load B, then when B’s resolution needs A, use the partially loaded A). This spec does not require a particular behaviour; the implementation must document whether cycles are allowed and, if so, how they are handled.
 
+**Self-hosted compiler behavior:** The JVM self-hosted driver (`kestrel:tools/compiler/driver`) resolves and parses the full import graph from the entry module, then compiles modules in deterministic dependency-first order (DFS post-order; each absolute path compiled at most once per invocation). Import cycles are rejected at compile time with a diagnostic that includes the cycle member paths.
+
 ### 4.4 Failure cases
 
 - **Module not found:** The specifier could not be resolved to any artifact (path does not exist, URL unreachable, stdlib name unknown). → **Compile error** (or implementation-defined error reporting).

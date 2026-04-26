@@ -1,6 +1,7 @@
 import { Suite, group, asyncGroup, eq, isTrue } from "kestrel:dev/test"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
+import * as Str from "kestrel:data/string"
 import * as Lex from "kestrel:dev/parser/lexer"
 import { parseFromList } from "kestrel:dev/parser/parser"
 import * as Ast from "kestrel:dev/parser/ast"
@@ -332,6 +333,151 @@ export async fun run(s: Suite): Task<Unit> = {
                   val result = await Driver.compileFile(mainPath, opts)
                   isTrue(sg, "missing dep ok=False", !result.ok)
                   isTrue(sg, "missing dep has diagnostic", Lst.length(result.diagnostics) > 0)
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - two-module graph compiles in dependency order", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_topo_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_topo_out"
+      val helperPath = "${srcDir}/helper.ks"
+      val mainPath = "${srcDir}/main.ks"
+      val helperSrc = "export fun answer(): Int = 42"
+      val mainSrc = "import { answer } from \"./helper\"\nexport fun main(): Int = answer()"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True
+      }
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(helperPath, helperSrc)) {
+                Err(_) => isTrue(sg, "writeText helper failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(mainPath, mainSrc)) {
+                    Err(_) => isTrue(sg, "writeText main failed", False)
+                    Ok(()) => {
+                      val result = await Driver.compileFile(mainPath, opts)
+                      isTrue(sg, "two-module compile ok", result.ok)
+                      isTrue(sg, "two-module no diagnostics", Lst.isEmpty(result.diagnostics))
+                      val helperClass = "${outDir}/${Driver.classNameForPath(helperPath)}.class"
+                      val helperBuilt = await Fs.fileExists(helperClass)
+                      isTrue(sg, "helper class emitted", helperBuilt)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - cycle detection names members", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_cycle_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_cycle_out"
+      val aPath = "${srcDir}/a.ks"
+      val bPath = "${srcDir}/b.ks"
+      val aSrc = "import { b } from \"./b\"\nexport fun a(): Int = b()"
+      val bSrc = "import { a } from \"./a\"\nexport fun b(): Int = a()"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True
+      }
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(aPath, aSrc)) {
+                Err(_) => isTrue(sg, "writeText a failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(bPath, bSrc)) {
+                    Err(_) => isTrue(sg, "writeText b failed", False)
+                    Ok(()) => {
+                      val result = await Driver.compileFile(aPath, opts)
+                      isTrue(sg, "cycle compile fails", !result.ok)
+                      match (result.diagnostics) {
+                        [] => isTrue(sg, "cycle diagnostics present", False)
+                        d :: _ => {
+                          isTrue(sg, "cycle message present", Str.contains("circular import", d.message))
+                          isTrue(sg, "cycle includes a.ks", Str.contains("a.ks", d.message))
+                          isTrue(sg, "cycle includes b.ks", Str.contains("b.ks", d.message))
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - diamond dependency compiles shared module once", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_diamond_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_diamond_out"
+      val aPath = "${srcDir}/a.ks"
+      val bPath = "${srcDir}/b.ks"
+      val cPath = "${srcDir}/c.ks"
+      val dPath = "${srcDir}/d.ks"
+      val cSrc = "export fun c(): Int = 1"
+      val bSrc = "import { c } from \"./c\"\nexport fun b(): Int = c()"
+      val dSrc = "import { c } from \"./c\"\nexport fun d(): Int = c()"
+      val aSrc = "import { b } from \"./b\"\nimport { d } from \"./d\"\nexport fun a(): Int = b() + d()"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True
+      }
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(cPath, cSrc)) {
+                Err(_) => isTrue(sg, "writeText c failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(bPath, bSrc)) {
+                    Err(_) => isTrue(sg, "writeText b failed", False)
+                    Ok(()) => {
+                      match (await Fs.writeText(dPath, dSrc)) {
+                        Err(_) => isTrue(sg, "writeText d failed", False)
+                        Ok(()) => {
+                          match (await Fs.writeText(aPath, aSrc)) {
+                            Err(_) => isTrue(sg, "writeText a failed", False)
+                            Ok(()) => {
+                              val result = await Driver.compileFile(aPath, opts)
+                              isTrue(sg, "diamond compile ok", result.ok)
+                              val cClass = "${outDir}/${Driver.classNameForPath(cPath)}.class"
+                              val cBuilt = await Fs.fileExists(cClass)
+                              isTrue(sg, "shared dep class emitted", cBuilt)
+                              isTrue(sg, "shared dep canonicalized to one class path",
+                                Driver.classNameForPath(cPath) == Driver.classNameForPath("${srcDir}/./c.ks"))
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }

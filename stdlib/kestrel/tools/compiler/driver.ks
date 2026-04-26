@@ -95,6 +95,12 @@ export fun classNameForPath(path: String): String = {
   }
 }
 
+fun canonicalPath(path: String): String = {
+  val abs = Str.startsWith("/", path)
+  val parts = normalizeSegments(Str.split(path, "/"), [])
+  if (abs) "/${Str.join("/", parts)}" else Str.join("/", parts)
+}
+
 fun failResult(file: String, code: String, message: String): CompileResult = {
   ok = False,
   diagnostics = [diag(file, code, message)]
@@ -222,35 +228,102 @@ async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: Strin
   }
 }
 
+type GraphCompileResult =
+    GraphCompileOk(Dict<String, Bool>)
+  | GraphCompileErr(CompileResult)
+
+fun cycleMessage(path: String, visiting: List<String>): String = {
+  val nodes = Lst.append(Lst.reverse(path :: visiting), [path])
+  "circular import: ${Str.join(" -> ", nodes)}"
+}
+
+async fun compileOneModule(entryPath: String, opts: CompileOptions): Task<CompileResult> = {
+  match (await Fs.readText(entryPath)) {
+    Err(_) =>
+      failResult(entryPath, Diag.CODES.file.readError, "cannot read file: ${entryPath}")
+    Ok(source) => {
+      val moduleName = classNameForPath(entryPath);
+      val srcHash = Kti.sourceHash(source);
+      val ktiPath = "${opts.outDir}/${moduleName}.kti";
+      val isAlreadyFresh: Bool = match (await Kti.readKtiFile(ktiPath)) {
+        Err(_) => False
+        Ok(existingKti) => isFresh(existingKti, srcHash, Dict.emptyStringDict())
+      };
+      if (isAlreadyFresh) {
+        { ok = True, diagnostics = [] }
+      } else {
+        val tokens = Lex.lex(source);
+        match (parseOutcome(tokens)) {
+          ParseFail(msg, off, ln, col) =>
+            failWithDiags([mkParseErrDiag(entryPath, msg, off, ln, col)])
+          ParseOk(prog) =>
+            await doTypecheckAndEmit(prog, entryPath, moduleName, source, opts, ktiPath)
+        }
+      }
+    }
+  }
+}
+
+async fun compileGraph(path: String, opts: CompileOptions, visiting: List<String>, compiled: Dict<String, Bool>): Task<GraphCompileResult> = {
+  val p = canonicalPath(path)
+  if (Dict.member(compiled, p)) {
+    GraphCompileOk(compiled)
+  } else if (Lst.member(visiting, p)) {
+    GraphCompileErr(failWithDiags([diag(p, Diag.CODES.resolve.moduleNotFound, cycleMessage(p, visiting))]))
+  } else {
+    match (await Fs.readText(p)) {
+      Err(_) =>
+        GraphCompileErr(failResult(p, Diag.CODES.file.readError, "cannot read file: ${p}"))
+      Ok(source) => {
+        val tokens = Lex.lex(source)
+        match (parseOutcome(tokens)) {
+          ParseFail(msg, off, ln, col) =>
+            GraphCompileErr(failWithDiags([mkParseErrDiag(p, msg, off, ln, col)]))
+          ParseOk(prog) => {
+            val resolveOpts = { fromFile = p, stdlibDir = opts.stdlibDir, cacheRoot = opts.cacheRoot, allowHttp = opts.allowHttp }
+            match (Resolve.uniqueDependencyPaths(prog, p, resolveOpts)) {
+              Err(resolveErr) =>
+                GraphCompileErr(failWithDiags([diag(p, Diag.CODES.resolve.moduleNotFound, resolveErr)]))
+              Ok(deps) => {
+                val next: Task<GraphCompileResult> = compileDepsInOrder(deps, opts, p :: visiting, compiled)
+                match (await next) {
+                  GraphCompileErr(e) => GraphCompileErr(e)
+                  GraphCompileOk(compiledAfterDeps) => {
+                    val one = await compileOneModule(p, opts)
+                    if (!one.ok) GraphCompileErr(one)
+                    else GraphCompileOk(Dict.insert(compiledAfterDeps, p, True))
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+async fun compileDepsInOrder(deps: List<Resolve.ResolvedDep>, opts: CompileOptions, visiting: List<String>, compiled: Dict<String, Bool>): Task<GraphCompileResult> =
+  match (deps) {
+    [] => GraphCompileOk(compiled)
+    h :: rest => {
+      match (await compileGraph(h.path, opts, visiting, compiled)) {
+        GraphCompileErr(e) => GraphCompileErr(e)
+        GraphCompileOk(compiledNext) => {
+          val more: Task<GraphCompileResult> = compileDepsInOrder(rest, opts, visiting, compiledNext)
+          await more
+        }
+      }
+    }
+  }
+
 export async fun compileFile(entryPath: String, opts: CompileOptions): Task<CompileResult> = {
   if (entryPath == "") {
     failResult(entryPath, Diag.CODES.file.readError, "entry path is empty")
   } else {
-    // 1. Read source text
-    match (await Fs.readText(entryPath)) {
-      Err(_) =>
-        failResult(entryPath, Diag.CODES.file.readError, "cannot read file: ${entryPath}")
-      Ok(source) => {
-        val moduleName = classNameForPath(entryPath);
-        val srcHash = Kti.sourceHash(source);
-        val ktiPath = "${opts.outDir}/${moduleName}.kti";
-        val isAlreadyFresh: Bool = match (await Kti.readKtiFile(ktiPath)) {
-          Err(_) => False
-          Ok(existingKti) => isFresh(existingKti, srcHash, Dict.emptyStringDict())
-        };
-        if (isAlreadyFresh) {
-          { ok = True, diagnostics = [] }
-        } else {
-          // 2. Lex + Parse
-          val tokens = Lex.lex(source);
-          match (parseOutcome(tokens)) {
-            ParseFail(msg, off, ln, col) =>
-              failWithDiags([mkParseErrDiag(entryPath, msg, off, ln, col)])
-            ParseOk(prog) =>
-              await doTypecheckAndEmit(prog, entryPath, moduleName, source, opts, ktiPath)
-          }
-        }
-      }
+    match (await compileGraph(entryPath, opts, [], Dict.emptyStringDict())) {
+      GraphCompileErr(e) => e
+      GraphCompileOk(_) => { ok = True, diagnostics = [] }
     }
   }
 }

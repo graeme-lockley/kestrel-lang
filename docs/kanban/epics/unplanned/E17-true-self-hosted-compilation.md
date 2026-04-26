@@ -61,7 +61,7 @@ independently testable. No story should touch more than one concern at a time.
    and reconstruct the `importBindings` snapshot that the typechecker needs. Handle the case
    where a dependency `.kti` is absent (dependency must be compiled first; return an error).
 
-7. [S17-07] Topological dependency ordering and cycle detection
+7. [S17-07] Topological dependency ordering and cycle detection ✅
    — Build a full import graph (recursively from the entry file), topologically sort it, detect
    circular imports, and compile each module in dependency order. Each module is compiled
    once per invocation (deduplicated by absolute path).
