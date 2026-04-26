@@ -16,6 +16,7 @@ import * as Fs from "kestrel:io/fs"
 import { NotFound, PermissionDenied, IoError } from "kestrel:io/fs"
 import * as Ty from "kestrel:dev/typecheck/types"
 import * as Resolve from "kestrel:tools/compiler/resolve"
+import * as Crypto from "kestrel:io/crypto"
 
 export type KtiFunctionEntry = { kind: String, function_index: Int, arity: Int, type_: Json.Value }
 export type KtiExportEntry = KtiFunction(KtiFunctionEntry)
@@ -41,11 +42,9 @@ export type KtiV4 = {
   codegenMeta: KtiCodegenMeta
 }
 
-fun pseudoHash(s: String): String = "len:${Str.fromInt(Str.length(s))}"
-
 /// Compute the source hash for a Kestrel source string.
 /// This must match the hash stored in KTI files by `buildKtiV4`.
-export fun sourceHash(s: String): String = pseudoHash(s)
+export fun sourceHash(s: String): String = Crypto.sha256(s)
 
 export fun serializeType(t: Ty.InternalType): Json.Value =
   StrVal(Ty.typeToString(t))
@@ -262,7 +261,7 @@ export fun buildKtiV4(prog: Ast.Program, exports: Dict<String, Ty.InternalType>,
   version = 4,
   functions = buildEntries(Dict.keys(exports), exports, 0, Dict.emptyStringDict()),
   types = Dict.emptyStringDict(),
-  sourceHash = pseudoHash(source),
+  sourceHash = sourceHash(source),
   depHashes = depHashes,
   codegenMeta = extractCodegenMeta(prog, exports)
 }

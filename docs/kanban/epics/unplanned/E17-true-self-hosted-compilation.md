@@ -66,7 +66,7 @@ independently testable. No story should touch more than one concern at a time.
    circular imports, and compile each module in dependency order. Each module is compiled
    once per invocation (deduplicated by absolute path).
 
-8. [S17-08] Multi-module incremental compilation (graph-wide freshness)
+8. [S17-08] Multi-module incremental compilation (graph-wide freshness) ✅
    — Apply the single-file freshness check (S17-04) across the full dependency graph. Only
    recompile modules whose source has changed or whose dependencies have changed. Dep hashes
    are SHA-256 hashes of direct dependency `.kti` contents, matching the TS compiler's scheme.

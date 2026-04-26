@@ -7,6 +7,7 @@ import { parseFromList } from "kestrel:dev/parser/parser"
 import * as Ast from "kestrel:dev/parser/ast"
 import * as Driver from "kestrel:tools/compiler/driver"
 import * as Kti from "kestrel:tools/compiler/kti"
+import * as Crypto from "kestrel:io/crypto"
 import * as Ty from "kestrel:dev/typecheck/types"
 import * as Fs from "kestrel:io/fs"
 import { getProcess } from "kestrel:sys/process"
@@ -24,6 +25,12 @@ fun defaultOpts(outDir: String): Driver.CompileOptions = {
   allowHttp = False,
   writeKti = False
 }
+
+async fun fileMtimeMs(path: String): Task<Int> =
+  match (await Fs.stat(path)) {
+    Err(_) => -1
+    Ok(st) => st.mtimeMs
+  }
 
 export async fun run(s: Suite): Task<Unit> = {
   await asyncGroup(s, "kestrel:tools/compiler/driver", async (s1: Suite) => {
@@ -472,6 +479,246 @@ export async fun run(s: Suite): Task<Unit> = {
                               isTrue(sg, "shared dep class emitted", cBuilt)
                               isTrue(sg, "shared dep canonicalized to one class path",
                                 Driver.classNameForPath(cPath) == Driver.classNameForPath("${srcDir}/./c.ks"))
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - incremental second run skips unchanged graph", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_08_skip_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_08_skip_out"
+      val aPath = "${srcDir}/a.ks"
+      val bPath = "${srcDir}/b.ks"
+      val cPath = "${srcDir}/c.ks"
+      val cSrc = "export fun c(): Int = 1"
+      val bSrc = "import { c } from \"./c\"\nexport fun b(): Int = c()"
+      val aSrc = "import { b } from \"./b\"\nexport fun a(): Int = b()"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True
+      }
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(cPath, cSrc)) {
+                Err(_) => isTrue(sg, "writeText c failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(bPath, bSrc)) {
+                    Err(_) => isTrue(sg, "writeText b failed", False)
+                    Ok(()) => {
+                      match (await Fs.writeText(aPath, aSrc)) {
+                        Err(_) => isTrue(sg, "writeText a failed", False)
+                        Ok(()) => {
+                          val first = await Driver.compileFile(aPath, opts)
+                          isTrue(sg, "first compile ok", first.ok)
+                          val aClass = "${outDir}/${Driver.classNameForPath(aPath)}.class"
+                          val bClass = "${outDir}/${Driver.classNameForPath(bPath)}.class"
+                          val cClass = "${outDir}/${Driver.classNameForPath(cPath)}.class"
+                          val aM1 = await fileMtimeMs(aClass)
+                          val bM1 = await fileMtimeMs(bClass)
+                          val cM1 = await fileMtimeMs(cClass)
+                          val second = await Driver.compileFile(aPath, opts)
+                          isTrue(sg, "second compile ok", second.ok)
+                          val aM2 = await fileMtimeMs(aClass)
+                          val bM2 = await fileMtimeMs(bClass)
+                          val cM2 = await fileMtimeMs(cClass)
+                          eq(sg, "a class mtime unchanged", aM2, aM1)
+                          eq(sg, "b class mtime unchanged", bM2, bM1)
+                          eq(sg, "c class mtime unchanged", cM2, cM1)
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - dependency edit cascades through dependents", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_08_cascade_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_08_cascade_out"
+      val aPath = "${srcDir}/a.ks"
+      val bPath = "${srcDir}/b.ks"
+      val cPath = "${srcDir}/c.ks"
+      val cSrc1 = "export fun c(): Int = 1"
+      val cSrc2 = "export fun c(): Int = 99"
+      val bSrc = "import { c } from \"./c\"\nexport fun b(): Int = c()"
+      val aSrc = "import { b } from \"./b\"\nexport fun a(): Int = b()"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True
+      }
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(cPath, cSrc1)) {
+                Err(_) => isTrue(sg, "writeText c1 failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(bPath, bSrc)) {
+                    Err(_) => isTrue(sg, "writeText b failed", False)
+                    Ok(()) => {
+                      match (await Fs.writeText(aPath, aSrc)) {
+                        Err(_) => isTrue(sg, "writeText a failed", False)
+                        Ok(()) => {
+                          val first = await Driver.compileFile(aPath, opts)
+                          isTrue(sg, "first compile ok", first.ok)
+                          val aKtiPath = "${outDir}/${Driver.classNameForPath(aPath)}.kti"
+                          val bKtiPath = "${outDir}/${Driver.classNameForPath(bPath)}.kti"
+                          val cKtiPath = "${outDir}/${Driver.classNameForPath(cPath)}.kti"
+                          val a1 = await Kti.readKtiFile(aKtiPath)
+                          val b1 = await Kti.readKtiFile(bKtiPath)
+                          val c1 = await Kti.readKtiFile(cKtiPath)
+                          match (await Fs.writeText(cPath, cSrc2)) {
+                            Err(_) => isTrue(sg, "writeText c2 failed", False)
+                            Ok(()) => {
+                              val second = await Driver.compileFile(aPath, opts)
+                              isTrue(sg, "second compile ok", second.ok)
+                              val a2 = await Kti.readKtiFile(aKtiPath)
+                              val b2 = await Kti.readKtiFile(bKtiPath)
+                              val c2 = await Kti.readKtiFile(cKtiPath)
+                              match (c1) {
+                                Err(_) => isTrue(sg, "read c kti failed", False)
+                                Ok(kc1) => {
+                                  match (c2) {
+                                    Err(_) => isTrue(sg, "read c kti failed", False)
+                                    Ok(kc2) => isTrue(sg, "dep source hash changed", kc1.sourceHash != kc2.sourceHash)
+                                  }
+                                }
+                              }
+                              match (b1) {
+                                Err(_) => isTrue(sg, "read b kti failed", False)
+                                Ok(kb1) => {
+                                  match (b2) {
+                                    Err(_) => isTrue(sg, "read b kti failed", False)
+                                    Ok(kb2) => {
+                                      match (Dict.get(kb1.depHashes, cPath)) {
+                                        None => isTrue(sg, "b dep hash missing", False)
+                                        Some(v1) => {
+                                          match (Dict.get(kb2.depHashes, cPath)) {
+                                            None => isTrue(sg, "b dep hash missing", False)
+                                            Some(v2) => isTrue(sg, "b dep hash updated", v1 != v2)
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                              match (a1) {
+                                Err(_) => isTrue(sg, "read a kti failed", False)
+                                Ok(ka1) => {
+                                  match (a2) {
+                                    Err(_) => isTrue(sg, "read a kti failed", False)
+                                    Ok(ka2) => {
+                                      match (Dict.get(ka1.depHashes, bPath)) {
+                                        None => isTrue(sg, "a dep hash missing", False)
+                                        Some(v1) => {
+                                          match (Dict.get(ka2.depHashes, bPath)) {
+                                            None => isTrue(sg, "a dep hash missing", False)
+                                            Some(v2) => isTrue(sg, "a dep hash updated", v1 != v2)
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - depHashes are sha256 of direct dep kti content", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_08_dephash_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_08_dephash_out"
+      val aPath = "${srcDir}/a.ks"
+      val bPath = "${srcDir}/b.ks"
+      val cPath = "${srcDir}/c.ks"
+      val cSrc = "export fun c(): Int = 1"
+      val bSrc = "import { c } from \"./c\"\nexport fun b(): Int = c()"
+      val aSrc = "import { b } from \"./b\"\nexport fun a(): Int = b()"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True
+      }
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(cPath, cSrc)) {
+                Err(_) => isTrue(sg, "writeText c failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(bPath, bSrc)) {
+                    Err(_) => isTrue(sg, "writeText b failed", False)
+                    Ok(()) => {
+                      match (await Fs.writeText(aPath, aSrc)) {
+                        Err(_) => isTrue(sg, "writeText a failed", False)
+                        Ok(()) => {
+                          val result = await Driver.compileFile(aPath, opts)
+                          isTrue(sg, "compile ok", result.ok)
+                          val bKtiPath = "${outDir}/${Driver.classNameForPath(bPath)}.kti"
+                          val cKtiPath = "${outDir}/${Driver.classNameForPath(cPath)}.kti"
+                          val aKtiPath = "${outDir}/${Driver.classNameForPath(aPath)}.kti"
+                          val bKti = await Kti.readKtiFile(bKtiPath)
+                          val aKti = await Kti.readKtiFile(aKtiPath)
+                          match (await Fs.readText(cKtiPath)) {
+                            Err(_) => isTrue(sg, "failed to read generated kti artifacts", False)
+                            Ok(cKtiText) => {
+                              match (bKti) {
+                                Err(_) => isTrue(sg, "failed to read generated kti artifacts", False)
+                                Ok(kb) => {
+                                  match (aKti) {
+                                    Err(_) => isTrue(sg, "failed to read generated kti artifacts", False)
+                                    Ok(ka) => {
+                                      val expected = Crypto.sha256(cKtiText)
+                                      match (Dict.get(kb.depHashes, cPath)) {
+                                        Some(actual) => eq(sg, "b stores hash of c.kti content", actual, expected)
+                                        None => isTrue(sg, "b dep hash for c missing", False)
+                                      }
+                                      isTrue(sg, "a only tracks direct dep b", Dict.member(ka.depHashes, bPath))
+                                      isTrue(sg, "a does not track transitive dep c", !Dict.member(ka.depHashes, cPath))
+                                    }
+                                  }
+                                }
+                              }
                             }
                           }
                         }

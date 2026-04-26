@@ -17,6 +17,7 @@ import * as Codegen from "kestrel:tools/compiler/codegen"
 import * as Kti from "kestrel:tools/compiler/kti"
 import { DepLoadOk, DepLoadErr } from "kestrel:tools/compiler/kti"
 import * as Resolve from "kestrel:tools/compiler/resolve"
+import * as Crypto from "kestrel:io/crypto"
 import * as Fs from "kestrel:io/fs"
 import * as Rep from "kestrel:dev/typecheck/reporter"
 
@@ -166,9 +167,9 @@ async fun writeAllClasses(outDir: String, pairs: List<(String, JByteArray)>): Ta
   }
 
 /// Write KTI file if writeKti option is set; otherwise return success.
-async fun writeKtiIfNeeded(opts: CompileOptions, ktiPath: String, prog: Program, tcExports: TC.TypeEnv, source: String, entryPath: String): Task<CompileResult> =
+async fun writeKtiIfNeeded(opts: CompileOptions, ktiPath: String, prog: Program, tcExports: TC.TypeEnv, source: String, depHashes: Dict<String, String>, entryPath: String): Task<CompileResult> =
   if (opts.writeKti) {
-    val kti = Kti.buildKtiV4(prog, tcExports.items, source, Dict.emptyStringDict());
+    val kti = Kti.buildKtiV4(prog, tcExports.items, source, depHashes);
     match (await Kti.writeKtiFile(ktiPath, kti)) {
       Err(ktiErr) => failResult(entryPath, Diag.CODES.file.readError, "cannot write KTI: ${ktiErr}")
       Ok(()) => { ok = True, diagnostics = [] }
@@ -178,7 +179,7 @@ async fun writeKtiIfNeeded(opts: CompileOptions, ktiPath: String, prog: Program,
   }
 
 /// Codegen and write class files + KTI (extracted to reduce async locals).
-async fun doCodegenAndWrite(moduleName: String, prog: Program, tcResult: TC.TypecheckResult, entryPath: String, opts: CompileOptions, ktiPath: String, source: String): Task<CompileResult> = {
+async fun doCodegenAndWrite(moduleName: String, prog: Program, tcResult: TC.TypecheckResult, entryPath: String, opts: CompileOptions, ktiPath: String, source: String, depHashes: Dict<String, String>): Task<CompileResult> = {
   val codegenResult = Codegen.jvmCodegen(moduleName, prog);
   match (await Fs.mkdirAll(opts.outDir)) {
     Err(_) =>
@@ -189,38 +190,113 @@ async fun doCodegenAndWrite(moduleName: String, prog: Program, tcResult: TC.Type
       match (await writeAllClasses(opts.outDir, pairs)) {
         Err(writeErr) => failResult(entryPath, Diag.CODES.file.readError, writeErr)
         Ok(()) =>
-          await writeKtiIfNeeded(opts, ktiPath, prog, tcResult.exports, source, entryPath)
+          await writeKtiIfNeeded(opts, ktiPath, prog, tcResult.exports, source, depHashes, entryPath)
       }
     }
   }
 }
 
 /// Typecheck, codegen, and write output for a parsed program (extracted to reduce async locals).
-async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: String, source: String, opts: CompileOptions, ktiPath: String): Task<CompileResult> = {
-  // 3. Resolve direct dependency paths
-  val resolveOpts = { fromFile = entryPath, stdlibDir = opts.stdlibDir, cacheRoot = opts.cacheRoot, allowHttp = opts.allowHttp };
-  match (Resolve.uniqueDependencyPaths(prog, entryPath, resolveOpts)) {
-    Err(resolveErr) =>
-      failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, resolveErr)])
-    Ok(deps) => {
-      // 4. Load dep KTIs for import bindings
-      val depPairs = Lst.map(deps, (d: Resolve.ResolvedDep) => (d.spec, "${opts.outDir}/${classNameForPath(d.path)}.kti"));
-      match (await Kti.loadDepBindings(depPairs, prog.imports)) {
-        DepLoadErr(depErr) =>
-          failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, depErr)])
-        DepLoadOk(importBindings) => {
-          val importEnv = if (Dict.isEmpty(importBindings)) None else Some({ items = importBindings });
-          val tcOpts = {
-            importBindings = importEnv,
-            typeAliasBindings = None,
-            importOpaqueTypes = None,
-            sourceFile = entryPath
-          };
-          val tc = TC.typecheck(prog, tcOpts);
-          if (!tc.ok) {
-            failWithDiags(tc.diagnostics)
-          } else {
-            await doCodegenAndWrite(moduleName, prog, tc, entryPath, opts, ktiPath, source)
+async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: String, source: String, opts: CompileOptions, ktiPath: String, deps: List<Resolve.ResolvedDep>, depHashes: Dict<String, String>): Task<CompileResult> = {
+  // 4. Load dep KTIs for import bindings
+  val depPairs = Lst.map(deps, (d: Resolve.ResolvedDep) => (d.spec, "${opts.outDir}/${classNameForPath(canonicalPath(d.path))}.kti"));
+  match (await Kti.loadDepBindings(depPairs, prog.imports)) {
+    DepLoadErr(depErr) =>
+      failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, depErr)])
+    DepLoadOk(importBindings) => {
+      val importEnv = if (Dict.isEmpty(importBindings)) None else Some({ items = importBindings });
+      val tcOpts = {
+        importBindings = importEnv,
+        typeAliasBindings = None,
+        importOpaqueTypes = None,
+        sourceFile = entryPath
+      };
+      val tc = TC.typecheck(prog, tcOpts);
+      if (!tc.ok) {
+        failWithDiags(tc.diagnostics)
+      } else {
+        await doCodegenAndWrite(moduleName, prog, tc, entryPath, opts, ktiPath, source, depHashes)
+      }
+    }
+  }
+}
+
+type GraphState = {
+  compiled: Dict<String, Bool>,
+  ktiTexts: Dict<String, String>
+}
+
+fun ktiPathForModule(path: String, opts: CompileOptions): String =
+  "${opts.outDir}/${classNameForPath(path)}.kti"
+
+async fun loadKtiText(path: String, opts: CompileOptions, state: GraphState): Task<Result<String, String>> =
+  match (Dict.get(state.ktiTexts, path)) {
+    Some(content) => Ok(content)
+    None => {
+      val ktiPath = ktiPathForModule(path, opts)
+      match (await Fs.readText(ktiPath)) {
+        Err(_) => Err("dependency not compiled yet: ${path} (missing ${ktiPath})")
+        Ok(content) => Ok(content)
+      }
+    }
+  }
+
+async fun depHashesForDeps(deps: List<Resolve.ResolvedDep>, opts: CompileOptions, state: GraphState): Task<Result<Dict<String, String>, String>> =
+  match (deps) {
+    [] => Ok(Dict.emptyStringDict())
+    h :: rest => {
+      val depPath = canonicalPath(h.path)
+      match (await loadKtiText(depPath, opts, state)) {
+        Err(_) => Err("dependency not compiled yet: ${h.spec} (missing ${ktiPathForModule(depPath, opts)})")
+        Ok(content) => {
+          val next: Task<Result<Dict<String, String>, String>> = depHashesForDeps(rest, opts, state)
+          match (await next) {
+            Err(e) => Err(e)
+            Ok(hashes) => Ok(Dict.insert(hashes, depPath, Crypto.sha256(content)))
+          }
+        }
+      }
+    }
+  }
+
+type GraphCompileResult =
+    GraphCompileOk(GraphState)
+  | GraphCompileErr(CompileResult)
+
+type ModuleCompileResult =
+    ModuleCompileOk(String)
+  | ModuleCompileErr(CompileResult)
+
+fun cycleMessage(path: String, visiting: List<String>): String = {
+  val nodes = Lst.append(Lst.reverse(path :: visiting), [path])
+  "circular import: ${Str.join(" -> ", nodes)}"
+}
+
+async fun compileOneModule(entryPath: String, source: String, prog: Program, deps: List<Resolve.ResolvedDep>, opts: CompileOptions, state: GraphState): Task<ModuleCompileResult> = {
+  val moduleName = classNameForPath(entryPath)
+  val srcHash = Kti.sourceHash(source)
+  val ktiPath = "${opts.outDir}/${moduleName}.kti"
+  match (await depHashesForDeps(deps, opts, state)) {
+    Err(depErr) =>
+      ModuleCompileErr(failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, depErr)]))
+    Ok(depHashes) => {
+      val isAlreadyFresh: Bool = match (await Kti.readKtiFile(ktiPath)) {
+        Err(_) => False
+        Ok(existingKti) => isFresh(existingKti, srcHash, depHashes)
+      }
+      if (isAlreadyFresh) {
+        match (await loadKtiText(entryPath, opts, state)) {
+          Err(depErr2) => ModuleCompileErr(failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, depErr2)]))
+          Ok(content) => ModuleCompileOk(content)
+        }
+      } else {
+        val emitted = await doTypecheckAndEmit(prog, entryPath, moduleName, source, opts, ktiPath, deps, depHashes)
+        if (!emitted.ok) ModuleCompileErr(emitted)
+        else if (!opts.writeKti) ModuleCompileOk("")
+        else {
+          match (await Fs.readText(ktiPath)) {
+            Err(_) => ModuleCompileErr(failResult(entryPath, Diag.CODES.file.readError, "cannot read file: ${ktiPath}"))
+            Ok(content) => ModuleCompileOk(content)
           }
         }
       }
@@ -228,46 +304,10 @@ async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: Strin
   }
 }
 
-type GraphCompileResult =
-    GraphCompileOk(Dict<String, Bool>)
-  | GraphCompileErr(CompileResult)
-
-fun cycleMessage(path: String, visiting: List<String>): String = {
-  val nodes = Lst.append(Lst.reverse(path :: visiting), [path])
-  "circular import: ${Str.join(" -> ", nodes)}"
-}
-
-async fun compileOneModule(entryPath: String, opts: CompileOptions): Task<CompileResult> = {
-  match (await Fs.readText(entryPath)) {
-    Err(_) =>
-      failResult(entryPath, Diag.CODES.file.readError, "cannot read file: ${entryPath}")
-    Ok(source) => {
-      val moduleName = classNameForPath(entryPath);
-      val srcHash = Kti.sourceHash(source);
-      val ktiPath = "${opts.outDir}/${moduleName}.kti";
-      val isAlreadyFresh: Bool = match (await Kti.readKtiFile(ktiPath)) {
-        Err(_) => False
-        Ok(existingKti) => isFresh(existingKti, srcHash, Dict.emptyStringDict())
-      };
-      if (isAlreadyFresh) {
-        { ok = True, diagnostics = [] }
-      } else {
-        val tokens = Lex.lex(source);
-        match (parseOutcome(tokens)) {
-          ParseFail(msg, off, ln, col) =>
-            failWithDiags([mkParseErrDiag(entryPath, msg, off, ln, col)])
-          ParseOk(prog) =>
-            await doTypecheckAndEmit(prog, entryPath, moduleName, source, opts, ktiPath)
-        }
-      }
-    }
-  }
-}
-
-async fun compileGraph(path: String, opts: CompileOptions, visiting: List<String>, compiled: Dict<String, Bool>): Task<GraphCompileResult> = {
+async fun compileGraph(path: String, opts: CompileOptions, visiting: List<String>, state: GraphState): Task<GraphCompileResult> = {
   val p = canonicalPath(path)
-  if (Dict.member(compiled, p)) {
-    GraphCompileOk(compiled)
+  if (Dict.member(state.compiled, p)) {
+    GraphCompileOk(state)
   } else if (Lst.member(visiting, p)) {
     GraphCompileErr(failWithDiags([diag(p, Diag.CODES.resolve.moduleNotFound, cycleMessage(p, visiting))]))
   } else {
@@ -285,13 +325,20 @@ async fun compileGraph(path: String, opts: CompileOptions, visiting: List<String
               Err(resolveErr) =>
                 GraphCompileErr(failWithDiags([diag(p, Diag.CODES.resolve.moduleNotFound, resolveErr)]))
               Ok(deps) => {
-                val next: Task<GraphCompileResult> = compileDepsInOrder(deps, opts, p :: visiting, compiled)
+                val next: Task<GraphCompileResult> = compileDepsInOrder(deps, opts, p :: visiting, state)
                 match (await next) {
                   GraphCompileErr(e) => GraphCompileErr(e)
-                  GraphCompileOk(compiledAfterDeps) => {
-                    val one = await compileOneModule(p, opts)
-                    if (!one.ok) GraphCompileErr(one)
-                    else GraphCompileOk(Dict.insert(compiledAfterDeps, p, True))
+                  GraphCompileOk(stateAfterDeps) => {
+                    match (await compileOneModule(p, source, prog, deps, opts, stateAfterDeps)) {
+                      ModuleCompileErr(e) => GraphCompileErr(e)
+                      ModuleCompileOk(ktiText) => {
+                        val ktiTexts = if (Str.isEmpty(ktiText)) stateAfterDeps.ktiTexts else Dict.insert(stateAfterDeps.ktiTexts, p, ktiText)
+                        GraphCompileOk({
+                          compiled = Dict.insert(stateAfterDeps.compiled, p, True),
+                          ktiTexts = ktiTexts
+                        })
+                      }
+                    }
                   }
                 }
               }
@@ -303,14 +350,14 @@ async fun compileGraph(path: String, opts: CompileOptions, visiting: List<String
   }
 }
 
-async fun compileDepsInOrder(deps: List<Resolve.ResolvedDep>, opts: CompileOptions, visiting: List<String>, compiled: Dict<String, Bool>): Task<GraphCompileResult> =
+async fun compileDepsInOrder(deps: List<Resolve.ResolvedDep>, opts: CompileOptions, visiting: List<String>, state: GraphState): Task<GraphCompileResult> =
   match (deps) {
-    [] => GraphCompileOk(compiled)
+    [] => GraphCompileOk(state)
     h :: rest => {
-      match (await compileGraph(h.path, opts, visiting, compiled)) {
+      match (await compileGraph(h.path, opts, visiting, state)) {
         GraphCompileErr(e) => GraphCompileErr(e)
-        GraphCompileOk(compiledNext) => {
-          val more: Task<GraphCompileResult> = compileDepsInOrder(rest, opts, visiting, compiledNext)
+        GraphCompileOk(stateNext) => {
+          val more: Task<GraphCompileResult> = compileDepsInOrder(rest, opts, visiting, stateNext)
           await more
         }
       }
@@ -321,7 +368,10 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
   if (entryPath == "") {
     failResult(entryPath, Diag.CODES.file.readError, "entry path is empty")
   } else {
-    match (await compileGraph(entryPath, opts, [], Dict.emptyStringDict())) {
+    match (await compileGraph(entryPath, opts, [], {
+      compiled = Dict.emptyStringDict(),
+      ktiTexts = Dict.emptyStringDict()
+    })) {
       GraphCompileErr(e) => e
       GraphCompileOk(_) => { ok = True, diagnostics = [] }
     }
