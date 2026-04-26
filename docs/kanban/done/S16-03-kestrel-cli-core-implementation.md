@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E16 Kestrel CLI in Kestrel](../epics/unplanned/E16-kestrel-cli-in-kestrel.md)
+- Epic: [E16 Kestrel CLI in Kestrel](../epics/done/E16-kestrel-cli-in-kestrel.md)
 - Companion stories: S16-01, S16-02, S16-04, S16-05
 
 ## Summary
@@ -131,8 +131,8 @@ Environment variables consumed (set by Bash shim):
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — deferred to S16-05
-- [ ] `docs/specs/11-bootstrap.md` — deferred to S16-05
+- [x] `docs/specs/09-tools.md` — completed in S16-05
+- [x] `docs/specs/11-bootstrap.md` — completed in S16-05
 
 ## Build notes
 

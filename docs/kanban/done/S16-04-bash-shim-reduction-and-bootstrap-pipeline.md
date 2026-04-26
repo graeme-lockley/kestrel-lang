@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E16 Kestrel CLI in Kestrel](../epics/unplanned/E16-kestrel-cli-in-kestrel.md)
+- Epic: [E16 Kestrel CLI in Kestrel](../epics/done/E16-kestrel-cli-in-kestrel.md)
 - Companion stories: S16-01, S16-02, S16-03, S16-05
 
 ## Summary
@@ -121,10 +121,17 @@ the `kestrel bootstrap` Bash implementation is needed.
 - [x] `cd compiler && npm run build && npm test`
 - [x] `./scripts/kestrel test`
 
+## Tests to add
+
+| Layer | Path | Intent |
+|-------|------|--------|
+| E2E suite | `scripts/run-e2e.sh` | Confirms all positive and negative E2E scenarios pass after shim reduction and bootstrap pipeline integration |
+| Kestrel harness | `./scripts/kestrel test` | 1855 Kestrel harness tests cover CLI helpers, maven resolver, and stdlib behaviour exercised via the new shim |
+
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` — deferred to S16-05
-- [ ] `docs/specs/11-bootstrap.md` — deferred to S16-05
+- [x] `docs/specs/09-tools.md` — completed in S16-05
+- [x] `docs/specs/11-bootstrap.md` — completed in S16-05
 
 ## Build notes
 

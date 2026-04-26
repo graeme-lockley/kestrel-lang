@@ -6,7 +6,7 @@
 
 ## Epic
 
-- Epic: [E16 Kestrel CLI in Kestrel](../epics/unplanned/E16-kestrel-cli-in-kestrel.md)
+- Epic: [E16 Kestrel CLI in Kestrel](../epics/done/E16-kestrel-cli-in-kestrel.md)
 - Companion stories: S16-01, S16-03, S16-04, S16-05
 
 ## Summary
@@ -127,7 +127,7 @@ translations from JavaScript to Kestrel.
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/09-tools.md` §2.1 — deferred to S16-05
+- [x] `docs/specs/09-tools.md` §2.1 — completed in S16-05
 
 ## Build notes
 
