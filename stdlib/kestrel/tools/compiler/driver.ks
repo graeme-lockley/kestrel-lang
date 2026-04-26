@@ -13,6 +13,7 @@ import { parseFromList, ParseError } from "kestrel:dev/parser/parser"
 import * as TC from "kestrel:dev/typecheck/typecheck"
 import * as Codegen from "kestrel:tools/compiler/codegen"
 import * as Kti from "kestrel:tools/compiler/kti"
+import * as Resolve from "kestrel:tools/compiler/resolve"
 import * as Fs from "kestrel:io/fs"
 import * as Rep from "kestrel:dev/typecheck/reporter"
 
@@ -168,6 +169,12 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
           ParseFail(msg, off, ln, col) =>
             failWithDiags([mkParseErrDiag(entryPath, msg, off, ln, col)])
           ParseOk(prog) => {
+            // 3. Resolve direct dependency paths
+            val resolveOpts = { fromFile = entryPath, stdlibDir = opts.stdlibDir, cacheRoot = opts.cacheRoot, allowHttp = opts.allowHttp };
+            match (Resolve.uniqueDependencyPaths(prog, entryPath, resolveOpts)) {
+              Err(resolveErr) =>
+                failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, resolveErr)])
+              Ok(deps) => {
             // 4. Typecheck (no imports in this story)
             val tcOpts = {
               importBindings = None,
@@ -205,6 +212,7 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
                 }
               }
             }
+            }
           }
         }
         }
@@ -213,3 +221,4 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
   }
 }
 
+}

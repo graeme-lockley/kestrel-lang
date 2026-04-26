@@ -281,6 +281,32 @@ export async fun run(s: Suite): Task<Unit> = {
         }
       }
     })
+
+    await asyncGroup(s1, "compileFile - bad import specifier fails resolution", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_badspec_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_badspec_out"
+      val srcPath = "${srcDir}/badspec.ks"
+      // kestrel:../bad contains '..' which is not a safe stdlib segment
+      val src = "import * as X from \"kestrel:../bad\"\nexport fun f(): Int = 1"
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(srcPath, src)) {
+                Err(_) => isTrue(sg, "writeText failed", False)
+                Ok(()) => {
+                  val result = await Driver.compileFile(srcPath, defaultOpts(outDir))
+                  isTrue(sg, "bad specifier ok=False", !result.ok)
+                  isTrue(sg, "bad specifier has diagnostic", Lst.length(result.diagnostics) > 0)
+                }
+              }
+            }
+          }
+        }
+      }
+    })
   })
 }
 
