@@ -48,13 +48,13 @@ The individual pieces needed:
 
 ## Acceptance Criteria
 
-- [ ] `Driver.compileFile` successfully compiles a single-file Kestrel program with no imports.
-- [ ] `.class` files are written to the directory specified by `opts.outDir`.
-- [ ] `compileFile` returns `ok=True` for valid source.
-- [ ] `compileFile` returns `ok=False` when source cannot be parsed (even without full diagnostics).
-- [ ] `stdlib/kestrel/tools/compiler/driver.test.ks` has a test verifying the happy-path.
-- [ ] `cd compiler && npm run build && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] `Driver.compileFile` successfully compiles a single-file Kestrel program with no imports.
+- [x] `.class` files are written to the directory specified by `opts.outDir`.
+- [x] `compileFile` returns `ok=True` for valid source.
+- [x] `compileFile` returns `ok=False` when source cannot be parsed (even without full diagnostics).
+- [x] `stdlib/kestrel/tools/compiler/driver.test.ks` has a test verifying the happy-path.
+- [x] `cd compiler && npm run build && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
@@ -82,16 +82,16 @@ The individual pieces needed:
 
 ## Tasks
 
-- [ ] Add imports to `driver.ks`: `Lex`, `Par` (parser), `TC` (typecheck), `Codegen` (jvmCodegen), `Fs`, `Char`, `Dict`, `Lst`, `Str`
-- [ ] Implement `classNameForPath(path: String): String` in `driver.ks` (matches `classNameForPath` in TS compiler)
-- [ ] Rewrite `compileFile` to: read source with `Fs.readText`; lex with `Lex.lex`; parse with `Par.parseFromList`; typecheck with `TC.typecheck`; codegen with `Codegen.jvmCodegen`; write classes with `Fs.writeBytes` after `Fs.mkdirAll`
-- [ ] Handle parse failure: return `{ ok = False, diagnostics = [] }` when parse returns `Err`
-- [ ] Handle file-read failure: return `{ ok = False, diagnostics = [diag(...readError...)] }`
-- [ ] Handle typecheck failure: return `{ ok = False, diagnostics = [] }` when `tc.ok = False` (full diagnostic surface in S17-02)
-- [ ] Add happy-path test in `driver.test.ks`: compile a valid single-file program, assert `ok=True`
-- [ ] Add failure test: compile a parse-invalid program, assert `ok=False`
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `./scripts/kestrel test`
+- [x] Add imports to `driver.ks`: `Lex`, `Par` (parser), `TC` (typecheck), `Codegen` (jvmCodegen), `Fs`, `Char`, `Dict`, `Lst`, `Str`
+- [x] Implement `classNameForPath(path: String): String` in `driver.ks` (matches `classNameForPath` in TS compiler)
+- [x] Rewrite `compileFile` to: read source with `Fs.readText`; lex with `Lex.lex`; parse with `Par.parseFromList`; typecheck with `TC.typecheck`; codegen with `Codegen.jvmCodegen`; write classes with `Fs.writeBytes` after `Fs.mkdirAll`
+- [x] Handle parse failure: return `{ ok = False, diagnostics = [] }` when parse returns `Err`
+- [x] Handle file-read failure: return `{ ok = False, diagnostics = [diag(...readError...)] }`
+- [x] Handle typecheck failure: return `{ ok = False, diagnostics = [] }` when `tc.ok = False` (full diagnostic surface in S17-02)
+- [x] Add happy-path test in `driver.test.ks`: compile a valid single-file program, assert `ok=True`
+- [x] Add failure test: compile a parse-invalid program, assert `ok=False`
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
 
 ## Tests to add
 
@@ -102,4 +102,13 @@ The individual pieces needed:
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/11-bootstrap.md` — no change needed for this story; mark reviewed
+- [x] `docs/specs/11-bootstrap.md` — no change needed for this story; mark reviewed
+
+## Build notes
+
+- 2026-04-26: Started implementation. Exploring `driver.ks` stub, codegen API, FS API, typecheck API before writing code.
+- 2026-04-26: Implemented `classNameForPath` using `Str.mapChars` + `Chr.isAlphaNum`, mirroring the TS compiler logic.
+- 2026-04-26: Implemented `writeAllClasses` as a recursive async helper; needed to bind recursive calls to typed variables before `await` to avoid type inference failures (pattern from `listDirAllLoop` in fs.ks).
+- 2026-04-26: `writeAllClasses` also needed to call `Fs.mkdirAll` for each class file's parent directory since class names include path segments.
+- 2026-04-26: Tests updated to use `asyncGroup` from `kestrel:dev/test`; source and output dirs kept separate to avoid path collisions.
+- 2026-04-26: All 17 driver tests pass; 1867 total Kestrel tests pass; 440 TypeScript tests pass.

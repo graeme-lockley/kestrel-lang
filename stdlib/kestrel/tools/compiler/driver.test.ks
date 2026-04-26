@@ -1,11 +1,14 @@
-import { Suite, group, eq, isTrue } from "kestrel:dev/test"
+import { Suite, group, asyncGroup, eq, isTrue } from "kestrel:dev/test"
 import * as Dict from "kestrel:data/dict"
+import * as Lst from "kestrel:data/list"
 import * as Lex from "kestrel:dev/parser/lexer"
 import { parseFromList } from "kestrel:dev/parser/parser"
 import * as Ast from "kestrel:dev/parser/ast"
 import * as Driver from "kestrel:tools/compiler/driver"
 import * as Kti from "kestrel:tools/compiler/kti"
 import * as Ty from "kestrel:dev/typecheck/types"
+import * as Fs from "kestrel:io/fs"
+import { getProcess } from "kestrel:sys/process"
 
 fun program(src: String): Ast.Program =
   match (parseFromList(Lex.lex(src))) {
@@ -13,8 +16,16 @@ fun program(src: String): Ast.Program =
     Err(e) => throw e
   }
 
-export async fun run(s: Suite): Task<Unit> =
-  group(s, "kestrel:tools/compiler/driver", (s1: Suite) => {
+fun defaultOpts(outDir: String): Driver.CompileOptions = {
+  outDir = outDir,
+  stdlibDir = "/nonexistent/stdlib",
+  cacheRoot = "/tmp/kestrel_cache",
+  allowHttp = False,
+  writeKti = False
+}
+
+export async fun run(s: Suite): Task<Unit> = {
+  await asyncGroup(s, "kestrel:tools/compiler/driver", async (s1: Suite) => {
     group(s1, "freshness helper", (sg: Suite) => {
       val p = program("export fun id(x: Int): Int = x")
       val kti = Kti.buildKtiV4(p, Dict.insert(Dict.emptyStringDict(), "id", Ty.TArrow([Ty.tInt], Ty.tInt)), "src", Dict.emptyStringDict())
@@ -37,4 +48,75 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(sg, "options outDir set", opts.outDir == "/tmp/out")
       isTrue(sg, "options allowHttp set", opts.allowHttp == False)
     })
+
+    group(s1, "classNameForPath", (sg: Suite) => {
+      eq(sg, "simple file", Driver.classNameForPath("/foo/bar/hello.ks"), "foo/bar/Hello")
+      eq(sg, "no extension", Driver.classNameForPath("/foo/bar/hello"), "foo/bar/Hello")
+      eq(sg, "root file", Driver.classNameForPath("/hello.ks"), "Hello")
+      eq(sg, "no leading slash", Driver.classNameForPath("foo/bar.ks"), "foo/Bar")
+      eq(sg, "dashes sanitized", Driver.classNameForPath("/foo/my-module.ks"), "foo/My_module")
+      eq(sg, "stdlib path", Driver.classNameForPath("/stdlib/kestrel/data/list.ks"), "stdlib/kestrel/data/List")
+    })
+
+    await asyncGroup(s1, "compileFile - empty path", async (sg: Suite) => {
+      val result = await Driver.compileFile("", defaultOpts("/tmp/kestrel_test_out"))
+      isTrue(sg, "empty path fails", !result.ok)
+      isTrue(sg, "empty path has diagnostic", Lst.length(result.diagnostics) > 0)
+    })
+
+    await asyncGroup(s1, "compileFile - missing file", async (sg: Suite) => {
+      val result = await Driver.compileFile("/nonexistent/path/file.ks", defaultOpts("/tmp/kestrel_test_out"))
+      isTrue(sg, "missing file fails", !result.ok)
+    })
+
+    await asyncGroup(s1, "compileFile - valid single-file program", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_out"
+      val srcPath = "${srcDir}/testmain.ks"
+      val src = "export fun answer(): Int = 42"
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(srcPath, src)) {
+                Err(_) => isTrue(sg, "writeText failed", False)
+                Ok(()) => {
+                  val result = await Driver.compileFile(srcPath, defaultOpts(outDir))
+                  isTrue(sg, "valid source ok=True", result.ok)
+                  isTrue(sg, "no diagnostics on success", Lst.isEmpty(result.diagnostics))
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - parse error returns ok=False", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_fail_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_fail_out"
+      val srcPath = "${srcDir}/bad.ks"
+      val src = "this is not valid kestrel syntax @@@@"
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(srcPath, src)) {
+                Err(_) => isTrue(sg, "writeText failed", False)
+                Ok(()) => {
+                  val result = await Driver.compileFile(srcPath, defaultOpts(outDir))
+                  isTrue(sg, "invalid source ok=False", !result.ok)
+                }
+              }
+            }
+          }
+        }
+      }
+    })
   })
+}
+
