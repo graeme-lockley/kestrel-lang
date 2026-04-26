@@ -35,12 +35,12 @@ written yet. The `isFresh` function exists but is never called.
 
 ## Acceptance Criteria
 
-- [ ] A `.kti` file is written to `outDir` after successful single-file compilation.
-- [ ] No `.kti` file is written when compilation fails (parse/type errors).
-- [ ] `opts.writeKti = False` suppresses KTI writing.
-- [ ] `driver.test.ks` verifies the KTI write path.
-- [ ] `cd compiler && npm run build && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] A `.kti` file is written to `outDir` after successful single-file compilation.
+- [x] No `.kti` file is written when compilation fails (parse/type errors).
+- [x] `opts.writeKti = False` suppresses KTI writing.
+- [x] `driver.test.ks` verifies the KTI write path.
+- [x] `cd compiler && npm run build && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
@@ -55,3 +55,30 @@ written yet. The `isFresh` function exists but is never called.
   returns an equivalent structure.
 - The KTI file path: typically `<outDir>/<ModuleName>.kti` — verify what path convention
   the TypeScript compiler uses and replicate it.
+
+## Impact analysis
+
+- `stdlib/kestrel/tools/compiler/driver.ks`: after `writeAllClasses` succeeds and `opts.writeKti = True`, call `Kti.buildKtiV4(prog, tc.exports.items, source, Dict.emptyStringDict())` then `Kti.writeKtiFile("${opts.outDir}/${moduleName}.kti", kti)`; `source` must be threaded through from `Fs.readText`; `prog` and `tc` also available in scope
+- `stdlib/kestrel/tools/compiler/driver.test.ks`: test that `.kti` file is created when `writeKti=True`; test that it is NOT created when `writeKti=False`; test that it is NOT created on failure
+
+## Tasks
+
+- [x] Thread `source` through to the success path in `compileFile`
+- [x] After `writeAllClasses` succeeds, conditionally write KTI: if `opts.writeKti` is True, `val kti = Kti.buildKtiV4(prog, tc.exports.items, source, Dict.emptyStringDict()); await Kti.writeKtiFile("${opts.outDir}/${moduleName}.kti", kti)`
+- [x] Return `ok=True` if KTI write succeeds (or is skipped); `ok=False` with file error if KTI write fails
+- [x] Add test: writeKti=True writes a `.kti` file (assert file exists after compile)
+- [x] Add test: writeKti=False does not write `.kti` file
+- [x] Run `./scripts/kestrel test`
+
+## Tests to add
+
+- `driver.test.ks`: test that KTI file is written when `writeKti=True`
+- `driver.test.ks`: test that KTI file is NOT written when `writeKti=False`
+
+## Documentation and specs to update
+
+- [x] No spec changes needed for this story; mark reviewed
+
+## Build notes
+
+- 2026-04-26: Starting implementation.

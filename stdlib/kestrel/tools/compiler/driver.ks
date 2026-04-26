@@ -180,7 +180,18 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
                   val pairs = Dict.toList(codegenResult.classes);
                   match (await writeAllClasses(opts.outDir, pairs)) {
                     Err(msg) => failResult(entryPath, Diag.CODES.file.readError, msg)
-                    Ok(()) => { ok = True, diagnostics = [] }
+                    Ok(()) => {
+                      if (!opts.writeKti) {
+                        { ok = True, diagnostics = [] }
+                      } else {
+                        val kti = Kti.buildKtiV4(prog, tc.exports.items, source, Dict.emptyStringDict());
+                        val ktiPath = "${opts.outDir}/${moduleName}.kti";
+                        match (await Kti.writeKtiFile(ktiPath, kti)) {
+                          Err(ktiErr) => failResult(entryPath, Diag.CODES.file.readError, "cannot write KTI: ${ktiErr}")
+                          Ok(()) => { ok = True, diagnostics = [] }
+                        }
+                      }
+                    }
                   }
                 }
               }

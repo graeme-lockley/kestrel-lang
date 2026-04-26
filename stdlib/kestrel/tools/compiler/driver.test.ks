@@ -143,6 +143,69 @@ export async fun run(s: Suite): Task<Unit> = {
         }
       }
     })
+
+    await asyncGroup(s1, "compileFile - writeKti=True writes KTI file", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_kti_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_kti_out"
+      val srcPath = "${srcDir}/ktitest.ks"
+      val src = "export fun greet(): String = \"hello\""
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(srcPath, src)) {
+                Err(_) => isTrue(sg, "writeText failed", False)
+                Ok(()) => {
+                  val ktiOpts = {
+                    outDir = outDir,
+                    stdlibDir = "/nonexistent/stdlib",
+                    cacheRoot = "/tmp/kestrel_cache",
+                    allowHttp = False,
+                    writeKti = True
+                  }
+                  val result = await Driver.compileFile(srcPath, ktiOpts)
+                  isTrue(sg, "writeKti compile ok", result.ok)
+                  val moduleName = Driver.classNameForPath(srcPath)
+                  val ktiPath = "${outDir}/${moduleName}.kti"
+                  val exists = await Fs.fileExists(ktiPath)
+                  isTrue(sg, "KTI file written", exists)
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - writeKti=False no KTI file", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_nokti_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_nokti_out"
+      val srcPath = "${srcDir}/noktitest.ks"
+      val src = "export fun answer(): Int = 42"
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(srcPath, src)) {
+                Err(_) => isTrue(sg, "writeText failed", False)
+                Ok(()) => {
+                  val result = await Driver.compileFile(srcPath, defaultOpts(outDir))
+                  isTrue(sg, "no-kti compile ok", result.ok)
+                  val moduleName = Driver.classNameForPath(srcPath)
+                  val ktiPath = "${outDir}/${moduleName}.kti"
+                  val exists = await Fs.fileExists(ktiPath)
+                  isTrue(sg, "KTI file NOT written", !exists)
+                }
+              }
+            }
+          }
+        }
+      }
+    })
   })
 }
 
