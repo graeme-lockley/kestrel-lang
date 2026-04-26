@@ -255,7 +255,8 @@ async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: Strin
 
 type GraphState = {
   compiled: Dict<String, Bool>,
-  ktiTexts: Dict<String, String>
+  ktiTexts: Dict<String, String>,
+  processedOrder: List<String>
 }
 
 fun ktiPathForModule(path: String, opts: CompileOptions): String =
@@ -296,8 +297,26 @@ type GraphCompileResult =
   | GraphCompileErr(CompileResult)
 
 type ModuleCompileResult =
-    ModuleCompileOk(String)
+    ModuleCompileOk(String, Bool)
   | ModuleCompileErr(CompileResult)
+
+/// Write <className>.class.deps file listing all transitive dep paths + the module itself.
+async fun writeDepsFile(entryPath: String, transDeps: List<String>, opts: CompileOptions): Task<Option<CompileResult>> = {
+  val className = classNameForPath(entryPath)
+  val depsPath = "${opts.outDir}/${className}.class.deps"
+  val allPaths = Lst.append(transDeps, [entryPath])
+  val content = Str.join("\n", allPaths)
+  val contentWithTrailingNewline = "${content}\n"
+  match (await Fs.writeText(depsPath, contentWithTrailingNewline)) {
+    Err(e) => Some(failResult(entryPath, Diag.CODES.file.readError, "cannot write ${depsPath}: ${e}"))
+    Ok(()) => None
+  }
+}
+
+/// Write the deps file only when the module was actually compiled (not fresh/skipped).
+async fun writeDepsFileIfCompiled(wasCompiled: Bool, entryPath: String, transDeps: List<String>, opts: CompileOptions): Task<Option<CompileResult>> =
+  if (!wasCompiled) None
+  else await writeDepsFile(entryPath, transDeps, opts)
 
 fun cycleMessage(path: String, visiting: List<String>): String = {
   val nodes = Lst.append(Lst.reverse(path :: visiting), [path])
@@ -319,16 +338,16 @@ async fun compileOneModule(entryPath: String, source: String, prog: Program, dep
       if (isAlreadyFresh) {
         match (await loadKtiText(entryPath, opts, state)) {
           Err(depErr2) => ModuleCompileErr(failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, depErr2)]))
-          Ok(content) => ModuleCompileOk(content)
+          Ok(content) => ModuleCompileOk(content, False)
         }
       } else {
         val emitted = await doTypecheckAndEmit(prog, entryPath, moduleName, source, opts, ktiPath, deps, depHashes)
         if (!emitted.ok) ModuleCompileErr(emitted)
-        else if (!opts.writeKti) ModuleCompileOk("")
+        else if (!opts.writeKti) ModuleCompileOk("", True)
         else {
           match (await Fs.readText(ktiPath)) {
             Err(_) => ModuleCompileErr(failResult(entryPath, Diag.CODES.file.readError, "cannot read file: ${ktiPath}"))
-            Ok(content) => ModuleCompileOk(content)
+            Ok(content) => ModuleCompileOk(content, True)
           }
         }
       }
@@ -364,14 +383,22 @@ async fun compileGraph(path: String, opts: CompileOptions, visiting: List<String
                     match (await next) {
                       GraphCompileErr(e) => GraphCompileErr(e)
                       GraphCompileOk(stateAfterDeps) => {
+                        val startLen = Lst.length(state.processedOrder)
                         match (await compileOneModule(p, source, prog, deps, opts, stateAfterDeps)) {
                           ModuleCompileErr(e) => GraphCompileErr(e)
-                          ModuleCompileOk(ktiText) => {
+                          ModuleCompileOk(ktiText, wasCompiled) => {
                             val ktiTexts = if (Str.isEmpty(ktiText)) stateAfterDeps.ktiTexts else Dict.insert(stateAfterDeps.ktiTexts, p, ktiText)
-                            GraphCompileOk({
-                              compiled = Dict.insert(stateAfterDeps.compiled, p, True),
-                              ktiTexts = ktiTexts
-                            })
+                            val transDeps = Lst.drop(stateAfterDeps.processedOrder, startLen)
+                            val depsTask: Task<Option<CompileResult>> = writeDepsFileIfCompiled(wasCompiled, p, transDeps, opts)
+                            match (await depsTask) {
+                              Some(depsErr) => GraphCompileErr(depsErr)
+                              None =>
+                                GraphCompileOk({
+                                  compiled = Dict.insert(stateAfterDeps.compiled, p, True),
+                                  ktiTexts = ktiTexts,
+                                  processedOrder = Lst.append(stateAfterDeps.processedOrder, [p])
+                                })
+                            }
                           }
                         }
                       }
@@ -407,7 +434,8 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
   } else {
     match (await compileGraph(entryPath, opts, [], {
       compiled = Dict.emptyStringDict(),
-      ktiTexts = Dict.emptyStringDict()
+      ktiTexts = Dict.emptyStringDict(),
+      processedOrder = []
     })) {
       GraphCompileErr(e) => e
       GraphCompileOk(_) => { ok = True, diagnostics = [] }

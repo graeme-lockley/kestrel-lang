@@ -888,6 +888,66 @@ export async fun run(s: Suite): Task<Unit> = {
         }
       }
     })
+
+    await asyncGroup(s1, "compileFile — class.deps sidecar for two-module program", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_classdeps_src"
+      val outDir = "/tmp/kestrel_driver_classdeps_out"
+      val depPath = "${srcDir}/dep.ks"
+      val mainPath = "${srcDir}/main.ks"
+      val depSrc = "export fun depAnswer(): Int = 1"
+      val mainSrc = "import * as Dep from \"${depPath}\"\nexport fun go(): Int = Dep.depAnswer()"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True,
+        refresh = False
+      }
+      val depClassName = Driver.classNameForPath(depPath)
+      val mainClassName = Driver.classNameForPath(mainPath)
+      val depDepsFile = "${outDir}/${depClassName}.class.deps"
+      val mainDepsFile = "${outDir}/${mainClassName}.class.deps"
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll srcDir failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll outDir failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(depPath, depSrc)) {
+                Err(_) => isTrue(sg, "write dep failed", False)
+                Ok(()) => {
+                  match (await Fs.writeText(mainPath, mainSrc)) {
+                    Err(_) => isTrue(sg, "write main failed", False)
+                    Ok(()) => {
+                      val result = await Driver.compileFile(mainPath, opts)
+                      isTrue(sg, "compile ok", result.ok)
+                      match (await Fs.readText(depDepsFile)) {
+                        Err(_) => isTrue(sg, "dep.class.deps exists", False)
+                        Ok(depDepsContent) => {
+                          val depLines = Lst.filter(Str.split(depDepsContent, "\n"), (l: String) => !Str.isEmpty(l))
+                          eq(sg, "dep deps count", Lst.length(depLines), 1)
+                          eq(sg, "dep deps[0] is dep path", Lst.head(depLines), Some(depPath))
+                        }
+                      }
+                      match (await Fs.readText(mainDepsFile)) {
+                        Err(_) => isTrue(sg, "main.class.deps exists", False)
+                        Ok(mainDepsContent) => {
+                          val mainLines = Lst.filter(Str.split(mainDepsContent, "\n"), (l: String) => !Str.isEmpty(l))
+                          eq(sg, "main deps count", Lst.length(mainLines), 2)
+                          eq(sg, "main deps[0] is dep path", Lst.head(mainLines), Some(depPath))
+                          eq(sg, "main deps[1] is main path", Lst.head(Lst.drop(mainLines, 1)), Some(mainPath))
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
   })
 }
 

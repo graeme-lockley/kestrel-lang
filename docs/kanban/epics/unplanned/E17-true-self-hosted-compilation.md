@@ -76,7 +76,7 @@ independently testable. No story should touch more than one concern at a time.
    `Resolve.fetchUrl` to populate the URL cache before attempting to resolve the path. Wire
    `--refresh` flag to force re-fetch. Verify cached-hit path skips the network.
 
-10. [S17-10] `.class.deps` sidecar file writing
+10. ✅ [S17-10] `.class.deps` sidecar file writing
     — After compiling a module, write `<ClassName>.class.deps` listing the absolute paths of
     all direct and transitive source dependencies. This file is used by `cli.ks` for mtime-
     based staleness checks (legacy freshness path). Format: one absolute path per line.

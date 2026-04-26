@@ -81,6 +81,7 @@ The first command updates TypeScript compiler output and runtime artifacts; the 
 - **Path:** `~/.kestrel/jvm/` by default.
 - **Override:** `KESTREL_JVM_CACHE` environment variable.
 - **Contents:** All compiled `.class` files (both self-hosted compiler classes and user program classes), `.class.deps` dependency lists, and `.kti` incremental metadata.
+- **`.class.deps` format:** For each compiled module `<ClassName>`, a sidecar file `<ClassName>.class.deps` is written to `outDir`. The file contains the absolute source paths of all transitive source dependencies of that module (in DFS post-order), with the module's own path last. One absolute path per line, UTF-8 encoded, newline-terminated. Only written when a module is actually compiled (not when a fresh/incremental skip occurs).
 - **Gate artifact:** `Cli_entry.class` (nested under a path derived from the source file's absolute path).
 
 ### 2.2 Maven Cache
