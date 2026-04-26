@@ -56,7 +56,7 @@ independently testable. No story should touch more than one concern at a time.
    `ResolvedDep` values for direct imports. No multi-module compile yet; just prove the paths
    are correctly resolved for stdlib and relative specifiers.
 
-6. [S17-06] Cross-module KTI type loading for the typechecker
+6. [S17-06] Cross-module KTI type loading for the typechecker ✅
    — Before typechecking a module, read the `.kti` files of each resolved direct dependency
    and reconstruct the `importBindings` snapshot that the typechecker needs. Handle the case
    where a dependency `.kti` is absent (dependency must be compiled first; return an error).

@@ -307,6 +307,38 @@ export async fun run(s: Suite): Task<Unit> = {
         }
       }
     })
+
+    await asyncGroup(s1, "compileFile - missing dep KTI returns error", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_missingdep_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_missingdep_out"
+      val mainPath = "${srcDir}/main2.ks"
+      val mainSrc = "import { answer } from \"./nodep\"\nexport fun main(): Int = answer()"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = False
+      }
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(mainPath, mainSrc)) {
+                Err(_) => isTrue(sg, "writeText main failed", False)
+                Ok(()) => {
+                  val result = await Driver.compileFile(mainPath, opts)
+                  isTrue(sg, "missing dep ok=False", !result.ok)
+                  isTrue(sg, "missing dep has diagnostic", Lst.length(result.diagnostics) > 0)
+                }
+              }
+            }
+          }
+        }
+      }
+    })
   })
 }
 

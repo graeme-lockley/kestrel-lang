@@ -22,7 +22,7 @@
 //! ```
 //!
 
-extern type JByteArray = jvm("java.lang.Object")
+export extern type JByteArray = jvm("java.lang.Object")
 
 extern fun jbaNew(size: Int): JByteArray =
   jvm("kestrel.runtime.KRuntime#byteArrayNew(java.lang.Object)")

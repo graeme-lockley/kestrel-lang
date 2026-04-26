@@ -9,10 +9,13 @@ import * as Str from "kestrel:data/string"
 import * as Chr from "kestrel:data/char"
 import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as Lex from "kestrel:dev/parser/lexer"
+import { Program, ImportDecl } from "kestrel:dev/parser/ast"
 import { parseFromList, ParseError } from "kestrel:dev/parser/parser"
+import { JByteArray } from "kestrel:data/bytearray"
 import * as TC from "kestrel:dev/typecheck/typecheck"
 import * as Codegen from "kestrel:tools/compiler/codegen"
 import * as Kti from "kestrel:tools/compiler/kti"
+import { DepLoadOk, DepLoadErr } from "kestrel:tools/compiler/kti"
 import * as Resolve from "kestrel:tools/compiler/resolve"
 import * as Fs from "kestrel:io/fs"
 import * as Rep from "kestrel:dev/typecheck/reporter"
@@ -48,8 +51,21 @@ export fun isFresh(kti: Kti.KtiV4, srcHash: String, depHashes: Dict<String, Stri
 /// so that the async `compileFile` function can branch on it without allocating exception
 /// pattern-binding locals inside the async state machine (which can cause JVM VerifyError).
 type ParseOutcome =
-    ParseOk(Ast.Program)
+    ParseOk(Program)
   | ParseFail(String, Int, Int, Int)
+
+fun normalizeSegments(parts: List<String>, acc: List<String>): List<String> =
+  match (parts) {
+    [] => Lst.reverse(acc)
+    part :: rest =>
+      if (part == "." | Str.isEmpty(part)) normalizeSegments(rest, acc)
+      else if (part == "..") {
+        match (acc) {
+          [] => normalizeSegments(rest, acc)
+          _ :: accRest => normalizeSegments(rest, accRest)
+        }
+      } else normalizeSegments(rest, part :: acc)
+  }
 
 fun parseOutcome(tokens: List<Token.Token>): ParseOutcome =
   match (parseFromList(tokens)) {
@@ -64,7 +80,7 @@ fun parseOutcome(tokens: List<Token.Token>): ParseOutcome =
 export fun classNameForPath(path: String): String = {
   val normalized = if (Str.startsWith("/", path)) Str.dropLeft(path, 1) else path
   val withoutExt = if (Str.endsWith(".ks", normalized)) Str.dropRight(normalized, 3) else normalized
-  val parts = Lst.filter(Str.split(withoutExt, "/"), (p: String) => !Str.isEmpty(p))
+  val parts = normalizeSegments(Str.split(withoutExt, "/"), [])
   val sanitize = (seg: String) =>
     Str.mapChars(seg, (c: Char) => if (Chr.isAlphaNum(c) | c == '_') c else '_')
   val sanitized = Lst.map(parts, sanitize)
@@ -122,7 +138,7 @@ fun classFileDir(outDir: String, className: String): String = {
   else "${outDir}/${Str.left(className, last)}"
 }
 
-async fun writeAllClasses(outDir: String, pairs: List<(String, ByteArray)>): Task<Result<Unit, String>> =
+async fun writeAllClasses(outDir: String, pairs: List<(String, JByteArray)>): Task<Result<Unit, String>> =
   match (pairs) {
     [] => Ok(())
     h :: rest => {
@@ -143,6 +159,69 @@ async fun writeAllClasses(outDir: String, pairs: List<(String, ByteArray)>): Tas
     }
   }
 
+/// Write KTI file if writeKti option is set; otherwise return success.
+async fun writeKtiIfNeeded(opts: CompileOptions, ktiPath: String, prog: Program, tcExports: TC.TypeEnv, source: String, entryPath: String): Task<CompileResult> =
+  if (opts.writeKti) {
+    val kti = Kti.buildKtiV4(prog, tcExports.items, source, Dict.emptyStringDict());
+    match (await Kti.writeKtiFile(ktiPath, kti)) {
+      Err(ktiErr) => failResult(entryPath, Diag.CODES.file.readError, "cannot write KTI: ${ktiErr}")
+      Ok(()) => { ok = True, diagnostics = [] }
+    }
+  } else {
+    { ok = True, diagnostics = [] }
+  }
+
+/// Codegen and write class files + KTI (extracted to reduce async locals).
+async fun doCodegenAndWrite(moduleName: String, prog: Program, tcResult: TC.TypecheckResult, entryPath: String, opts: CompileOptions, ktiPath: String, source: String): Task<CompileResult> = {
+  val codegenResult = Codegen.jvmCodegen(moduleName, prog);
+  match (await Fs.mkdirAll(opts.outDir)) {
+    Err(_) =>
+      failResult(entryPath, Diag.CODES.file.readError,
+        "cannot create output directory: ${opts.outDir}")
+    Ok(()) => {
+      val pairs = Dict.toList(codegenResult.classes);
+      match (await writeAllClasses(opts.outDir, pairs)) {
+        Err(writeErr) => failResult(entryPath, Diag.CODES.file.readError, writeErr)
+        Ok(()) =>
+          await writeKtiIfNeeded(opts, ktiPath, prog, tcResult.exports, source, entryPath)
+      }
+    }
+  }
+}
+
+/// Typecheck, codegen, and write output for a parsed program (extracted to reduce async locals).
+async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: String, source: String, opts: CompileOptions, ktiPath: String): Task<CompileResult> = {
+  // 3. Resolve direct dependency paths
+  val resolveOpts = { fromFile = entryPath, stdlibDir = opts.stdlibDir, cacheRoot = opts.cacheRoot, allowHttp = opts.allowHttp };
+  match (Resolve.uniqueDependencyPaths(prog, entryPath, resolveOpts)) {
+    Err(resolveErr) =>
+      failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, resolveErr)])
+    Ok(deps) => {
+      // 4. Load dep KTIs for import bindings
+      val depPairs = Lst.map(deps, (d: Resolve.ResolvedDep) => (d.spec, "${opts.outDir}/${classNameForPath(d.path)}.kti"));
+      match (await Kti.loadDepBindings(depPairs, prog.imports)) {
+        DepLoadErr(depErr) =>
+          failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, depErr)])
+        DepLoadOk(importBindings) => {
+          val importEnv = if (Dict.isEmpty(importBindings)) None else Some({ items = importBindings });
+          val tcOpts = {
+            importBindings = importEnv,
+            typeAliasBindings = None,
+            importOpaqueTypes = None,
+            sourceFile = entryPath
+          };
+          val tc = TC.typecheck(prog, tcOpts);
+          if (!tc.ok) {
+            failWithDiags(tc.diagnostics)
+          } else {
+            await doCodegenAndWrite(moduleName, prog, tc, entryPath, opts, ktiPath, source)
+          }
+        }
+      }
+    }
+  }
+}
+
 export async fun compileFile(entryPath: String, opts: CompileOptions): Task<CompileResult> = {
   if (entryPath == "") {
     failResult(entryPath, Diag.CODES.file.readError, "entry path is empty")
@@ -152,7 +231,6 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
       Err(_) =>
         failResult(entryPath, Diag.CODES.file.readError, "cannot read file: ${entryPath}")
       Ok(source) => {
-        // Check freshness before full compilation
         val moduleName = classNameForPath(entryPath);
         val srcHash = Kti.sourceHash(source);
         val ktiPath = "${opts.outDir}/${moduleName}.kti";
@@ -163,62 +241,16 @@ export async fun compileFile(entryPath: String, opts: CompileOptions): Task<Comp
         if (isAlreadyFresh) {
           { ok = True, diagnostics = [] }
         } else {
-        // 2. Lex + Parse
-        val tokens = Lex.lex(source);
-        match (parseOutcome(tokens)) {
-          ParseFail(msg, off, ln, col) =>
-            failWithDiags([mkParseErrDiag(entryPath, msg, off, ln, col)])
-          ParseOk(prog) => {
-            // 3. Resolve direct dependency paths
-            val resolveOpts = { fromFile = entryPath, stdlibDir = opts.stdlibDir, cacheRoot = opts.cacheRoot, allowHttp = opts.allowHttp };
-            match (Resolve.uniqueDependencyPaths(prog, entryPath, resolveOpts)) {
-              Err(resolveErr) =>
-                failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, resolveErr)])
-              Ok(deps) => {
-            // 4. Typecheck (no imports in this story)
-            val tcOpts = {
-              importBindings = None,
-              typeAliasBindings = None,
-              importOpaqueTypes = None,
-              sourceFile = entryPath
-            };
-            val tc = TC.typecheck(prog, tcOpts);
-            if (!tc.ok) {
-              failWithDiags(tc.diagnostics)
-            } else {
-              // 5. Code generate
-              val codegenResult = Codegen.jvmCodegen(moduleName, prog);
-              // 6. Write class files
-              match (await Fs.mkdirAll(opts.outDir)) {
-                Err(_) =>
-                  failResult(entryPath, Diag.CODES.file.readError,
-                    "cannot create output directory: ${opts.outDir}")
-                Ok(()) => {
-                  val pairs = Dict.toList(codegenResult.classes);
-                  match (await writeAllClasses(opts.outDir, pairs)) {
-                    Err(msg) => failResult(entryPath, Diag.CODES.file.readError, msg)
-                    Ok(()) => {
-                      if (!opts.writeKti) {
-                        { ok = True, diagnostics = [] }
-                      } else {
-                        val kti = Kti.buildKtiV4(prog, tc.exports.items, source, Dict.emptyStringDict());
-                        match (await Kti.writeKtiFile(ktiPath, kti)) {
-                          Err(ktiErr) => failResult(entryPath, Diag.CODES.file.readError, "cannot write KTI: ${ktiErr}")
-                          Ok(()) => { ok = True, diagnostics = [] }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            }
+          // 2. Lex + Parse
+          val tokens = Lex.lex(source);
+          match (parseOutcome(tokens)) {
+            ParseFail(msg, off, ln, col) =>
+              failWithDiags([mkParseErrDiag(entryPath, msg, off, ln, col)])
+            ParseOk(prog) =>
+              await doTypecheckAndEmit(prog, entryPath, moduleName, source, opts, ktiPath)
           }
-        }
         }
       }
     }
   }
-}
-
 }

@@ -11,10 +11,11 @@ import * as Opt from "kestrel:data/option"
 import * as Res from "kestrel:data/result"
 import * as Str from "kestrel:data/string"
 import * as Ast from "kestrel:dev/parser/ast"
-import { TDFun, TDVar, TDVal, TDType, TBAdt, TDExternFun, TDException, TDExport, EIDecl } from "kestrel:dev/parser/ast"
+import { TDFun, TDVar, TDVal, TDType, TBAdt, TDExternFun, TDException, TDExport, EIDecl, IDNamed, IDNamespace } from "kestrel:dev/parser/ast"
 import * as Fs from "kestrel:io/fs"
 import { NotFound, PermissionDenied, IoError } from "kestrel:io/fs"
 import * as Ty from "kestrel:dev/typecheck/types"
+import * as Resolve from "kestrel:tools/compiler/resolve"
 
 export type KtiFunctionEntry = { kind: String, function_index: Int, arity: Int, type_: Json.Value }
 export type KtiExportEntry = KtiFunction(KtiFunctionEntry)
@@ -49,14 +50,41 @@ export fun sourceHash(s: String): String = pseudoHash(s)
 export fun serializeType(t: Ty.InternalType): Json.Value =
   StrVal(Ty.typeToString(t))
 
+fun parseNamedType(s: String): Ty.InternalType =
+  if (s == "Int") Ty.tInt
+  else if (s == "Bool") Ty.tBool
+  else if (s == "String") Ty.tString
+  else if (s == "Unit") Ty.tUnit
+  else Ty.tUnit
+
+fun parseTypeList(parts: List<String>, acc: List<Ty.InternalType>): List<Ty.InternalType> =
+  match (parts) {
+    [] => Lst.reverse(acc)
+    part :: rest => parseTypeList(rest, parseNamedType(Str.trim(part)) :: acc)
+  }
+
 export fun deserializeType(v: Json.Value): Ty.InternalType =
   match (v) {
     StrVal(s) => {
-      if (Str.contains("->", s)) Ty.TArrow([Ty.tInt], Ty.tInt)
-      else if (s == "Int") Ty.tInt
-      else if (s == "Bool") Ty.tBool
-      else if (s == "String") Ty.tString
-      else Ty.tUnit
+      if (Str.contains("->", s)) {
+        val parts = Str.split(s, "->")
+        match (parts) {
+          lhs :: rest =>
+            match (rest) {
+              rhs :: _ => {
+                val paramText = Str.trim(lhs)
+                val returnTy = parseNamedType(Str.trim(rhs))
+                if (paramText == "()") Ty.TArrow([], returnTy)
+                else if (Str.startsWith("(", paramText) & Str.endsWith(")", paramText)) {
+                  val inner = Str.dropRight(Str.dropLeft(paramText, 1), 1)
+                  Ty.TArrow(parseTypeList(Str.split(inner, ","), []), returnTy)
+                } else Ty.TArrow([parseNamedType(paramText)], returnTy)
+              }
+              _ => Ty.tUnit
+            }
+          _ => Ty.tUnit
+        }
+      } else parseNamedType(s)
     }
     _ => Ty.tUnit
   }
@@ -261,3 +289,57 @@ export fun deserializeExports(kti: KtiV4): Dict<String, Ty.InternalType> =
       KtiFunction(fe) => Dict.insert(acc, p.0, deserializeType(fe.type_))
     }
   )
+
+/// Wrap a namespace export map as a TNamespace InternalType (for import * as X bindings).
+export fun makeNamespaceType(exports: Dict<String, Ty.InternalType>): Ty.InternalType =
+  Ty.TNamespace(exports)
+
+/// Build import bindings for a named import: add each requested name from dep exports to bindings.
+export fun addNamedImportBindings(specs: List<Ast.ImportSpec>, depExports: Dict<String, Ty.InternalType>, bindings: Dict<String, Ty.InternalType>): Dict<String, Ty.InternalType> =
+  match (specs) {
+    [] => bindings
+    h :: rest => {
+      val t = Dict.get(depExports, h.external);
+      val b2 = match (t) {
+        None => bindings
+        Some(ty) => Dict.insert(bindings, h.local, ty)
+      };
+      addNamedImportBindings(rest, depExports, b2)
+    }
+  }
+
+/// Result of loading all dep KTIs — either a combined importBindings dict or an error message.
+export type DepLoadResult = DepLoadOk(Dict<String, Ty.InternalType>) | DepLoadErr(String)
+
+/// Load import bindings from dep KTIs. deps is a list of (spec, ktiPath) pairs.
+/// For each dep, read its KTI and process matching import decls.
+export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast.ImportDecl>): Task<DepLoadResult> =
+  match (deps) {
+    [] => DepLoadOk(Dict.emptyStringDict())
+    dep :: rest => {
+      match (await readKtiFile(dep.1)) {
+        Err(_) => DepLoadErr("dependency not compiled yet: ${dep.0} (missing ${dep.1})")
+        Ok(depKti) => {
+          val depExports = deserializeExports(depKti);
+          val next: Task<DepLoadResult> = loadDepBindings(rest, imports)
+          match (await next) {
+            DepLoadErr(e) => DepLoadErr(e)
+            DepLoadOk(acc) => {
+              val merged = Lst.foldl(imports, acc, (b: Dict<String, Ty.InternalType>, imp: Ast.ImportDecl) =>
+                match (imp) {
+                  IDNamed(spec, specs2) =>
+                    if (spec == dep.0) addNamedImportBindings(specs2, depExports, b)
+                    else b
+                  IDNamespace(spec, alias) =>
+                    if (spec == dep.0) Dict.insert(b, alias, makeNamespaceType(depExports))
+                    else b
+                  _ => b
+                }
+              );
+              DepLoadOk(merged)
+            }
+          }
+        }
+      }
+    }
+  }

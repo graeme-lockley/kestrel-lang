@@ -212,6 +212,8 @@ When a `.kti` file is present alongside a dependency's `.class` output, the comp
 
 **Transitive invalidation:** A change to a leaf package A propagates to packages that import A through `depHashes`. When A is recompiled and gets a new `sourceHash`, any package B that lists A in its `depHashes` will find a mismatch in step 1 (depHash check) or step 2 (depHash re-check), causing B to be recompiled even if B's own source has not changed.
 
+**Self-hosted KTI import binding load:** In the JVM self-hosted compiler path, direct dependencies are resolved first, then each dependency's `.kti` is read before typechecking the current module. The compiler reconstructs `importBindings` from dependency exports (`import { ... }` maps selected names; `import * as Ns` maps a namespace binding) and passes those bindings into typecheck. If a direct dependency `.kti` is missing, compilation fails with a module-resolution diagnostic indicating that the dependency must be compiled first.
+
 **`--clean` flag:** `kestrel build --clean` and `kestrel run --clean` delete all `.kti` files in the configured output directory before compilation begins, bypassing steps 1 and 2 entirely and forcing a full rebuild from source. `--clean` is composable with `--refresh` for a fully-from-scratch build including URL re-download.
 
 ---
