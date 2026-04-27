@@ -21,7 +21,7 @@ import {
   SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue,
   PWild, PVar, PLit, PCon, PList, PCons, PTuple,
   LElem, LSpread,
-  TDFun, TDType, TDVal, TDVar, TDSVal, TDSVar, TDSExpr,
+  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr,
   TBAdt, TBAlias,
   TmplLit, TmplExpr
 } from "kestrel:dev/parser/ast"
@@ -254,6 +254,29 @@ fun registerTypeDecl(reg: TypeRegistry, td: Ast.TypeDecl): TypeRegistry = {
         exportedTypeVisibility = vis
       }
     }
+  }
+}
+
+fun registerExceptionDecl(reg: TypeRegistry, exn: Ast.ExceptionDecl): TypeRegistry = {
+  val exnType = Ty.TApp(exn.name, [])
+  val ctorParams =
+    match (exn.fields) {
+      Some(fields) => Lst.map(fields, (f: Ast.TypeField) => FA.astTypeToInternalWithScope(f.type_, reg.typeAliases, []))
+      None => []
+    }
+  val ctorType =
+    if (Lst.isEmpty(ctorParams)) exnType
+    else Ty.TArrow(ctorParams, exnType)
+  val vis =
+    if (exn.exported) "export"
+    else "local"
+  {
+    typeAliases = Dict.insert(reg.typeAliases, exn.name, exnType),
+    ctorEnv = Dict.insert(reg.ctorEnv, exn.name, Ty.generalize(Dict.emptyStringDict(), ctorType)),
+    adtConstructors = reg.adtConstructors,
+    ctorOwners = reg.ctorOwners,
+    exportedConstructors = reg.exportedConstructors,
+    exportedTypeVisibility = Dict.insert(reg.exportedTypeVisibility, exn.name, vis)
   }
 }
 
@@ -799,6 +822,7 @@ fun prebindTypeDecls(reg: TypeRegistry, decls: List<Ast.TopDecl>): TypeRegistry 
       val reg2 =
         match (h) {
           TDType(td) => registerTypeDecl(reg, td)
+          TDException(exn) => registerExceptionDecl(reg, exn)
           _ => reg
         }
       prebindTypeDecls(reg2, rest)
@@ -950,6 +974,13 @@ fun checkDecls(
       val out =
         match (h) {
           TDFun(fd) => checkFunDecl(state, env, typeAliases, exports, exportedTypeAliases, fd)
+          TDException(exn) => {
+            val ctorType = Opt.getOrElse(envGet(env, exn.name), Ty.freshVar())
+            if (exn.exported)
+              (env, envInsert(exports, exn.name, ctorType), exportedTypeAliases)
+            else
+              (env, exports, exportedTypeAliases)
+          }
           TDVal(name, ann, expr) => checkExportValDecl(state, env, typeAliases, exports, exportedTypeAliases, name, ann, expr)
           TDVar(name, ann, expr) => checkExportVarDecl(state, env, typeAliases, exports, exportedTypeAliases, name, ann, expr)
           TDSVal(name, expr) => checkScriptValDecl(state, env, typeAliases, exports, exportedTypeAliases, name, expr)
