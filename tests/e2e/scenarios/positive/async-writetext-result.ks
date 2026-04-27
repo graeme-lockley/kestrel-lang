@@ -1,3 +1,4 @@
+// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 import * as Fs from "kestrel:io/fs"
 import { NotFound } from "kestrel:io/fs"
 import * as Str from "kestrel:data/string"

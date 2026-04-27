@@ -762,10 +762,16 @@ fun fmtTopDecl(d: Ast.TopDecl): Doc =
         None => PP.hsep([PP.text("export var"), PP.text(name), PP.text("="), fmtExpr(e)])
         Some(t) => PP.hsep([PP.text("export var"), PP.hcat([PP.text(name), PP.text(": "), fmtType(t)]), PP.text("="), fmtExpr(e)])
       }
-    TDSVal(name, e) =>
-      PP.hsep([PP.text("val"), PP.text(name), PP.text("="), fmtExpr(e)])
-    TDSVar(name, e) =>
-      PP.hsep([PP.text("var"), PP.text(name), PP.text("="), fmtExpr(e)])
+    TDSVal(name, typeAnn, e) =>
+      match (typeAnn) {
+        None => PP.hsep([PP.text("val"), PP.text(name), PP.text("="), fmtExpr(e)])
+        Some(t) => PP.hsep([PP.text("val"), PP.hcat([PP.text(name), PP.text(": "), fmtType(t)]), PP.text("="), fmtExpr(e)])
+      }
+    TDSVar(name, typeAnn, e) =>
+      match (typeAnn) {
+        None => PP.hsep([PP.text("var"), PP.text(name), PP.text("="), fmtExpr(e)])
+        Some(t) => PP.hsep([PP.text("var"), PP.hcat([PP.text(name), PP.text(": "), fmtType(t)]), PP.text("="), fmtExpr(e)])
+      }
     TDSAssign(target, rhs) =>
       PP.hsep([fmtExpr(target), PP.text(":="), fmtExpr(rhs)])
     TDSExpr(e) => fmtExpr(e)

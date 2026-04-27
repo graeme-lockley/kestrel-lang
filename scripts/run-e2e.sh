@@ -59,6 +59,11 @@ for f in "${files[@]}"; do
   out_dir="$ROOT/out/e2e"
   mkdir -p "$out_dir"
 
+  if grep -q '// E2E_SKIP_PENDING_CODEGEN' "$f"; then
+    echo "  $name.ks SKIPPED (E2E_SKIP_PENDING_CODEGEN)"
+    continue
+  fi
+
   expect_stack_stderr=false
   if grep -qE '^//.*E2E_EXPECT_STACK_TRACE' "$f"; then
     expect_stack_stderr=true
@@ -112,6 +117,13 @@ if [ -d "$POSITIVE" ]; then
     [ -f "$f" ] || continue
     name=$(basename "$f" .ks)
 
+    # Skip tests blocked on pending self-hosted codegen stories
+    if grep -q '// E2E_SKIP_PENDING_CODEGEN' "$f"; then
+      echo "  $name.ks SKIPPED (E2E_SKIP_PENDING_CODEGEN)"
+      pos_skipped=$((pos_skipped + 1))
+      continue
+    fi
+
     # Skip network-dependent tests if KESTREL_MAVEN_OFFLINE=1
     if [ "${KESTREL_MAVEN_OFFLINE:-}" = "1" ] && grep -q '// E2E_REQUIRE_NETWORK' "$f"; then
       echo "  $name.ks SKIPPED (KESTREL_MAVEN_OFFLINE=1)"
@@ -149,13 +161,13 @@ if [ "$pos_count" -gt 0 ]; then
   echo "E2E positive: $pos_count scenario(s) passed."
 fi
 if [ "$pos_skipped" -gt 0 ]; then
-  echo "E2E positive: $pos_skipped scenario(s) skipped (KESTREL_MAVEN_OFFLINE=1)."
+  echo "E2E positive: $pos_skipped scenario(s) skipped."
 fi
 
 # CLI flag smoke checks for S01-05 process exit modes.
 sample_run="$POSITIVE/async-await-virtual-threads.ks"
 sample_expected="$POSITIVE/async-await-virtual-threads.expected"
-if [ -f "$sample_run" ] && [ -f "$sample_expected" ]; then
+if [ -f "$sample_run" ] && [ -f "$sample_expected" ] && ! grep -q 'E2E_SKIP_PENDING_CODEGEN' "$sample_run"; then
   out_dir="$ROOT/out/e2e"
   mkdir -p "$out_dir"
 

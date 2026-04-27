@@ -44,6 +44,8 @@ Also handles the tail-call optimisation case where `then` ends with `ARETURN`
   comparison), S17-27 (call emission).
 - **Blocks**: S17-31 (`EWhile`) and S17-32 (`EMatch`) — all of these require the same
   backpatching infrastructure. `EIf` is the simplest form to implement first.
+- **Blocks**: restoring meaningful runtime-negative execution, because `if`-driven control flow is
+  required before runtime stack/throw/catch scenarios can be trusted again.
 - **Blocks**: S17-42 (E2E).
 
 ## Goals
@@ -79,3 +81,5 @@ Also handles the tail-call optimisation case where `then` ends with `ARETURN`
 - `thenArmPushesValue` (TS line 163) — a predicate that returns `false` when the then arm
   ends with `ARETURN` (tail call). This avoids emitting an unreachable `ASTORE` after the
   return, which confuses the verifier. Port this predicate.
+- This is the control-flow foundation story. Re-enable runtime-negative scenarios only after this,
+  S17-31/S17-33, and the real startup tranche are all in place.

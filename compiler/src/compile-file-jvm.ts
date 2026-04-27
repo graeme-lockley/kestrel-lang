@@ -743,22 +743,46 @@ export function compileFileJvm(
           }
         }
         if (depHashesMatch) {
-          const deserialized = deserializeExports(kti);
-          const depPaths = depResults.flatMap((d) => [d.path, ...d.dependencyPaths]);
-          const dependencyPathsU = uniqueDependencyPaths([filePath, ...depPaths]);
-          const entry = {
-            program: { kind: 'Program', imports: [], topLevelDecls: [], body: [] } as unknown as Program,
-            jvmResult: { className: cn, classBytes: new Uint8Array(), innerClasses: new Map<string, Uint8Array>() } as unknown as JvmCodegenResult,
-            dependencyPaths: dependencyPathsU,
-            className: cn,
-            ...deserialized,
-            mavenDeps: [] as MavenResolvedDependency[],
-            sourceHash,
-            codegenMeta: kti.codegenMeta,
-          };
-          cache.set(filePath, entry);
-          visited.delete(filePath);
-          return { ok: true, ...entry };
+          // Verify the .class file has a valid Java magic (0xCAFEBABE).
+          // A previous crash may have left a zero-filled placeholder on disk.
+          const classFilePath = pathResolve(classDir, cn + '.class');
+          let classFileValid = false;
+          try {
+            const buf = readFileSync(classFilePath);
+            classFileValid = buf.length >= 4 &&
+              buf[0] === 0xCA && buf[1] === 0xFE && buf[2] === 0xBA && buf[3] === 0xBE;
+          } catch {
+            classFileValid = false;
+          }
+
+          if (classFileValid) {
+            let deserialized: ReturnType<typeof deserializeExports> | null;
+            try {
+              deserialized = deserializeExports(kti);
+            } catch {
+              // KTI was written in an older format (e.g. string types from a
+              // prior bootstrap JAR). Treat as a cache miss and recompile.
+              deserialized = null;
+            }
+            if (deserialized != null) {
+              const depPaths = depResults.flatMap((d) => [d.path, ...d.dependencyPaths]);
+              const dependencyPathsU = uniqueDependencyPaths([filePath, ...depPaths]);
+              const entry = {
+                program: { kind: 'Program', imports: [], topLevelDecls: [], body: [] } as unknown as Program,
+                jvmResult: { className: cn, classBytes: new Uint8Array(), innerClasses: new Map<string, Uint8Array>() } as unknown as JvmCodegenResult,
+                dependencyPaths: dependencyPathsU,
+                className: cn,
+                ...deserialized,
+                mavenDeps: [] as MavenResolvedDependency[],
+                sourceHash,
+                codegenMeta: kti.codegenMeta,
+              };
+              cache.set(filePath, entry);
+              visited.delete(filePath);
+              return { ok: true, ...entry };
+            }
+          }
+          // Corrupt/missing class file or stale KTI format — fall through to recompile.
         }
       }
     }

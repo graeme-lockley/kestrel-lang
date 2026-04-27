@@ -39,6 +39,10 @@ TS reference: lambdas are compiled in two passes:
 
 - **Depends on**: S17-27 (`ECall` — the lambda's `invoke` method also emits calls),
   S17-30/S17-32 (EIf/EMatch — lambda bodies can contain branches and matches).
+- **Recommended after**: the core execution tranche plus S17-34, so higher-order async/stdlb code
+   comes back only after direct call/control-flow paths are already stable.
+- **Feeds**: re-enabling higher-order positive E2Es and the full stdlib test framework without
+   temporary execution gaps.
 - **Blocks**: S17-42 (E2E). Higher-order functions and the entire functional stdlib depend
   on lambdas.
 
@@ -78,3 +82,5 @@ TS reference: lambdas are compiled in two passes:
 - The TS reference uses a `Map<Expr, number>` to identify lambda nodes. The self-hosted
   version needs a comparable identity scheme — possibly using list indices or a mutable
   counter threaded through the AST walk.
+- Keep this out of the first "make the pipeline honest again" tranche. It is necessary for full
+   self-hosted parity, but not for the earliest restoration of runtime-negative coverage.

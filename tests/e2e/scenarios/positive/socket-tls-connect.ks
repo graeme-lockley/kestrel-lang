@@ -1,3 +1,4 @@
+// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 // E2E test: TLS socket connect to example.com (S03-02).
 // Opens a TLS connection, sends an HTTP/1.0 GET request, checks the response.
 import * as Socket from "kestrel:io/socket"

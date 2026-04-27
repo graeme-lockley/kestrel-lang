@@ -1210,14 +1210,14 @@ fun parseTopDecl_(ps: ParseState, exported: Bool): Ast.TopDecl = {
     var typ = if (atPunct(ps, ":")) { adv(ps); Some(parseTypeH(ps)) } else None
     expectOp(ps, "=");
     var expr = parseExprH(ps)
-    if (exported) TDVal(name, typ, expr) else TDSVal(name, expr)
+    if (exported) TDVal(name, typ, expr) else TDSVal(name, typ, expr)
   } else if (atKw(ps, "var")) {
     adv(ps);
     val name = if (atIdent(ps)) adv(ps).text else expectUpper(ps).text
     var typ = if (atPunct(ps, ":")) { adv(ps); Some(parseTypeH(ps)) } else None
     expectOp(ps, "=");
     var expr = parseExprH(ps)
-    if (exported) TDVar(name, typ, expr) else TDSVar(name, expr)
+    if (exported) TDVar(name, typ, expr) else TDSVar(name, typ, expr)
   } else {
     var expr = parseExprH(ps)
     if (atOp(ps, ":=")) {

@@ -223,8 +223,8 @@ export type TopDecl =
   | TDExport(ExportInner)
   | TDVal(String, Option<AstType>, Expr)  // export val name : T? = e
   | TDVar(String, Option<AstType>, Expr)  // export var name : T? = e
-  | TDSVal(String, Expr)                  // top-level val name = e (no type, no export)
-  | TDSVar(String, Expr)                  // top-level var name = e (no type, no export)
+  | TDSVal(String, Option<AstType>, Expr) // top-level val name : T? = e (no export)
+  | TDSVar(String, Option<AstType>, Expr) // top-level var name : T? = e (no export)
   | TDSAssign(Expr, Expr)                 // top-level assignment
   | TDSExpr(Expr)                         // top-level expression statement
 

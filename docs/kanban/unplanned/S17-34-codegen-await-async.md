@@ -37,6 +37,9 @@ TS reference:
 
 - **Depends on**: S17-27 (`ECall` — async function calls are still `INVOKESTATIC`; the
   wrapping is added on top).
+- **Depends on**: the real startup/runtime tranche led by S17-25 + S17-37; async E2Es are not
+  meaningful while compiled modules still execute through the temporary no-op `main` shim.
+- **Feeds**: the first positive E2E re-enable slice (async/task/core fs-process scenarios).
 - **Blocks**: S17-42 (E2E). All filesystem and process operations are async; the stdlib
   test runner is async.
 
@@ -70,3 +73,5 @@ TS reference:
   (`runtime/jvm/src/`).
 - Async payloads interact with tail-call optimization (S17-35): a tail `await` should still
   use a direct method call to avoid extra wrapping.
+- This story is the main gate for re-enabling the currently skipped async positive E2Es. Bring
+  those back in slices after focused async-function tests are green, not all at once.

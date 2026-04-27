@@ -15,6 +15,7 @@ import { TDFun, TDVar, TDVal, TDType, TBAdt, TDExternFun, TDException, TDExport,
 import * as Fs from "kestrel:io/fs"
 import { NotFound, PermissionDenied, IoError } from "kestrel:io/fs"
 import * as Ty from "kestrel:dev/typecheck/types"
+import { TVar, TPrim, TArrow, TRecord, TApp, TTuple, TUnion, TInter, TScheme, TNamespace } from "kestrel:dev/typecheck/types"
 import * as Resolve from "kestrel:tools/compiler/resolve"
 import * as Crypto from "kestrel:io/crypto"
 
@@ -46,8 +47,59 @@ export type KtiV4 = {
 /// This must match the hash stored in KTI files by `buildKtiV4`.
 export fun sourceHash(s: String): String = Crypto.sha256(s)
 
+fun serializeTypeField(f: Ty.TypeField): Json.Value =
+  Object([
+    ("n", StrVal(f.name)),
+    ("mut", Bool(f.mut_)),
+    ("t", serializeType(f.type_))
+  ])
+
 export fun serializeType(t: Ty.InternalType): Json.Value =
-  StrVal(Ty.typeToString(t))
+  match (t) {
+    TVar(id) => Object([("k", StrVal("var")), ("id", Int(id))])
+    TPrim(name) => Object([("k", StrVal("prim")), ("n", StrVal(name))])
+    TArrow(params, ret) =>
+      Object([
+        ("k", StrVal("arrow")),
+        ("ps", Array(Lst.map(params, serializeType))),
+        ("r", serializeType(ret))
+      ])
+    TRecord(fields, rowOpt) => {
+      val rowJson = match (rowOpt) {
+        None => Null
+        Some(rv) => serializeType(rv)
+      }
+      Object([
+        ("k", StrVal("record")),
+        ("fs", Array(Lst.map(fields, serializeTypeField))),
+        ("row", rowJson)
+      ])
+    }
+    TApp(name, args) =>
+      Object([
+        ("k", StrVal("app")),
+        ("n", StrVal(name)),
+        ("as", Array(Lst.map(args, serializeType)))
+      ])
+    TTuple(elems) =>
+      Object([("k", StrVal("tuple")), ("es", Array(Lst.map(elems, serializeType)))])
+    TUnion(l, r) =>
+      Object([("k", StrVal("union")), ("l", serializeType(l)), ("r", serializeType(r))])
+    TInter(l, r) =>
+      Object([("k", StrVal("inter")), ("l", serializeType(l)), ("r", serializeType(r))])
+    TScheme(vars, body) =>
+      Object([
+        ("k", StrVal("scheme")),
+        ("vs", Array(Lst.map(vars, (id: Int) => Int(id)))),
+        ("b", serializeType(body))
+      ])
+    TNamespace(_bindings) =>
+      Object([
+        ("k", StrVal("app")),
+        ("n", StrVal("__namespace__")),
+        ("as", Array([]))
+      ])
+  }
 
 fun parseNamedType(s: String): Ty.InternalType =
   if (s == "Int") Ty.tInt

@@ -39,6 +39,8 @@ TS reference:
 
 - **Depends on**: S17-30 (`EIf` — backpatching) and S17-32 (`EMatch` — catch arm dispatch
   shares pattern infrastructure).
+- **Runtime-negative tranche**: this story is the direct gate for re-enabling
+  `uncaught_throw.ks` and `runtime_catch_no_match_rethrow.ks` once real startup is in place.
 - **Blocks**: S17-42 (E2E). Exception handling is used throughout the stdlib for IO errors.
 
 ## Goals
@@ -74,3 +76,5 @@ TS reference:
   this is already present; if not, add it as part of this story.
 - The `varOpt` parameter of `ETry` (variable name for the raw caught Throwable in the
   finally-clause-style usage) — verify with the TS reference how this is handled.
+- Validate this story against the restored runtime-negative scenarios before re-enabling broader
+  fs/process/http positive tests, because exception paths are central to those result types.

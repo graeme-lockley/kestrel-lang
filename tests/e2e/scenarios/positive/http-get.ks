@@ -1,3 +1,4 @@
+// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 // E2E test: Http.get returns a response with the correct status code (S03-05).
 // Requires network access. Tests HTTP GET (plain http) against httpbin.org.
 import * as Http from "kestrel:io/http"

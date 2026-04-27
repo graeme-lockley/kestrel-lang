@@ -37,6 +37,9 @@ TS reference:
 - **Depends on**: S17-27 (`ECall` — tail calls are a special case of call emission).
 - **Recommended after**: S17-30 (`EIf`) and S17-32 (`EMatch`) — tail position must be
   propagated through branches and match arms.
+- **Recommended after**: the first real execution tranche and basic runtime-negative re-enable.
+  TCO matters for parity and deep recursion, but it is not the first gate to remove the temporary
+  startup/E2E workarounds.
 - **Blocks**: S17-42 (E2E) only indirectly — programs will still run without TCO but will
   stack-overflow on deeply recursive calls.
 
@@ -74,3 +77,5 @@ TS reference:
   every call to `emitExpr`. The self-hosted version must thread it through the recursive
   `emitExpr` call (currently a single function). Consider adding it as a second parameter
   to `emitExpr` and `emitBlockStmt`.
+- Treat this as a later parity/performance tranche unless a restored E2E specifically proves it is
+  still blocking. The immediate goal is real execution and honest gating, not early TCO polish.

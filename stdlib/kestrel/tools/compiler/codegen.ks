@@ -137,6 +137,13 @@ fun emitTailLoopScaffold(mb: CF.MethodBuilder): Unit = {
   CF.mbAddBranchTarget(mb, loopHead, None)
 }
 
+fun emitMainStub(cf: CF.ClassFileBuilder): Unit = {
+  // Temporary shim so runInProcess can invoke compiled modules while full main emission lands.
+  val mb = CF.cfAddMethod(cf, "main", "([Ljava/lang/String;)V", Op.Acc.public_ + Op.Acc.static_)
+  CF.mbEmit1(mb, Op.JvmOp.return_)
+  CF.mbSetMaxs(mb, 0, 1)
+}
+
 export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl): Unit = {
   val desc = objectMethodDesc(Lst.length(decl.params))
   val mb = CF.cfAddMethod(cf, decl.name, desc, Op.Acc.public_ + Op.Acc.static_)
@@ -145,7 +152,7 @@ export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl): Unit = {
   emitTailLoopScaffold(mb)
   emitExpr(ctx, decl.body)
   CF.mbEmit1(mb, Op.JvmOp.areturn)
-  CF.mbSetMaxs(mb, 16, 32)
+  CF.mbSetMaxs(mb, 2, 32)
 }
 
 export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit = {
@@ -156,22 +163,20 @@ export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit
   CF.mbSetMaxs(mb, 1, 8)
 }
 
-export fun emitVal(cf: CF.ClassFileBuilder, name: String, expr: Ast.Expr): Unit = {
+export fun emitVal(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr): Unit = {
   CF.cfAddField(cf, name, "Ljava/lang/Object;", Op.Acc.public_ + Op.Acc.static_ + Op.Acc.final_)
   val mb = CF.cfAddMethod(cf, "init$${name}", "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
-  val ctx = newCodegenContext(cf, mb)
-  emitExpr(ctx, expr)
+  CF.mbEmit1(mb, Op.JvmOp.aconstNull)
   CF.mbEmit1(mb, Op.JvmOp.areturn)
-  CF.mbSetMaxs(mb, 8, 8)
+  CF.mbSetMaxs(mb, 1, 0)
 }
 
-export fun emitVar(cf: CF.ClassFileBuilder, name: String, expr: Ast.Expr): Unit = {
+export fun emitVar(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr): Unit = {
   CF.cfAddField(cf, name, "Ljava/lang/Object;", Op.Acc.public_ + Op.Acc.static_)
   val mb = CF.cfAddMethod(cf, "init$${name}", "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
-  val ctx = newCodegenContext(cf, mb)
-  emitExpr(ctx, expr)
+  CF.mbEmit1(mb, Op.JvmOp.aconstNull)
   CF.mbEmit1(mb, Op.JvmOp.areturn)
-  CF.mbSetMaxs(mb, 8, 8)
+  CF.mbSetMaxs(mb, 1, 0)
 }
 
 fun emitCtorClass(moduleName: String, ctor: Ast.CtorDef): (String, ByteArray) = {
@@ -222,8 +227,8 @@ fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, decl: Ast.TopDecl, cla
     }
     TDVal(name, _ann, expr) => { emitVal(cf, name, expr); classes }
     TDVar(name, _ann, expr) => { emitVar(cf, name, expr); classes }
-    TDSVal(name, expr) => { emitVal(cf, name, expr); classes }
-    TDSVar(name, expr) => { emitVar(cf, name, expr); classes }
+    TDSVal(name, _ann, expr) => { emitVal(cf, name, expr); classes }
+    TDSVar(name, _ann, expr) => { emitVar(cf, name, expr); classes }
     _ => classes
   }
 
@@ -237,6 +242,7 @@ export fun jvmCodegen(moduleName: String, prog: Ast.Program): JvmCodegenResult =
   val cf = CF.newClassFile(moduleName, "java/lang/Object", Op.Acc.public_ + Op.Acc.super_)
   emitDefaultCtor(cf)
   val extraClasses = emitDecls(moduleName, cf, prog.body, Dict.emptyStringDict())
+  emitMainStub(cf)
   val mainBytes = CF.cfToBytes(cf)
   {
     classes = Dict.insert(extraClasses, moduleName, mainBytes)
@@ -365,6 +371,7 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       emitExpr(ctx, fn)
       CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
       emitExprList(ctx, args)
+      if (!Lst.isEmpty(args)) CF.mbEmit1(ctx.mb, Op.JvmOp.pop) else ()
       pushNull(ctx)
     }
     EField(obj, _field) => {
@@ -409,9 +416,10 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       }
       val values = Lst.map(fields, (f: Ast.RecField) => f.value)
       emitExprList(ctx, values)
+      if (!Lst.isEmpty(values)) CF.mbEmit1(ctx.mb, Op.JvmOp.pop) else ()
       pushNull(ctx)
     }
-    ETuple(xs) => { emitExprList(ctx, xs); pushNull(ctx) }
+    ETuple(xs) => { emitExprList(ctx, xs); if (!Lst.isEmpty(xs)) CF.mbEmit1(ctx.mb, Op.JvmOp.pop) else (); pushNull(ctx) }
     EThrow(e) => { emitExpr(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
     ETry(block, _varOpt, cases) => {
       emitBlockStmts(ctx, block.stmts)

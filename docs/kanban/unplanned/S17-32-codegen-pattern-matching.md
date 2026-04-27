@@ -46,6 +46,8 @@ TS reference `emitExpr` case `'MatchExpr'` (~500+ lines, the largest single case
 
 - **Depends on**: S17-30 (`EIf` — shares backpatching infrastructure), S17-27 (`ECall`),
   S17-28 (`EField`).
+- **Feeds**: S17-33 catch-arm dispatch, S17-35 local fun/lambda-heavy higher-order code, and the
+  runtime-negative re-enable tranche for exception/pattern scenarios.
 - **Blocks**: S17-42 (E2E). Pattern matching is the core control flow of nearly all Kestrel
   programs.
 
@@ -86,3 +88,5 @@ TS reference `emitExpr` case `'MatchExpr'` (~500+ lines, the largest single case
   frames right at every arm is critical for JVM verifier acceptance.
 - Nested patterns (`PCon(_, [PCons(h, t)])`) require recursive `emitSubPatternBindings`.
   The TS reference has a dedicated helper; mirror it carefully.
+- Do not defer catch-pattern work to S17-33-only thinking. The runtime-negative catch/rethrow
+  E2E depends on this story and S17-33 together.

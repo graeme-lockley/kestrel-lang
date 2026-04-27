@@ -1100,6 +1100,15 @@ export function typecheck(program: Program, options?: TypecheckOptions): {
         // Expect Task<T>
         if (applied.kind === 'app' && applied.name === 'Task' && applied.args.length === 1) {
           result = apply(applied.args[0]!);
+        } else if (applied.kind === 'var') {
+          // The operand type is still an unresolved type variable (e.g. a recursive
+          // async call whose return type has not yet been fully unified).  Constrain
+          // it to Task<inner> via unification so that downstream inference can
+          // propagate the concrete inner type once unification settles.
+          const inner = freshVar();
+          const taskType: InternalType = { kind: 'app', name: 'Task', args: [inner] };
+          unifyWithBlame(applied, taskType, expr);
+          result = apply(inner);
         } else {
           throw new TypeCheckError(`await expects Task<T> but got ${typeStr(applied)}`, expr);
         }

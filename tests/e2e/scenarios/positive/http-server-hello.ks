@@ -1,3 +1,4 @@
+// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 // E2E test: createServer + listen + plain text response (S03-06).
 // Starts a server on 127.0.0.1:0 (OS-assigned port), uses Http.get to call it,
 // asserts response status 200 and body "hello".

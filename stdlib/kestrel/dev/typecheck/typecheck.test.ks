@@ -92,5 +92,36 @@ export async fun run(s: Suite): Task<Unit> =
       // field access on record
       val field = runTc("val p = { x = 42 }\nexport val n: Int = p.x")
       eq(sg, "field access ok", field.ok, True)
+    });
+
+    group(s1, "await recursive direct call", (sg: Suite) => {
+      Ty.resetVarId();
+      // Regression: direct `await` on a recursive async call must be accepted.
+      // The operand type is an unresolved TVar when first encountered; the type
+      // checker must constrain it to Task<inner> via unification rather than
+      // reporting "await expects Task<T>".
+      val src = "import * as Lst from \"kestrel:data/list\"\nasync fun go(xs: List<Int>): Task<Int> =\n  match (xs) {\n    [] => 0\n    _ :: rest => await go(rest)\n  }"
+      val res = runTc(src)
+      eq(sg, "recursive direct await accepted", res.ok, True);
+      isTrue(sg, "no diagnostics", Lst.isEmpty(res.diagnostics))
+    });
+
+    group(s1, "await outside async", (sg: Suite) => {
+      Ty.resetVarId()
+      val topLevel = runTc("async fun getTask(): Task<Int> = 1\nval x = await getTask()")
+      eq(sg, "top-level await rejected", topLevel.ok, False);
+      isTrue(sg, "top-level await has diagnostics", !Lst.isEmpty(topLevel.diagnostics))
+
+      Ty.resetVarId()
+      val localSync = runTc("async fun getTask(): Task<Int> = 1\nfun bad(): Int = await getTask()")
+      eq(sg, "sync local fun await rejected", localSync.ok, False);
+      isTrue(sg, "sync local fun has diagnostics", !Lst.isEmpty(localSync.diagnostics))
+    });
+
+    group(s1, "script val annotations", (sg: Suite) => {
+      Ty.resetVarId()
+      val mismatch = runTc("val s: String = 42")
+      eq(sg, "script val annotation mismatch rejected", mismatch.ok, False);
+      isTrue(sg, "script val mismatch has diagnostics", !Lst.isEmpty(mismatch.diagnostics))
     })
   })

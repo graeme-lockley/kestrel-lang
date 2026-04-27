@@ -105,7 +105,7 @@ independently testable. No story should touch more than one concern at a time.
     stdlib test files with the same pattern) to a flat `|>` pipeline with a single `match`,
     so each failing setup step surfaces a labelled error message. (Renumbered from S17-15.)
 
-15. [S17-15 — Fix await direct-call type inference defect in recursive async functions](../../unplanned/S17-15-await-direct-call-type-inference-defect.md)
+15. ✅ [S17-15 — Fix await direct-call type inference defect in recursive async functions](../../done/S17-15-await-direct-call-type-inference-defect.md)
     — Fix a type-inference/checking defect where `await f(...)` can fail with `await expects
     Task<T> but got α...` while `val x: Task<T> = f(...); await x` succeeds. Apply parity fixes
     in both the TypeScript and self-hosted Kestrel compilers, add regression tests, and remove
@@ -187,6 +187,19 @@ expression forms, includes unit tests that verify real bytecode emission, and mu
 any existing tests. The KTI correctness block (stories 16–18) must be complete first because
 S17-25 (EIdent) and S17-38 (JvmCodegenOptions) consume `codegenMeta` data from KTI.
 
+This block now has an explicit phased rollout:
+
+- **Execution tranche first**: S17-25 and S17-37 land together to replace the temporary
+    self-hosted `main(String[])` shim with real identifier/global-init/startup behavior.
+- **Core runtime semantics second**: S17-26 through S17-34 restore real calls, operators,
+    records, control flow, exceptions, and async so runtime-negative E2Es and then positive E2Es
+    can be re-enabled in slices.
+- **Higher-order and parity stories last**: S17-35, S17-36, and the remaining S17-38 work bring
+    the self-hosted codegen up to full parity after the pipeline is already exercising real code.
+
+During this transition the pipeline may stay green via temporary `E2E_SKIP_PENDING_CODEGEN`
+markers, but those are considered tranche-local scaffolding, not the final state of the epic.
+
 26. [S17-24 — Codegen: complete `ELit` emission (string, char, float, unit)](../../unplanned/S17-24-codegen-literal-emission.md)
     — Add `"string"` (`LDC_W`), `"char"` (code-point boxing), `"float"` (`LDC2_W` double),
     and `"unit"` (`GETSTATIC KUnit.INSTANCE`) arms. Int and bool already work.
@@ -195,7 +208,8 @@ S17-25 (EIdent) and S17-38 (JvmCodegenOptions) consume `codegenMeta` data from K
     — Implement full identifier resolution: local slots (already done), global `val`/`var`
     (`GETSTATIC`), nullary ADT constructors (`GETSTATIC INSTANCE`), imported val/var/fun,
     and module-level function references. Emit compile errors for unresolved identifiers.
-    Depends on S17-43 for accurate `varNames` metadata.
+    Depends on S17-43 for accurate `varNames` metadata. **Deliver together with S17-37 as the
+    first real execution tranche.**
 
 28. [S17-26 — Codegen: `EBinary` and `EUnary` operator emission](../../unplanned/S17-26-codegen-binary-unary-operators.md)
     — Emit real arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`<`, `>`, `<=`, `>=`),
@@ -205,6 +219,8 @@ S17-25 (EIdent) and S17-38 (JvmCodegenOptions) consume `codegenMeta` data from K
 29. [S17-27 — Codegen: `ECall` — local, imported, and namespace function calls](../../unplanned/S17-27-codegen-call-emission.md)
     — Emit `INVOKESTATIC` for direct local and imported calls; `INVOKEVIRTUAL KFunc.invoke`
     for indirect calls; ADT constructor calls (`NEW; INVOKESPECIAL`); extern JVM calls.
+    **This is the first major runtime-semantics story after the S17-25 + S17-37 tranche and is a
+    gate for re-enabling meaningful runtime-negative execution.**
 
 30. [S17-28 — Codegen: `EField`, `ERecord`, spread, and mutable-field assignment](../../unplanned/S17-28-codegen-field-record-emission.md)
     — Emit `KRecord.get` for field reads, `KRecord.put` for field writes, `new KRecord`
@@ -229,28 +245,35 @@ S17-25 (EIdent) and S17-38 (JvmCodegenOptions) consume `codegenMeta` data from K
 
 35. [S17-33 — Codegen: `ETry` / `EThrow` — real JVM exception handling](../../unplanned/S17-33-codegen-try-throw.md)
     — Emit `ATHROW` for throw, JVM exception-table entries for `try/catch` arms, and catch
-    dispatch with `CHECKCAST` per exception type.
+    dispatch with `CHECKCAST` per exception type. **Completing this with S17-30/S17-32 is the
+    direct gate for restoring the runtime-negative throw/catch E2Es.**
 
 36. [S17-34 — Codegen: `EAwait` and async function scaffolding](../../unplanned/S17-34-codegen-await-async.md)
     — Emit `INVOKEVIRTUAL KTask.await` for await; emit async payload methods for `async fun`;
-    wrap results in `KTask`.
+    wrap results in `KTask`. **This is the main gate for re-enabling the first positive E2E slice
+    (core async/task/fs/process scenarios).**
 
 37. [S17-35 — Codegen: `ELambda` — closure class generation and free variable capture](../../unplanned/S17-35-codegen-lambda-closures.md)
     — Collect all lambdas and local funs, compute free variables, emit `OuterClass$lambda_N`
-    JVM classes with `invoke(Object[])Object` methods and env capture.
+    JVM classes with `invoke(Object[])Object` methods and env capture. **Treat as later parity work
+    after the first execution and runtime-negative/positive E2E tranche is already honest.**
 
 38. [S17-36 — Codegen: tail-call optimisation (loop-back GOTO)](../../unplanned/S17-36-codegen-tail-call-optimisation.md)
     — Detect self-tail calls in tail position; emit `ASTORE` of each argument + `GOTO loopHead`
-    instead of `INVOKESTATIC` + `ARETURN`.
+    instead of `INVOKESTATIC` + `ARETURN`. **Recommended after the initial runtime-restoration
+    tranche unless a restored scenario proves it is still blocking.**
 
 39. [S17-37 — Codegen: global `val`/`var` lazy initialisation (`$init` pattern)](../../unplanned/S17-37-codegen-global-lazy-init.md)
     — Emit `static $initialized` lock field and `static $init()V` method; emit
-    `INVOKESTATIC $init` before every imported global access.
+    `INVOKESTATIC $init` before every imported global access. **Deliver together with S17-25 and
+    use the same tranche to remove the temporary startup shim and the temporary runtime-negative
+    E2E skips.**
 
 40. [S17-38 — Codegen: `EIs` type narrowing, `ENever`, and `JvmCodegenOptions`](../../unplanned/S17-38-codegen-is-never-options.md)
     — Emit real `INSTANCEOF` for `EIs`; extend `jvmCodegen` with an options parameter carrying
     cross-module import maps (class names, arities, var sets) built from KTI `codegenMeta`.
-    Depends on S17-43 for correct `codegenMeta` data.
+    Depends on S17-43 for correct `codegenMeta` data. **The `JvmCodegenOptions` plumbing is needed
+    early alongside S17-25/S17-27 even if the narrower `EIs` semantics finish later.**
 
 ### Final validation
 
@@ -259,6 +282,8 @@ S17-25 (EIdent) and S17-38 (JvmCodegenOptions) consume `codegenMeta` data from K
     CI step that runs `mv compiler compiler_DISABLED && ./kestrel test` and must exit 0.
     Restore `compiler/`. Update `docs/specs/11-bootstrap.md` and
     `docs/specs/12-agent-enablement-and-knowledge.md` to reflect the JVM-only runtime path.
+    **This now explicitly comes after re-enabling runtime-negative E2Es, re-enabling positive E2Es
+    in slices, and restoring strict `scripts/test-all.sh` gating.**
 
 ## Dependencies
 
@@ -292,10 +317,13 @@ Each story corresponds to one vertical slice of `compile-file-jvm.ts`:
   a prerequisite for S17-43.
 - S17-16–S17-22 close the self-hosted typechecker MVP gaps.
 - S17-24–S17-38 close the self-hosted codegen gaps — the much larger body of work: the
-  self-hosted `emitExpr` is currently a stub that pushes `null` for every expression except
-  `ELit(int/bool)` and `EIdent(local)`. Each story implements one group of expression forms
-  and must pass unit tests that verify real bytecode is emitted and executes correctly.
-- S17-42 is the final validation gate.
+    self-hosted `emitExpr` is currently a stub that pushes `null` for every expression except
+    `ELit(int/bool)` and `EIdent(local)`. Delivery is phased: first the S17-25 + S17-37 execution
+    tranche, then the runtime/control-flow/async tranche (S17-26 through S17-34), then the later
+    parity tranche (S17-35, S17-36, remaining S17-38 work). Each story must still pass focused
+    unit tests that verify real bytecode is emitted and executes correctly.
+- S17-42 is the final validation gate only after temporary startup/E2E workarounds are gone and
+    strict pipeline gating has been restored.
 
 **Key implementation invariants to preserve (match TS compiler exactly):**
 - Source hash: SHA-256 of raw source bytes, hex-encoded.

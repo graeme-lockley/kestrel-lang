@@ -182,8 +182,8 @@ export async fun run(s: Suite): Task<Unit> =
     });
 
     group(s1, "TopDecl construction", (sg: Suite) => {
-      match (TDSVal("x", ELit("int","1"))) {
-        TDSVal(n, _) => eq(sg, "TDSVal name", n, "x"),
+      match (TDSVal("x", Some(ATPrim("Int")), ELit("int","1"))) {
+        TDSVal(n, typ, _) => { eq(sg, "TDSVal name", n, "x"); eq(sg, "TDSVal type", typ, Some(ATPrim("Int"))) },
         _ => isTrue(sg, "expected TDSVal", False)
       };
       match (TDExport(EIStar("m"))) {

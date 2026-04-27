@@ -43,6 +43,8 @@ The TS reference has ~350 lines for call emission covering:
 
 - **Depends on**: S17-24 (literals), S17-25 (EIdent — needed to resolve callee names),
   S17-26 (operators — prerequisite for non-trivial arguments).
+- **Execution tranche priority**: this is the first runtime-sensitive story after S17-25 + S17-37.
+  Real calls are required before re-enabling almost any skipped runtime-negative or positive E2E.
 - **Blocks**: effectively every other codegen story and S17-42 (E2E) — no useful code can
   be generated without function calls.
 
@@ -87,3 +89,6 @@ The TS reference has ~350 lines for call emission covering:
   conflict with direct call emission here. Emit `INVOKESTATIC` + `ARETURN` initially; the
   tail-call story converts qualifying call+return pairs into `GOTO loopHead`.
 - Async call wrapping is addressed in S17-36 (`EAwait`).
+- This story is the main gate for restoring the runtime-negative scenarios that currently never
+  execute under the temporary startup shim. Expect it to be validated first with tiny direct-call
+  fixtures, then with the runtime-negative E2Es once S17-30/S17-33 are also real.

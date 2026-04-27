@@ -31,13 +31,25 @@ emits `ALOAD slot`. If not found, `emitExpr` calls `pushNull`. Missing resolutio
 
 TS reference handles all of these in the `'IdentExpr'` case (~80 lines, lines 1397–1480).
 
+Recent pipeline work added a temporary self-hosted `main(String[])` shim so compiled modules
+can be launched while real entrypoint and global-init codegen is still pending. That shim is
+enough to make `./kestrel test` and `./scripts/test-all.sh` runnable, but it does not make
+identifier resolution correct: unresolved globals still become `null`, imported globals still
+skip `$init`, and runtime-sensitive E2E coverage is currently gated behind
+`E2E_SKIP_PENDING_CODEGEN` markers until this story and S17-37 land together.
+
 ## Relationship to other stories
 
 - **Depends on**: S17-24 (literal emission, which establishes the constant-pool helpers also
   needed here).
+- **Implement alongside**: S17-37. Real identifier resolution and real module startup need to
+  ship together so the temporary `main` shim and the temporary E2E skips can be removed in one
+  tranche.
 - **Blocks**: S17-26 (`ECall`) — function calls require being able to load a callable target,
   which depends on correct `EIdent` resolution.
-- **Blocks**: S17-42 (E2E).
+- **Blocks**: S17-37 (`$init` must be callable from imported/global reads in the same delivery
+  slice).
+- **Blocks**: S17-42 (E2E / no-Node validation).
 
 ## Goals
 
@@ -59,6 +71,9 @@ TS reference handles all of these in the `'IdentExpr'` case (~80 lines, lines 13
    h. Global fun → `emitFunctionRef`.
    i. Unresolved → compile error (currently silent null).
 5. Emit a compile error diagnostic for unresolved identifiers instead of pushing null.
+6. Replace the current silent-null fallback paths that only exist to keep the temporary
+  self-hosted launcher alive; after this story the runtime should see real values or a real
+  compile diagnostic, never placeholder `null`.
 
 ## Acceptance Criteria
 
@@ -69,6 +84,8 @@ TS reference handles all of these in the `'IdentExpr'` case (~80 lines, lines 13
       evaluates to its INSTANCE.
 - [ ] A program importing a `val` from another module reads the correct value.
 - [ ] An unresolved identifier name produces a compile error diagnostic.
+- [ ] The temporary execution path no longer relies on `pushNull` for unresolved identifiers in
+  any identifier-resolution branch used by module startup.
 - [ ] New codegen unit tests cover each resolution path.
 - [ ] `cd compiler && npm test` passes.
 - [ ] `./scripts/kestrel test` passes.
@@ -85,3 +102,6 @@ TS reference handles all of these in the `'IdentExpr'` case (~80 lines, lines 13
   interoperable between bootstrap-compiled and self-hosted-compiled modules.
 - `emitFunctionRef` needs to produce the correct lambda-wrapper object; this is also needed
   by `ECall` (S17-26). Factor into a shared helper.
+- Do not remove the temporary `main` shim until S17-37 is ready in the same tranche; otherwise
+  `./kestrel test` regresses from "runtime-sensitive tests skipped" back to "compiled module is
+  not executable at all".

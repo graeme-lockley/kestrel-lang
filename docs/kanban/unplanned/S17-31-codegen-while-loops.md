@@ -41,6 +41,8 @@ TS reference:
 ## Relationship to other stories
 
 - **Depends on**: S17-30 (`EIf` — shares backpatching infrastructure; should be done first).
+- **Feeds**: re-enabling `runtime_stack_overflow.ks` once loop and break/continue semantics are
+   real and the execution path is no longer masked by the temporary startup shim.
 - **Blocks**: S17-42 (E2E). Loops are used in many stdlib algorithms.
 
 ## Goals
@@ -77,3 +79,5 @@ TS reference:
 - The `estimateBodyLocals` heuristic is critical for JVM verifier acceptance. Without a
   wide-enough stackmap frame at the loop head, the verifier rejects back-edge GOTOs.
   Use a conservative fixed margin (e.g. 70 local slots) as the TS compiler does.
+- This story should be validated with focused loop tests first; then use the runtime-negative loop
+   scenario as the tranche-level confirmation once real startup/runtime execution is already active.

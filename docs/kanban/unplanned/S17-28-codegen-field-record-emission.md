@@ -39,6 +39,8 @@ TS reference:
 
 - **Depends on**: S17-27 (`ECall` — `KRecord` construction uses `INVOKESPECIAL`; field access
   uses `INVOKEVIRTUAL`).
+- **Recommended early in the tranche**: records are needed before most stdlib-backed positive
+  E2Es can be re-enabled, especially fs/process/http result-handling scenarios.
 - **Blocks**: S17-42 (E2E). Records are used everywhere.
 
 ## Goals
@@ -77,3 +79,6 @@ TS reference:
   exactly so the stack is correct after each put call.
 - Spread + mutable-field interaction: ensure the cloned KRecord is fully independent
   (shallow copy suffices if fields are boxed Objects).
+- This story is also a prerequisite for removing the placeholder-null execution behavior from many
+  record-heavy test modules; use it to unlock the fs/process positive E2E slice after core call
+  emission is stable.

@@ -42,6 +42,10 @@ The TS reference handles all operators in `'BinaryExpr'` (~300 lines):
 
 - **Depends on**: S17-24 (literal emission helpers), S17-25 (EIdent resolution to produce
   correct operand values).
+- **Recommended after**: the S17-25 + S17-37 execution tranche, so operator results flow through
+  real global/module startup instead of the temporary startup shim.
+- **Feeds**: S17-30, S17-31, S17-34, and the first positive E2E re-enable slice (core async/task
+  and basic computation-heavy scenarios).
 - **Blocks**: S17-42 (E2E). Without operators, no comparison, arithmetic, or boolean logic
   works in self-hosted-compiled code.
 
@@ -85,3 +89,6 @@ The TS reference handles all operators in `'BinaryExpr'` (~300 lines):
   Long/Double, dispatched at runtime via a helper).
 - The runtime helpers `KObject`, `KString` class names and method signatures must match the
   JVM runtime exactly.
+- This story is part of the "make expressions compute real values again" tranche. Do not use E2E
+  unskips as the primary verification here; add focused operator tests first, then re-enable the
+  positive scenarios that actually depend on them.

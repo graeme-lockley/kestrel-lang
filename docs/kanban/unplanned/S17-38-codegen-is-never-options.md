@@ -39,6 +39,9 @@ Three remaining codegen gaps:
 - `JvmCodegenOptions` extension is a **prerequisite** for S17-25 and S17-27 to have access
   to the import metadata built from KTI codegenMeta. If those stories are implemented
   before this one, they must use placeholder empty maps and be revisited.
+- **Implement early sub-slice**: the `JvmCodegenOptions` part should land with or immediately
+   adjacent to the S17-25 + S17-27 execution tranche, even if the `EIs` and `ENever` parts remain
+   later in the roadmap sequence.
 - **Blocks**: S17-42 (E2E) for programs using `is` type narrowing or cross-module import
   resolution.
 
@@ -78,3 +81,6 @@ Three remaining codegen gaps:
   `java/lang/Double`, `Bool` → `java/lang/Boolean`, `String` → `java/lang/String`, etc.)
   must match the boxing scheme used by the rest of codegen. Cross-check with TS
   `javaTypeNameToDescriptor`.
+- Because this story mixes "import metadata plumb-through" with the narrower `EIs` / `ENever`
+   work, it may be implemented in two commits inside one story: first the options plumbing needed
+   by S17-25/S17-27, then the remaining `EIs` semantics.

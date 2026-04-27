@@ -33,6 +33,9 @@ TS reference (`compiler/src/jvm-codegen/codegen.ts` lines ~1337–1395):
 ## Relationship to other stories
 
 - **Depends on**: nothing (literals are leaf nodes).
+- **Feeds**: the first real execution tranche (S17-25 + S17-37) and the operator/call stories
+      immediately after it. This story should stay complete before broader runtime-sensitive E2E
+      re-enable begins.
 - **Blocks**: S17-42 (E2E). Without correct literal emission, any string constant, character
   comparison, floating-point computation, or unit return in self-hosted code is broken.
 - **Companion**: S17-25..S17-38.

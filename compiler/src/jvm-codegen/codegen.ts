@@ -1336,8 +1336,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
       case 'LiteralExpr': {
         switch (expr.literal) {
           case 'int': {
-            const n = parseInt(expr.value, 10);
-            const idx = cf.constantLong(BigInt(n));
+            const idx = cf.constantLong(BigInt(expr.value.replace(/_/g, '')));
             mb.emit1s(JvmOp.LDC2_W, idx);
             mb.emit1s(JvmOp.INVOKESTATIC, cf.methodref(LONG, 'valueOf', '(J)Ljava/lang/Long;'));
             break;

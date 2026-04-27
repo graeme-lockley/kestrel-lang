@@ -85,6 +85,7 @@ type TcState = {
   adtConstructors: Dict<String, List<String>>,
   ctorOwners: Dict<String, String>,
   sourceFile: String,
+  asyncDepth: mut Int,
   inferredItems: mut List<InferredEntry>
 }
 
@@ -135,6 +136,14 @@ fun addDiag(state: TcState, code: String, message: String): Unit =
     suggestion = None,
     hint = None
   })
+
+fun inferExprInAsyncContext(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.InternalType>, expr: Ast.Expr): Ty.InternalType = {
+  val prev = state.asyncDepth
+  state.asyncDepth := prev + 1
+  val out = inferExpr(state, env, typeAliases, expr)
+  state.asyncDepth := prev
+  out
+}
 
 fun apply(state: TcState, t: Ty.InternalType): Ty.InternalType = Ty.applySubstFull(state.subst, t)
 
@@ -385,7 +394,7 @@ fun inferStmtList(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.Int
             val fnType = Ty.TArrow(ps, asyncPair.1)
             val env2a = envInsert(env, name, Ty.generalize(Dict.emptyStringDict(), fnType))
             val local = bindParams(env2a, namesFromParams(params), ps)
-            val bodyT = inferExpr(state, local, mergeTypeMaps(typeAliases, scope), body)
+            val bodyT = if (async_) inferExprInAsyncContext(state, local, mergeTypeMaps(typeAliases, scope), body) else inferExpr(state, local, mergeTypeMaps(typeAliases, scope), body)
             unifyEq(state, bodyT, asyncPair.0)
             env2a
           }
@@ -634,6 +643,7 @@ fun inferField(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.Intern
   }
 
 fun inferAwait(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.InternalType>, e: Ast.Expr): Ty.InternalType = {
+  if (state.asyncDepth <= 0) addDiag(state, Diag.CODES.type_.check, "await used outside async context") else ()
   val t = apply(state, inferExpr(state, env, typeAliases, e))
   match (t) {
     TApp("Task", args) =>
@@ -641,6 +651,15 @@ fun inferAwait(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.Intern
         h :: _ => h
         [] => Ty.freshVar()
       }
+    TVar(_) => {
+      // The operand type is still an unresolved type variable (e.g. a recursive
+      // async call whose return type has not yet been fully unified).  Constrain
+      // it to Task<inner> via unification so downstream inference can propagate
+      // the concrete inner type once unification settles.
+      val inner = Ty.freshVar()
+      unifyEq(state, t, Ty.TApp("Task", [inner]));
+      inner
+    }
     _ => {
       addDiag(state, Diag.CODES.type_.check, "await expects Task<T>");
       Ty.freshVar()
@@ -860,7 +879,7 @@ fun checkFunDecl(
   val ps = paramTypes(fd.params, scope)
   val ret = FA.astTypeToInternalWithScope(fd.retType, mergeTypeMaps(typeAliases, scope), [])
   val local = bindParams(env, namesFromParams(fd.params), ps)
-  val bodyT = inferExpr(state, local, mergeTypeMaps(typeAliases, scope), fd.body)
+  val bodyT = if (fd.async_) inferExprInAsyncContext(state, local, mergeTypeMaps(typeAliases, scope), fd.body) else inferExpr(state, local, mergeTypeMaps(typeAliases, scope), fd.body)
   val asyncPair =
     if (fd.async_) {
       match (apply(state, ret)) {
@@ -926,9 +945,14 @@ fun checkScriptValDecl(
   exports: TypeEnv,
   exportedTypeAliases: Dict<String, Ty.InternalType>,
   name: String,
+  ann: Option<Ast.AstType>,
   expr: Ast.Expr
 ): (TypeEnv, TypeEnv, Dict<String, Ty.InternalType>) = {
-  val t = inferExpr(state, env, typeAliases, expr);
+  val t = inferExpr(state, env, typeAliases, expr)
+  match (ann) {
+    Some(astType) => { unifyEq(state, t, FA.astTypeToInternalWithScope(astType, typeAliases, [])); () }
+    None => ()
+  };
   (envInsert(env, name, Ty.generalize(env.items, apply(state, t))), exports, exportedTypeAliases)
 }
 
@@ -939,9 +963,14 @@ fun checkScriptVarDecl(
   exports: TypeEnv,
   exportedTypeAliases: Dict<String, Ty.InternalType>,
   name: String,
+  ann: Option<Ast.AstType>,
   expr: Ast.Expr
 ): (TypeEnv, TypeEnv, Dict<String, Ty.InternalType>) = {
-  val t = inferExpr(state, env, typeAliases, expr);
+  val t = inferExpr(state, env, typeAliases, expr)
+  match (ann) {
+    Some(astType) => { unifyEq(state, t, FA.astTypeToInternalWithScope(astType, typeAliases, [])); () }
+    None => ()
+  };
   (envInsert(env, name, apply(state, t)), exports, exportedTypeAliases)
 }
 
@@ -983,8 +1012,8 @@ fun checkDecls(
           }
           TDVal(name, ann, expr) => checkExportValDecl(state, env, typeAliases, exports, exportedTypeAliases, name, ann, expr)
           TDVar(name, ann, expr) => checkExportVarDecl(state, env, typeAliases, exports, exportedTypeAliases, name, ann, expr)
-          TDSVal(name, expr) => checkScriptValDecl(state, env, typeAliases, exports, exportedTypeAliases, name, expr)
-          TDSVar(name, expr) => checkScriptVarDecl(state, env, typeAliases, exports, exportedTypeAliases, name, expr)
+          TDSVal(name, ann, expr) => checkScriptValDecl(state, env, typeAliases, exports, exportedTypeAliases, name, ann, expr)
+          TDSVar(name, ann, expr) => checkScriptVarDecl(state, env, typeAliases, exports, exportedTypeAliases, name, ann, expr)
           TDSExpr(expr) => { inferExpr(state, env, typeAliases, expr); (env, exports, exportedTypeAliases) }
           TDType(td) => checkTypeDeclExports(typeAliases, env, exports, exportedTypeAliases, td)
           _ => {
@@ -1023,6 +1052,7 @@ fun makeTcState(reporter: Rep.Reporter, reg: TypeRegistry, sourceFile: String): 
   adtConstructors = reg.adtConstructors,
   ctorOwners = reg.ctorOwners,
   sourceFile = sourceFile,
+  mut asyncDepth = 0,
   mut inferredItems = []
 }
 
@@ -1030,12 +1060,16 @@ fun builtinTypeEnv(): TypeEnv = {
   val optionA = Ty.freshVar()
   val resultOk = Ty.freshVar()
   val resultErr = Ty.freshVar()
+  val printA = Ty.freshVar()
   {
     items = Dict.fromStringList([
       ("None", Ty.generalize(Dict.emptyStringDict(), Ty.TApp("Option", [optionA]))),
       ("Some", Ty.generalize(Dict.emptyStringDict(), Ty.TArrow([optionA], Ty.TApp("Option", [optionA])))),
       ("Ok", Ty.generalize(Dict.emptyStringDict(), Ty.TArrow([resultOk], Ty.TApp("Result", [resultOk, resultErr])))),
-      ("Err", Ty.generalize(Dict.emptyStringDict(), Ty.TArrow([resultErr], Ty.TApp("Result", [resultOk, resultErr]))))
+      ("Err", Ty.generalize(Dict.emptyStringDict(), Ty.TArrow([resultErr], Ty.TApp("Result", [resultOk, resultErr])))),
+      ("println", Ty.generalize(Dict.emptyStringDict(), Ty.TArrow([printA], Ty.tUnit))),
+      ("print", Ty.generalize(Dict.emptyStringDict(), Ty.TArrow([printA], Ty.tUnit))),
+      ("exit", Ty.generalize(Dict.emptyStringDict(), Ty.TArrow([Ty.tInt], Ty.tUnit)))
     ])
   }
 }

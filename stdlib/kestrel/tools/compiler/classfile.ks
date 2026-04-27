@@ -158,8 +158,8 @@ fun slotList(i: Int, count: Int, acc: List<Int>): List<Int> =
 /// Create a new class file builder.
 export fun newClassFile(className: String, superName: String, accessFlags: Int): ClassFileBuilder =
   {
-    className = Str.replace(className, ".", "/"),
-    superName = Str.replace(superName, ".", "/"),
+    className = Str.replace(".", "/", className),
+    superName = Str.replace(".", "/", superName),
     accessFlags = accessFlags,
     mut interfaces = Arr.new(),
     mut constantPool = Arr.new(),
@@ -251,7 +251,7 @@ export fun cfUtf8(cf: ClassFileBuilder, s: String): Int = {
 
 /// Return (or allocate) the constant pool index for a Class entry.
 export fun cfClassRef(cf: ClassFileBuilder, internalName: String): Int = {
-  val name = Str.replace(internalName, ".", "/")
+  val name = Str.replace(".", "/", internalName)
   val cached = Dict.get(cf.classCache, name)
   match (cached) {
     Some(idx) => idx

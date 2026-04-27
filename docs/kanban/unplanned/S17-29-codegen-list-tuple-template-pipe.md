@@ -36,6 +36,10 @@ TS reference:
 ## Relationship to other stories
 
 - **Depends on**: S17-27 (`ECall` — list cons and tuple constructors use method calls).
+- **Recommended after**: S17-28, so list/template-heavy code reuses already-correct call and
+  record/value paths.
+- **Feeds**: the first positive E2E re-enable slice for core async/task and collection-heavy
+  scenarios.
 - **Blocks**: S17-42 (E2E). List literals and string templates are ubiquitous in Kestrel.
 
 ## Goals
@@ -70,3 +74,6 @@ TS reference:
 - Spread elements in list literals (`[...rest, x]`) require additional handling; check the
   TS reference for the exact pattern.
 - `EPipe` operator precedence rewriting must match the parser's fixity table exactly.
+- This story is a good boundary for re-enabling positive scenarios in slices: once calls,
+  records, operators, and these collection/template forms are real, the core async/task scenarios
+  can start coming back before networked tests do.

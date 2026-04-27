@@ -134,18 +134,36 @@ export async fun run(s: Suite): Task<Unit> =
 
     group(s1, "val/var declarations", (sg: Suite) => {
       match (firstDecl("val x = 42")) {
-        TDSVal(name, expr) => {
+        TDSVal(name, typ, expr) => {
           eq(sg, "val name", name, "x");
+          eq(sg, "val type", typ, None);
           eq(sg, "val expr", expr, ELit("int","42"))
         },
         _ => isTrue(sg, "expected TDSVal", False)
       };
+      match (firstDecl("val x: Int = 42")) {
+        TDSVal(name, typ, expr) => {
+          eq(sg, "typed val name", name, "x");
+          eq(sg, "typed val type", typ, Some(ATPrim("Int")));
+          eq(sg, "typed val expr", expr, ELit("int","42"))
+        },
+        _ => isTrue(sg, "expected typed TDSVal", False)
+      };
       match (firstDecl("var x = 42")) {
-        TDSVar(name, expr) => {
+        TDSVar(name, typ, expr) => {
           eq(sg, "var name", name, "x");
+          eq(sg, "var type", typ, None);
           eq(sg, "var expr", expr, ELit("int","42"))
         },
         _ => isTrue(sg, "expected TDSVar", False)
+      };
+      match (firstDecl("var x: Int = 42")) {
+        TDSVar(name, typ, expr) => {
+          eq(sg, "typed var name", name, "x");
+          eq(sg, "typed var type", typ, Some(ATPrim("Int")));
+          eq(sg, "typed var expr", expr, ELit("int","42"))
+        },
+        _ => isTrue(sg, "expected typed TDSVar", False)
       };
       match (firstDecl("export val x: Int = 42")) {
         TDVal(name, typ, expr) => {
