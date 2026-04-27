@@ -48,7 +48,7 @@ Kestrel is a self-hosted language: the compiler is written in Kestrel and compil
 ### 1.2 Self-Hosted Compiler Entry Points
 
 - **`stdlib/kestrel/tools/compiler/cli-entry.ks`**: Executable entry point compiled to `Cli_entry.class`. Imports and invokes `main()` from `cli-main.ks`.
-- **`stdlib/kestrel/tools/compiler/cli-main.ks`**: Command dispatcher. Parses CLI commands (`run`, `build`, `dis`, `test`, `fmt`, `doc`, `lock`) and either handles them directly (e.g. `build` calls `Driver.compileFile()`) or delegates to the shell wrapper for commands that need additional orchestration.
+- **`stdlib/kestrel/tools/compiler/cli-main.ks`**: Command dispatcher. Parses CLI commands (`run`, `build`, `dis`, `test`, `fmt`, `doc`, `lock`) and either handles them directly (e.g. `build` calls `Driver.compileFile()` without forwarding to the shell wrapper) or delegates non-build commands to the shell wrapper (`./kestrel`) for commands that need full CLI orchestration.
 - **`stdlib/kestrel/tools/cli.ks`**: Self-hosted CLI shim target compiled to `kestrel/tools/Cli.class`. After bootstrap, `scripts/kestrel` delegates normal commands to this class via `exec java`.
 
 ### 1.3 Clean-Machine Install Flow

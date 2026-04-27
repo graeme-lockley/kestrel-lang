@@ -54,11 +54,8 @@ async fun runBuildScaffold(args: List<String>, cwd: String): Task<Int> =
     }
   }
 
-async fun dispatch(parsed: ParsedCommand, cwd: String): Task<Int> = {
-  val buildStatus =
-    if (parsed.command == "build") await runBuildScaffold(parsed.args, cwd)
-    else 0;
-  if (buildStatus != 0) buildStatus
+async fun dispatch(parsed: ParsedCommand, cwd: String): Task<Int> =
+  if (parsed.command == "build") await runBuildScaffold(parsed.args, cwd)
   else {
     val forward = forwardArgs(parsed);
     match (await runProcessStream(forward.0, forward.1)) {
@@ -69,7 +66,6 @@ async fun dispatch(parsed: ParsedCommand, cwd: String): Task<Int> = {
       }
     }
   }
-}
 
 export async fun main(allArgs: List<String>): Task<Unit> = {
   val proc = getProcess()

@@ -22,11 +22,11 @@ export async fun run(s: Suite): Task<Unit> =
       eq(sg, "first argv is command", Lst.head(fwd.1), Some("run"))
     })
 
-    group(s1, "build command forwards", (sg: Suite) => {
-      val parsed = { command = "build", args = ["samples/expr.ks"] }
+    group(s1, "forwardArgs for non-build commands", (sg: Suite) => {
+      val parsed = { command = "run", args = ["samples/expr.ks"] }
       val fwd = CliMain.forwardArgs(parsed)
       eq(sg, "program", fwd.0, "./kestrel")
-      eq(sg, "first arg", Lst.head(fwd.1), Some("build"))
+      eq(sg, "first arg", Lst.head(fwd.1), Some("run"))
       isTrue(sg, "has script arg", Lst.any(fwd.1, (x: String) => x == "samples/expr.ks"))
     })
   })

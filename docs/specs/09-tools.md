@@ -17,7 +17,7 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
   `java -Xss8m -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE" <resolved Cli class> "$@"`.
   The shim resolves the CLI class by searching for `*/kestrel/tools/Cli.class` under the JVM cache. If missing, it exits non-zero with remediation instructions to rebuild bootstrap artifacts. Set `KESTREL_JVM_CACHE` to override the JVM class cache root. See [11-bootstrap.md](11-bootstrap.md) for full bootstrap architecture details.
 - **Fallback:** Normal command execution does not fall back to an unbootstrapped state. Users must restore self-hosted artifacts with `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
-- **Dependencies:** Requires `node`, `java`, and `javac` on `PATH` for full toolchain flows.
+- **Dependencies:** Requires `java` and `javac` on `PATH` for normal toolchain flows. `node` is only required for the bootstrap build step (`kestrel build` with no script argument) and the internal `__ts-compile` command.
 
 ### 1.1 Entry-point environment variables
 

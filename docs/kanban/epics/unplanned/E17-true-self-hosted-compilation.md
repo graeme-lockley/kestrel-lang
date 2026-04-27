@@ -87,7 +87,7 @@ independently testable. No story should touch more than one concern at a time.
     it records coordinates. `cli.ks` (and `kestrel:tools/cli/maven`) reads these sidecars
     to build the JVM classpath.
 
-12. [S17-12] Wire `cli.ks` `compileScript` to call the Kestrel driver in-process
+12. ✅ [S17-12] Wire `cli.ks` `compileScript` to call the Kestrel driver in-process
     — Replace the `runProcessStream("node", [compilerCli, ...])` call in `cli.ks` with a
     direct in-process call to `Driver.compileFile`. Remove the `compilerCli` parameter from
     `compileScript` and all call sites. The Node path must no longer be reachable for normal
@@ -98,7 +98,19 @@ independently testable. No story should touch more than one concern at a time.
     unreachable. Add a CI step that runs `mv compiler compiler_DISABLED && ./kestrel test`
     and must exit 0. Restore `compiler/`. Update `docs/specs/11-bootstrap.md` and
     `docs/specs/12-agent-enablement-and-knowledge.md` to reflect the JVM-only runtime path.
+
+14. [S17-14] Fix JVM codegen variable binding for nested cons-chain patterns
+    — The TS JVM codegen mis-compiles `match` arms with 3+ variable bindings in a cons-chain
+    (e.g. `g :: a :: v :: []`); middle bindings are lost, producing an "unknown variable"
+    crash. Fix the binding-emission logic and add regression tests. Revert the S17-11
+    workaround in `driver.ks` once fixed.
     Update README "What you need" — Node becomes a maintainer-only build dependency.
+
+15. [S17-15 — Refactor deep async-Result nesting in driver tests using combinators](../../unplanned/S17-15-refactor-test-async-result-nesting.md)
+    — Add `andThenAsync` and `mapErrorAsync` to `kestrel:data/result`; refactor all 3+-level
+    nested `match (await ...)` filesystem-setup blocks in `driver.test.ks` (and any other
+    stdlib test files with the same pattern) to a flat `|>` pipeline with a single `match`,
+    so each failing setup step surfaces a labelled error message.
 
 ## Dependencies
 
