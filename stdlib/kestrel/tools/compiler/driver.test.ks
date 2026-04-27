@@ -501,6 +501,12 @@ export async fun run(s: Suite): Task<Unit> = {
         Ok(()) => {
           val first = await Driver.compileFile(aPath, opts)
           isTrue(sg, "first compile ok", first.ok)
+          val aClass = "${outDir}/${Driver.classNameForPath(aPath)}.class"
+          val bClass = "${outDir}/${Driver.classNameForPath(bPath)}.class"
+          val cClass = "${outDir}/${Driver.classNameForPath(cPath)}.class"
+          val aM1 = await fileMtimeMs(aClass)
+          val bM1 = await fileMtimeMs(bClass)
+          val cM1 = await fileMtimeMs(cClass)
           val aKtiPath = "${outDir}/${Driver.classNameForPath(aPath)}.kti"
           val bKtiPath = "${outDir}/${Driver.classNameForPath(bPath)}.kti"
           val cKtiPath = "${outDir}/${Driver.classNameForPath(cPath)}.kti"
@@ -512,6 +518,10 @@ export async fun run(s: Suite): Task<Unit> = {
             Ok(()) => {
               val second = await Driver.compileFile(aPath, opts)
               isTrue(sg, "second compile ok", second.ok)
+              val bM2 = await fileMtimeMs(bClass)
+              val cM2 = await fileMtimeMs(cClass)
+              isTrue(sg, "c class rebuilt after edit", cM2 != cM1)
+              isTrue(sg, "b class rebuilt after dep edit", bM2 != bM1)
               val a2 = await Kti.readKtiFile(aKtiPath)
               val b2 = await Kti.readKtiFile(bKtiPath)
               val c2 = await Kti.readKtiFile(cKtiPath)
@@ -554,7 +564,7 @@ export async fun run(s: Suite): Task<Unit> = {
                         Some(v1) => {
                           match (Dict.get(ka2.depHashes, bPath)) {
                             None => isTrue(sg, "a dep hash missing", False)
-                            Some(v2) => isTrue(sg, "a dep hash updated", v1 != v2)
+                            Some(v2) => isTrue(sg, "a dep hash unchanged", v1 == v2)
                           }
                         }
                       }
@@ -568,7 +578,7 @@ export async fun run(s: Suite): Task<Unit> = {
       }
     })
 
-    await asyncGroup(s1, "compileFile - depHashes are sha256 of direct dep kti content", async (sg: Suite) => {
+    await asyncGroup(s1, "compileFile - depHashes are sha256 of direct dep source content", async (sg: Suite) => {
       val srcDir = "/tmp/kestrel_driver_test_s17_08_dephash_src"
       val outDir = "/tmp/kestrel_driver_test_s17_08_dephash_out"
       val aPath = "${srcDir}/a.ks"
@@ -597,28 +607,22 @@ export async fun run(s: Suite): Task<Unit> = {
           val result = await Driver.compileFile(aPath, opts)
           isTrue(sg, "compile ok", result.ok)
           val bKtiPath = "${outDir}/${Driver.classNameForPath(bPath)}.kti"
-          val cKtiPath = "${outDir}/${Driver.classNameForPath(cPath)}.kti"
           val aKtiPath = "${outDir}/${Driver.classNameForPath(aPath)}.kti"
           val bKti = await Kti.readKtiFile(bKtiPath)
           val aKti = await Kti.readKtiFile(aKtiPath)
-          match (await Fs.readText(cKtiPath)) {
+          match (bKti) {
             Err(_) => isTrue(sg, "failed to read generated kti artifacts", False)
-            Ok(cKtiText) => {
-              match (bKti) {
+            Ok(kb) => {
+              match (aKti) {
                 Err(_) => isTrue(sg, "failed to read generated kti artifacts", False)
-                Ok(kb) => {
-                  match (aKti) {
-                    Err(_) => isTrue(sg, "failed to read generated kti artifacts", False)
-                    Ok(ka) => {
-                      val expected = Crypto.sha256(cKtiText)
-                      match (Dict.get(kb.depHashes, cPath)) {
-                        Some(actual) => eq(sg, "b stores hash of c.kti content", actual, expected)
-                        None => isTrue(sg, "b dep hash for c missing", False)
-                      }
-                      isTrue(sg, "a only tracks direct dep b", Dict.member(ka.depHashes, bPath))
-                      isTrue(sg, "a does not track transitive dep c", !Dict.member(ka.depHashes, cPath))
-                    }
+                Ok(ka) => {
+                  val expected = Crypto.sha256(cSrc)
+                  match (Dict.get(kb.depHashes, cPath)) {
+                    Some(actual) => eq(sg, "b stores hash of c source content", actual, expected)
+                    None => isTrue(sg, "b dep hash for c missing", False)
                   }
+                  isTrue(sg, "a only tracks direct dep b", Dict.member(ka.depHashes, bPath))
+                  isTrue(sg, "a does not track transitive dep c", !Dict.member(ka.depHashes, cPath))
                 }
               }
             }
