@@ -79,7 +79,7 @@ val cliSpec = {
  *  proc.cwd is the project root. KESTREL_BIN env var identifies the kestrel binary. */
 async fun handler(parsed: ParsedArgs): Task<Int> = {
   val proc = getProcess()
-  val rootDir = proc.cwd
+  val rootDir = Opt.withDefault(getEnv("KESTREL_ROOT"), proc.cwd)
   val kestrelBin = Opt.withDefault(getEnv("KESTREL_BIN"), "${rootDir}/kestrel")
   val outputModeStr =
     match (Dict.get(parsed.options, "summary")) {

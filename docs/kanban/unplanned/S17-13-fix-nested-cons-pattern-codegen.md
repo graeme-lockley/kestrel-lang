@@ -1,8 +1,8 @@
 # Fix JVM codegen variable binding for nested cons-chain patterns
 
-## Sequence: S17-14
+## Sequence: S17-13
 ## Tier: 6
-## Former ID: (none)
+## Former ID: S17-14
 
 ## Epic
 

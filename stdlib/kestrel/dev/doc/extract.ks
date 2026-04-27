@@ -95,7 +95,7 @@ fun inferExportTypeStrings(source: String): Dict<String, String> =
         importOpaqueTypes = None,
         sourceFile = "<doc-extract>"
       });
-      Dict.map(tc.exports.items, (_name: String, t: Ty.InternalType) => Ty.typeToString(t))
+      Dict.map(tc.exports.items, (_name: String, t) => Ty.typeToString(t))
     }
   }
 

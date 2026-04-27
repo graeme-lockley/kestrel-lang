@@ -141,7 +141,8 @@ async fun deleteFiles(files: List<String>): Task<Unit> =
     [] => ()
     f :: rest => {
       val _ = await Fs.deleteFile(f)
-      await deleteFiles(rest)
+      val next: Task<Unit> = deleteFiles(rest)
+      await next
     }
   }
 

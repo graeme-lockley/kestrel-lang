@@ -1,13 +1,13 @@
 # End-to-end validation without Node; CI gate and spec update
 
-## Sequence: S17-13
+## Sequence: S17-42
 ## Tier: 9
-## Former ID: (none)
+## Former ID: S17-13 (then S17-23, then S17-39)
 
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-01, S17-02, S17-03, S17-04, S17-05, S17-06, S17-07, S17-08, S17-09, S17-10, S17-11, S17-12
+- Companion stories: S17-01 through S17-41
 
 ## Summary
 
@@ -18,12 +18,13 @@ Restore `compiler/`. Update `docs/specs/11-bootstrap.md` and
 
 ## Current State
 
-After S17-12, the driver is wired into the CLI. But the test suite still uses Node/TypeScript
-for compilation in many paths. This story validates that everything works with Node removed.
+After S17-22, the self-hosted typechecker and codegen have parity with the TypeScript
+compiler for every top-level construct used by the stdlib. This story validates that the
+full test suite passes with the TypeScript compiler removed and adds a permanent CI gate.
 
 ## Relationship to other stories
 
-- **Depends on**: S17-12 (CLI wired to driver)
+- **Depends on**: S17-12 (CLI wired to driver) and the gap-closure stories S17-16..S17-22 which together remove every "Unsupported top-level declaration" or "Unsupported expression form" diagnostic raised by the self-hosted checker for stdlib inputs.
 - **Blocks**: nothing — this is the final story in the epic.
 
 ## Goals
@@ -57,3 +58,4 @@ for compilation in many paths. This story validates that everything works with N
 - The CI gate must restore `compiler/` after the test to avoid breaking the TypeScript build.
 - The `compiler/dist/cli.js` path may still be needed for the bootstrap process (building the
   bootstrap JAR); document this clearly in the spec.
+

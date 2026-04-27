@@ -289,7 +289,18 @@ fun registerFunSig(reg: Dict<String, Ty.InternalType>, typeAliases: Dict<String,
   val scope = buildTypeParamScope(typeAliases, fd.typeParams)
   val ps = paramTypes(fd.params, scope)
   val ret = FA.astTypeToInternalWithScope(fd.retType, scope, [])
-  Dict.insert(reg, fd.name, Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, ret)))
+  val resultT =
+    if (fd.async_) {
+      match (ret) {
+        TApp("Task", taskArgs) =>
+          match (taskArgs) {
+            _ :: [] => ret
+            _ => Ty.TApp("Task", [ret])
+          }
+        _ => Ty.TApp("Task", [ret])
+      }
+    } else ret
+  Dict.insert(reg, fd.name, Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, resultT)))
 }
 
 fun inferExprs(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.InternalType>, exprs: List<Ast.Expr>): List<Ty.InternalType> =
@@ -337,12 +348,22 @@ fun inferStmtList(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.Int
             val scope = buildTypeParamScope(typeAliases, typeParams)
             val ps = paramTypes(params, scope)
             val ret = FA.astTypeToInternalWithScope(retType, scope, [])
-            val fnRet = if (async_) Ty.TApp("Task", [ret]) else ret
-            val fnType = Ty.TArrow(ps, fnRet)
+            val asyncPair =
+              if (async_) {
+                match (apply(state, ret)) {
+                  TApp("Task", taskArgs) =>
+                    match (taskArgs) {
+                      innerT :: [] => (innerT, ret)
+                      _ => (ret, Ty.TApp("Task", [ret]))
+                    }
+                  _ => (ret, Ty.TApp("Task", [ret]))
+                }
+              } else (ret, ret)
+            val fnType = Ty.TArrow(ps, asyncPair.1)
             val env2a = envInsert(env, name, Ty.generalize(Dict.emptyStringDict(), fnType))
             val local = bindParams(env2a, namesFromParams(params), ps)
             val bodyT = inferExpr(state, local, mergeTypeMaps(typeAliases, scope), body)
-            unifyEq(state, bodyT, ret)
+            unifyEq(state, bodyT, asyncPair.0)
             env2a
           }
           SBreak => { addDiag(state, Diag.CODES.type_.breakOutsideLoop, "break used outside loop"); env }
@@ -816,9 +837,19 @@ fun checkFunDecl(
   val ret = FA.astTypeToInternalWithScope(fd.retType, mergeTypeMaps(typeAliases, scope), [])
   val local = bindParams(env, namesFromParams(fd.params), ps)
   val bodyT = inferExpr(state, local, mergeTypeMaps(typeAliases, scope), fd.body)
-  val resultT = taskReturnType(fd.async_, ret)
-  unifyEq(state, bodyT, ret);
-  val finalType = Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, resultT));
+  val asyncPair =
+    if (fd.async_) {
+      match (apply(state, ret)) {
+        TApp("Task", taskArgs) =>
+          match (taskArgs) {
+            innerT :: [] => (innerT, ret)
+            _ => (ret, Ty.TApp("Task", [ret]))
+          }
+        _ => (ret, Ty.TApp("Task", [ret]))
+      }
+    } else (ret, ret)
+  unifyEq(state, bodyT, asyncPair.0);
+  val finalType = Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, asyncPair.1));
   val env2 = envInsert(env, fd.name, finalType);
   val exports2 = maybeExportBinding(fd.exported, exports, fd.name, finalType);
   (env2, exports2, exportedTypeAliases)

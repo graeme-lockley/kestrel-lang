@@ -40,7 +40,15 @@ export async fun run(s: Suite): Task<Unit> = {
   await asyncGroup(s, "kestrel:tools/compiler/driver", async (s1: Suite) => {
     group(s1, "freshness helper", (sg: Suite) => {
       val p = program("export fun id(x: Int): Int = x")
-      val kti = Kti.buildKtiV4(p, Dict.insert(Dict.emptyStringDict(), "id", Ty.TArrow([Ty.tInt], Ty.tInt)), "src", Dict.emptyStringDict())
+      val kti = Kti.buildKtiV4(
+        p,
+        Dict.insert(Dict.emptyStringDict(), "id", Ty.TArrow([Ty.tInt], Ty.tInt)),
+        Dict.emptyStringDict(),
+        Dict.emptyStringDict(),
+        Dict.emptyStringDict(),
+        "src",
+        Dict.emptyStringDict()
+      )
       val fresh = Driver.isFresh(kti, kti.sourceHash, Dict.emptyStringDict())
       val staleSrc = Driver.isFresh(kti, "different", Dict.emptyStringDict())
       val staleDeps = Driver.isFresh(kti, kti.sourceHash, Dict.insert(Dict.emptyStringDict(), "dep", "h"))

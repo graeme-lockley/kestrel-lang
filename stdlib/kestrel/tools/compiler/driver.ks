@@ -201,9 +201,17 @@ async fun writeAllClasses(outDir: String, pairs: List<(String, JByteArray)>): Ta
   }
 
 /// Write KTI file if writeKti option is set; otherwise return success.
-async fun writeKtiIfNeeded(opts: CompileOptions, ktiPath: String, prog: Program, tcExports: TC.TypeEnv, source: String, depHashes: Dict<String, String>, entryPath: String): Task<CompileResult> =
+async fun writeKtiIfNeeded(opts: CompileOptions, ktiPath: String, prog: Program, tcResult: TC.TypecheckResult, source: String, depHashes: Dict<String, String>, entryPath: String): Task<CompileResult> =
   if (opts.writeKti) {
-    val kti = Kti.buildKtiV4(prog, tcExports.items, source, depHashes);
+    val kti = Kti.buildKtiV4(
+      prog,
+      tcResult.exports.items,
+      tcResult.exportedTypeAliases,
+      tcResult.exportedConstructors,
+      tcResult.exportedTypeVisibility,
+      source,
+      depHashes
+    );
     match (await Kti.writeKtiFile(ktiPath, kti)) {
       Err(ktiErr) => failResult(entryPath, Diag.CODES.file.readError, "cannot write KTI: ${ktiErr}")
       Ok(()) => { ok = True, diagnostics = [] }
@@ -224,7 +232,7 @@ async fun doCodegenAndWrite(moduleName: String, prog: Program, tcResult: TC.Type
       match (await writeAllClasses(opts.outDir, pairs)) {
         Err(writeErr) => failResult(entryPath, Diag.CODES.file.readError, writeErr)
         Ok(()) =>
-          await writeKtiIfNeeded(opts, ktiPath, prog, tcResult.exports, source, depHashes, entryPath)
+          await writeKtiIfNeeded(opts, ktiPath, prog, tcResult, source, depHashes, entryPath)
       }
     }
   }
@@ -237,12 +245,14 @@ async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: Strin
   match (await Kti.loadDepBindings(depPairs, prog.imports)) {
     DepLoadErr(depErr) =>
       failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, depErr)])
-    DepLoadOk(importBindings) => {
-      val importEnv = if (Dict.isEmpty(importBindings)) None else Some({ items = importBindings });
+    DepLoadOk(depBindings) => {
+      val importEnv = if (Dict.isEmpty(depBindings.importBindings)) None else Some({ items = depBindings.importBindings });
+      val typeAliasEnv = if (Dict.isEmpty(depBindings.typeAliasBindings)) None else Some(depBindings.typeAliasBindings)
+      val opaqueTypes = if (Lst.isEmpty(depBindings.importOpaqueTypes)) None else Some(depBindings.importOpaqueTypes)
       val tcOpts = {
         importBindings = importEnv,
-        typeAliasBindings = None,
-        importOpaqueTypes = None,
+        typeAliasBindings = typeAliasEnv,
+        importOpaqueTypes = opaqueTypes,
         sourceFile = entryPath
       };
       val tc = TC.typecheck(prog, tcOpts);
@@ -281,13 +291,15 @@ async fun depHashesForDeps(deps: List<Resolve.ResolvedDep>, opts: CompileOptions
     [] => Ok(Dict.emptyStringDict())
     h :: rest => {
       val depPath = canonicalPath(h.path)
-      match (await loadKtiText(depPath, opts, state)) {
-        Err(_) => Err("dependency not compiled yet: ${h.spec} (missing ${ktiPathForModule(depPath, opts)})")
-        Ok(content) => {
+      // Use sha256(source) to match the TypeScript compiler dep-hash scheme so that
+      // KTI files written by either compiler are mutually compatible.
+      match (await Fs.readText(depPath)) {
+        Err(_) => Err("dependency not compiled yet: ${h.spec} (missing source ${depPath})")
+        Ok(srcContent) => {
           val next: Task<Result<Dict<String, String>, String>> = depHashesForDeps(rest, opts, state)
           match (await next) {
             Err(e) => Err(e)
-            Ok(hashes) => Ok(Dict.insert(hashes, depPath, Crypto.sha256(content)))
+            Ok(hashes) => Ok(Dict.insert(hashes, depPath, Crypto.sha256(srcContent)))
           }
         }
       }
@@ -430,46 +442,110 @@ async fun compileGraph(path: String, opts: CompileOptions, visiting: List<String
       Err(_) =>
         GraphCompileErr(failResult(p, Diag.CODES.file.readError, "cannot read file: ${p}"))
       Ok(source) => {
-        val tokens = Lex.lex(source)
-        match (parseOutcome(tokens)) {
-          ParseFail(msg, off, ln, col) =>
-            GraphCompileErr(failWithDiags([mkParseErrDiag(p, msg, off, ln, col)]))
-          ParseOk(prog) => {
-            val resolveOpts = { fromFile = p, stdlibDir = opts.stdlibDir, cacheRoot = opts.cacheRoot, allowHttp = opts.allowHttp }
-            match (Resolve.uniqueDependencyPaths(prog, p, resolveOpts)) {
-              Err(resolveErr) =>
-                GraphCompileErr(failWithDiags([diag(p, Diag.CODES.resolve.moduleNotFound, resolveErr)]))
-              Ok(deps) => {
-                match (await ensureUrlDeps(deps, opts)) {
-                  Some(fetchErr) => GraphCompileErr(fetchErr)
-                  None => {
-                    val next: Task<GraphCompileResult> = compileDepsInOrder(deps, opts, p :: visiting, state)
-                    match (await next) {
-                      GraphCompileErr(e) => GraphCompileErr(e)
-                      GraphCompileOk(stateAfterDeps) => {
-                        val startLen = Lst.length(state.processedOrder)
-                        match (await compileOneModule(p, source, prog, deps, opts, stateAfterDeps)) {
-                          ModuleCompileErr(e) => GraphCompileErr(e)
-                          ModuleCompileOk(ktiText, wasCompiled) => {
-                            val ktiTexts = if (Str.isEmpty(ktiText)) stateAfterDeps.ktiTexts else Dict.insert(stateAfterDeps.ktiTexts, p, ktiText)
-                            val transDeps = Lst.drop(stateAfterDeps.processedOrder, startLen)
-                            val depsTask: Task<Option<CompileResult>> = writeDepsFileIfCompiled(wasCompiled, p, transDeps, opts)
-                            match (await depsTask) {
-                              Some(depsErr) => GraphCompileErr(depsErr)
-                              None => {
-                                val mavenCoords = collectMavenCoords(prog.imports, [], Dict.emptyStringDict())
-                                val kdepsTask: Task<Option<CompileResult>> = writeKdepsFileIfNeeded(wasCompiled, p, mavenCoords, opts)
-                                match (await kdepsTask) {
-                                  Some(kdepsErr) => GraphCompileErr(kdepsErr)
-                                  None =>
-                                    GraphCompileOk({
-                                      compiled = Dict.insert(stateAfterDeps.compiled, p, True),
-                                      ktiTexts = ktiTexts,
-                                      processedOrder = Lst.append(stateAfterDeps.processedOrder, [p])
-                                    })
-                                }
-                              }
-                            }
+        val srcHash = Kti.sourceHash(source)
+        val ktiPath = ktiPathForModule(p, opts)
+        // Fast path: if a valid KTI exists whose sourceHash matches the current source,
+        // use the dep paths stored in the KTI to process deps WITHOUT parsing the source.
+        // This avoids parse failures for source files that contain syntax not yet supported
+        // by the self-hosted parser (e.g. generic lambdas, extern declarations) when the
+        // compiled artefacts are already up-to-date.
+        match (await Kti.readKtiFile(ktiPath)) {
+          Ok(existingKti) => {
+            if (existingKti.sourceHash == srcHash) {
+              // srcHash matches — try to confirm full freshness via stored dep paths.
+              val storedDepPaths = Dict.keys(existingKti.depHashes)
+              val depsFromKti: List<Resolve.ResolvedDep> = Lst.map(storedDepPaths, (dp: String) => { spec = dp, path = dp })
+              val depsTask: Task<GraphCompileResult> = compileDepsInOrder(depsFromKti, opts, p :: visiting, state)
+              match (await depsTask) {
+                GraphCompileErr(e) => GraphCompileErr(e)
+                GraphCompileOk(stateAfterDeps) => {
+                  match (await depHashesForDeps(depsFromKti, opts, stateAfterDeps)) {
+                    Err(_) => {
+                      // Could not compute dep hashes — fall through to slow path below.
+                      val slowResult: Task<GraphCompileResult> = compileGraphSlow(p, source, srcHash, opts, visiting, state)
+                      await slowResult
+                    }
+                    Ok(depHashes) => {
+                      if (isFresh(existingKti, srcHash, depHashes)) {
+                        // Fully fresh: skip parse/typecheck/codegen and return cached KTI.
+                        match (await loadKtiText(p, opts, stateAfterDeps)) {
+                          Err(_) => {
+                            val slowResult: Task<GraphCompileResult> = compileGraphSlow(p, source, srcHash, opts, visiting, state)
+                            await slowResult
+                          }
+                          Ok(ktiText) =>
+                            GraphCompileOk({
+                              compiled = Dict.insert(stateAfterDeps.compiled, p, True),
+                              ktiTexts = Dict.insert(stateAfterDeps.ktiTexts, p, ktiText),
+                              processedOrder = Lst.append(stateAfterDeps.processedOrder, [p])
+                            })
+                        }
+                      } else {
+                        // Dep hashes changed — must parse and recompile.
+                        val slowResult: Task<GraphCompileResult> = compileGraphSlow(p, source, srcHash, opts, visiting, state)
+                        await slowResult
+                      }
+                    }
+                  }
+                }
+              }
+            } else {
+              // Source changed — must parse and recompile.
+              val slowResult: Task<GraphCompileResult> = compileGraphSlow(p, source, srcHash, opts, visiting, state)
+              await slowResult
+            }
+          }
+          Err(_) => {
+            // No cached KTI — must parse and compile from scratch.
+            val slowResult: Task<GraphCompileResult> = compileGraphSlow(p, source, srcHash, opts, visiting, state)
+            await slowResult
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Slow path for compileGraph: lex, parse, resolve deps, compile, and write outputs.
+/// Called when the KTI is absent, the source hash has changed, or dep hashes have changed.
+async fun compileGraphSlow(p: String, source: String, _srcHash: String, opts: CompileOptions, visiting: List<String>, state: GraphState): Task<GraphCompileResult> = {
+  val tokens = Lex.lex(source)
+  match (parseOutcome(tokens)) {
+    ParseFail(msg, off, ln, col) =>
+      GraphCompileErr(failWithDiags([mkParseErrDiag(p, msg, off, ln, col)]))
+    ParseOk(prog) => {
+      val resolveOpts = { fromFile = p, stdlibDir = opts.stdlibDir, cacheRoot = opts.cacheRoot, allowHttp = opts.allowHttp }
+      match (Resolve.uniqueDependencyPaths(prog, p, resolveOpts)) {
+        Err(resolveErr) =>
+          GraphCompileErr(failWithDiags([diag(p, Diag.CODES.resolve.moduleNotFound, resolveErr)]))
+        Ok(deps) => {
+          match (await ensureUrlDeps(deps, opts)) {
+            Some(fetchErr) => GraphCompileErr(fetchErr)
+            None => {
+              val next: Task<GraphCompileResult> = compileDepsInOrder(deps, opts, p :: visiting, state)
+              match (await next) {
+                GraphCompileErr(e) => GraphCompileErr(e)
+                GraphCompileOk(stateAfterDeps) => {
+                  val startLen = Lst.length(state.processedOrder)
+                  match (await compileOneModule(p, source, prog, deps, opts, stateAfterDeps)) {
+                    ModuleCompileErr(e) => GraphCompileErr(e)
+                    ModuleCompileOk(ktiText, wasCompiled) => {
+                      val ktiTexts = if (Str.isEmpty(ktiText)) stateAfterDeps.ktiTexts else Dict.insert(stateAfterDeps.ktiTexts, p, ktiText)
+                      val transDeps = Lst.drop(stateAfterDeps.processedOrder, startLen)
+                      val depsTask: Task<Option<CompileResult>> = writeDepsFileIfCompiled(wasCompiled, p, transDeps, opts)
+                      match (await depsTask) {
+                        Some(depsErr) => GraphCompileErr(depsErr)
+                        None => {
+                          val mavenCoords = collectMavenCoords(prog.imports, [], Dict.emptyStringDict())
+                          val kdepsTask: Task<Option<CompileResult>> = writeKdepsFileIfNeeded(wasCompiled, p, mavenCoords, opts)
+                          match (await kdepsTask) {
+                            Some(kdepsErr) => GraphCompileErr(kdepsErr)
+                            None =>
+                              GraphCompileOk({
+                                compiled = Dict.insert(stateAfterDeps.compiled, p, True),
+                                ktiTexts = ktiTexts,
+                                processedOrder = Lst.append(stateAfterDeps.processedOrder, [p])
+                              })
                           }
                         }
                       }

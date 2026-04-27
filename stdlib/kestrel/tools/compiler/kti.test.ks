@@ -24,7 +24,15 @@ fun baseExports(): Dict<String, Ty.InternalType> =
 export async fun run(s: Suite): Task<Unit> =
   {
     val rtProg = program("export fun id(x: Int): Int = x")
-    val rtKti = Kti.buildKtiV4(rtProg, Dict.insert(Dict.emptyStringDict(), "id", Ty.TArrow([Ty.tInt], Ty.tInt)), "src", Dict.emptyStringDict())
+    val rtKti = Kti.buildKtiV4(
+      rtProg,
+      Dict.insert(Dict.emptyStringDict(), "id", Ty.TArrow([Ty.tInt], Ty.tInt)),
+      Dict.emptyStringDict(),
+      Dict.emptyStringDict(),
+      Dict.emptyStringDict(),
+      "src",
+      Dict.emptyStringDict()
+    )
     val rtPath = "/tmp/kestrel-kti-roundtrip.kti"
     val rtWrite = await Kti.writeKtiFile(rtPath, rtKti)
     val rtRead = await Kti.readKtiFile(rtPath)
@@ -32,7 +40,15 @@ export async fun run(s: Suite): Task<Unit> =
     group(s, "kestrel:tools/compiler/kti", (s1: Suite) => {
     group(s1, "build v4 shape", (sg: Suite) => {
       val prog = program("export fun id(x: Int): Int = x\nexport val x: Int = 1")
-      val kti = Kti.buildKtiV4(prog, baseExports(), "module source", Dict.emptyStringDict())
+      val kti = Kti.buildKtiV4(
+        prog,
+        baseExports(),
+        Dict.emptyStringDict(),
+        Dict.emptyStringDict(),
+        Dict.emptyStringDict(),
+        "module source",
+        Dict.emptyStringDict()
+      )
       eq(sg, "version", kti.version, 4)
       isTrue(sg, "functions include id", Dict.member(kti.functions, "id"))
       isTrue(sg, "sourceHash present", kti.sourceHash != "")
@@ -52,7 +68,15 @@ export async fun run(s: Suite): Task<Unit> =
 
     group(s1, "deserialize exports", (sg: Suite) => {
       val prog = program("export fun id(x: Int): Int = x")
-      val kti = Kti.buildKtiV4(prog, Dict.insert(Dict.emptyStringDict(), "id", Ty.TArrow([Ty.tInt], Ty.tInt)), "src", Dict.emptyStringDict())
+      val kti = Kti.buildKtiV4(
+        prog,
+        Dict.insert(Dict.emptyStringDict(), "id", Ty.TArrow([Ty.tInt], Ty.tInt)),
+        Dict.emptyStringDict(),
+        Dict.emptyStringDict(),
+        Dict.emptyStringDict(),
+        "src",
+        Dict.emptyStringDict()
+      )
       val ex = Kti.deserializeExports(kti)
       match (Dict.get(ex, "id")) {
         Some(t) => eq(sg, "id type restored", Ty.typeToString(t), "(Int) -> Int")

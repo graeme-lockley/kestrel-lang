@@ -1,10 +1,10 @@
 # Refactor deep async-Result nesting in driver tests using combinators
 
-## Sequence: S17-15
+## Sequence: S17-14
 
 ## Tier: Optional
 
-## Former ID: (none)
+## Former ID: S17-15
 
 ## Epic
 
