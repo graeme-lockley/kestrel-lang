@@ -2,7 +2,7 @@
  * JVM codegen: typed AST → .class file(s).
  * Uses same Program + getInferredType pipeline as the main compiler.
  */
-import type { Program, Expr, TopLevelStmt, TopLevelDecl, TuplePattern, Pattern } from '../ast/nodes.js';
+import type { Program, Expr, TopLevelStmt, TopLevelDecl, TuplePattern, Pattern, ConsPattern } from '../ast/nodes.js';
 import type { FunDecl, ExternFunDecl, ValDecl, VarDecl, BlockExpr, LambdaExpr, FunStmt, TypeDecl, ExceptionDecl, Type } from '../ast/nodes.js';
 import { getInferredType } from '../typecheck/check.js';
 import type { InternalType } from '../types/internal.js';
@@ -2441,86 +2441,116 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
             }
           }
           if (c.pattern.kind === 'ConsPattern') {
-            const headPat = c.pattern.head;
-            const tailPat = c.pattern.tail;
-            mb.emit1b(JvmOp.ALOAD, scrutSlot);
-            mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_CONS));
-            const ifeq = mb.length();
-            mb.emit1s(JvmOp.IFEQ, 0);
-            mb.addBranchTarget(mb.length(), matchBaseState);
-            const headFieldBindings: Array<{ name: string; prev: number | undefined }> = [];
-            let ifeqHead = -1;
-            if (headPat.kind === 'VarPattern') {
-              mb.emit1b(JvmOp.ALOAD, scrutSlot);
-              mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
-              mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'head', 'Ljava/lang/Object;'));
-              const slot = nextLocal++;
-              env.set(headPat.name, slot);
-              mb.emit1b(JvmOp.ASTORE, slot);
-              headFieldBindings.push({ name: headPat.name, prev: undefined });
-            } else if (headPat.kind === 'ConstructorPattern') {
-              const headAdtClass = adtClassByConstructor.get(headPat.name);
-              if (headAdtClass != null) {
-                // Check instanceof the head ADT class without storing head in a local
-                mb.emit1b(JvmOp.ALOAD, scrutSlot);
+            // Walk the cons spine iteratively so that nested chains
+            // (a :: b :: c :: [] and deeper) correctly bind all variables.
+            const allIfeqs: number[] = [];
+            const allBindings: Array<{ name: string; prev: number | undefined }> = [];
+            let ifeqTailNil = -1;
+
+            let currentPat: Pattern = c.pattern;
+            let currentScrutSlot = scrutSlot;
+            let firstLevel = true;
+
+            while (currentPat.kind === 'ConsPattern') {
+              const hp: Pattern = (currentPat as ConsPattern).head;
+              const tp: Pattern = (currentPat as ConsPattern).tail;
+
+              // Check this level is a KCons cell
+              mb.emit1b(JvmOp.ALOAD, currentScrutSlot);
+              mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_CONS));
+              const levelIfeq = mb.length();
+              mb.emit1s(JvmOp.IFEQ, 0);
+              // Only record matchBaseState at the first level — at deeper levels, locals
+              // from earlier levels are already bound, so matchBaseState would incorrectly
+              // mark those slots as top causing a JVM VerifyError.
+              if (firstLevel) mb.addBranchTarget(mb.length(), matchBaseState);
+              firstLevel = false;
+              allIfeqs.push(levelIfeq);
+
+              // Bind the head
+              if (hp.kind === 'VarPattern') {
+                mb.emit1b(JvmOp.ALOAD, currentScrutSlot);
                 mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
                 mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'head', 'Ljava/lang/Object;'));
-                mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(headAdtClass));
-                ifeqHead = mb.length();
-                mb.emit1s(JvmOp.IFEQ, 0);
-                mb.addBranchTarget(mb.length(), matchBaseState);
-                // Bind the constructor fields by reloading the head element each time
-                if (headPat.fields?.length) {
-                  for (let fi = 0; fi < headPat.fields.length; fi++) {
-                    const f = headPat.fields[fi]!;
-                    if (f.pattern?.kind === 'VarPattern') {
-                      mb.emit1b(JvmOp.ALOAD, scrutSlot);
-                      mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
-                      mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'head', 'Ljava/lang/Object;'));
-                      mb.emit1s(JvmOp.CHECKCAST, cf.classRef(headAdtClass));
-                      mb.emit1s(JvmOp.GETFIELD, cf.fieldref(headAdtClass, f.name, 'Ljava/lang/Object;'));
-                      const bindName = (f.pattern as { name: string }).name;
-                      const slot = nextLocal++;
-                      headFieldBindings.push({ name: bindName, prev: env.get(bindName) });
-                      env.set(bindName, slot);
-                      mb.emit1b(JvmOp.ASTORE, slot);
+                const slot = nextLocal++;
+                allBindings.push({ name: hp.name, prev: env.get(hp.name) });
+                env.set(hp.name, slot);
+                mb.emit1b(JvmOp.ASTORE, slot);
+              } else if (hp.kind === 'ConstructorPattern') {
+                const headAdtClass = adtClassByConstructor.get(hp.name);
+                if (headAdtClass != null) {
+                  mb.emit1b(JvmOp.ALOAD, currentScrutSlot);
+                  mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
+                  mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'head', 'Ljava/lang/Object;'));
+                  mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(headAdtClass));
+                  const ifeqHead = mb.length();
+                  mb.emit1s(JvmOp.IFEQ, 0);
+                  mb.addBranchTarget(mb.length(), matchBaseState);
+                  allIfeqs.push(ifeqHead);
+                  if (hp.fields?.length) {
+                    for (let fi = 0; fi < hp.fields.length; fi++) {
+                      const f = hp.fields[fi]!;
+                      if (f.pattern?.kind === 'VarPattern') {
+                        mb.emit1b(JvmOp.ALOAD, currentScrutSlot);
+                        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
+                        mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'head', 'Ljava/lang/Object;'));
+                        mb.emit1s(JvmOp.CHECKCAST, cf.classRef(headAdtClass));
+                        mb.emit1s(JvmOp.GETFIELD, cf.fieldref(headAdtClass, f.name, 'Ljava/lang/Object;'));
+                        const bindName = (f.pattern as { name: string }).name;
+                        const slot = nextLocal++;
+                        allBindings.push({ name: bindName, prev: env.get(bindName) });
+                        env.set(bindName, slot);
+                        mb.emit1b(JvmOp.ASTORE, slot);
+                      }
                     }
-                    // Wildcard / non-binding field: no load needed
                   }
                 }
               }
-              // Zero-arity constructor (no fields) or Wildcard: just check instanceof, no field bindings
+
+              // Handle the tail
+              if (tp.kind === 'ConsPattern') {
+                // Store tail in a new slot to use as the scrutinee for the next level
+                mb.emit1b(JvmOp.ALOAD, currentScrutSlot);
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
+                mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'tail', 'Lkestrel/runtime/KList;'));
+                const tailSlot = nextLocal++;
+                mb.emit1b(JvmOp.ASTORE, tailSlot);
+                currentScrutSlot = tailSlot;
+                currentPat = tp;
+              } else if (tp.kind === 'VarPattern') {
+                mb.emit1b(JvmOp.ALOAD, currentScrutSlot);
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
+                mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'tail', 'Lkestrel/runtime/KList;'));
+                const slot = nextLocal++;
+                allBindings.push({ name: tp.name, prev: env.get(tp.name) });
+                env.set(tp.name, slot);
+                mb.emit1b(JvmOp.ASTORE, slot);
+                break;
+              } else if (tp.kind === 'ListPattern' && tp.elements.length === 0) {
+                // h :: [] — check tail is KNil
+                mb.emit1b(JvmOp.ALOAD, currentScrutSlot);
+                mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
+                mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'tail', 'Lkestrel/runtime/KList;'));
+                mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_NIL));
+                ifeqTailNil = mb.length();
+                mb.emit1s(JvmOp.IFEQ, 0);
+                // No addBranchTarget for the fall-through here: the fall-through frame is the
+                // natural continuation of sequential execution (with h already bound), which
+                // the JVM verifier infers correctly. Adding a matchBaseState frame here would
+                // override the natural frame with a stale one that marks h's slot as 'top',
+                // causing a VerifyError on any subsequent aload of h.
+                break;
+              } else {
+                break;
+              }
             }
-            if (tailPat.kind === 'VarPattern') {
-              mb.emit1b(JvmOp.ALOAD, scrutSlot);
-              mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
-              mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'tail', 'Lkestrel/runtime/KList;'));
-              const slot = nextLocal++;
-              env.set(tailPat.name, slot);
-              mb.emit1b(JvmOp.ASTORE, slot);
-            }
-            // Empty list tail pattern: h :: [] — check tail is KNil
-            let ifeqTailNil = -1;
-            if (tailPat.kind === 'ListPattern' && tailPat.elements.length === 0) {
-              mb.emit1b(JvmOp.ALOAD, scrutSlot);
-              mb.emit1s(JvmOp.CHECKCAST, cf.classRef(K_CONS));
-              mb.emit1s(JvmOp.GETFIELD, cf.fieldref(K_CONS, 'tail', 'Lkestrel/runtime/KList;'));
-              mb.emit1s(JvmOp.INSTANCEOF, cf.classRef(K_NIL));
-              ifeqTailNil = mb.length();
-              mb.emit1s(JvmOp.IFEQ, 0);
-              // No addBranchTarget for the fall-through here: the fall-through frame is the
-              // natural continuation of sequential execution (with h already bound), which
-              // the JVM verifier infers correctly. Adding a matchBaseState frame here would
-              // override the natural frame with a stale one that marks h's slot as 'top',
-              // causing a VerifyError on any subsequent aload of h.
-            }
+
             const xferConsPat = emitExpr(c.body, mb, tcT, stackDepth);
-            for (let bi = headFieldBindings.length - 1; bi >= 0; bi--) {
-              const b = headFieldBindings[bi]!;
+            for (let bi = allBindings.length - 1; bi >= 0; bi--) {
+              const b = allBindings[bi]!;
               if (b.prev !== undefined) env.set(b.name, b.prev);
               else env.delete(b.name);
             }
-            if (tailPat.kind === 'VarPattern') env.delete(tailPat.name);
             if (!xferConsPat) {
               mb.emit1b(JvmOp.ASTORE, matchResultSlot);
               const gotoEnd = mb.length();
@@ -2528,8 +2558,7 @@ export function jvmCodegen(program: Program, options: JvmCodegenOptions = {}): J
               endLabels.push(gotoEnd);
             }
             const afterGoto = mb.length();
-            patchShort(mb, ifeq + 1, afterGoto - ifeq);
-            if (ifeqHead >= 0) patchShort(mb, ifeqHead + 1, afterGoto - ifeqHead);
+            for (const iq of allIfeqs) patchShort(mb, iq + 1, afterGoto - iq);
             if (ifeqTailNil >= 0) patchShort(mb, ifeqTailNil + 1, afterGoto - ifeqTailNil);
             mb.addBranchTarget(afterGoto, matchBaseState);
             continue;

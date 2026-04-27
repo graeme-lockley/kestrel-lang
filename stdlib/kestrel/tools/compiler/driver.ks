@@ -320,20 +320,11 @@ fun parseMavenGav(spec: String): Option<(String, String)> =
   else {
     val rest = Str.dropLeft(spec, 6)
     val parts = Str.split(rest, ":")
-    if (Lst.length(parts) != 3) None
-    else match (Lst.head(parts)) {
-      None => None
-      Some(g) =>
-        match (Lst.head(Lst.drop(parts, 1))) {
-          None => None
-          Some(ar) =>
-            match (Lst.head(Lst.drop(parts, 2))) {
-              None => None
-              Some(v) =>
-                if (Str.isEmpty(g) | Str.isEmpty(ar) | Str.isEmpty(v)) None
-                else Some(("${g}:${ar}", v))
-            }
-        }
+    match (parts) {
+      g :: a :: v :: [] =>
+        if (Str.isEmpty(g) | Str.isEmpty(a) | Str.isEmpty(v)) None
+        else Some(("${g}:${a}", v))
+      _ => None
     }
   }
 

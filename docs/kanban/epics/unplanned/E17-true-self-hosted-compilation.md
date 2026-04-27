@@ -93,7 +93,7 @@ independently testable. No story should touch more than one concern at a time.
     `compileScript` and all call sites. The Node path must no longer be reachable for normal
     compilation. `cli-main.ks` build scaffold is superseded by this wiring.
 
-13. [S17-13 — Fix JVM codegen variable binding for nested cons-chain patterns](../../unplanned/S17-13-fix-nested-cons-pattern-codegen.md)
+13. ✅ [S17-13 — Fix JVM codegen variable binding for nested cons-chain patterns](../../done/S17-13-fix-nested-cons-pattern-codegen.md)
     — The TS JVM codegen mis-compiles `match` arms with 3+ variable bindings in a cons-chain
     (e.g. `g :: a :: v :: []`); middle bindings are lost, producing an "unknown variable"
     crash. Fix the binding-emission logic and add regression tests. Revert the S17-11

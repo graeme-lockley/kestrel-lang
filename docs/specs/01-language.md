@@ -337,7 +337,7 @@ WhileExpr      ::= "while" "(" Expr ")" Block
 MatchExpr      ::= "match" "(" Expr ")" "{" Case { Case } "}"   /* match must be exhaustive (see type system) */
 Case           ::= Pattern "=>" Expr
 Pattern        ::= ConsPattern | NonConsPattern
-ConsPattern    ::= NonConsPattern "::" Pattern                                     /* list cons; right-associative */
+ConsPattern    ::= NonConsPattern "::" Pattern                                     /* list cons; right-associative; nested chains (a :: b :: c :: t) supported to any depth */
 NonConsPattern ::= "_"
                  | UPPER_IDENT [ "(" Pattern { "," Pattern } ")" ]                   /* constructor with positional args */
                  | ListPattern
