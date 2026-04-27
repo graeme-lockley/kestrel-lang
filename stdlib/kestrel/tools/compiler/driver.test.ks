@@ -11,6 +11,8 @@ import * as Crypto from "kestrel:io/crypto"
 import * as Ty from "kestrel:dev/typecheck/types"
 import * as Fs from "kestrel:io/fs"
 import * as Resolve from "kestrel:tools/compiler/resolve"
+import * as Json from "kestrel:data/json"
+import { Object, StrVal } from "kestrel:data/json"
 import { getProcess } from "kestrel:sys/process"
 
 fun program(src: String): Ast.Program =
@@ -940,6 +942,114 @@ export async fun run(s: Suite): Task<Unit> = {
                         }
                       }
                     }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile — kdeps sidecar for maven import", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_kdeps_maven_src"
+      val outDir = "/tmp/kestrel_driver_kdeps_maven_out"
+      val mainPath = "${srcDir}/main.ks"
+      val mainSrc = "import \"maven:org.apache.commons:commons-lang3:3.17.0\"\nexport fun go(): Int = 42"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True,
+        refresh = False
+      }
+      val mainClassName = Driver.classNameForPath(mainPath)
+      val kdepsFile = "${outDir}/${mainClassName}.kdeps"
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll srcDir failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll outDir failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(mainPath, mainSrc)) {
+                Err(_) => isTrue(sg, "write main failed", False)
+                Ok(()) => {
+                  val result = await Driver.compileFile(mainPath, opts)
+                  isTrue(sg, "compile ok", result.ok)
+                  match (await Fs.readText(kdepsFile)) {
+                    Err(_) => isTrue(sg, "kdeps file exists", False)
+                    Ok(kdepsContent) => {
+                      match (Json.parse(kdepsContent)) {
+                        Err(_) => isTrue(sg, "kdeps is valid JSON", False)
+                        Ok(root) => {
+                          match (root) {
+                            Object(rootPairs) => {
+                              val mavenVals = Lst.filterMap(rootPairs, (p: (String, Json.Value)) => if (p.0 == "maven") Some(p.1) else None)
+                              match (Lst.head(mavenVals)) {
+                                None => isTrue(sg, "kdeps has maven key", False)
+                                Some(mavenNode) => {
+                                  match (mavenNode) {
+                                    Object(mavenPairs) => {
+                                      val coordVals = Lst.filterMap(mavenPairs, (p: (String, Json.Value)) => if (p.0 == "org.apache.commons:commons-lang3") Some(p.1) else None)
+                                      match (Lst.head(coordVals)) {
+                                        None => isTrue(sg, "kdeps has coord key", False)
+                                        Some(versionNode) => {
+                                          match (versionNode) {
+                                            StrVal(v) => eq(sg, "kdeps coord version", v, "3.17.0")
+                                            _ => isTrue(sg, "kdeps version is string", False)
+                                          }
+                                        }
+                                      }
+                                    }
+                                    _ => isTrue(sg, "kdeps maven is object", False)
+                                  }
+                                }
+                              }
+                            }
+                            _ => isTrue(sg, "kdeps root is object", False)
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile — no kdeps when no maven imports", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_kdeps_none_src"
+      val outDir = "/tmp/kestrel_driver_kdeps_none_out"
+      val mainPath = "${srcDir}/main.ks"
+      val mainSrc = "export fun go(): Int = 1"
+      val opts = {
+        outDir = outDir,
+        stdlibDir = "/nonexistent/stdlib",
+        cacheRoot = "/tmp/kestrel_cache",
+        allowHttp = False,
+        writeKti = True,
+        refresh = False
+      }
+      val mainClassName = Driver.classNameForPath(mainPath)
+      val kdepsFile = "${outDir}/${mainClassName}.kdeps"
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(sg, "mkdirAll srcDir failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(sg, "mkdirAll outDir failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(mainPath, mainSrc)) {
+                Err(_) => isTrue(sg, "write main failed", False)
+                Ok(()) => {
+                  val result = await Driver.compileFile(mainPath, opts)
+                  isTrue(sg, "compile ok", result.ok)
+                  match (await Fs.readText(kdepsFile)) {
+                    Ok(_) => isTrue(sg, "no kdeps file for no-maven program", False)
+                    Err(_) => isTrue(sg, "no kdeps file for no-maven program", True)
                   }
                 }
               }

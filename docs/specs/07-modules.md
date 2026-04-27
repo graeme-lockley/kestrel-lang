@@ -162,6 +162,18 @@ For an **extern type** (e.g., `export extern type HashMap = jvm("java.util.HashM
 - If `fetchUrl` returns an error (e.g. `allowHttp=false` for an `http://` URL), compilation fails immediately with a `moduleNotFound` diagnostic referencing the URL specifier.
 - The `CompileOptions.refresh` flag (default `false`) is the mechanism for forcing re-download of all URL dependencies in a build invocation.
 
+**Maven `.kdeps` sidecar (S17-11):** After successfully compiling a module that contains one or more `maven:` side-effect imports, the self-hosted driver writes a `<ClassName>.kdeps` file alongside the compiled `.class` file (in `CompileOptions.outDir`). The format is compact JSON:
+
+```json
+{"maven":{"groupId:artifactId":"version",...}}
+```
+
+- Each `maven:groupId:artifactId:version` side-effect import in the source contributes one entry. Duplicate `groupId:artifactId` coordinates within the same module are deduplicated (last occurrence wins is undefined; coordinates are unique per module).
+- The `jars` and `checksums` sections written by the TypeScript compiler are **not** written by the self-hosted driver. The CLI falls back to `deriveJarPath(ga, version, mavenCache)` when the `jars` key is absent.
+- If a module has no `maven:` imports, no `.kdeps` file is written.
+- If the module was not recompiled (fresh/cache-hit), the existing `.kdeps` file from the previous compilation is left unchanged.
+- `maven:` specifiers are **not** passed to the source-graph resolver (`Resolve.uniqueDependencyPaths`); they are filtered out before filesystem resolution to avoid spurious errors.
+
 ### 4.4 Failure cases
 
 - **Module not found:** The specifier could not be resolved to any artifact (path does not exist, URL unreachable, stdlib name unknown). → **Compile error** (or implementation-defined error reporting).

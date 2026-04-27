@@ -9,7 +9,7 @@ import * as Str from "kestrel:data/string"
 import * as Chr from "kestrel:data/char"
 import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as Lex from "kestrel:dev/parser/lexer"
-import { Program, ImportDecl } from "kestrel:dev/parser/ast"
+import { Program, ImportDecl, IDNamed, IDNamespace, IDSideEffect } from "kestrel:dev/parser/ast"
 import { parseFromList, ParseError } from "kestrel:dev/parser/parser"
 import { JByteArray } from "kestrel:data/bytearray"
 import * as TC from "kestrel:dev/typecheck/typecheck"
@@ -20,6 +20,8 @@ import * as Resolve from "kestrel:tools/compiler/resolve"
 import * as Crypto from "kestrel:io/crypto"
 import * as Fs from "kestrel:io/fs"
 import * as Rep from "kestrel:dev/typecheck/reporter"
+import * as Json from "kestrel:data/json"
+import { Object, StrVal } from "kestrel:data/json"
 
 export type CompileOptions = {
   outDir: String,
@@ -300,6 +302,68 @@ type ModuleCompileResult =
     ModuleCompileOk(String, Bool)
   | ModuleCompileErr(CompileResult)
 
+/// Parse `maven:groupId:artifactId:version` → `Some(("groupId:artifactId", "version"))`.
+fun parseMavenGav(spec: String): Option<(String, String)> =
+  if (!Resolve.isMavenSpecifier(spec)) None
+  else {
+    val rest = Str.dropLeft(spec, 6)
+    val parts = Str.split(rest, ":")
+    if (Lst.length(parts) != 3) None
+    else match (Lst.head(parts)) {
+      None => None
+      Some(g) =>
+        match (Lst.head(Lst.drop(parts, 1))) {
+          None => None
+          Some(ar) =>
+            match (Lst.head(Lst.drop(parts, 2))) {
+              None => None
+              Some(v) =>
+                if (Str.isEmpty(g) | Str.isEmpty(ar) | Str.isEmpty(v)) None
+                else Some(("${g}:${ar}", v))
+            }
+        }
+    }
+  }
+
+/// Collect unique (ga, version) pairs from a list of import declarations.
+fun collectMavenCoords(imports: List<ImportDecl>, acc: List<(String, String)>, seen: Dict<String, Bool>): List<(String, String)> =
+  match (imports) {
+    [] => Lst.reverse(acc)
+    imp :: rest => {
+      val spec = match (imp) {
+        IDNamed(s, _) => s
+        IDNamespace(s, _) => s
+        IDSideEffect(s) => s
+      }
+      match (parseMavenGav(spec)) {
+        None => collectMavenCoords(rest, acc, seen)
+        Some(coord) => {
+          val ga = coord.0
+          if (Dict.member(seen, ga)) collectMavenCoords(rest, acc, seen)
+          else collectMavenCoords(rest, coord :: acc, Dict.insert(seen, ga, True))
+        }
+      }
+    }
+  }
+
+/// Build compact JSON string `{"maven":{"g:a":"version",...}}` for a .kdeps sidecar.
+fun buildKdepsJson(coords: List<(String, String)>): String = {
+  val pairs = Lst.map(coords, (c: (String, String)) => (c.0, StrVal(c.1)))
+  "${Json.stringify(Object([("maven", Object(pairs))]))}\n"
+}
+
+/// Write <className>.kdeps if the module was actually compiled and has maven coords.
+async fun writeKdepsFileIfNeeded(wasCompiled: Bool, entryPath: String, coords: List<(String, String)>, opts: CompileOptions): Task<Option<CompileResult>> =
+  if (!wasCompiled | Lst.isEmpty(coords)) None
+  else {
+    val className = classNameForPath(entryPath)
+    val kdepsPath = "${opts.outDir}/${className}.kdeps"
+    match (await Fs.writeText(kdepsPath, buildKdepsJson(coords))) {
+      Err(e) => Some(failResult(entryPath, Diag.CODES.file.readError, "cannot write ${kdepsPath}: ${e}"))
+      Ok(()) => None
+    }
+  }
+
 /// Write <className>.class.deps file listing all transitive dep paths + the module itself.
 async fun writeDepsFile(entryPath: String, transDeps: List<String>, opts: CompileOptions): Task<Option<CompileResult>> = {
   val className = classNameForPath(entryPath)
@@ -392,12 +456,19 @@ async fun compileGraph(path: String, opts: CompileOptions, visiting: List<String
                             val depsTask: Task<Option<CompileResult>> = writeDepsFileIfCompiled(wasCompiled, p, transDeps, opts)
                             match (await depsTask) {
                               Some(depsErr) => GraphCompileErr(depsErr)
-                              None =>
-                                GraphCompileOk({
-                                  compiled = Dict.insert(stateAfterDeps.compiled, p, True),
-                                  ktiTexts = ktiTexts,
-                                  processedOrder = Lst.append(stateAfterDeps.processedOrder, [p])
-                                })
+                              None => {
+                                val mavenCoords = collectMavenCoords(prog.imports, [], Dict.emptyStringDict())
+                                val kdepsTask: Task<Option<CompileResult>> = writeKdepsFileIfNeeded(wasCompiled, p, mavenCoords, opts)
+                                match (await kdepsTask) {
+                                  Some(kdepsErr) => GraphCompileErr(kdepsErr)
+                                  None =>
+                                    GraphCompileOk({
+                                      compiled = Dict.insert(stateAfterDeps.compiled, p, True),
+                                      ktiTexts = ktiTexts,
+                                      processedOrder = Lst.append(stateAfterDeps.processedOrder, [p])
+                                    })
+                                }
+                              }
                             }
                           }
                         }

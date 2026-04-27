@@ -40,6 +40,8 @@ fun isSafeStdlibSegment(seg: String): Bool =
 fun allSafeSegments(parts: List<String>): Bool =
   Lst.all(parts, isSafeStdlibSegment)
 
+export fun isMavenSpecifier(spec: String): Bool = Str.startsWith("maven:", spec)
+
 fun stdlibSpecPath(spec: String): Result<String, String> = {
   if (!Str.startsWith("kestrel:", spec)) Err("not-stdlib")
   else {
@@ -151,7 +153,8 @@ fun resolveAll(specs: List<String>, opts: ResolveOptions, out: List<ResolvedDep>
 
 export fun uniqueDependencyPaths(prog: Ast.Program, fromFile: String, opts: ResolveOptions): Result<List<ResolvedDep>, String> = {
   val importSpecs = Lst.map(prog.imports, depFromImport)
-  val specs = distinctInOrder(Lst.append(importSpecs, exportSpecs(prog.body)), Dict.emptyStringDict(), [])
+  val allSpecs = distinctInOrder(Lst.append(importSpecs, exportSpecs(prog.body)), Dict.emptyStringDict(), [])
+  val sourceSpecs = Lst.filter(allSpecs, (s: String) => !isMavenSpecifier(s))
   val localOpts = { fromFile = fromFile, stdlibDir = opts.stdlibDir, cacheRoot = opts.cacheRoot, allowHttp = opts.allowHttp }
-  resolveAll(specs, localOpts, [])
+  resolveAll(sourceSpecs, localOpts, [])
 }
