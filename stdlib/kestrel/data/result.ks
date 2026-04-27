@@ -9,6 +9,9 @@
 //! transform or wrap the error side. Convert between `Result` and `Option` with
 //! `toOption` and `fromOption`.
 //!
+//! For async pipelines that produce `Task<Result<T,E>>`, use `andThenAsync` to
+//! flat-map the next step and `mapErrorAsync` to label or transform the error.
+//!
 //! ## Quick Start
 //!
 //! ```kestrel
@@ -22,6 +25,8 @@
 //! val msg = Res.mapError(Err("bad"), (e: String) => "error: ${e}")
 //! ```
 //!
+
+import * as Task from "kestrel:sys/task"
 
 /// Return the success value, or `default` if the result is `Err(_)`.
 export fun getOrElse<T, E>(r: Result<T, E>, default: T): T = match (r) {
@@ -161,3 +166,18 @@ export fun fromOption<T, E>(o: Option<T>, err: E): Result<T, E> = match (o) {
   None => Err(err)
   Some(x) => Ok(x)
 }
+
+/// Async flat-map: if the `Task<Result<T, E>>` resolves to `Ok(x)`, apply `f(x)`;
+/// otherwise propagate `Err` unchanged.
+/// Use to pipeline `Task<Result>` operations with `|>` without extra nesting.
+export async fun andThenAsync<T, U, E>(task: Task<Result<T, E>>, f: (T) -> Task<Result<U, E>>): Task<Result<U, E>> =
+  match (await task) {
+    Err(e) => Err(e)
+    Ok(x) => await f(x)
+  }
+
+/// Async error-map: transform the error inside a `Task<Result<T, E>>` using `f`
+/// without awaiting the result at the call site.
+/// Use to attach labels to each setup step in a flat `|>` pipeline.
+export fun mapErrorAsync<T, E, F>(task: Task<Result<T, E>>, f: (E) -> F): Task<Result<T, F>> =
+  Task.map(task, (r: Result<T, E>) => mapError(r, f))

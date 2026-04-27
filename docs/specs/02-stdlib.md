@@ -317,6 +317,8 @@ Helpers for `Result<T, E>` (see §Library types). Functions are polymorphic in b
 | `map` | `(Result<T, E>, (T) -> U) -> Result<U, E>` | |
 | `mapError` | `(Result<T, E>, (E) -> F) -> Result<T, F>` | |
 | `andThen` | `(Result<T, E>, (T) -> Result<U, E>) -> Result<U, E>` | |
+| `andThenAsync` | `(Task<Result<T, E>>, (T) -> Task<Result<U, E>>) -> Task<Result<U, E>>` | Async flat-map: apply `f` to `Ok` payload; propagate `Err` unchanged |
+| `mapErrorAsync` | `(Task<Result<T, E>>, (E) -> F) -> Task<Result<T, F>>` | Transform the error inside a `Task<Result>` without awaiting; useful to label setup steps |
 | `map2`–`map5` | … | Same error type `E`; first `Err` wins |
 | `toOption` | `(Result<T, E>) -> Option<T>` | `Ok` → `Some`, `Err` → `None` |
 | `fromOption` | `(Option<T>, E) -> Result<T, E>` | `None` → `Err(err)` |

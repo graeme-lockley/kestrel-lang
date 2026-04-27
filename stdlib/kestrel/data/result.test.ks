@@ -1,4 +1,4 @@
-import { Suite, group, eq, isTrue, isFalse } from "kestrel:dev/test"
+import { Suite, group, asyncGroup, eq, isTrue, isFalse } from "kestrel:dev/test"
 import { getOrElse as optGet } from "kestrel:data/option"
 import {
   getOrElse,
@@ -8,6 +8,8 @@ import {
   map,
   mapError,
   andThen,
+  andThenAsync,
+  mapErrorAsync,
   map2,
   map3,
   toOption,
@@ -16,8 +18,8 @@ import {
 
 fun double(n: Int): Int = n + n
 
-export async fun run(s: Suite): Task<Unit> =
-  group(s, "kestrel:data/result", (s1: Suite) => {
+export async fun run(s: Suite): Task<Unit> = {
+  await asyncGroup(s, "kestrel:data/result", async (s1: Suite) => {
     group(s1, "construction", (sg: Suite) => {
       eq(sg, "Ok(42) pattern match", match (Ok(42)) { Err(_) => 0, Ok(v) => v }, 42)
       eq(sg, "Err(1) pattern match", match (Err(1)) { Err(e) => e, Ok(_) => 0 }, 1)
@@ -77,4 +79,32 @@ export async fun run(s: Suite): Task<Unit> =
       val v = Ok(3) |> map(double) |> withDefault(0)
       eq(sg, "pipe", v, 6)
     })
+
+    await asyncGroup(s1, "andThenAsync mapErrorAsync", async (sg: Suite) => {
+      // andThenAsync: Ok case — flat-maps to another Task<Result>
+      async fun okFive(): Task<Result<Int, String>> = Ok(5)
+      async fun addOne(n: Int): Task<Result<Int, String>> = Ok(n + 1)
+      val okResult = await andThenAsync(okFive(), (n: Int) => addOne(n))
+      eq(sg, "andThenAsync Ok", getOrElse(okResult, 0), 6)
+
+      // andThenAsync: Err propagation — f is not called
+      async fun errOops(): Task<Result<Int, String>> = Err("oops")
+      async fun ninetyNine(_n: Int): Task<Result<Int, String>> = Ok(99)
+      val errResult = await andThenAsync(errOops(), (n: Int) => ninetyNine(n))
+      isTrue(sg, "andThenAsync Err propagated", isErr(errResult))
+
+      // mapErrorAsync: Ok — propagated unchanged
+      async fun okSeven(): Task<Result<Int, String>> = Ok(7)
+      val mappedOk = await mapErrorAsync(okSeven(), (e: String) => "wrapped: ${e}")
+      eq(sg, "mapErrorAsync Ok", getOrElse(mappedOk, 0), 7)
+
+      // mapErrorAsync: Err — error is transformed
+      async fun errBad(): Task<Result<Int, String>> = Err("bad")
+      val mappedErr = await mapErrorAsync(errBad(), (e: String) => "wrapped: ${e}")
+      match (mappedErr) {
+        Ok(_) => isTrue(sg, "mapErrorAsync Err", False)
+        Err(msg) => eq(sg, "mapErrorAsync Err msg", msg, "wrapped: bad")
+      }
+    })
   })
+}
