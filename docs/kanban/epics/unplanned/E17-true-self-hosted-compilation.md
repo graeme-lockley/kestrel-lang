@@ -219,7 +219,7 @@ before the self-hosted compiler can typecheck its own stdlib modules.
     — Add `TDExternType` arms to `prebindTypeDecls`, `checkDecls`, and `emitDecl`. Required
     for opaque types (`ByteArray`, `FileHandle`, ...).
 
-21. [S17-18 — Self-hosted typecheck and codegen for `extern import` declarations](../../unplanned/S17-18-self-hosted-typecheck-codegen-extern-import.md)
+21. ✅ [S17-18 — Self-hosted typecheck and codegen for `extern import` declarations](../../done/S17-18-self-hosted-typecheck-codegen-extern-import.md)
     — Add `TDExternImport` arms to typecheck and codegen so JVM-bridge primitives are
     accepted by the self-hosted compiler.
 
