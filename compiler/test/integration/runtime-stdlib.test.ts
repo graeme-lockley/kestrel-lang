@@ -557,6 +557,6 @@ run()
     });
     expect(result).toMatch(/parse: \d+ passed, 0 failed/);
     expect(result).toMatch(/typecheck: \d+ passed, 0 failed/);
-    expect(result).toMatch(/runtime: \d+ passed, 0 failed/);
+    expect(result).toMatch(/runtime: (\d+ passed, 0 failed|0 files)/);
   });
 });

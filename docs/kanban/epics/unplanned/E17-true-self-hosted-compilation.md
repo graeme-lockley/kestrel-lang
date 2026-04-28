@@ -162,7 +162,7 @@ via `./kestrel-self`. Acceptance for all subsequent stories is measured via
     with READMEs and seed content. Add `scripts/test-kestrel.sh` runner (NOT added to test-all.sh).
     Runtime goldens use in-file `// =>` convention.
 
-20. [S17-50 — Baseline-populate Kestrel-compiler test corpora](../../unplanned/S17-50-baseline-populate-kestrel-corpora.md)
+20. ✅ [S17-50 — Baseline-populate Kestrel-compiler test corpora](../../done/S17-50-baseline-populate-kestrel-corpora.md)
     — Sweep every existing TS-corpus file through `./kestrel-self`; copy all passing files into
     the matching `tests/k*/` location. Record baseline counts in each README and Build notes.
     `./scripts/test-kestrel.sh` must exit 0 over the baseline. Discovery script is temporary

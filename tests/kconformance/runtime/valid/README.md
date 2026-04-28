@@ -27,4 +27,10 @@ Driven by `./scripts/test-kestrel.sh` (runtime tier).
 `./kestrel` (TypeScript compiler path). Once self-hosted codegen is functional,
 the tier will switch to `./kestrel-self`.
 
+## Baseline (S17-50, 2026-04-28)
+
+- Files: 0
+- Baseline source sweep evaluated `tests/conformance/runtime/valid/*.ks`
+- Golden format remains `// =>` when runtime files are promoted into this corpus
+
 See also: [../README.md](../README.md), [../../parse/README.md](../../parse/README.md).

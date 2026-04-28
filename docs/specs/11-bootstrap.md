@@ -202,6 +202,22 @@ A file with no `// =>` comments asserts exit 0 only.
 
 **Bootstrap guard:** If `~/.kestrel/self/` lacks `Cli.class`, the script automatically runs `./kestrel-self bootstrap` before proceeding.
 
+### Baseline population status (S17-50, 2026-04-28)
+
+The initial baseline sweep from TS corpora to Kestrel corpora established:
+
+- parse: 12 files
+- typecheck: 37 files
+- runtime: 0 files
+- unit: 0 files
+
+Notes:
+
+- All promoted corpus files carry a one-line provenance header (`// Provenance: ...`).
+- Runtime remains empty at this baseline floor; `scripts/test-kestrel.sh` still exercises the
+   tier and reports `runtime: 0 files` until codegen-gap stories promote runtime-valid cases.
+- Unit remains empty while self-hosted `kestrel:dev/test` execution is incomplete for `tests/unit/*`.
+
 ---
 
 ## 4. Self-Hosted Mode Gating

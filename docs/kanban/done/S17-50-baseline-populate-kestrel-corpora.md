@@ -51,15 +51,15 @@ handle across the full TS corpus.
 
 ## Acceptance Criteria
 
-- [ ] `tests/kconformance/parse/`, `tests/kconformance/typecheck/`, `tests/kconformance/runtime/valid/`
+- [x] `tests/kconformance/parse/`, `tests/kconformance/typecheck/`, `tests/kconformance/runtime/valid/`
       are populated with all currently-passing files from their TS counterparts.
-- [ ] `tests/kunit/` is populated with any currently-passing unit test files (may be empty
+- [x] `tests/kunit/` is populated with any currently-passing unit test files (may be empty
       if `kestrel:dev/test` is not yet self-hostable — this is an acceptable outcome).
-- [ ] `./scripts/test-kestrel.sh` exits 0 over the populated baseline.
-- [ ] Baseline counts are recorded in each `tests/k*/README.md`.
-- [ ] `scripts/seed-kestrel-tests.sh` is not present in the final commit.
-- [ ] `cd compiler && npm run build && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] `./scripts/test-kestrel.sh` exits 0 over the populated baseline.
+- [x] Baseline counts are recorded in each `tests/k*/README.md`.
+- [x] `scripts/seed-kestrel-tests.sh` is not present in the final commit.
+- [x] `cd compiler && npm run build && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
@@ -88,15 +88,15 @@ handle across the full TS corpus.
 
 ## Tasks
 
-- [ ] Add temporary `scripts/seed-kestrel-tests.sh` that sweeps `tests/conformance/{parse,typecheck,runtime/valid}` and `tests/unit/` through `./kestrel-self`, copies passing files to matching `tests/k*/` locations, prepends provenance headers, and writes grouped temporary failures to `tests/kconformance/FAILURES.txt`.
-- [ ] Run `scripts/seed-kestrel-tests.sh`, inspect discovered failures, and curate copied files so each `tests/k*` destination contains only currently passing self-hosted baseline files.
-- [ ] Remove temporary artifacts before close: delete `tests/kconformance/FAILURES.txt`, remove `scripts/seed-kestrel-tests.sh`, and ensure no temporary ignore rules are left behind.
-- [ ] Update baseline count sections and S17-50 date annotations in `tests/kconformance/parse/README.md`, `tests/kconformance/typecheck/README.md`, `tests/kconformance/runtime/README.md`, `tests/kconformance/runtime/valid/README.md`, and `tests/kunit/README.md`.
-- [ ] Update `docs/specs/11-bootstrap.md` with the established baseline workflow/caveats for `scripts/test-kestrel.sh` and `tests/k*` corpora.
-- [ ] Tick story Acceptance Criteria and append Build notes with final baseline counts plus categorized failure summary.
-- [ ] Run `./scripts/test-kestrel.sh`.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Add temporary `scripts/seed-kestrel-tests.sh` that sweeps `tests/conformance/{parse,typecheck,runtime/valid}` and `tests/unit/` through `./kestrel-self`, copies passing files to matching `tests/k*/` locations, prepends provenance headers, and writes grouped temporary failures to `tests/kconformance/FAILURES.txt`.
+- [x] Run `scripts/seed-kestrel-tests.sh`, inspect discovered failures, and curate copied files so each `tests/k*` destination contains only currently passing self-hosted baseline files.
+- [x] Remove temporary artifacts before close: delete `tests/kconformance/FAILURES.txt`, remove `scripts/seed-kestrel-tests.sh`, and ensure no temporary ignore rules are left behind.
+- [x] Update baseline count sections and S17-50 date annotations in `tests/kconformance/parse/README.md`, `tests/kconformance/typecheck/README.md`, `tests/kconformance/runtime/README.md`, `tests/kconformance/runtime/valid/README.md`, and `tests/kunit/README.md`.
+- [x] Update `docs/specs/11-bootstrap.md` with the established baseline workflow/caveats for `scripts/test-kestrel.sh` and `tests/k*` corpora.
+- [x] Tick story Acceptance Criteria and append Build notes with final baseline counts plus categorized failure summary.
+- [x] Run `./scripts/test-kestrel.sh`.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -110,9 +110,18 @@ handle across the full TS corpus.
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/11-bootstrap.md` — update self-hosted corpus runner section with S17-50 baseline-population expectations and current runtime-tier caveat.
-- [ ] `tests/kconformance/parse/README.md` — add baseline (S17-50, date) counts and provenance note.
-- [ ] `tests/kconformance/typecheck/README.md` — add baseline (S17-50, date) counts and provenance note.
-- [ ] `tests/kconformance/runtime/README.md` — add baseline (S17-50, date) counts and runtime-tier baseline constraints.
-- [ ] `tests/kconformance/runtime/valid/README.md` — add baseline (S17-50, date) counts and `// =>` golden expectation.
-- [ ] `tests/kunit/README.md` — record baseline count and explicit blocker statement if tier remains empty.
+- [x] `docs/specs/11-bootstrap.md` — update self-hosted corpus runner section with S17-50 baseline-population expectations and current runtime-tier caveat.
+- [x] `tests/kconformance/parse/README.md` — add baseline (S17-50, date) counts and provenance note.
+- [x] `tests/kconformance/typecheck/README.md` — add baseline (S17-50, date) counts and provenance note.
+- [x] `tests/kconformance/runtime/README.md` — add baseline (S17-50, date) counts and runtime-tier baseline constraints.
+- [x] `tests/kconformance/runtime/valid/README.md` — add baseline (S17-50, date) counts and `// =>` golden expectation.
+- [x] `tests/kunit/README.md` — record baseline count and explicit blocker statement if tier remains empty.
+
+## Build notes
+
+- 2026-04-28: Started implementation.
+- 2026-04-28: Added temporary `scripts/seed-kestrel-tests.sh` sweep script and ran baseline discovery across parse/typecheck/runtime/unit source corpora. Discovery snapshot: parse 12 pass / 8 fail, typecheck 37 pass / 29 fail, runtime 0 pass / 43 fail, unit 0 pass. Failure manifest categories: parse `unsupported-syntax` (8), runtime `codegen-gap` (43), typecheck `other` (29), unit `other` (1 probe failure at `stdlib/kestrel/data/dict.ks`).
+- 2026-04-28: Initial provenance-header insertion broke `shebang_header.ks` by placing comment before `#!`; fixed by keeping shebang first and provenance on the next line. `./scripts/test-kestrel.sh` now passes with baseline counts: parse 12, typecheck 37, runtime 0, unit 0.
+- 2026-04-28: Removed temporary discovery artifacts (`scripts/seed-kestrel-tests.sh`, `tests/kconformance/FAILURES.txt`) after recording baseline/failure analysis in this story and in corpus READMEs.
+- 2026-04-28: Compiler verification surfaced an assertion mismatch in `compiler/test/integration/runtime-stdlib.test.ts` (runtime tier now legitimately reports `runtime: 0 files` at this baseline). Updated expectation to accept either `runtime: N passed, 0 failed` or `runtime: 0 files`.
+- 2026-04-28: `./scripts/kestrel test` initially failed with `ClassFormatError` against stale bootstrap artifacts. Rebuilt bootstrap artifacts (`./scripts/build-bootstrap-jar.sh`), re-ran `./kestrel-self bootstrap`, and confirmed `./scripts/kestrel test --summary` reports `1963 passed`.
