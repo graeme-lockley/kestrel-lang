@@ -45,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           ./scripts/build-bootstrap-jar.sh
-          ./kestrel bootstrap
+          ./kestrel-self bootstrap
           ./kestrel status
 
       - name: E2E scenarios
