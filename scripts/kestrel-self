@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# kestrel-self — self-hosted Kestrel CLI shim.
+# Sets KESTREL_SELF=1 so cli.ks routes compilation to Driver.compileFile in-process.
+# Uses KESTREL_SELF_CACHE (~/.kestrel/self) as the JVM class cache.
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"; SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"; export KESTREL_ROOT="$ROOT"
+COMPILER="$ROOT/compiler"; COMPILER_CLI="$COMPILER/dist/cli.js"
+TS_CACHE="${KESTREL_TS_CACHE:-$HOME/.kestrel/ts}"
+JVM_CACHE="${KESTREL_SELF_CACHE:-$HOME/.kestrel/self}"
+MAVEN="${KESTREL_MAVEN_CACHE:-$HOME/.kestrel/maven}"
+MAVEN_RUNTIME_JAR="$MAVEN/lang/kestrel/runtime/1.0/runtime-1.0.jar"
+MAVEN_BOOTSTRAP_JAR="$MAVEN/lang/kestrel/compile/1.0/compile-1.0.jar"
+
+export KESTREL_SELF=1
+
+# bootstrap: extract bootstrap JAR to self-hosted cache
+if [ "${1:-}" = "bootstrap" ]; then
+  [ -f "$MAVEN_RUNTIME_JAR" ] || { echo "kestrel-self bootstrap: missing runtime jar; run ./kestrel build" >&2; exit 1; }
+  [ -f "$MAVEN_BOOTSTRAP_JAR" ] || { echo "kestrel-self bootstrap: missing bootstrap JAR; run ./scripts/build-bootstrap-jar.sh" >&2; exit 1; }
+  mkdir -p "$JVM_CACHE" && (cd "$JVM_CACHE" && jar xf "$MAVEN_BOOTSTRAP_JAR")
+  find "$JVM_CACHE" -name "Cli_entry.class" -print -quit | grep -q . || { echo "kestrel-self bootstrap: Cli_entry.class missing after extraction" >&2; exit 1; }
+  find "$JVM_CACHE" -name "Cli_main.class" -print -quit | grep -q . || { echo "kestrel-self bootstrap: Cli_main.class missing after extraction" >&2; exit 1; }
+  echo "kestrel-self bootstrap: self-hosted compiler classes installed successfully"; exit 0
+fi
+
+# test: generate and run the synthetic test runner via `run`.
+if [ "${1:-}" = "test" ]; then
+  shift
+  "$0" run "$ROOT/stdlib/kestrel/tools/test.ks" --generate "$@" || exit $?
+  exec "$0" run "$ROOT/.kestrel_test_runner.ks"
+fi
+
+# All other commands: delegate to the self-hosted Kestrel CLI
+# Look for Cli.class in SELF_CACHE (self-hosted), then fall back to TS_CACHE.
+CLI_CLASS=$(find "$JVM_CACHE" "$TS_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null \
+  | head -1) || true
+if [ -n "${CLI_CLASS:-}" ]; then
+  if [[ "$CLI_CLASS" == "$JVM_CACHE"* ]]; then
+    CLI_CLASS_NAME=$(echo "$CLI_CLASS" | sed "s|$JVM_CACHE/||;s|\.class\$||" | tr '/' '.')
+  else
+    CLI_CLASS_NAME=$(echo "$CLI_CLASS" | sed "s|$TS_CACHE/||;s|\.class\$||" | tr '/' '.')
+  fi
+  exec java -Xss8m -Dkestrel.exitWait=false \
+    -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE:$TS_CACHE" \
+    "$CLI_CLASS_NAME" "$@"
+fi
+echo "kestrel-self: self-hosted compiler artifacts are required for this command" >&2
+echo "  run: ./scripts/build-bootstrap-jar.sh && ./kestrel-self bootstrap" >&2
+exit 1

@@ -509,17 +509,15 @@ async fun cmdBuild(
 
 // ── cmd_status ────────────────────────────────────────────────────────────────
 
-async fun cmdStatus(kestrelRoot: String, jvmCache: String): Task<Int> = {
-  val selfhost = await isSelfhostReady(kestrelRoot, jvmCache)
-  if (selfhost) {
-    println("compiler mode: self-hosted");
-    println("  classes: ${jvmCache}");
-    0
-  } else {
-    println("compiler mode: bootstrap-required");
-    println("hint: run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap");
-    0
-  }
+async fun cmdStatus(kestrelRoot: String, tsCache: String, selfCache: String): Task<Int> = {
+  val tsCliClass = Maven.classFileForSource(tsCache, "${kestrelRoot}/stdlib/kestrel/tools/cli.ks")
+  val tsReady = await Fs.fileExists(tsCliClass)
+  val selfReady = await isSelfhostReady(kestrelRoot, selfCache)
+  val tsStatus = if (tsReady) "ready" else "missing"
+  val selfStatus = if (selfReady) "ready" else "missing"
+  println("TS compiler cache:          ${tsCache} (${tsStatus})");
+  println("Self-hosted compiler cache: ${selfCache} (${selfStatus})");
+  0
 }
 
 // ── cmd_bootstrap ─────────────────────────────────────────────────────────────
@@ -696,6 +694,7 @@ export async fun main(allArgs: List<String>): Task<Unit> = {
   val kestrelRoot = envOr("KESTREL_ROOT", ".")
   val home = envOr("HOME", ".")
   val jvmCache = envOr("KESTREL_TS_CACHE", "${home}/.kestrel/ts")
+  val selfCache = envOr("KESTREL_SELF_CACHE", "${home}/.kestrel/self")
   val mavenCache = envOr("KESTREL_MAVEN_CACHE", "${home}/.kestrel/maven")
   val mavenRuntimeJar = "${mavenCache}/lang/kestrel/runtime/1.0/runtime-1.0.jar"
   val compilerCli = "${kestrelRoot}/compiler/dist/cli.js"
@@ -711,7 +710,7 @@ export async fun main(allArgs: List<String>): Task<Unit> = {
         else if (cmd == "dis") await cmdDis(rest, kestrelRoot, jvmCache, mavenRuntimeJar, compilerCli)
         else if (cmd == "build") await cmdBuild(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)
         else if (cmd == "bootstrap") await cmdBootstrap(kestrelRoot, jvmCache, mavenCache)
-        else if (cmd == "status") await cmdStatus(kestrelRoot, jvmCache)
+        else if (cmd == "status") await cmdStatus(kestrelRoot, jvmCache, selfCache)
         else if (cmd == "test") await cmdTest(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)
         else if (cmd == "fmt") await cmdFmt(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)
         else if (cmd == "doc") await cmdDoc(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)

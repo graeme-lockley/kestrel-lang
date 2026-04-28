@@ -25,14 +25,10 @@ if [ "${1:-}" = "--allow-ts-compiler" ] && [ "${2:-}" = "__ts-compile" ]; then
   shift 2; exec node "$COMPILER_CLI" "$1" --target jvm -o "$2" "${@:3}"
 fi
 
-# bootstrap: extract bootstrap JAR to self-hosted cache
+# bootstrap: deprecated — forward to kestrel-self bootstrap
 if [ "${1:-}" = "bootstrap" ]; then
-  [ -f "$MAVEN_RUNTIME_JAR" ] || { echo "kestrel bootstrap: missing runtime jar; run ./kestrel build" >&2; exit 1; }
-  [ -f "$MAVEN_BOOTSTRAP_JAR" ] || { echo "kestrel bootstrap: missing bootstrap JAR; run ./scripts/build-bootstrap-jar.sh" >&2; exit 1; }
-  mkdir -p "$SELF_CACHE" && (cd "$SELF_CACHE" && jar xf "$MAVEN_BOOTSTRAP_JAR")
-  find "$SELF_CACHE" -name "Cli_entry.class" -print -quit | grep -q . || { echo "kestrel bootstrap: Cli_entry.class missing after extraction" >&2; exit 1; }
-  find "$SELF_CACHE" -name "Cli_main.class" -print -quit | grep -q . || { echo "kestrel bootstrap: Cli_main.class missing after extraction" >&2; exit 1; }
-  echo "kestrel bootstrap: self-hosted compiler classes installed successfully"; exit 0
+  echo "kestrel: 'kestrel bootstrap' is deprecated; use './kestrel-self bootstrap' instead" >&2
+  exec "$ROOT/scripts/kestrel-self" bootstrap
 fi
 
 # build (no args): rebuild TypeScript compiler and JVM runtime from source

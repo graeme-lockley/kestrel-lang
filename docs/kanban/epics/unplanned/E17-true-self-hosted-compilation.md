@@ -153,7 +153,7 @@ via `./kestrel-self`. Acceptance for all subsequent stories is measured via
     Restore weakened `tests/unit/` tests (union_intersection, functions). Remove all
     `// E2E_SKIP_PENDING_CODEGEN` markers and the corresponding skip logic from `run-e2e.sh`.
 
-18. [S17-47 — `./kestrel-self` script and bootstrap into `~/.kestrel/self/`](../../unplanned/S17-47-kestrel-self-script.md)
+18. ✅ [S17-47 — `./kestrel-self` script and bootstrap into `~/.kestrel/self/`](../../done/S17-47-kestrel-self-script.md)
     — Add `scripts/kestrel-self` + root symlink as the dedicated self-hosted compiler entry point.
     Move `bootstrap` subcommand here. Update `./kestrel status` to report both caches.
 

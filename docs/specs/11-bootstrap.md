@@ -56,14 +56,14 @@ Kestrel is a self-hosted language: the compiler is written in Kestrel and compil
 The supported clean-machine path is:
 
 1. `./scripts/build-bootstrap-jar.sh`
-2. `./kestrel bootstrap`
+2. `./kestrel-self bootstrap`
 3. `./kestrel status`
 
 Expected outcome:
 
 - Maven cache contains bootstrap/runtime jars under `~/.kestrel/maven/lang/kestrel/...`.
-- JVM cache contains extracted self-hosted classes including `kestrel/tools/Cli.class`.
-- `kestrel status` reports self-hosted mode.
+- Self-hosted cache (`~/.kestrel/self/`) contains extracted self-hosted classes including `kestrel/tools/Cli.class`.
+- `kestrel status` reports both cache presence.
 
 ### 1.4 Developer Re-Compile Flow
 
@@ -152,7 +152,7 @@ Two separate cache directories exist under `~/.kestrel/`:
 
 **Output directory:** `~/.kestrel/self/` by default; override with `KESTREL_SELF_CACHE`.
 
-**Deprecation:** `kestrel bootstrap` (without the `-self` suffix) is a one-release deprecation shim that prints a notice and forwards to `kestrel-self bootstrap`.
+**Deprecation:** `kestrel bootstrap` (i.e. the `./kestrel` shim, without the `-self` suffix) is a one-release deprecation shim: it prints a notice to stderr and forwards to `kestrel-self bootstrap`.
 
 **Failure diagnostics:** Emits explicit errors for missing runtime JAR, missing bootstrap JAR, and installation failure.
 
@@ -162,25 +162,15 @@ Two separate cache directories exist under `~/.kestrel/`:
 
 **Usage:** `kestrel status`
 
-**Purpose:** Report the active compiler mode.
-
-**Mode detection:** Checks whether `Cli_entry.class` exists anywhere under `$KESTREL_SELF_CACHE` (default `~/.kestrel/self/`).
-
-**Mode values:**
-- **`self-hosted`** — `Cli_entry.class` found. Prints both cache paths.
-- **`bootstrap-required`** — `Cli_entry.class` not found in self cache. Prints a remediation hint.
+**Purpose:** Report the presence/absence of both JVM class caches.
 
 **Output format:**
 ```
-compiler mode: self-hosted
-  ts classes:   ~/.kestrel/ts
-  self classes: ~/.kestrel/self
+TS compiler cache:          ~/.kestrel/ts   (ready|missing)
+Self-hosted compiler cache: ~/.kestrel/self (ready|missing)
 ```
-or:
-```
-compiler mode: bootstrap-required
-hint: run ./scripts/build-bootstrap-jar.sh && ./kestrel-self bootstrap
-```
+
+`ready` means the Cli.class for the TS cache (or `Cli_entry.class` for the self-hosted cache) is present. `missing` means it is absent.
 
 ---
 
