@@ -1,4 +1,3 @@
-// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 // E2E test: Http.responseHeader() (S03-03).
 // Starts an echo server on 127.0.0.1:0, sends a POST with body via Http.request(),
 // checks that the "content-length" response header is present and non-empty.

@@ -1,4 +1,3 @@
-// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 // E2E test: web routing with path parameters (S03-04).
 // Verifies that :name and multi-segment parameters are extracted correctly.
 import * as Http from "kestrel:io/http"

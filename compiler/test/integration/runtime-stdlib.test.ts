@@ -474,14 +474,18 @@ run()
   });
 
   it('scripts/kestrel test requires self-hosted compiler artifacts before bootstrap', () => {
-    const isolatedJvmCache = join(
+    const isolatedTsCache = join(
       tmpdir(),
-      `kestrel-empty-jvm-cache-${Date.now()}-${Math.random().toString(16).slice(2)}`
+      `kestrel-empty-ts-cache-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    );
+    const isolatedSelfCache = join(
+      tmpdir(),
+      `kestrel-empty-self-cache-${Date.now()}-${Math.random().toString(16).slice(2)}`
     );
     expect(() =>
       execSync('./scripts/kestrel test --summary tests/unit/async_virtual_threads.test.ks', {
         cwd: kestrelRoot,
-        env: { ...process.env, KESTREL_JVM_CACHE: isolatedJvmCache },
+        env: { ...process.env, KESTREL_TS_CACHE: isolatedTsCache, KESTREL_SELF_CACHE: isolatedSelfCache },
         stdio: 'pipe',
       })
     ).toThrow(/self-hosted compiler artifacts are required for this command/);

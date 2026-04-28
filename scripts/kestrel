@@ -53,7 +53,20 @@ if [ "${1:-}" = "test" ]; then
 fi
 
 # All other commands: delegate to the self-hosted Kestrel CLI
-CLI_CLASS=$(find "$SELF_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null \
-  | head -1 | sed "s|$SELF_CACHE/||;s|\.class\$||" | tr '/' '.') || CLI_CLASS=""
-[ -n "$CLI_CLASS" ] || { echo "kestrel: self-hosted compiler artifacts are required for this command" >&2; echo "  run: ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap" >&2; exit 1; }
-exec java -Xss8m -Dkestrel.exitWait=false -cp "$MAVEN_RUNTIME_JAR:$SELF_CACHE:$JVM_CACHE" "$CLI_CLASS" "$@"
+# Look for Cli.class in JVM_CACHE first (TS-compiled, for ./kestrel default path),
+# then fall back to SELF_CACHE (self-hosted bootstrap/compiled classes, for ./kestrel-self).
+CLI_CLASS=$(find "$JVM_CACHE" "$SELF_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null \
+  | head -1) || CLI_CLASS_FILE=""
+if [ -n "$CLI_CLASS" ]; then
+  # Determine which cache the class came from to build the correct classpath
+  if [[ "$CLI_CLASS" == "$JVM_CACHE"* ]]; then
+    CLI_CLASS_NAME=$(echo "$CLI_CLASS" | sed "s|$JVM_CACHE/||;s|\.class\$||" | tr '/' '.')
+    exec java -Xss8m -Dkestrel.exitWait=false -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE:$SELF_CACHE" "$CLI_CLASS_NAME" "$@"
+  else
+    CLI_CLASS_NAME=$(echo "$CLI_CLASS" | sed "s|$SELF_CACHE/||;s|\.class\$||" | tr '/' '.')
+    exec java -Xss8m -Dkestrel.exitWait=false -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE:$SELF_CACHE" "$CLI_CLASS_NAME" "$@"
+  fi
+fi
+echo "kestrel: self-hosted compiler artifacts are required for this command" >&2
+echo "  run: ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap" >&2
+exit 1

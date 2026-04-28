@@ -1,4 +1,3 @@
-// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 export exception Boom
 
 async fun value(n: Int): Task<Int> = n + 1

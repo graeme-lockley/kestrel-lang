@@ -296,6 +296,11 @@ export function unify(
     if (l.name !== r.name) throw new UnifyError(left, right);
     return;
   }
+  if ((l.kind === 'union' && r.kind === 'union') || (l.kind === 'inter' && r.kind === 'inter')) {
+    unify(l.left, r.left, subst, genericAliases, options);
+    unify(l.right, r.right, subst, genericAliases, options);
+    return;
+  }
   if (l.kind === 'arrow' && r.kind === 'arrow') {
     if (l.params.length !== r.params.length) throw new UnifyError(left, right);
     const arrowMode = options?.arrowMode ?? 'symmetric';

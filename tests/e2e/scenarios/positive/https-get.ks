@@ -1,4 +1,3 @@
-// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 // E2E test: Http.get works over HTTPS (S03-05 HTTPS acceptance criterion).
 // Requires network access. Verifies system trust store, SNI, TLS 1.2+ all work.
 import * as Http from "kestrel:io/http"

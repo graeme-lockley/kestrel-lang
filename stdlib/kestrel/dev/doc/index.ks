@@ -92,48 +92,40 @@ fun sortAlpha(rs: List<SearchResult>): List<SearchResult> = match (rs) {
 }
 
 fun rank1(es: List<IndexEntry>, ql: String): List<SearchResult> =
-  sortAlpha(
-    List.map(
-      List.filter(es, (ie: IndexEntry) => Str.toLowerCase(ie.entry.name) == ql),
-      (ie: IndexEntry) => toResult(ie)
-    )
-  )
+  es
+  |> List.filter((ie: IndexEntry) => Str.toLowerCase(ie.entry.name) == ql)
+  |> List.map((ie: IndexEntry) => toResult(ie))
+  |> sortAlpha
 
 fun rank2(es: List<IndexEntry>, ql: String): List<SearchResult> =
-  sortAlpha(
-    List.map(
-      List.filter(es, (ie: IndexEntry) => {
-        val n = Str.toLowerCase(ie.entry.name);
-        Str.startsWith(ql, n) & (n != ql)
-      }),
-      (ie: IndexEntry) => toResult(ie)
-    )
-  )
+  es
+  |> List.filter((ie: IndexEntry) => {
+    val n = Str.toLowerCase(ie.entry.name);
+    Str.startsWith(ql, n) & (n != ql)
+  })
+  |> List.map((ie: IndexEntry) => toResult(ie))
+  |> sortAlpha
 
 fun rank3(es: List<IndexEntry>, ql: String): List<SearchResult> =
-  sortAlpha(
-    List.map(
-      List.filter(es, (ie: IndexEntry) => {
-        val n = Str.toLowerCase(ie.entry.name);
-        val s = Str.toLowerCase(Sig.format(ie.entry));
-        Str.contains(ql, s) & (n != ql) & !Str.startsWith(ql, n)
-      }),
-      (ie: IndexEntry) => toResult(ie)
-    )
-  )
+  es
+  |> List.filter((ie: IndexEntry) => {
+    val n = Str.toLowerCase(ie.entry.name);
+    val s = Str.toLowerCase(Sig.format(ie.entry));
+    Str.contains(ql, s) & (n != ql) & !Str.startsWith(ql, n)
+  })
+  |> List.map((ie: IndexEntry) => toResult(ie))
+  |> sortAlpha
 
 fun rank4(es: List<IndexEntry>, ql: String): List<SearchResult> =
-  sortAlpha(
-    List.map(
-      List.filter(es, (ie: IndexEntry) => {
-        val n = Str.toLowerCase(ie.entry.name);
-        val s = Str.toLowerCase(Sig.format(ie.entry));
-        val d = Str.toLowerCase(ie.entry.doc);
-        Str.contains(ql, d) & (n != ql) & !Str.startsWith(ql, n) & !Str.contains(ql, s)
-      }),
-      (ie: IndexEntry) => toResult(ie)
-    )
-  )
+  es
+  |> List.filter((ie: IndexEntry) => {
+    val n = Str.toLowerCase(ie.entry.name);
+    val s = Str.toLowerCase(Sig.format(ie.entry));
+    val d = Str.toLowerCase(ie.entry.doc);
+    Str.contains(ql, d) & (n != ql) & !Str.startsWith(ql, n) & !Str.contains(ql, s)
+  })
+  |> List.map((ie: IndexEntry) => toResult(ie))
+  |> sortAlpha
 
 /// Query the index and return ranked results (max 50).
 /// Rank order: exact name match > name prefix > signature substring > doc body substring.

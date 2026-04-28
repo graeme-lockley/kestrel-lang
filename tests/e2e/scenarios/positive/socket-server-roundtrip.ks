@@ -1,4 +1,3 @@
-// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 // E2E test: TCP server socket loopback round-trip (S03-02).
 // Binds a server socket, accepts one connection, reads the message, and verifies it.
 import * as Socket from "kestrel:io/socket"

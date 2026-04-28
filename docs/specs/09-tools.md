@@ -14,8 +14,11 @@ This document specifies the Kestrel developer toolchain: the unified `kestrel` C
 - **Usage:** `kestrel <command> [options]`
 - **Location:** A single entry point at the repository root (`./kestrel` or `scripts/kestrel`) exposes all commands. The root script delegates to `scripts/kestrel`.
 - **Topology:** `scripts/kestrel` is a minimal Bash shim (target: ≤50 lines) that resolves `KESTREL_ROOT`, handles only bootstrap-critical paths (`bootstrap`, no-arg `build`, and internal `--allow-ts-compiler __ts-compile`), and delegates all normal commands to the self-hosted JVM CLI class via:
-  `java -Xss8m -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE" <resolved Cli class> "$@"`.
-  The shim resolves the CLI class by searching for `*/kestrel/tools/Cli.class` under the self-hosted cache. If missing, it exits non-zero with remediation instructions to rebuild bootstrap artifacts. Set `KESTREL_SELF_CACHE` to override the self-hosted JVM class cache root. See [11-bootstrap.md](11-bootstrap.md) for full bootstrap architecture details.
+  `java -Xss8m -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE:$SELF_CACHE" <resolved Cli class> "$@"`.
+  The shim resolves the CLI class by searching for `*/kestrel/tools/Cli.class` under `JVM_CACHE` first, then `SELF_CACHE`. If missing from both, it exits non-zero with remediation instructions to rebuild bootstrap artifacts. Set `KESTREL_TS_CACHE` / `KESTREL_SELF_CACHE` to override the respective cache roots. See [11-bootstrap.md](11-bootstrap.md) for full bootstrap architecture details.
+- **Compiler routing:** The CLI Kestrel code (`cli.ks`) uses the `KESTREL_SELF` environment variable to select the active compiler:
+  - `KESTREL_SELF` unset (default, `./kestrel` path): calls the TypeScript compiler subprocess via `node compiler/dist/cli.js` (`compileScript`). Compiled classes go to `JVM_CACHE` (`~/.kestrel/ts/`).
+  - `KESTREL_SELF=1` (`./kestrel-self` path, S17-47): calls `Driver.compileFile` in-process (self-hosted compiler). Compiled classes go to `SELF_CACHE` (`~/.kestrel/self/`).
 - **Fallback:** Normal command execution does not fall back to an unbootstrapped state. Users must restore self-hosted artifacts with `./scripts/build-bootstrap-jar.sh` and `./kestrel bootstrap`.
 - **Dependencies:** Requires `java` and `javac` on `PATH` for normal toolchain flows. `node` is only required for the bootstrap build step (`kestrel build` with no script argument) and the internal `__ts-compile` command.
 

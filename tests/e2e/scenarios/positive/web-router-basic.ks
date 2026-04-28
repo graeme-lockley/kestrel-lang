@@ -1,4 +1,3 @@
-// E2E_SKIP_PENDING_CODEGEN: self-hosted codegen does not yet emit $init/main; re-enable in S17-37/S17-42
 // E2E test: basic web routing with GET and POST routes (S03-04).
 // Verifies 200 for matched routes, 404 for unmatched path, 405 for wrong method.
 import * as Http from "kestrel:io/http"

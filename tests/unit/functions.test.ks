@@ -127,10 +127,8 @@ export async fun run(s: Suite): Task<Unit> =
       // Nested fun return type checked and matches body
       eq(sg, "nested fun return type ok", { fun ok(): Int = 42; ok() }, 42)
 
-      // TEMP: self-hosted typechecker still rejects this block-local mutual recursion form.
-      // Re-enable once local nested-fun mutual recursion is fully supported.
-      // isTrue(sg, "block-level mutual recursion even(10)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); even(10) })
-      // isTrue(sg, "block-level mutual recursion odd(5)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); odd(5) })
+      isTrue(sg, "block-level mutual recursion even(10)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); even(10) })
+      isTrue(sg, "block-level mutual recursion odd(5)", { fun even(n: Int): Bool = if (n == 0) True else odd(n - 1); fun odd(n: Int): Bool = if (n == 0) False else even(n - 1); odd(5) })
     })
 
     group(s1, "closures", (sg: Suite) => {

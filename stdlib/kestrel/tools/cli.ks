@@ -153,6 +153,20 @@ async fun deleteKtiFiles(outDir: String): Task<Unit> =
     Ok(files) => await deleteFiles(files)
   }
 
+// Invoke the TypeScript compiler subprocess to compile entrySource to outDir.
+// Returns 0 on success, 1 on failure.
+async fun compileScript(entrySource: String, outDir: String, compilerCli: String, flags: List<String>): Task<Int> = {
+  val _ = await Fs.mkdirAll(outDir)
+  val args = Lst.append([compilerCli, entrySource, "--target", "jvm", "-o", outDir], flags)
+  match (await runProcessStream("node", args)) {
+    Ok(code) => code
+    Err(ProcessSpawnError(_)) => {
+      println("kestrel: compile failed (node not found or failed to start)");
+      1
+    }
+  }
+}
+
 // Compile entrySource to outDir using the in-process Kestrel driver.
 // Returns 0 on success, 1 on failure (with diagnostics printed to stderr).
 async fun compileWithDriver(
@@ -180,6 +194,31 @@ async fun compileWithDriver(
     1
   }
 }
+
+// Route compilation to TS subprocess (default) or in-process driver (when KESTREL_SELF=1).
+// compilerCli: path to compiler/dist/cli.js (used for TS path only).
+async fun compile(
+  entrySource: String,
+  outDir: String,
+  kestrelRoot: String,
+  compilerCli: String,
+  refresh: Bool,
+  allowHttp: Bool,
+  clean: Bool
+): Task<Int> =
+  if (envOr("KESTREL_SELF", "") == "1")
+    await compileWithDriver(entrySource, outDir, kestrelRoot, refresh, allowHttp, clean)
+  else {
+    val flags: List<String> =
+      Lst.append(
+        if (refresh) ["--refresh"] else [],
+        Lst.append(
+          if (allowHttp) ["--allow-http"] else [],
+          if (clean) ["--clean"] else []
+        )
+      )
+    await compileScript(entrySource, outDir, compilerCli, flags)
+  }
 
 // ── In-process execution ──────────────────────────────────────────────────────
 
@@ -257,7 +296,8 @@ async fun cmdRun(
   kestrelRoot: String,
   jvmCache: String,
   mavenCache: String,
-  mavenRuntimeJar: String
+  mavenRuntimeJar: String,
+  compilerCli: String
 ): Task<Int> = {
   if (Lst.member(args, "--help") | Lst.member(args, "-h")) {
     println("Usage: kestrel run [--exit-wait|--exit-no-wait] [--refresh] [--allow-http] [--clean] <script.ks> [args...]");
@@ -281,7 +321,7 @@ async fun cmdRun(
           1
         }
         Some(absPath) => {
-          val code = await compileWithDriver(absPath, jvmCache, kestrelRoot, opts.refresh, opts.allowHttp, opts.clean)
+          val code = await compile(absPath, jvmCache, kestrelRoot, compilerCli, opts.refresh, opts.allowHttp, opts.clean)
           if (code != 0) code
           else {
             await runScript(absPath, jvmCache, mavenCache, mavenRuntimeJar, userArgs, opts.exitNoWait);
@@ -340,7 +380,8 @@ async fun cmdDis(
   args: List<String>,
   kestrelRoot: String,
   jvmCache: String,
-  mavenRuntimeJar: String
+  mavenRuntimeJar: String,
+  compilerCli: String
 ): Task<Int> = {
   val defaultOpts = { verbose = False, codeOnly = False, script = None }
   match (parseDisArgs(args, defaultOpts)) {
@@ -361,7 +402,7 @@ async fun cmdDis(
             1
           }
           Some(absPath) => {
-            val code = await compileWithDriver(absPath, jvmCache, kestrelRoot, False, False, False)
+            val code = await compile(absPath, jvmCache, kestrelRoot, compilerCli, False, False, False)
             if (code != 0) code
             else await runDis(absPath, jvmCache, mavenRuntimeJar, opts.verbose, opts.codeOnly)
           }
@@ -431,7 +472,8 @@ async fun cmdBuild(
   kestrelRoot: String,
   jvmCache: String,
   mavenCache: String,
-  mavenRuntimeJar: String
+  mavenRuntimeJar: String,
+  compilerCli: String
 ): Task<Int> =
   match (args) {
     [] => await buildCompilerAndRuntime(kestrelRoot, mavenRuntimeJar)
@@ -453,7 +495,7 @@ async fun cmdBuild(
               1
             }
             Some(absPath) => {
-              val code = await compileWithDriver(absPath, jvmCache, kestrelRoot, refresh, allowHttp, clean)
+              val code = await compile(absPath, jvmCache, kestrelRoot, compilerCli, refresh, allowHttp, clean)
               if (code != 0) code
               else {
                 println("Built ${jvmCache} (JVM)");
@@ -525,7 +567,8 @@ async fun cmdTest(
   kestrelRoot: String,
   jvmCache: String,
   mavenCache: String,
-  mavenRuntimeJar: String
+  mavenRuntimeJar: String,
+  compilerCli: String
 ): Task<Int> = {
   val testScript = "${kestrelRoot}/stdlib/kestrel/tools/test.ks"
   val exists = await Fs.fileExists(testScript)
@@ -533,7 +576,7 @@ async fun cmdTest(
     println("kestrel test: test runner not found: ${testScript}");
     1
   } else {
-    val code = await compileWithDriver(testScript, jvmCache, kestrelRoot, False, False, False)
+    val code = await compile(testScript, jvmCache, kestrelRoot, compilerCli, False, False, False)
     if (code != 0) code
     else {
       // test.ks is async; run in wait mode so discovery + execution completes before exit.
@@ -550,7 +593,8 @@ async fun cmdFmt(
   kestrelRoot: String,
   jvmCache: String,
   mavenCache: String,
-  mavenRuntimeJar: String
+  mavenRuntimeJar: String,
+  compilerCli: String
 ): Task<Int> = {
   val fmtScript = "${kestrelRoot}/stdlib/kestrel/tools/format.ks"
   val exists = await Fs.fileExists(fmtScript)
@@ -558,7 +602,7 @@ async fun cmdFmt(
     println("kestrel fmt: formatter not found: ${fmtScript}");
     1
   } else {
-    val code = await compileWithDriver(fmtScript, jvmCache, kestrelRoot, False, False, False)
+    val code = await compile(fmtScript, jvmCache, kestrelRoot, compilerCli, False, False, False)
     if (code != 0) code
     else {
       await runScript(fmtScript, jvmCache, mavenCache, mavenRuntimeJar, args, False);
@@ -574,7 +618,8 @@ async fun cmdDoc(
   kestrelRoot: String,
   jvmCache: String,
   mavenCache: String,
-  mavenRuntimeJar: String
+  mavenRuntimeJar: String,
+  compilerCli: String
 ): Task<Int> = {
   val docScript = "${kestrelRoot}/stdlib/kestrel/tools/doc.ks"
   val exists = await Fs.fileExists(docScript)
@@ -582,7 +627,7 @@ async fun cmdDoc(
     println("kestrel doc: doc browser not found: ${docScript}");
     1
   } else {
-    val code = await compileWithDriver(docScript, jvmCache, kestrelRoot, False, False, False)
+    val code = await compile(docScript, jvmCache, kestrelRoot, compilerCli, False, False, False)
     if (code != 0) code
     else {
       await runScript(docScript, jvmCache, mavenCache, mavenRuntimeJar, args, False);
@@ -653,6 +698,7 @@ export async fun main(allArgs: List<String>): Task<Unit> = {
   val jvmCache = envOr("KESTREL_TS_CACHE", "${home}/.kestrel/ts")
   val mavenCache = envOr("KESTREL_MAVEN_CACHE", "${home}/.kestrel/maven")
   val mavenRuntimeJar = "${mavenCache}/lang/kestrel/runtime/1.0/runtime-1.0.jar"
+  val compilerCli = "${kestrelRoot}/compiler/dist/cli.js"
 
   val code =
     match (allArgs) {
@@ -661,19 +707,19 @@ export async fun main(allArgs: List<String>): Task<Unit> = {
         1
       }
       cmd :: rest =>
-        if (cmd == "run") await cmdRun(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar)
-        else if (cmd == "dis") await cmdDis(rest, kestrelRoot, jvmCache, mavenRuntimeJar)
-        else if (cmd == "build") await cmdBuild(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar)
+        if (cmd == "run") await cmdRun(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)
+        else if (cmd == "dis") await cmdDis(rest, kestrelRoot, jvmCache, mavenRuntimeJar, compilerCli)
+        else if (cmd == "build") await cmdBuild(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)
         else if (cmd == "bootstrap") await cmdBootstrap(kestrelRoot, jvmCache, mavenCache)
         else if (cmd == "status") await cmdStatus(kestrelRoot, jvmCache)
-        else if (cmd == "test") await cmdTest(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar)
-        else if (cmd == "fmt") await cmdFmt(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar)
-        else if (cmd == "doc") await cmdDoc(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar)
+        else if (cmd == "test") await cmdTest(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)
+        else if (cmd == "fmt") await cmdFmt(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)
+        else if (cmd == "doc") await cmdDoc(rest, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)
         else if (cmd == "__ts-compile") await cmdTsCompile(rest)
         else if (cmd == "lock") cmdLock()
         else {
           // Implicit run: when first arg is a .ks file (shebang support)
-          if (Str.endsWith(".ks", cmd)) await cmdRun(allArgs, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar)
+          if (Str.endsWith(".ks", cmd)) await cmdRun(allArgs, kestrelRoot, jvmCache, mavenCache, mavenRuntimeJar, compilerCli)
           else {
             println("kestrel: unknown command: ${cmd}\n${usage()}");
             1

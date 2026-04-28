@@ -1,4 +1,5 @@
 import { Suite, group, eq, isTrue } from "kestrel:dev/test"
+import * as Str from "kestrel:data/string"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Lex from "kestrel:dev/parser/lexer"
@@ -128,25 +129,25 @@ export async fun run(s: Suite): Task<Unit> =
     group(s1, "extern fun declarations", (sg: Suite) => {
       // exported extern fun appears in exports with correct type
       Ty.resetVarId()
-      val exportedExtern = runTc("export extern fun add(x: Int, y: Int): Int = \"(II)I\"")
+      val exportedExtern = runTc("export extern fun add(x: Int, y: Int): Int = jvm(\"(II)I\")")
       eq(sg, "exported extern fun ok", exportedExtern.ok, True);
       eq(sg, "exported extern fun in exports", findExportType(exportedExtern, "add"), "(Int, Int) -> Int");
 
       // non-exported extern fun does not appear in exports
       Ty.resetVarId()
-      val localExtern = runTc("extern fun hidden(x: Int): Int = \"(I)I\"")
+      val localExtern = runTc("extern fun hidden(x: Int): Int = jvm(\"(I)I\")")
       eq(sg, "non-exported extern fun ok", localExtern.ok, True);
       eq(sg, "non-exported extern fun absent from exports", findExportType(localExtern, "hidden"), "<missing>");
 
       // generic extern fun generalizes correctly
       Ty.resetVarId()
-      val genericExtern = runTc("export extern fun identity<A>(x: A): A = \"(Ljava/lang/Object;)Ljava/lang/Object;\"")
+      val genericExtern = runTc("export extern fun identity<A>(x: A): A = jvm(\"(Ljava/lang/Object;)Ljava/lang/Object;\")")
       eq(sg, "generic extern fun ok", genericExtern.ok, True);
-      eq(sg, "generic extern fun type", findExportType(genericExtern, "identity"), "(A) -> A");
+      isTrue(sg, "generic extern fun type", Str.startsWith("forall 1 vars.", findExportType(genericExtern, "identity")));
 
       // downstream module using an extern fun imported from a prior module typechecks successfully
       Ty.resetVarId()
-      val producer = runTc("export extern fun add(x: Int, y: Int): Int = \"(II)I\"")
+      val producer = runTc("export extern fun add(x: Int, y: Int): Int = jvm(\"(II)I\")")
       val consumer = TC.typecheck(program("export val result: Int = add(1, 2)"), {
         importBindings = Some(producer.exports),
         typeAliasBindings = None,

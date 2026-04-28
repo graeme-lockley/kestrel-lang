@@ -21,7 +21,7 @@ import {
   SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue,
   PWild, PVar, PLit, PCon, PList, PCons, PTuple,
   LElem, LSpread,
-  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr,
+  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr, TDExternFun,
   TBAdt, TBAlias,
   TmplLit, TmplExpr
 } from "kestrel:dev/parser/ast"
@@ -908,7 +908,7 @@ fun checkExternFunDecl(
   val ret = FA.astTypeToInternalWithScope(efd.retType, scope, [])
   val finalType = Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, ret))
   val env2 = envInsert(env, efd.name, finalType)
-  val exports2 = maybeExportBinding(efd.exported, exports, efd.name, finalType)
+  val exports2 = maybeExportBinding(efd.exported, exports, efd.name, finalType);
   (env2, exports2, exportedTypeAliases)
 }
 

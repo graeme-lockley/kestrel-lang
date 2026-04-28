@@ -148,7 +148,7 @@ via `./kestrel-self`. Acceptance for all subsequent stories is measured via
     — Split the single JVM class cache into two sub-directories under one root. `KESTREL_JVM_CACHE`
     is kept as a deprecated read-only alias for one release. Maven cache unchanged.
 
-17. [S17-46 — Restore TS compiler as the default for `./kestrel`](../../unplanned/S17-46-restore-ts-as-kestrel-default.md)
+17. ✅ [S17-46 — Restore TS compiler as the default for `./kestrel`](../../done/S17-46-restore-ts-as-kestrel-default.md)
     — Revert the user-visible effect of S17-12: make `./kestrel` call the TS compiler subprocess.
     Restore weakened `tests/unit/` tests (union_intersection, functions). Remove all
     `// E2E_SKIP_PENDING_CODEGEN` markers and the corresponding skip logic from `run-e2e.sh`.
