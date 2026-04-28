@@ -172,11 +172,11 @@ export async fun run(s: Suite): Task<Unit> =
       eq(sg, "exported extern type ok", exportedExt.ok, True);
       eq(sg, "exported extern type visibility", Opt.getOrElse(Dict.get(exportedExt.exportedTypeVisibility, "Bar"), "<missing>"), "export");
 
-      // opaque extern type appears in exportedTypeVisibility as "opaque"
+      // local (non-exported, non-opaque) extern type appears in exportedTypeVisibility as "local"
       Ty.resetVarId()
-      val opaqueExt = runTc("extern type Baz = jvm(\"java.lang.Object\")")
-      eq(sg, "local extern type ok", opaqueExt.ok, True);
-      eq(sg, "local extern type visibility recorded", Opt.getOrElse(Dict.get(opaqueExt.exportedTypeVisibility, "Baz"), "<missing>"), "local");
+      val localExt2 = runTc("extern type Baz = jvm(\"java.lang.Object\")")
+      eq(sg, "local extern type ok", localExt2.ok, True);
+      eq(sg, "local extern type visibility recorded", Opt.getOrElse(Dict.get(localExt2.exportedTypeVisibility, "Baz"), "<missing>"), "local");
 
       // extern type with type params is accepted
       Ty.resetVarId()
