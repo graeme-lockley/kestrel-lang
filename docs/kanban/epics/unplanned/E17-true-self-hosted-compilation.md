@@ -223,7 +223,7 @@ before the self-hosted compiler can typecheck its own stdlib modules.
     — Add `TDExternImport` arms to typecheck and codegen so JVM-bridge primitives are
     accepted by the self-hosted compiler.
 
-22. [S17-19 — Self-hosted typecheck for `exception` declarations](../../unplanned/S17-19-self-hosted-typecheck-exception-decls.md)
+22. ✅ [S17-19 — Self-hosted typecheck for `exception` declarations](../../done/S17-19-self-hosted-typecheck-exception-decls.md)
     — Add `TDException` arms to typecheck (codegen already handles them). Required for any
     module declaring its own exception types.
 
