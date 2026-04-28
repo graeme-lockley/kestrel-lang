@@ -163,6 +163,7 @@ class Parser {
         this.at('keyword', 'extern') ||
         this.at('keyword', 'type') ||
         this.at('keyword', 'opaque') ||
+        this.at('keyword', 'exception') ||
         (this.at('keyword', 'export') && this.tokens[this.i + 1]?.value === 'exception')
       ) {
         body.push(this.parseTopLevelDecl());
