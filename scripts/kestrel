@@ -63,6 +63,13 @@ fi
 # test: generate and run the synthetic test runner via `run`.
 # This avoids self-hosted `cmdTest` exiting early when async work is still pending.
 if [ "${1:-}" = "test" ]; then
+  # `kestrel test` should require self-hosted compiler artifacts before bootstrap.
+  SELF_CLI_CLASS=$(find "$SELF_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null | head -1 || true)
+  if [ -z "$SELF_CLI_CLASS" ]; then
+    echo "kestrel: self-hosted compiler artifacts are required for this command" >&2
+    echo "  run: ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap" >&2
+    exit 1
+  fi
   shift
   "$0" run "$ROOT/stdlib/kestrel/tools/test.ks" --generate "$@" || exit $?
   exec "$0" run "$ROOT/.kestrel_test_runner.ks"
