@@ -536,7 +536,8 @@ async fun cmdTest(
     val code = await compileWithDriver(testScript, jvmCache, kestrelRoot, False, False, False)
     if (code != 0) code
     else {
-      await runScript(testScript, jvmCache, mavenCache, mavenRuntimeJar, args, True);
+      // test.ks is async; run in wait mode so discovery + execution completes before exit.
+      await runScript(testScript, jvmCache, mavenCache, mavenRuntimeJar, args, False);
       0
     }
   }
@@ -649,7 +650,7 @@ fun usage(): String =
 export async fun main(allArgs: List<String>): Task<Unit> = {
   val kestrelRoot = envOr("KESTREL_ROOT", ".")
   val home = envOr("HOME", ".")
-  val jvmCache = envOr("KESTREL_JVM_CACHE", "${home}/.kestrel/jvm")
+  val jvmCache = envOr("KESTREL_TS_CACHE", "${home}/.kestrel/ts")
   val mavenCache = envOr("KESTREL_MAVEN_CACHE", "${home}/.kestrel/maven")
   val mavenRuntimeJar = "${mavenCache}/lang/kestrel/runtime/1.0/runtime-1.0.jar"
 

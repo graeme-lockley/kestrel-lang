@@ -3,7 +3,8 @@
  * CLI: kestrel-compiler <input.ks> [-o outputDir] [--target jvm] [--stale-file path] [--format=json]
  *      [--refresh] [--allow-http] [--status] [--clean]
  * Parse input, resolve imports, emit JVM .class files.
- * When -o is omitted, output goes under KESTREL_JVM_CACHE (~/.kestrel/jvm/ by default).
+ * When -o is omitted, output goes under KESTREL_TS_CACHE (~/.kestrel/ts/ by default).
+ * KESTREL_JVM_CACHE is a deprecated alias for KESTREL_TS_CACHE.
  * If --stale-file is given, only print "Compiling X" for paths listed in that file (one path per line).
  * If --format=json, emit diagnostics as JSONL on failure (spec 10).
  * If --refresh, force re-download of all URL dependencies.
@@ -49,7 +50,7 @@ import { CODES, locationFileOnly } from './src/diagnostics/types.js';
   const clean = args.includes('--clean');
 
   const urlCacheRoot = defaultCacheRoot();
-  const jvmCacheRoot = process.env.KESTREL_JVM_CACHE || join(homedir(), '.kestrel', 'jvm');
+  const jvmCacheRoot = process.env.KESTREL_TS_CACHE || process.env.KESTREL_JVM_CACHE || join(homedir(), '.kestrel', 'ts');
   const outputPath = outIdx >= 0 ? args[outIdx + 1]! : jvmCacheRoot;
   const staleIdx = args.indexOf('--stale-file');
   const staleFilePath = staleIdx >= 0 ? args[staleIdx + 1] : undefined;

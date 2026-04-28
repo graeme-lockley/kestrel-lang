@@ -92,7 +92,7 @@ The `kestrel` script implements the CLI described in [docs/specs/09-tools.md](do
 - **`kestrel fmt`** — Formats `.ks` source files in-place (120 columns, 2-space indent). Pass `--check` to report non-conforming files without modifying them; `--stdin` to read from stdin and write to stdout.
 - **`kestrel doc`** — Starts a local documentation browser at `http://localhost:7070/docs/` (override port with `--port`). Extracts doc-comments from all stdlib and project modules with live reload.
 
-JVM class output is cached under `~/.kestrel/jvm/` unless you set `KESTREL_JVM_CACHE`.
+JVM class output is cached under `~/.kestrel/ts/` (TS compiler) and `~/.kestrel/self/` (self-hosted compiler). Override with `KESTREL_TS_CACHE` or `KESTREL_SELF_CACHE` respectively.
 
 ## Specifications
 

@@ -14,7 +14,7 @@ export async fun main(allArgs: List<String>): Task<Unit> = {
   val proc     = getProcess()
   val rootDir  = proc.cwd
   val home     = Opt.withDefault(getEnv("HOME"), "/root")
-  val jvmCache = Opt.withDefault(getEnv("KESTREL_JVM_CACHE"), "${home}/.kestrel/jvm")
+  val jvmCache = Opt.withDefault(getEnv("KESTREL_SELF_CACHE"), "${home}/.kestrel/self")
   val code     = await Compiler.compileCliEntry(rootDir, jvmCache)
   exit(code)
 }

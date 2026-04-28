@@ -335,6 +335,13 @@ fun registerFunSig(reg: Dict<String, Ty.InternalType>, typeAliases: Dict<String,
   Dict.insert(reg, fd.name, Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, resultT)))
 }
 
+fun registerExternFunSig(reg: Dict<String, Ty.InternalType>, typeAliases: Dict<String, Ty.InternalType>, efd: Ast.ExternFunDecl): Dict<String, Ty.InternalType> = {
+  val scope = buildTypeParamScope(typeAliases, efd.typeParams)
+  val ps = paramTypes(efd.params, scope)
+  val ret = FA.astTypeToInternalWithScope(efd.retType, scope, [])
+  Dict.insert(reg, efd.name, Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, ret)))
+}
+
 fun inferExprs(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.InternalType>, exprs: List<Ast.Expr>): List<Ty.InternalType> =
   match (exprs) {
     [] => []
@@ -353,29 +360,49 @@ fun inferListElems(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.In
     }
   }
 
-fun inferStmtList(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.InternalType>, stmts: List<Ast.Stmt>): TypeEnv =
+fun prebindStmtFunDecls(env: TypeEnv, typeAliases: Dict<String, Ty.InternalType>, stmts: List<Ast.Stmt>): TypeEnv =
   match (stmts) {
     [] => env
     h :: rest => {
       val env2 =
         match (h) {
+          SFun(async_, name, typeParams, params, retType, _body) => {
+            val scope = buildTypeParamScope(typeAliases, typeParams)
+            val ps = paramTypes(params, scope)
+            val ret = FA.astTypeToInternalWithScope(retType, scope, [])
+            val resultT = taskReturnType(async_, ret)
+            envInsert(env, name, Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, resultT)))
+          }
+          _ => env
+        }
+      prebindStmtFunDecls(env2, typeAliases, rest)
+    }
+  }
+
+fun inferStmtList(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.InternalType>, stmts: List<Ast.Stmt>): TypeEnv =
+  match (stmts) {
+    [] => env
+    h :: rest => {
+      val envPre = prebindStmtFunDecls(env, typeAliases, stmts)
+      val env2 =
+        match (h) {
           SVal(name, ann, expr) => {
-            val t = inferExpr(state, env, typeAliases, expr)
+            val t = inferExpr(state, envPre, typeAliases, expr)
             match (ann) {
               Some(astType) => { unifyEq(state, t, FA.astTypeToInternalWithScope(astType, typeAliases, [])); () }
               None => ()
             };
-            envInsert(env, name, Ty.generalize(env.items, apply(state, t)))
+            envInsert(envPre, name, Ty.generalize(envPre.items, apply(state, t)))
           }
           SVar(name, ann, expr) => {
-            val t = inferExpr(state, env, typeAliases, expr)
+            val t = inferExpr(state, envPre, typeAliases, expr)
             match (ann) {
               Some(astType) => { unifyEq(state, t, FA.astTypeToInternalWithScope(astType, typeAliases, [])); () }
               None => ()
             };
-            envInsert(env, name, apply(state, t))
+            envInsert(envPre, name, apply(state, t))
           }
-          SExpr(expr) => { inferExpr(state, env, typeAliases, expr); env }
+          SExpr(expr) => { inferExpr(state, envPre, typeAliases, expr); envPre }
           SFun(async_, name, typeParams, params, retType, body) => {
             val scope = buildTypeParamScope(typeAliases, typeParams)
             val ps = paramTypes(params, scope)
@@ -392,21 +419,21 @@ fun inferStmtList(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.Int
                 }
               } else (ret, ret)
             val fnType = Ty.TArrow(ps, asyncPair.1)
-            val env2a = envInsert(env, name, Ty.generalize(Dict.emptyStringDict(), fnType))
+            val env2a = envInsert(envPre, name, Ty.generalize(Dict.emptyStringDict(), fnType))
             val local = bindParams(env2a, namesFromParams(params), ps)
             val bodyT = if (async_) inferExprInAsyncContext(state, local, mergeTypeMaps(typeAliases, scope), body) else inferExpr(state, local, mergeTypeMaps(typeAliases, scope), body)
             unifyEq(state, bodyT, asyncPair.0)
             env2a
           }
-          SBreak => { addDiag(state, Diag.CODES.type_.breakOutsideLoop, "break used outside loop"); env }
-          SContinue => { addDiag(state, Diag.CODES.type_.continueOutsideLoop, "continue used outside loop"); env }
+          SBreak => { addDiag(state, Diag.CODES.type_.breakOutsideLoop, "break used outside loop"); envPre }
+          SContinue => { addDiag(state, Diag.CODES.type_.continueOutsideLoop, "continue used outside loop"); envPre }
           SAssign(target, rhs) => {
-            val targetT = inferExpr(state, env, typeAliases, target)
-            val rhsT = inferExpr(state, env, typeAliases, rhs)
+            val targetT = inferExpr(state, envPre, typeAliases, target)
+            val rhsT = inferExpr(state, envPre, typeAliases, rhs)
             unifyEq(state, rhsT, targetT);
-            env
+            envPre
           }
-          _ => env
+          _ => envPre
         }
       inferStmtList(state, env2, typeAliases, rest)
     }
@@ -855,6 +882,7 @@ fun prebindFunDecls(env: Dict<String, Ty.InternalType>, typeAliases: Dict<String
       val env2 =
         match (h) {
           TDFun(fd) => registerFunSig(env, typeAliases, fd)
+          TDExternFun(efd) => registerExternFunSig(env, typeAliases, efd)
           _ => env
         }
       prebindFunDecls(env2, typeAliases, rest)
@@ -866,6 +894,23 @@ fun taskReturnType(async_: Bool, ret: Ty.InternalType): Ty.InternalType =
 
 fun maybeExportBinding(exported: Bool, exports: TypeEnv, name: String, t: Ty.InternalType): TypeEnv =
   if (exported) envInsert(exports, name, t) else exports
+
+fun checkExternFunDecl(
+  state: TcState,
+  env: TypeEnv,
+  typeAliases: Dict<String, Ty.InternalType>,
+  exports: TypeEnv,
+  exportedTypeAliases: Dict<String, Ty.InternalType>,
+  efd: Ast.ExternFunDecl
+): (TypeEnv, TypeEnv, Dict<String, Ty.InternalType>) = {
+  val scope = buildTypeParamScope(typeAliases, efd.typeParams)
+  val ps = paramTypes(efd.params, scope)
+  val ret = FA.astTypeToInternalWithScope(efd.retType, scope, [])
+  val finalType = Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, ret))
+  val env2 = envInsert(env, efd.name, finalType)
+  val exports2 = maybeExportBinding(efd.exported, exports, efd.name, finalType)
+  (env2, exports2, exportedTypeAliases)
+}
 
 fun checkFunDecl(
   state: TcState,
@@ -1016,6 +1061,7 @@ fun checkDecls(
           TDSVar(name, ann, expr) => checkScriptVarDecl(state, env, typeAliases, exports, exportedTypeAliases, name, ann, expr)
           TDSExpr(expr) => { inferExpr(state, env, typeAliases, expr); (env, exports, exportedTypeAliases) }
           TDType(td) => checkTypeDeclExports(typeAliases, env, exports, exportedTypeAliases, td)
+          TDExternFun(efd) => checkExternFunDecl(state, env, typeAliases, exports, exportedTypeAliases, efd)
           _ => {
             addDiag(state, Diag.CODES.type_.check, "Unsupported top-level declaration in self-hosted checker MVP");
             (env, exports, exportedTypeAliases)

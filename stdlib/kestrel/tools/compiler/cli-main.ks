@@ -33,7 +33,7 @@ export fun forwardArgs(parsed: ParsedCommand): (String, List<String>) =
   ("./kestrel", parsed.command :: parsed.args)
 
 fun defaultCompileOptions(cwd: String): Driver.CompileOptions = {
-  outDir = Opt.withDefault(getEnv("KESTREL_JVM_CACHE"), "${cwd}/.kestrel/jvm"),
+  outDir = Opt.withDefault(getEnv("KESTREL_TS_CACHE"), "${cwd}/.kestrel/ts"),
   stdlibDir = "${cwd}/stdlib",
   cacheRoot = "${cwd}/.kestrel/cache",
   allowHttp = False,

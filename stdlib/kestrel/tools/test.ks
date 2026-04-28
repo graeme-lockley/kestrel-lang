@@ -108,7 +108,7 @@ async fun handler(parsed: ParsedArgs): Task<Int> = {
     Some(_) => 0
     None => {
       val compilerFlags = Runner.buildCompilerFlags(parsed)
-      val innerArgs = Lst.append(["run", "--exit-no-wait"], Lst.append(compilerFlags, [generatedPath]))
+      val innerArgs = Lst.append(["run", "--exit-wait"], Lst.append(compilerFlags, [generatedPath]))
       await Runner.runProcessStreamOrExit(kestrelBin, innerArgs)
     }
   }

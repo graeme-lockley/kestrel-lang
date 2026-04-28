@@ -28,15 +28,15 @@ Kestrel is a self-hosted language: the compiler is written in Kestrel and compil
 │  Bootstrap JAR           │  ~/.kestrel/maven/lang/kestrel/compile/1.0/compile-1.0.jar
 │  (Maven cache)           │  includes Cli_entry.class, Cli_main.class, tools/Cli.class
 └────────────┬────────────┘
-             │ 2. kestrel bootstrap
-             │    extracts JAR into JVM cache
+             │ 2. kestrel-self bootstrap
+             │    extracts JAR into self-hosted cache
              ▼
 ┌─────────────────────────┐
-│  Self-Hosted Classes     │  ~/.kestrel/jvm/
+│  Self-Hosted Classes     │  ~/.kestrel/self/
 │  (Cli_entry, Cli_main,   │
 │   tools/Cli, etc.)       │
 └────────────┬────────────┘
-             │ 3. Normal commands
+             │ 3. Normal commands (via ./kestrel-self)
              │    shim execs java ... <resolved tools.Cli> ...
              ▼
 ┌─────────────────────────┐
@@ -76,13 +76,20 @@ The first command updates TypeScript compiler output and runtime artifacts; the 
 
 ## 2. Directory Layout
 
-### 2.1 JVM Class Cache
+### 2.1 JVM Class Caches
 
-- **Path:** `~/.kestrel/jvm/` by default.
-- **Override:** `KESTREL_JVM_CACHE` environment variable.
-- **Contents:** All compiled `.class` files (both self-hosted compiler classes and user program classes), `.class.deps` dependency lists, and `.kti` incremental metadata.
+Two separate cache directories exist under `~/.kestrel/`:
+
+- **TypeScript compiler cache:** `~/.kestrel/ts/` by default. Override with `KESTREL_TS_CACHE`.
+  Contains `.class` files compiled by the TypeScript bootstrap compiler for user programs.
+  `KESTREL_JVM_CACHE` is a deprecated alias for `KESTREL_TS_CACHE` (one-release window).
+- **Self-hosted compiler cache:** `~/.kestrel/self/` by default. Override with `KESTREL_SELF_CACHE`.
+  Contains self-hosted compiler classes (seeded by `./kestrel-self bootstrap`) plus `.class`
+  files compiled by the self-hosted compiler for user programs run via `./kestrel-self`.
+
+**Contents of each cache:** Compiled `.class` files, `.class.deps` dependency lists, and `.kti` incremental metadata.
 - **`.class.deps` format:** For each compiled module `<ClassName>`, a sidecar file `<ClassName>.class.deps` is written to `outDir`. The file contains the absolute source paths of all transitive source dependencies of that module (in DFS post-order), with the module's own path last. One absolute path per line, UTF-8 encoded, newline-terminated. Only written when a module is actually compiled (not when a fresh/incremental skip occurs).
-- **Gate artifact:** `Cli_entry.class` (nested under a path derived from the source file's absolute path).
+- **Gate artifact for self-hosted cache:** `Cli_entry.class` (nested under a path derived from the source file's absolute path).
 
 ### 2.2 Maven Cache
 
@@ -133,17 +140,19 @@ The first command updates TypeScript compiler output and runtime artifacts; the 
 
 ### 3.2 Bootstrap Command
 
-**Usage:** `kestrel bootstrap`
+**Usage:** `kestrel-self bootstrap`
 
-**Purpose:** Seed self-hosted compiler classes into the JVM cache from the bootstrap JAR. The JAR contains the Kestrel compiler already compiled to JVM bytecode (produced by `build-bootstrap-jar.sh` using the TypeScript compiler). The bootstrap command itself does not invoke the TypeScript compiler.
+**Purpose:** Seed self-hosted compiler classes into the self-hosted cache (`~/.kestrel/self/`) from the bootstrap JAR. The JAR contains the Kestrel compiler already compiled to JVM bytecode (produced by `build-bootstrap-jar.sh` using the TypeScript compiler). The bootstrap command itself does not invoke the TypeScript compiler.
 
 **Steps:**
 1. Validate runtime JAR exists in Maven cache at `~/.kestrel/maven/lang/kestrel/runtime/1.0/runtime-1.0.jar`.
 2. Validate bootstrap compiler JAR exists in Maven cache at `~/.kestrel/maven/lang/kestrel/compile/1.0/compile-1.0.jar`.
-3. Extract and install self-hosted compiler classes from the bootstrap JAR into the JVM cache.
-4. Verify `Cli_entry.class` and `Cli_main.class` are present in the JVM cache.
+3. Extract and install self-hosted compiler classes from the bootstrap JAR into the self-hosted cache.
+4. Verify `Cli_entry.class` and `Cli_main.class` are present in the self-hosted cache.
 
-**Output directory:** `~/.kestrel/jvm/` by default; override with `KESTREL_JVM_CACHE`.
+**Output directory:** `~/.kestrel/self/` by default; override with `KESTREL_SELF_CACHE`.
+
+**Deprecation:** `kestrel bootstrap` (without the `-self` suffix) is a one-release deprecation shim that prints a notice and forwards to `kestrel-self bootstrap`.
 
 **Failure diagnostics:** Emits explicit errors for missing runtime JAR, missing bootstrap JAR, and installation failure.
 
@@ -155,21 +164,22 @@ The first command updates TypeScript compiler output and runtime artifacts; the 
 
 **Purpose:** Report the active compiler mode.
 
-**Mode detection:** Checks whether `Cli_entry.class` exists anywhere under `$KESTREL_JVM_CACHE` (default `~/.kestrel/jvm/`).
+**Mode detection:** Checks whether `Cli_entry.class` exists anywhere under `$KESTREL_SELF_CACHE` (default `~/.kestrel/self/`).
 
 **Mode values:**
-- **`self-hosted`** — `Cli_entry.class` found. Prints the JVM cache path.
-- **`bootstrap-required`** — `Cli_entry.class` not found. Prints a remediation hint: `run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap`.
+- **`self-hosted`** — `Cli_entry.class` found. Prints both cache paths.
+- **`bootstrap-required`** — `Cli_entry.class` not found in self cache. Prints a remediation hint.
 
 **Output format:**
 ```
 compiler mode: self-hosted
-  classes: ~/.kestrel/jvm
+  ts classes:   ~/.kestrel/ts
+  self classes: ~/.kestrel/self
 ```
 or:
 ```
 compiler mode: bootstrap-required
-hint: run ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap
+hint: run ./scripts/build-bootstrap-jar.sh && ./kestrel-self bootstrap
 ```
 
 ---
@@ -208,6 +218,21 @@ After passing shim-level gating, script compilation is orchestrated by the Kestr
 
 The self-hosted compiler classes (`Cli_main`) are installed and gate command availability. They are also exercised directly by bootstrap-parity tooling (for example `scripts/test-compiler-bootstrap`) via:
 `java -cp <runtime>:<classes> Cli_main <command> <args>`.
+
+### 4.4 Self-Hosted Typechecker Coverage
+
+The self-hosted typechecker (`stdlib/kestrel/dev/typecheck/typecheck.ks`) handles all top-level declaration forms required to typecheck the Kestrel stdlib and compiler from source:
+
+| Declaration form | Supported | Notes |
+|-----------------|-----------|-------|
+| `fun` / `export fun` | Yes | Full inference + generalization |
+| `val` / `export val` | Yes | Full inference |
+| `var` / `export var` | Yes | Full inference |
+| `extern fun` / `export extern fun` | Yes | Signature-only registration; no body inference required. Exported extern funs appear in `TypecheckResult.exports` and are emitted to `.kti` files. |
+| `type` / `export type` | Yes | ADT and alias registration |
+| `exception` / `export exception` | Yes | Constructor registration |
+
+Declarations not yet handled emit a diagnostic `"Unsupported top-level declaration in self-hosted checker MVP"` and are skipped without aborting the run.
 
 ---
 

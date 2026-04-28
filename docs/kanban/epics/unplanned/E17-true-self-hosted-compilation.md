@@ -31,6 +31,32 @@ of Node. The TypeScript reference implementation is `compiler/src/compile-file-j
 Stories must be **fine-grained** — each one adds exactly one pipeline capability and is
 independently testable. No story should touch more than one concern at a time.
 
+## Pivot — 2026-04-28
+
+The original epic plan (S17-01..S17-44) wired all `./kestrel` commands through the self-hosted
+`Driver.compileFile` as each story landed. In practice this caused the self-hosted compiler's
+immaturity to degrade the TS compiler's test suite: ~20 E2E scenarios were suppressed with
+`// E2E_SKIP_PENDING_CODEGEN` markers and two unit tests were TEMP-stubbed. This weakens the TS
+compiler's ability to detect regressions.
+
+**The new approach:**
+- `~/.kestrel/jvm/` is split into `~/.kestrel/ts/` (TS compiler) and `~/.kestrel/self/`
+  (self-hosted compiler). The shared Maven cache stays at `~/.kestrel/maven/`.
+- `./kestrel` drives the TS compiler exclusively. The S17-12 in-process driver wiring is
+  preserved in code but is only reachable via `./kestrel-self`.
+- `./kestrel-self` (`scripts/kestrel-self`) is a new dedicated entry point for the self-hosted
+  compiler, pinned to `~/.kestrel/self/`.
+- Parallel test corpora (`tests/kunit/`, `tests/kfixtures/`, `tests/kconformance/`) are
+  introduced as the exclusive target for self-hosted compiler testing. The TS corpora
+  (`tests/unit/`, `tests/fixtures/`, `tests/conformance/`) are restored to their full strength.
+- `./scripts/test-kestrel.sh` runs the self-hosted compiler against the `k*` corpora. It is
+  NOT added to `scripts/test-all.sh` until a stable baseline is established.
+- The flag-based CLI unification (`--compiler=ts|self`) is deferred to S17-49, a future story
+  that must not be built until S17-42 (no-Node final validation) is complete.
+
+Stories S17-45..S17-50 must land **before** any further gap-closure work (S17-40, S17-16..S17-44)
+so that all subsequent stories are measured against the new `k*` corpora via `./kestrel-self`.
+
 ## Stories (ordered — implement sequentially)
 
 1. [S17-01] Single-file happy-path compilation in driver
@@ -111,6 +137,41 @@ independently testable. No story should touch more than one concern at a time.
     in both the TypeScript and self-hosted Kestrel compilers, add regression tests, and remove
     unnecessary temporary `Task` bindings in affected call sites. (Renumbered from S17-16.)
 
+### Pivot: dual caches and dedicated Kestrel-compiler test corpora
+
+These five stories implement the 2026-04-28 pivot (see § Pivot above). They must all land
+**before** any further gap-closure work so the rest of E17 builds against the new `k*` corpora
+via `./kestrel-self`. Acceptance for all subsequent stories is measured via
+`./scripts/test-kestrel.sh` rather than `./kestrel test` / `tests/unit/`.
+
+16. ✅ [S17-45 — Dual cache layout (`~/.kestrel/ts/` + `~/.kestrel/self/`)](../../done/S17-45-dual-cache-layout.md)
+    — Split the single JVM class cache into two sub-directories under one root. `KESTREL_JVM_CACHE`
+    is kept as a deprecated read-only alias for one release. Maven cache unchanged.
+
+17. [S17-46 — Restore TS compiler as the default for `./kestrel`](../../unplanned/S17-46-restore-ts-as-kestrel-default.md)
+    — Revert the user-visible effect of S17-12: make `./kestrel` call the TS compiler subprocess.
+    Restore weakened `tests/unit/` tests (union_intersection, functions). Remove all
+    `// E2E_SKIP_PENDING_CODEGEN` markers and the corresponding skip logic from `run-e2e.sh`.
+
+18. [S17-47 — `./kestrel-self` script and bootstrap into `~/.kestrel/self/`](../../unplanned/S17-47-kestrel-self-script.md)
+    — Add `scripts/kestrel-self` + root symlink as the dedicated self-hosted compiler entry point.
+    Move `bootstrap` subcommand here. Update `./kestrel status` to report both caches.
+
+19. [S17-48 — Kestrel-compiler test corpora scaffolding and `scripts/test-kestrel.sh`](../../unplanned/S17-48-kestrel-test-corpora-and-runner.md)
+    — Create `tests/kunit/`, `tests/kfixtures/`, `tests/kconformance/{parse,typecheck,runtime/valid}/`
+    with READMEs and seed content. Add `scripts/test-kestrel.sh` runner (NOT added to test-all.sh).
+    Runtime goldens use in-file `// =>` convention.
+
+20. [S17-50 — Baseline-populate Kestrel-compiler test corpora](../../unplanned/S17-50-baseline-populate-kestrel-corpora.md)
+    — Sweep every existing TS-corpus file through `./kestrel-self`; copy all passing files into
+    the matching `tests/k*/` location. Record baseline counts in each README and Build notes.
+    `./scripts/test-kestrel.sh` must exit 0 over the baseline. Discovery script is temporary
+    and removed after the baseline is committed.
+
+21. [S17-49 — Future: flag-based CLI unification (`--compiler=ts|self`)](../../unplanned/S17-49-flag-based-cli-unification.md)
+    — **Placeholder only.** Unify `./kestrel` and `./kestrel-self` into a single entry point with
+    a `--compiler` flag once S17-42 (no-Node final validation) is complete. Not built now.
+
 ### KTI correctness (foundation for multi-module self-hosted compilation)
 
 Three interconnected correctness bugs in the KTI subsystem must be fixed before the
@@ -150,7 +211,7 @@ The self-hosted typechecker MVP raises "Unsupported top-level declaration in sel
 checker MVP" for several declaration forms used across the stdlib. These must be implemented
 before the self-hosted compiler can typecheck its own stdlib modules.
 
-19. [S17-16 — Self-hosted typecheck for `extern fun` declarations](../../unplanned/S17-16-self-hosted-typecheck-extern-fun.md)
+19. ✅ [S17-16 — Self-hosted typecheck for `extern fun` declarations](../../done/S17-16-self-hosted-typecheck-extern-fun.md)
     — Add `TDExternFun` arms to `prebindFunDecls` and `checkDecls`. Required for every
     stdlib primitive module (`data/string`, `data/list`, `io/fs`, `io/process`, etc.).
 
@@ -277,7 +338,12 @@ markers, but those are considered tranche-local scaffolding, not the final state
 
 ### Final validation
 
-41. [S17-42 — End-to-end validation without Node; CI gate and spec update](../../unplanned/S17-42-e2e-validation-no-node.md)
+41. [S17-44 — Self-hosted typecheck: `is` narrowing for union-typed identifiers](../../unplanned/S17-44-self-hosted-typecheck-is-narrowing-union.md)
+    — Implement branch-local narrowing for `if (x is T)` in the self-hosted typechecker,
+    re-enable `tests/unit/union_intersection.test.ks`, and keep the scenario green under
+    `./kestrel test` before final no-Node validation.
+
+42. [S17-42 — End-to-end validation without Node; CI gate and spec update](../../unplanned/S17-42-e2e-validation-no-node.md)
     — Rename `compiler/` to verify the full test suite passes with Node unreachable. Add a
     CI step that runs `mv compiler compiler_DISABLED && ./kestrel test` and must exit 0.
     Restore `compiler/`. Update `docs/specs/11-bootstrap.md` and

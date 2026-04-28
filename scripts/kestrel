@@ -9,7 +9,13 @@ while [ -L "$SOURCE" ]; do
 done
 ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"; export KESTREL_ROOT="$ROOT"
 COMPILER="$ROOT/compiler"; COMPILER_CLI="$COMPILER/dist/cli.js"
-JVM_CACHE="${KESTREL_JVM_CACHE:-$HOME/.kestrel/jvm}"
+if [ -n "${KESTREL_JVM_CACHE:-}" ]; then
+  echo "kestrel: KESTREL_JVM_CACHE is deprecated; use KESTREL_TS_CACHE instead" >&2
+  JVM_CACHE="$KESTREL_JVM_CACHE"
+else
+  JVM_CACHE="${KESTREL_TS_CACHE:-$HOME/.kestrel/ts}"
+fi
+SELF_CACHE="${KESTREL_SELF_CACHE:-$HOME/.kestrel/self}"
 MAVEN="${KESTREL_MAVEN_CACHE:-$HOME/.kestrel/maven}"
 MAVEN_RUNTIME_JAR="$MAVEN/lang/kestrel/runtime/1.0/runtime-1.0.jar"
 MAVEN_BOOTSTRAP_JAR="$MAVEN/lang/kestrel/compile/1.0/compile-1.0.jar"
@@ -19,13 +25,13 @@ if [ "${1:-}" = "--allow-ts-compiler" ] && [ "${2:-}" = "__ts-compile" ]; then
   shift 2; exec node "$COMPILER_CLI" "$1" --target jvm -o "$2" "${@:3}"
 fi
 
-# bootstrap: extract bootstrap JAR to JVM cache
+# bootstrap: extract bootstrap JAR to self-hosted cache
 if [ "${1:-}" = "bootstrap" ]; then
   [ -f "$MAVEN_RUNTIME_JAR" ] || { echo "kestrel bootstrap: missing runtime jar; run ./kestrel build" >&2; exit 1; }
   [ -f "$MAVEN_BOOTSTRAP_JAR" ] || { echo "kestrel bootstrap: missing bootstrap JAR; run ./scripts/build-bootstrap-jar.sh" >&2; exit 1; }
-  mkdir -p "$JVM_CACHE" && (cd "$JVM_CACHE" && jar xf "$MAVEN_BOOTSTRAP_JAR")
-  find "$JVM_CACHE" -name "Cli_entry.class" -print -quit | grep -q . || { echo "kestrel bootstrap: Cli_entry.class missing after extraction" >&2; exit 1; }
-  find "$JVM_CACHE" -name "Cli_main.class" -print -quit | grep -q . || { echo "kestrel bootstrap: Cli_main.class missing after extraction" >&2; exit 1; }
+  mkdir -p "$SELF_CACHE" && (cd "$SELF_CACHE" && jar xf "$MAVEN_BOOTSTRAP_JAR")
+  find "$SELF_CACHE" -name "Cli_entry.class" -print -quit | grep -q . || { echo "kestrel bootstrap: Cli_entry.class missing after extraction" >&2; exit 1; }
+  find "$SELF_CACHE" -name "Cli_main.class" -print -quit | grep -q . || { echo "kestrel bootstrap: Cli_main.class missing after extraction" >&2; exit 1; }
   echo "kestrel bootstrap: self-hosted compiler classes installed successfully"; exit 0
 fi
 
@@ -38,8 +44,16 @@ if [ "${1:-}" = "build" ] && [ -z "${2:-}" ]; then
   mkdir -p "$(dirname "$MAVEN_RUNTIME_JAR")" && cp "$ROOT/runtime/jvm/kestrel-runtime.jar" "$MAVEN_RUNTIME_JAR"; exit 0
 fi
 
+# test: generate and run the synthetic test runner via `run`.
+# This avoids self-hosted `cmdTest` exiting early when async work is still pending.
+if [ "${1:-}" = "test" ]; then
+  shift
+  "$0" run "$ROOT/stdlib/kestrel/tools/test.ks" --generate "$@" || exit $?
+  exec "$0" run "$ROOT/.kestrel_test_runner.ks"
+fi
+
 # All other commands: delegate to the self-hosted Kestrel CLI
-CLI_CLASS=$(find "$JVM_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null \
-  | head -1 | sed "s|$JVM_CACHE/||;s|\.class\$||" | tr '/' '.') || CLI_CLASS=""
+CLI_CLASS=$(find "$SELF_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null \
+  | head -1 | sed "s|$SELF_CACHE/||;s|\.class\$||" | tr '/' '.') || CLI_CLASS=""
 [ -n "$CLI_CLASS" ] || { echo "kestrel: self-hosted compiler artifacts are required for this command" >&2; echo "  run: ./scripts/build-bootstrap-jar.sh && ./kestrel bootstrap" >&2; exit 1; }
-exec java -Xss8m -Dkestrel.exitWait=false -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE" "$CLI_CLASS" "$@"
+exec java -Xss8m -Dkestrel.exitWait=false -cp "$MAVEN_RUNTIME_JAR:$SELF_CACHE:$JVM_CACHE" "$CLI_CLASS" "$@"

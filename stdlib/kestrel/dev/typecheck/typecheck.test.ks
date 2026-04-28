@@ -123,5 +123,37 @@ export async fun run(s: Suite): Task<Unit> =
       val mismatch = runTc("val s: String = 42")
       eq(sg, "script val annotation mismatch rejected", mismatch.ok, False);
       isTrue(sg, "script val mismatch has diagnostics", !Lst.isEmpty(mismatch.diagnostics))
+    });
+
+    group(s1, "extern fun declarations", (sg: Suite) => {
+      // exported extern fun appears in exports with correct type
+      Ty.resetVarId()
+      val exportedExtern = runTc("export extern fun add(x: Int, y: Int): Int = \"(II)I\"")
+      eq(sg, "exported extern fun ok", exportedExtern.ok, True);
+      eq(sg, "exported extern fun in exports", findExportType(exportedExtern, "add"), "(Int, Int) -> Int");
+
+      // non-exported extern fun does not appear in exports
+      Ty.resetVarId()
+      val localExtern = runTc("extern fun hidden(x: Int): Int = \"(I)I\"")
+      eq(sg, "non-exported extern fun ok", localExtern.ok, True);
+      eq(sg, "non-exported extern fun absent from exports", findExportType(localExtern, "hidden"), "<missing>");
+
+      // generic extern fun generalizes correctly
+      Ty.resetVarId()
+      val genericExtern = runTc("export extern fun identity<A>(x: A): A = \"(Ljava/lang/Object;)Ljava/lang/Object;\"")
+      eq(sg, "generic extern fun ok", genericExtern.ok, True);
+      eq(sg, "generic extern fun type", findExportType(genericExtern, "identity"), "(A) -> A");
+
+      // downstream module using an extern fun imported from a prior module typechecks successfully
+      Ty.resetVarId()
+      val producer = runTc("export extern fun add(x: Int, y: Int): Int = \"(II)I\"")
+      val consumer = TC.typecheck(program("export val result: Int = add(1, 2)"), {
+        importBindings = Some(producer.exports),
+        typeAliasBindings = None,
+        importOpaqueTypes = None,
+        sourceFile = "consumer.ks"
+      })
+      eq(sg, "downstream consumer ok", consumer.ok, True);
+      eq(sg, "downstream consumer result type", findExportType(consumer, "result"), "Int")
     })
   })

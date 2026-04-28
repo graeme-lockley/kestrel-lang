@@ -68,14 +68,14 @@ Layout: `tests/e2e/scenarios/negative/*.ks` (must fail at compile or runtime wit
 ./kestrel build [script.ks]
 
 # Seed self-hosted compiler classes from bootstrap JAR
-./kestrel bootstrap
+./kestrel-self bootstrap
 
 # Show active compiler mode/provenance state
 ./kestrel status
 
 # After successful bootstrap (`status` shows self-hosted), normal commands
-# require self-hosted compiler classes in ~/.kestrel/jvm/
-# (compile orchestration remains via compiler/dist/cli.js in scripts/kestrel)
+# require self-hosted compiler classes in ~/.kestrel/self/
+# (./kestrel uses ~/.kestrel/ts/ via the TS compiler; ./kestrel-self uses ~/.kestrel/self/)
 
 # Run Kestrel test suite
 ./kestrel test [--verbose|--summary] [--clean] [--refresh] [--allow-http] [files...]
