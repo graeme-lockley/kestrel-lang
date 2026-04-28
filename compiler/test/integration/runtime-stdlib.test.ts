@@ -516,6 +516,18 @@ run()
   });
 
   it('kestrel status reports both caches', () => {
+    // Ensure bootstrap exists; build-bootstrap-jar.sh may not have run in this test environment
+    const bootstrapCmd = './scripts/build-bootstrap-jar.sh && ./kestrel-self bootstrap 2>&1';
+    try {
+      execSync(bootstrapCmd, {
+        cwd: kestrelRoot,
+        shell: true,
+        stdio: 'pipe',
+      });
+    } catch {
+      // Ignore bootstrap failure; test will skip if still missing
+    }
+
     const result = execSync('./kestrel status', {
       cwd: kestrelRoot,
       encoding: 'utf8',
@@ -526,6 +538,18 @@ run()
   });
 
   it('scripts/test-kestrel.sh exits 0 over the seed corpus', () => {
+    // Ensure bootstrap exists; build-bootstrap-jar.sh may not have run in this test environment
+    const bootstrapCmd = './scripts/build-bootstrap-jar.sh && ./kestrel-self bootstrap 2>&1';
+    try {
+      execSync(bootstrapCmd, {
+        cwd: kestrelRoot,
+        shell: true,
+        stdio: 'pipe',
+      });
+    } catch {
+      // Ignore bootstrap failure; test will skip if still missing
+    }
+
     const result = execSync('./scripts/test-kestrel.sh', {
       cwd: kestrelRoot,
       encoding: 'utf8',
