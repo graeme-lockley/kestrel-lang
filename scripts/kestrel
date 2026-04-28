@@ -9,6 +9,7 @@ while [ -L "$SOURCE" ]; do
 done
 ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"; export KESTREL_ROOT="$ROOT"
 COMPILER="$ROOT/compiler"; COMPILER_CLI="$COMPILER/dist/cli.js"
+TS_CLI_SOURCE="$ROOT/stdlib/kestrel/tools/cli.ks"
 if [ -n "${KESTREL_JVM_CACHE:-}" ]; then
   echo "kestrel: KESTREL_JVM_CACHE is deprecated; use KESTREL_TS_CACHE instead" >&2
   JVM_CACHE="$KESTREL_JVM_CACHE"
@@ -19,6 +20,25 @@ SELF_CACHE="${KESTREL_SELF_CACHE:-$HOME/.kestrel/self}"
 MAVEN="${KESTREL_MAVEN_CACHE:-$HOME/.kestrel/maven}"
 MAVEN_RUNTIME_JAR="$MAVEN/lang/kestrel/runtime/1.0/runtime-1.0.jar"
 MAVEN_BOOTSTRAP_JAR="$MAVEN/lang/kestrel/compile/1.0/compile-1.0.jar"
+
+# Ensure the TS cache contains a current Cli.class for ./kestrel default mode.
+ensure_ts_cli_class() {
+  local ts_cli
+  ts_cli=$(find "$JVM_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null | head -1 || true)
+  if [ -n "$ts_cli" ]; then
+    return 0
+  fi
+
+  # If compiler output is missing, build it first.
+  if [ ! -f "$COMPILER_CLI" ]; then
+    command -v node >/dev/null || return 1
+    (cd "$COMPILER" && npm run build >/dev/null 2>&1) || return 1
+  fi
+
+  mkdir -p "$JVM_CACHE"
+  command -v node >/dev/null || return 1
+  node "$COMPILER_CLI" "$TS_CLI_SOURCE" --target jvm -o "$JVM_CACHE" >/dev/null 2>&1 || return 1
+}
 
 # --allow-ts-compiler __ts-compile: direct TypeScript compiler invocation (bootstrap only)
 if [ "${1:-}" = "--allow-ts-compiler" ] && [ "${2:-}" = "__ts-compile" ]; then
@@ -49,6 +69,9 @@ if [ "${1:-}" = "test" ]; then
 fi
 
 # All other commands: delegate to the self-hosted Kestrel CLI
+# First, try to ensure TS Cli.class exists so ./kestrel stays on TS-default path.
+ensure_ts_cli_class || true
+
 # Look for Cli.class in JVM_CACHE first (TS-compiled, for ./kestrel default path),
 # then fall back to SELF_CACHE (self-hosted bootstrap/compiled classes, for ./kestrel-self).
 CLI_CLASS=$(find "$JVM_CACHE" "$SELF_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null \
