@@ -215,38 +215,38 @@ export async fun run(s: Suite): Task<Unit> =
 
       // exception with fields typechecks with no diagnostics
       Ty.resetVarId()
-      val withFields = runTc("exception MyError(message: String)")
+      val withFields = runTc("exception MyError { message: String }")
       eq(sg, "exception with fields ok", withFields.ok, True);
       isTrue(sg, "exception with fields no diagnostics", Lst.isEmpty(withFields.diagnostics));
 
       // exported exception constructor appears in exports
       Ty.resetVarId()
-      val exported = runTc("export exception MyError(message: String)")
+      val exported = runTc("export exception MyError { message: String }")
       eq(sg, "exported exception ok", exported.ok, True);
       isTrue(sg, "exported exception ctor in exports", findExportType(exported, "MyError") != "<missing>");
 
       // non-exported exception constructor absent from exports
       Ty.resetVarId()
-      val local = runTc("exception LocalErr(code: Int)")
+      val local = runTc("exception LocalErr { code: Int }")
       eq(sg, "non-exported exception ok", local.ok, True);
       eq(sg, "non-exported exception absent from exports", findExportType(local, "LocalErr"), "<missing>");
 
       // throw expression typechecks
       Ty.resetVarId()
-      val throwRes = runTc("exception MyError(message: String)\nfun go(): Int = throw MyError(\"oops\")")
+      val throwRes = runTc("exception MyError { message: String }\nfun go(): Int = throw MyError(\"oops\")")
       eq(sg, "throw exception ok", throwRes.ok, True);
       isTrue(sg, "throw exception no diagnostics", Lst.isEmpty(throwRes.diagnostics));
 
       // try/catch with constructor pattern binds variables correctly
       Ty.resetVarId()
-      val tryCatch = runTc("exception MyError(message: String)\nexport fun run(): Int = try { 1 } catch (MyError(m)) { m => 0 }")
+      val tryCatch = runTc("exception MyError { message: String }\nexport fun run(): Int = try { 1 } catch { MyError(m) => 0 }")
       eq(sg, "try/catch exception ok", tryCatch.ok, True);
       isTrue(sg, "try/catch exception no diagnostics", Lst.isEmpty(tryCatch.diagnostics));
 
       // exported exception consumable cross-module via importBindings
       Ty.resetVarId()
-      val producer = runTc("export exception MyError(message: String)")
-      val consumer = TC.typecheck(program("export fun go(): Int = try { 1 } catch (MyError(m)) { m => 0 }"), {
+      val producer = runTc("export exception MyError { message: String }")
+      val consumer = TC.typecheck(program("export fun go(): Int = try { 1 } catch { MyError(m) => 0 }"), {
         importBindings = Some(producer.exports),
         typeAliasBindings = None,
         importOpaqueTypes = None,
