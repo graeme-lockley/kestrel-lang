@@ -215,7 +215,7 @@ before the self-hosted compiler can typecheck its own stdlib modules.
     — Add `TDExternFun` arms to `prebindFunDecls` and `checkDecls`. Required for every
     stdlib primitive module (`data/string`, `data/list`, `io/fs`, `io/process`, etc.).
 
-20. [S17-17 — Self-hosted typecheck and codegen for `extern type` declarations](../../unplanned/S17-17-self-hosted-typecheck-codegen-extern-type.md)
+20. [S17-17 — Self-hosted typecheck and codegen for `extern type` declarations](../../done/S17-17-self-hosted-typecheck-codegen-extern-type.md) ✅
     — Add `TDExternType` arms to `prebindTypeDecls`, `checkDecls`, and `emitDecl`. Required
     for opaque types (`ByteArray`, `FileHandle`, ...).
 

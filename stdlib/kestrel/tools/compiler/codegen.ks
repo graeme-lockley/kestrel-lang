@@ -10,7 +10,7 @@ import * as Opt from "kestrel:data/option"
 import * as Str from "kestrel:data/string"
 import * as Ast from "kestrel:dev/parser/ast"
 import {
-  TDFun, TDExternFun, TDType, TDException, TDExport, TDVal, TDVar, TDSVal, TDSVar,
+  TDFun, TDExternFun, TDExternType, TDType, TDException, TDExport, TDVal, TDVar, TDSVal, TDSVar,
   EIDecl, TBAdt,
   ELit, EIdent, ECall, EField, EAwait, EUnary, EBinary, ECons, EPipe,
   EIf, EWhile, EMatch, ELambda, ETemplate, EList, ERecord, ETuple,
@@ -209,6 +209,7 @@ fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, decl: Ast.TopDecl, cla
   match (decl) {
     TDFun(funDecl) => { emitFunDecl(cf, funDecl); classes }
     TDExternFun(externDecl) => { emitExternFun(cf, externDecl); classes }
+    TDExternType(_) => classes
     TDType(typeDecl) => {
       match (typeDecl.body) {
         TBAdt(ctors) => emitTypeCtors(moduleName, ctors, classes)

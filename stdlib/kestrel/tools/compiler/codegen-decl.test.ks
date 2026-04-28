@@ -40,5 +40,11 @@ export async fun run(s: Suite): Task<Unit> =
       val result = compileModule("test/DeclType", "type Color = Red | Green")
       isTrue(sg, "module class emitted", hasNonEmptyClass(result, "test/DeclType"))
       isTrue(sg, "constructor classes emitted", Dict.size(result.classes) >= 3)
+    });
+
+    group(s1, "extern type declaration", (sg: Suite) => {
+      val result = compileModule("test/DeclExternType", "export extern type Foo = jvm(\"java.lang.Object\")")
+      isTrue(sg, "main class emitted", hasNonEmptyClass(result, "test/DeclExternType"));
+      eq(sg, "no extra classes for extern type", Dict.size(result.classes), 1)
     })
   })

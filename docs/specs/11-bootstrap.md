@@ -265,6 +265,7 @@ The self-hosted typechecker (`stdlib/kestrel/dev/typecheck/typecheck.ks`) handle
 | `val` / `export val` | Yes | Full inference |
 | `var` / `export var` | Yes | Full inference |
 | `extern fun` / `export extern fun` | Yes | Signature-only registration; no body inference required. Exported extern funs appear in `TypecheckResult.exports` and are emitted to `.kti` files. |
+| `extern type` / `export extern type` | Yes | Nominal type registration; no constructors. Exported/opaque extern types appear in `TypecheckResult.exportedTypeVisibility` and `exportedTypeAliases`, and are serialised to `.kti` files. |
 | `type` / `export type` | Yes | ADT and alias registration |
 | `exception` / `export exception` | Yes | Constructor registration |
 
