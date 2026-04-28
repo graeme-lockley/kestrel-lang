@@ -2,6 +2,7 @@ import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 import * as Str from "kestrel:data/string"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
+import * as Opt from "kestrel:data/option"
 import * as Lex from "kestrel:dev/parser/lexer"
 import { parseFromList } from "kestrel:dev/parser/parser"
 import * as Ast from "kestrel:dev/parser/ast"
@@ -156,5 +157,31 @@ export async fun run(s: Suite): Task<Unit> =
       })
       eq(sg, "downstream consumer ok", consumer.ok, True);
       eq(sg, "downstream consumer result type", findExportType(consumer, "result"), "Int")
+    });
+
+    group(s1, "extern type declarations", (sg: Suite) => {
+      // non-exported extern type is accepted with no diagnostics
+      Ty.resetVarId()
+      val localExt = runTc("extern type Foo = jvm(\"java.lang.Object\")")
+      eq(sg, "non-exported extern type ok", localExt.ok, True);
+      isTrue(sg, "non-exported extern type no diagnostics", Lst.isEmpty(localExt.diagnostics));
+
+      // exported extern type appears in exportedTypeVisibility as "export"
+      Ty.resetVarId()
+      val exportedExt = runTc("export extern type Bar = jvm(\"java.lang.Object\")")
+      eq(sg, "exported extern type ok", exportedExt.ok, True);
+      eq(sg, "exported extern type visibility", Opt.getOrElse(Dict.get(exportedExt.exportedTypeVisibility, "Bar"), "<missing>"), "export");
+
+      // opaque extern type appears in exportedTypeVisibility as "opaque"
+      Ty.resetVarId()
+      val opaqueExt = runTc("extern type Baz = jvm(\"java.lang.Object\")")
+      eq(sg, "local extern type ok", opaqueExt.ok, True);
+      eq(sg, "local extern type visibility recorded", Opt.getOrElse(Dict.get(opaqueExt.exportedTypeVisibility, "Baz"), "<missing>"), "local");
+
+      // extern type with type params is accepted
+      Ty.resetVarId()
+      val paramExt = runTc("extern type Map<K, V> = jvm(\"java.util.Map\")")
+      eq(sg, "parameterised extern type ok", paramExt.ok, True);
+      isTrue(sg, "parameterised extern type no diagnostics", Lst.isEmpty(paramExt.diagnostics))
     })
   })

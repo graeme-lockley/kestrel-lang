@@ -21,7 +21,7 @@ import {
   SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue,
   PWild, PVar, PLit, PCon, PList, PCons, PTuple,
   LElem, LSpread,
-  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr, TDExternFun,
+  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr, TDExternFun, TDExternType,
   TBAdt, TBAlias,
   TmplLit, TmplExpr
 } from "kestrel:dev/parser/ast"
@@ -286,6 +286,19 @@ fun registerExceptionDecl(reg: TypeRegistry, exn: Ast.ExceptionDecl): TypeRegist
     ctorOwners = reg.ctorOwners,
     exportedConstructors = reg.exportedConstructors,
     exportedTypeVisibility = Dict.insert(reg.exportedTypeVisibility, exn.name, vis)
+  }
+}
+
+fun registerExternTypeDecl(reg: TypeRegistry, etd: Ast.ExternTypeDecl): TypeRegistry = {
+  val scope = buildTypeParamScope(reg.typeAliases, etd.typeParams)
+  val named = ctorReturnType(etd.name, scope, etd.typeParams)
+  {
+    typeAliases = Dict.insert(reg.typeAliases, etd.name, named),
+    ctorEnv = reg.ctorEnv,
+    adtConstructors = reg.adtConstructors,
+    ctorOwners = reg.ctorOwners,
+    exportedConstructors = reg.exportedConstructors,
+    exportedTypeVisibility = Dict.insert(reg.exportedTypeVisibility, etd.name, etd.visibility)
   }
 }
 
@@ -869,6 +882,7 @@ fun prebindTypeDecls(reg: TypeRegistry, decls: List<Ast.TopDecl>): TypeRegistry 
         match (h) {
           TDType(td) => registerTypeDecl(reg, td)
           TDException(exn) => registerExceptionDecl(reg, exn)
+          TDExternType(etd) => registerExternTypeDecl(reg, etd)
           _ => reg
         }
       prebindTypeDecls(reg2, rest)
@@ -1062,6 +1076,14 @@ fun checkDecls(
           TDSExpr(expr) => { inferExpr(state, env, typeAliases, expr); (env, exports, exportedTypeAliases) }
           TDType(td) => checkTypeDeclExports(typeAliases, env, exports, exportedTypeAliases, td)
           TDExternFun(efd) => checkExternFunDecl(state, env, typeAliases, exports, exportedTypeAliases, efd)
+          TDExternType(etd) => {
+            val aliasOut =
+              if (etd.visibility == "export" | etd.visibility == "opaque")
+                Dict.insert(exportedTypeAliases, etd.name, Opt.getOrElse(Dict.get(typeAliases, etd.name), Ty.TApp(etd.name, [])))
+              else
+                exportedTypeAliases;
+            (env, exports, aliasOut)
+          }
           _ => {
             addDiag(state, Diag.CODES.type_.check, "Unsupported top-level declaration in self-hosted checker MVP");
             (env, exports, exportedTypeAliases)
