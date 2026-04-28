@@ -21,7 +21,8 @@ import {
   SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue,
   PWild, PVar, PLit, PCon, PList, PCons, PTuple,
   LElem, LSpread,
-  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr, TDExternFun, TDExternType, TDExternImport,
+  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr, TDExternFun, TDExternType, TDExternImport, TDExport,
+  EIStar, EINamed, EIDecl,
   TBAdt, TBAlias,
   TmplLit, TmplExpr
 } from "kestrel:dev/parser/ast"
@@ -53,10 +54,13 @@ export type DependencyExportSnapshot = {
 ///
 /// `importBindings` and `typeAliasBindings` allow callers to inject resolved
 /// bindings for cross-module checking. `sourceFile` is used in diagnostics.
+/// `depSnapshots` provides per-spec full export data needed for re-export resolution
+/// (`export * from` / `export { x } from` declarations).
 export type TypecheckOptions = {
   importBindings: Option<TypeEnv>,
   typeAliasBindings: Option<Dict<String, Ty.InternalType>>,
   importOpaqueTypes: Option<List<String>>,
+  depSnapshots: Option<Dict<String, DependencyExportSnapshot>>,
   sourceFile: String
 }
 
@@ -86,7 +90,9 @@ type TcState = {
   ctorOwners: Dict<String, String>,
   sourceFile: String,
   asyncDepth: mut Int,
-  inferredItems: mut List<InferredEntry>
+  inferredItems: mut List<InferredEntry>,
+  fwdConstructors: mut Dict<String, Ty.InternalType>,
+  fwdTypeVisibility: mut Dict<String, String>
 }
 
 type InferredEntry = { node: Ast.Expr, type_: Ty.InternalType }
@@ -107,6 +113,7 @@ export val defaultTypecheckOptions: TypecheckOptions = {
   importBindings = None,
   typeAliasBindings = None,
   importOpaqueTypes = None,
+  depSnapshots = None,
   sourceFile = ""
 }
 
@@ -1088,12 +1095,76 @@ fun checkTypeDeclExports(
   (env, exports, aliasOut)
 }
 
+fun forwardReexportStar(
+  state: TcState,
+  exports: TypeEnv,
+  exportedTypeAliases: Dict<String, Ty.InternalType>,
+  snap: DependencyExportSnapshot
+): (TypeEnv, Dict<String, Ty.InternalType>) = {
+  // Forward all value bindings (includes constructor types since kti merges them).
+  // Local exports take priority over re-exported names.
+  val newExports = { items = Dict.union(exports.items, snap.exports.items) }
+  // Forward type aliases; local aliases win.
+  val newTypeAliases = Dict.union(exportedTypeAliases, snap.exportedTypeAliases)
+  // Accumulate forwarded constructors and type visibility into mutable state.
+  state.fwdConstructors := Dict.union(state.fwdConstructors, snap.exportedConstructors)
+  state.fwdTypeVisibility := Dict.union(state.fwdTypeVisibility, snap.exportedTypeVisibility)
+  (newExports, newTypeAliases)
+}
+
+fun forwardReexportNamed(
+  state: TcState,
+  exports: TypeEnv,
+  exportedTypeAliases: Dict<String, Ty.InternalType>,
+  snap: DependencyExportSnapshot,
+  spec: String,
+  importSpecs: List<Ast.ImportSpec>
+): (TypeEnv, Dict<String, Ty.InternalType>) =
+  match (importSpecs) {
+    [] => (exports, exportedTypeAliases)
+    s :: rest => {
+      val externalName = s.external
+      val exportName = s.local
+      // Check the name is actually exported by the dep.
+      val inValues = Dict.member(snap.exports.items, externalName)
+      val inCtors = Dict.member(snap.exportedConstructors, externalName)
+      val inTypeAliases = Dict.member(snap.exportedTypeAliases, externalName)
+      val out =
+        if (inValues | inCtors | inTypeAliases) {
+          val newExports =
+            match (Dict.get(snap.exports.items, externalName)) {
+              Some(t) => envInsert(exports, exportName, t)
+              None => exports
+            }
+          val newTypeAliases =
+            match (Dict.get(snap.exportedTypeAliases, externalName)) {
+              Some(t) => Dict.insert(exportedTypeAliases, exportName, t)
+              None => exportedTypeAliases
+            }
+          match (Dict.get(snap.exportedConstructors, externalName)) {
+            Some(ct) => state.fwdConstructors := Dict.insert(state.fwdConstructors, exportName, ct)
+            None => ()
+          }
+          match (Dict.get(snap.exportedTypeVisibility, externalName)) {
+            Some(vis) => state.fwdTypeVisibility := Dict.insert(state.fwdTypeVisibility, exportName, vis)
+            None => ()
+          }
+          (newExports, newTypeAliases)
+        } else {
+          addDiag(state, Diag.CODES.export_.notExported, "Module ${spec} does not export '${externalName}'");
+          (exports, exportedTypeAliases)
+        }
+      forwardReexportNamed(state, out.0, out.1, snap, spec, rest)
+    }
+  }
+
 fun checkDecls(
   state: TcState,
   env: TypeEnv,
   typeAliases: Dict<String, Ty.InternalType>,
   exports: TypeEnv,
   exportedTypeAliases: Dict<String, Ty.InternalType>,
+  depSnapshots: Dict<String, DependencyExportSnapshot>,
   decls: List<Ast.TopDecl>
 ): (TypeEnv, TypeEnv, Dict<String, Ty.InternalType>) =
   match (decls) {
@@ -1125,12 +1196,37 @@ fun checkDecls(
                 exportedTypeAliases;
             (env, exports, aliasOut)
           }
+          TDExport(EIStar(spec)) => {
+            match (Dict.get(depSnapshots, spec)) {
+              None => {
+                addDiag(state, Diag.CODES.type_.check, "Re-export target not found in dependencies: ${spec}");
+                (env, exports, exportedTypeAliases)
+              }
+              Some(snap) => {
+                val fwd = forwardReexportStar(state, exports, exportedTypeAliases, snap)
+                (env, fwd.0, fwd.1)
+              }
+            }
+          }
+          TDExport(EINamed(spec, importSpecs)) => {
+            match (Dict.get(depSnapshots, spec)) {
+              None => {
+                addDiag(state, Diag.CODES.type_.check, "Re-export target not found in dependencies: ${spec}");
+                (env, exports, exportedTypeAliases)
+              }
+              Some(snap) => {
+                val fwd = forwardReexportNamed(state, exports, exportedTypeAliases, snap, spec, importSpecs)
+                (env, fwd.0, fwd.1)
+              }
+            }
+          }
+          TDExport(EIDecl(d)) => checkDecls(state, env, typeAliases, exports, exportedTypeAliases, depSnapshots, [d])
           _ => {
             addDiag(state, Diag.CODES.type_.check, "Unsupported top-level declaration in self-hosted checker MVP");
             (env, exports, exportedTypeAliases)
           }
         }
-      checkDecls(state, out.0, typeAliases, out.1, out.2, rest)
+      checkDecls(state, out.0, typeAliases, out.1, out.2, depSnapshots, rest)
     }
   }
 
@@ -1162,7 +1258,9 @@ fun makeTcState(reporter: Rep.Reporter, reg: TypeRegistry, sourceFile: String): 
   ctorOwners = reg.ctorOwners,
   sourceFile = sourceFile,
   mut asyncDepth = 0,
-  mut inferredItems = []
+  mut inferredItems = [],
+  mut fwdConstructors = Dict.emptyStringDict(),
+  mut fwdTypeVisibility = Dict.emptyStringDict()
 }
 
 fun builtinTypeEnv(): TypeEnv = {
@@ -1215,6 +1313,19 @@ export fun typecheck(prog: Ast.Program, opts: TypecheckOptions): TypecheckResult
   val importEnv = resolvedImportEnv(opts)
   val env0 = envUnion(rawToEnv(reg.ctorEnv), envUnion(importEnv, builtinEnv))
   val env1 = rawToEnv(prebindFunDecls(env0.items, reg.typeAliases, prog.body))
-  val checked = checkDecls(state, env1, reg.typeAliases, emptyTypeEnv(), Dict.emptyStringDict(), prog.body)
-  finishTypecheckResult(reporter, reg, checked, state.inferredItems)
+  val depSnapshots = match (opts.depSnapshots) {
+    Some(d) => d
+    None => Dict.emptyStringDict()
+  }
+  val checked = checkDecls(state, env1, reg.typeAliases, emptyTypeEnv(), Dict.emptyStringDict(), depSnapshots, prog.body)
+  // Merge re-exported constructors and type visibility collected during checkDecls.
+  val reg2 = {
+    typeAliases = reg.typeAliases,
+    ctorEnv = reg.ctorEnv,
+    adtConstructors = reg.adtConstructors,
+    ctorOwners = reg.ctorOwners,
+    exportedConstructors = Dict.union(reg.exportedConstructors, state.fwdConstructors),
+    exportedTypeVisibility = Dict.union(reg.exportedTypeVisibility, state.fwdTypeVisibility)
+  }
+  finishTypecheckResult(reporter, reg2, checked, state.inferredItems)
 }
