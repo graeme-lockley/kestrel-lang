@@ -21,6 +21,7 @@ fun runTc(src: String): TC.TypecheckResult =
     importBindings = None,
     typeAliasBindings = None,
     importOpaqueTypes = None,
+    depSnapshots = None,
     sourceFile = "typecheck.test.ks"
   })
 
@@ -153,6 +154,7 @@ export async fun run(s: Suite): Task<Unit> =
         importBindings = Some(producer.exports),
         typeAliasBindings = None,
         importOpaqueTypes = None,
+        depSnapshots = None,
         sourceFile = "consumer.ks"
       })
       eq(sg, "downstream consumer ok", consumer.ok, True);
@@ -250,9 +252,86 @@ export async fun run(s: Suite): Task<Unit> =
         importBindings = Some(producer.exports),
         typeAliasBindings = None,
         importOpaqueTypes = None,
+        depSnapshots = None,
         sourceFile = "consumer.ks"
       })
       eq(sg, "cross-module exception consumer ok", consumer.ok, True);
       isTrue(sg, "cross-module exception no diagnostics", Lst.isEmpty(consumer.diagnostics))
+    });
+
+    group(s1, "re-exports (EIStar and EINamed)", (sg: Suite) => {
+      // Build a dep snapshot from a typechecked module.
+      fun makeDepSnapshot(src: String): TC.DependencyExportSnapshot = {
+        val depResult = runTc(src)
+        {
+          exports = depResult.exports,
+          exportedTypeAliases = depResult.exportedTypeAliases,
+          exportedConstructors = depResult.exportedConstructors,
+          exportedTypeVisibility = depResult.exportedTypeVisibility
+        }
+      }
+
+      fun runTcWithSnap(src: String, snapsBySpec: Dict<String, TC.DependencyExportSnapshot>): TC.TypecheckResult =
+        TC.typecheck(program(src), {
+          importBindings = None,
+          typeAliasBindings = None,
+          importOpaqueTypes = None,
+          depSnapshots = Some(snapsBySpec),
+          sourceFile = "reexport.test.ks"
+        })
+
+      // export * from — forwards all value bindings into exports
+      Ty.resetVarId()
+      val depSnap = makeDepSnapshot("export fun add(x: Int, y: Int): Int = x")
+      val snapMap = Dict.insert(Dict.emptyStringDict(), "kestrel:test/dep", depSnap)
+      val starResult = runTcWithSnap("export * from \"kestrel:test/dep\"", snapMap)
+      eq(sg, "EIStar ok", starResult.ok, True);
+      isTrue(sg, "EIStar forwards value binding", Dict.member(starResult.exports.items, "add"));
+
+      // export { foo } from — forwards named value binding
+      Ty.resetVarId()
+      val depSnap2 = makeDepSnapshot("export fun foo(): Int = 1\nexport fun bar(): Bool = True")
+      val snapMap2 = Dict.insert(Dict.emptyStringDict(), "kestrel:test/dep2", depSnap2)
+      val namedResult = runTcWithSnap("export { foo } from \"kestrel:test/dep2\"", snapMap2)
+      eq(sg, "EINamed ok", namedResult.ok, True);
+      isTrue(sg, "EINamed forwards requested binding", Dict.member(namedResult.exports.items, "foo"));
+      isTrue(sg, "EINamed excludes unrequested binding", !Dict.member(namedResult.exports.items, "bar"));
+
+      // export { foo as baz } from — alias form
+      Ty.resetVarId()
+      val depSnap3 = makeDepSnapshot("export fun foo(): Int = 1")
+      val snapMap3 = Dict.insert(Dict.emptyStringDict(), "kestrel:test/dep3", depSnap3)
+      val aliasResult = runTcWithSnap("export { foo as baz } from \"kestrel:test/dep3\"", snapMap3)
+      eq(sg, "EINamed alias ok", aliasResult.ok, True);
+      isTrue(sg, "EINamed alias forwards under new name", Dict.member(aliasResult.exports.items, "baz"));
+      isTrue(sg, "EINamed alias does not leak original name", !Dict.member(aliasResult.exports.items, "foo"));
+
+      // export * from with type alias — type alias is forwarded
+      Ty.resetVarId()
+      val depSnap4 = makeDepSnapshot("export type Color = Red | Green")
+      val snapMap4 = Dict.insert(Dict.emptyStringDict(), "kestrel:test/dep4", depSnap4)
+      val typeStarResult = runTcWithSnap("export * from \"kestrel:test/dep4\"", snapMap4)
+      eq(sg, "EIStar with type ok", typeStarResult.ok, True);
+
+      // EINamed — unknown name from dep produces a diagnostic
+      Ty.resetVarId()
+      val depSnap5 = makeDepSnapshot("export fun foo(): Int = 1")
+      val snapMap5 = Dict.insert(Dict.emptyStringDict(), "kestrel:test/dep5", depSnap5)
+      val unknownResult = runTcWithSnap("export { missing } from \"kestrel:test/dep5\"", snapMap5)
+      eq(sg, "EINamed unknown name reports error", unknownResult.ok, False);
+      isTrue(sg, "EINamed unknown has notExported diagnostic",
+        hasDiagCode(unknownResult.diagnostics, Diag.CODES.export_.notExported));
+
+      // EIStar with missing dep snapshot produces a diagnostic
+      Ty.resetVarId()
+      val missingResult = runTcWithSnap("export * from \"kestrel:no/dep\"", Dict.emptyStringDict())
+      eq(sg, "EIStar missing dep reports error", missingResult.ok, False);
+
+      // EIStar value type is correct after forwarding
+      Ty.resetVarId()
+      val depSnap6 = makeDepSnapshot("export fun compute(x: Int): Bool = True")
+      val snapMap6 = Dict.insert(Dict.emptyStringDict(), "kestrel:test/dep6", depSnap6)
+      val typeCheckResult = runTcWithSnap("export * from \"kestrel:test/dep6\"", snapMap6)
+      eq(sg, "EIStar type forwarded", findExportType(typeCheckResult, "compute"), "(Int) -> Bool")
     })
   })

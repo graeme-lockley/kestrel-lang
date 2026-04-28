@@ -93,6 +93,7 @@ fun inferExportTypeStrings(source: String): Dict<String, String> =
         importBindings = None,
         typeAliasBindings = None,
         importOpaqueTypes = None,
+        depSnapshots = None,
         sourceFile = "<doc-extract>"
       });
       Dict.map(tc.exports.items, (_name: String, t) => Ty.typeToString(t))

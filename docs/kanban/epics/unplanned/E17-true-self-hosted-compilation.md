@@ -227,7 +227,7 @@ before the self-hosted compiler can typecheck its own stdlib modules.
     — Add `TDException` arms to typecheck (codegen already handles them). Required for any
     module declaring its own exception types.
 
-23. [S17-20 — Self-hosted typecheck and codegen for `export * from` / `export { x } from` re-exports](../../unplanned/S17-20-self-hosted-typecheck-codegen-reexports.md)
+23. ✅ [S17-20 — Self-hosted typecheck and codegen for `export * from` / `export { x } from` re-exports](../../done/S17-20-self-hosted-typecheck-codegen-reexports.md)
     — Add the `EIStar` and `EINamed` arms to `TDExport` handling in both typecheck and
     codegen so aggregator modules typecheck and emit correct KTI.
 

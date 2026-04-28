@@ -53,5 +53,17 @@ export async fun run(s: Suite): Task<Unit> =
       val result = compileModule("test/DeclExternImport", src)
       isTrue(sg, "main class emitted", hasNonEmptyClass(result, "test/DeclExternImport"));
       eq(sg, "no extra classes for extern import", Dict.size(result.classes), 1)
+    });
+
+    group(s1, "re-export declarations", (sg: Suite) => {
+      // export * from produces no extra classes (pure linkage in KTI)
+      val starResult = compileModule("test/DeclReexportStar", "export * from \"kestrel:some/dep\"")
+      isTrue(sg, "export-star main class emitted", hasNonEmptyClass(starResult, "test/DeclReexportStar"));
+      eq(sg, "export-star no extra classes", Dict.size(starResult.classes), 1);
+
+      // export { x } from produces no extra classes
+      val namedResult = compileModule("test/DeclReexportNamed", "export { foo, Bar } from \"kestrel:some/dep\"")
+      isTrue(sg, "export-named main class emitted", hasNonEmptyClass(namedResult, "test/DeclReexportNamed"));
+      eq(sg, "export-named no extra classes", Dict.size(namedResult.classes), 1)
     })
   })

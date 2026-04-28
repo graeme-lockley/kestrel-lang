@@ -249,10 +249,19 @@ async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: Strin
       val importEnv = if (Dict.isEmpty(depBindings.importBindings)) None else Some({ items = depBindings.importBindings });
       val typeAliasEnv = if (Dict.isEmpty(depBindings.typeAliasBindings)) None else Some(depBindings.typeAliasBindings)
       val opaqueTypes = if (Lst.isEmpty(depBindings.importOpaqueTypes)) None else Some(depBindings.importOpaqueTypes)
+      // Convert per-dep snapshot entries to TC.DependencyExportSnapshot for re-export resolution.
+      val depSnapshotsDict = Dict.map(depBindings.depSnapshotsBySpec, (spec: String, e: Kti.DepSnapshotEntry) => {
+        exports = { items = e.depExports },
+        exportedTypeAliases = e.depTypeAliases,
+        exportedConstructors = Dict.emptyStringDict(),
+        exportedTypeVisibility = e.depTypeVisibility
+      })
+      val depSnapshotsOpt = if (Dict.isEmpty(depSnapshotsDict)) None else Some(depSnapshotsDict)
       val tcOpts = {
         importBindings = importEnv,
         typeAliasBindings = typeAliasEnv,
         importOpaqueTypes = opaqueTypes,
+        depSnapshots = depSnapshotsOpt,
         sourceFile = entryPath
       };
       val tc = TC.typecheck(prog, tcOpts);

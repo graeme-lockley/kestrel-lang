@@ -541,10 +541,22 @@ fun collectOpaqueNamedImports(specs: List<Ast.ImportSpec>, depTypeAliases: Dict<
     }
   }
 
+/// Per-dependency export snapshot used for re-export resolution in the self-hosted checker.
+///
+/// Holds the raw, unadapted export dictionaries for a single dependency module so that
+/// `typecheck` can forward selected (or all) names when it sees `export * from` /
+/// `export { x } from` declarations.
+export type DepSnapshotEntry = {
+  depExports: Dict<String, Ty.InternalType>,
+  depTypeAliases: Dict<String, Ty.InternalType>,
+  depTypeVisibility: Dict<String, String>
+}
+
 export type DepBindingBundle = {
   importBindings: Dict<String, Ty.InternalType>,
   typeAliasBindings: Dict<String, Ty.InternalType>,
-  importOpaqueTypes: List<String>
+  importOpaqueTypes: List<String>,
+  depSnapshotsBySpec: Dict<String, DepSnapshotEntry>
 }
 
 /// Result of loading all dep KTIs — either a combined binding bundle or an error message.
@@ -554,7 +566,7 @@ export type DepLoadResult = DepLoadOk(DepBindingBundle) | DepLoadErr(String)
 /// For each dep, read its KTI and process matching import decls.
 export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast.ImportDecl>): Task<DepLoadResult> =
   match (deps) {
-    [] => DepLoadOk({ importBindings = Dict.emptyStringDict(), typeAliasBindings = Dict.emptyStringDict(), importOpaqueTypes = [] })
+    [] => DepLoadOk({ importBindings = Dict.emptyStringDict(), typeAliasBindings = Dict.emptyStringDict(), importOpaqueTypes = [], depSnapshotsBySpec = Dict.emptyStringDict() })
     dep :: rest => {
       match (await readKtiFile(dep.1)) {
         Err(_) => DepLoadErr("dependency not compiled yet: ${dep.0} (missing ${dep.1})")
@@ -576,7 +588,8 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
                       {
                         importBindings = valueBindings,
                         typeAliasBindings = typeBindings,
-                        importOpaqueTypes = appendUniqueStrings(b.importOpaqueTypes, opaqueLocals)
+                        importOpaqueTypes = appendUniqueStrings(b.importOpaqueTypes, opaqueLocals),
+                        depSnapshotsBySpec = b.depSnapshotsBySpec
                       }
                     } else b
                   }
@@ -586,14 +599,22 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
                       {
                         importBindings = Dict.insert(b.importBindings, alias, makeNamespaceType(nsBindings)),
                         typeAliasBindings = b.typeAliasBindings,
-                        importOpaqueTypes = b.importOpaqueTypes
+                        importOpaqueTypes = b.importOpaqueTypes,
+                        depSnapshotsBySpec = b.depSnapshotsBySpec
                       }
                     } else b
                   }
                   _ => b
                 }
               );
-              DepLoadOk(merged)
+              // Record the full export snapshot for this dep (used by re-export resolution).
+              val snapshot = { depExports = depExports, depTypeAliases = depTypeAliases, depTypeVisibility = depTypeVisibility }
+              DepLoadOk({
+                importBindings = merged.importBindings,
+                typeAliasBindings = merged.typeAliasBindings,
+                importOpaqueTypes = merged.importOpaqueTypes,
+                depSnapshotsBySpec = Dict.insert(merged.depSnapshotsBySpec, dep.0, snapshot)
+              })
             }
           }
         }
