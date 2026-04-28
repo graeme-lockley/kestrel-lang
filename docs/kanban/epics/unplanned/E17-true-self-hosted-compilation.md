@@ -157,7 +157,7 @@ via `./kestrel-self`. Acceptance for all subsequent stories is measured via
     — Add `scripts/kestrel-self` + root symlink as the dedicated self-hosted compiler entry point.
     Move `bootstrap` subcommand here. Update `./kestrel status` to report both caches.
 
-19. [S17-48 — Kestrel-compiler test corpora scaffolding and `scripts/test-kestrel.sh`](../../unplanned/S17-48-kestrel-test-corpora-and-runner.md)
+19. ✅ [S17-48 — Kestrel-compiler test corpora scaffolding and `scripts/test-kestrel.sh`](../../done/S17-48-kestrel-test-corpora-and-runner.md)
     — Create `tests/kunit/`, `tests/kfixtures/`, `tests/kconformance/{parse,typecheck,runtime/valid}/`
     with READMEs and seed content. Add `scripts/test-kestrel.sh` runner (NOT added to test-all.sh).
     Runtime goldens use in-file `// =>` convention.

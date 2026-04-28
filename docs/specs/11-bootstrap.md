@@ -172,6 +172,36 @@ Self-hosted compiler cache: ~/.kestrel/self (ready|missing)
 
 `ready` means the Cli.class for the TS cache (or `Cli_entry.class` for the self-hosted cache) is present. `missing` means it is absent.
 
+### 3.4 `scripts/test-kestrel.sh` — Self-Hosted Compiler Test Runner
+
+**Usage:** `./scripts/test-kestrel.sh`
+
+**Purpose:** Run the Kestrel-compiler-specific test corpora via the self-hosted compiler toolchain.
+
+**Tiers (in order):**
+
+| Tier | Directory | Runner | What it checks |
+|------|-----------|--------|----------------|
+| parse | `tests/kconformance/parse/` | `./kestrel-self build <file>` | Compiles without error (exit 0) |
+| typecheck | `tests/kconformance/typecheck/` | `./kestrel-self build <file>` | Compiles without error (exit 0) |
+| runtime | `tests/kconformance/runtime/valid/` | `./kestrel run <file>` *(see note)* | Exit 0; stdout matches `// =>` goldens |
+| unit | `tests/kunit/*.test.ks` | `./kestrel-self test <file>` | kestrel:dev/test suite (inactive until S17-36+) |
+
+**Runtime tier note:** Until the self-hosted compiler's code generation for top-level programs is
+complete (S17-36/S17-37/S17-38), the runtime tier runs via `./kestrel` (TypeScript compiler
+path). Once self-hosted codegen is functional, it will switch to `./kestrel-self`.
+
+**Runtime golden format:** In-file `// =>` comments mark expected stdout lines:
+```
+println(42)
+// => 42
+```
+A file with no `// =>` comments asserts exit 0 only.
+
+**Output:** Per-tier counts (`parse N, typecheck M, runtime K`) followed by a total. Exits non-zero on any failure.
+
+**Bootstrap guard:** If `~/.kestrel/self/` lacks `Cli.class`, the script automatically runs `./kestrel-self bootstrap` before proceeding.
+
 ---
 
 ## 4. Self-Hosted Mode Gating

@@ -524,4 +524,15 @@ run()
     expect(result).toMatch(/TS compiler cache/i);
     expect(result).toMatch(/Self-hosted compiler cache/i);
   });
+
+  it('scripts/test-kestrel.sh exits 0 over the seed corpus', () => {
+    const result = execSync('./scripts/test-kestrel.sh', {
+      cwd: kestrelRoot,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    });
+    expect(result).toMatch(/parse: \d+ passed, 0 failed/);
+    expect(result).toMatch(/typecheck: \d+ passed, 0 failed/);
+    expect(result).toMatch(/runtime: \d+ passed, 0 failed/);
+  });
 });
