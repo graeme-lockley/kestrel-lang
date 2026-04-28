@@ -21,7 +21,7 @@ import {
   SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue,
   PWild, PVar, PLit, PCon, PList, PCons, PTuple,
   LElem, LSpread,
-  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr, TDExternFun, TDExternType,
+  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr, TDExternFun, TDExternType, TDExternImport,
   TBAdt, TBAlias,
   TmplLit, TmplExpr
 } from "kestrel:dev/parser/ast"
@@ -354,6 +354,17 @@ fun registerExternFunSig(reg: Dict<String, Ty.InternalType>, typeAliases: Dict<S
   val ret = FA.astTypeToInternalWithScope(efd.retType, scope, [])
   Dict.insert(reg, efd.name, Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, ret)))
 }
+
+fun registerExternImportSigs(reg: Dict<String, Ty.InternalType>, typeAliases: Dict<String, Ty.InternalType>, overrides: List<Ast.ExternOverride>): Dict<String, Ty.InternalType> =
+  match (overrides) {
+    [] => reg
+    ov :: rest => {
+      val ps = paramTypes(ov.params, typeAliases)
+      val ret = FA.astTypeToInternalWithScope(ov.retType, typeAliases, [])
+      val reg2 = Dict.insert(reg, ov.name, Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, ret)))
+      registerExternImportSigs(reg2, typeAliases, rest)
+    }
+  }
 
 fun inferExprs(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.InternalType>, exprs: List<Ast.Expr>): List<Ty.InternalType> =
   match (exprs) {
@@ -897,6 +908,7 @@ fun prebindFunDecls(env: Dict<String, Ty.InternalType>, typeAliases: Dict<String
         match (h) {
           TDFun(fd) => registerFunSig(env, typeAliases, fd)
           TDExternFun(efd) => registerExternFunSig(env, typeAliases, efd)
+          TDExternImport(eid) => registerExternImportSigs(env, typeAliases, eid.overrides)
           _ => env
         }
       prebindFunDecls(env2, typeAliases, rest)
@@ -925,6 +937,34 @@ fun checkExternFunDecl(
   val exports2 = maybeExportBinding(efd.exported, exports, efd.name, finalType);
   (env2, exports2, exportedTypeAliases)
 }
+
+fun checkExternImportOverrides(
+  env: TypeEnv,
+  typeAliases: Dict<String, Ty.InternalType>,
+  exports: TypeEnv,
+  exportedTypeAliases: Dict<String, Ty.InternalType>,
+  overrides: List<Ast.ExternOverride>
+): (TypeEnv, TypeEnv, Dict<String, Ty.InternalType>) =
+  match (overrides) {
+    [] => (env, exports, exportedTypeAliases)
+    ov :: rest => {
+      val ps = paramTypes(ov.params, typeAliases)
+      val ret = FA.astTypeToInternalWithScope(ov.retType, typeAliases, [])
+      val finalType = Ty.generalize(Dict.emptyStringDict(), Ty.TArrow(ps, ret))
+      val env2 = envInsert(env, ov.name, finalType)
+      // extern import is always local — the parser rejects export extern import
+      checkExternImportOverrides(env2, typeAliases, exports, exportedTypeAliases, rest)
+    }
+  }
+
+fun checkExternImportDecl(
+  env: TypeEnv,
+  typeAliases: Dict<String, Ty.InternalType>,
+  exports: TypeEnv,
+  exportedTypeAliases: Dict<String, Ty.InternalType>,
+  eid: Ast.ExternImportDecl
+): (TypeEnv, TypeEnv, Dict<String, Ty.InternalType>) =
+  checkExternImportOverrides(env, typeAliases, exports, exportedTypeAliases, eid.overrides)
 
 fun checkFunDecl(
   state: TcState,
@@ -1076,6 +1116,7 @@ fun checkDecls(
           TDSExpr(expr) => { inferExpr(state, env, typeAliases, expr); (env, exports, exportedTypeAliases) }
           TDType(td) => checkTypeDeclExports(typeAliases, env, exports, exportedTypeAliases, td)
           TDExternFun(efd) => checkExternFunDecl(state, env, typeAliases, exports, exportedTypeAliases, efd)
+          TDExternImport(eid) => checkExternImportDecl(env, typeAliases, exports, exportedTypeAliases, eid)
           TDExternType(etd) => {
             val aliasOut =
               if (etd.visibility == "export" | etd.visibility == "opaque")

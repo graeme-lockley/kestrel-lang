@@ -46,5 +46,12 @@ export async fun run(s: Suite): Task<Unit> =
       val result = compileModule("test/DeclExternType", "export extern type Foo = jvm(\"java.lang.Object\")")
       isTrue(sg, "main class emitted", hasNonEmptyClass(result, "test/DeclExternType"));
       eq(sg, "no extra classes for extern type", Dict.size(result.classes), 1)
+    });
+
+    group(s1, "extern import declaration", (sg: Suite) => {
+      val src = "extern import \"java:java.lang.StringBuilder\" as SB {\n  fun append(sb: String, s: String): String\n  fun clear(sb: String): String\n}"
+      val result = compileModule("test/DeclExternImport", src)
+      isTrue(sg, "main class emitted", hasNonEmptyClass(result, "test/DeclExternImport"));
+      eq(sg, "no extra classes for extern import", Dict.size(result.classes), 1)
     })
   })

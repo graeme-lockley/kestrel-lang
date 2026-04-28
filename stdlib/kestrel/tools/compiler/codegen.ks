@@ -10,7 +10,7 @@ import * as Opt from "kestrel:data/option"
 import * as Str from "kestrel:data/string"
 import * as Ast from "kestrel:dev/parser/ast"
 import {
-  TDFun, TDExternFun, TDExternType, TDType, TDException, TDExport, TDVal, TDVar, TDSVal, TDSVar,
+  TDFun, TDExternFun, TDExternImport, TDExternType, TDType, TDException, TDExport, TDVal, TDVar, TDSVal, TDSVar,
   EIDecl, TBAdt,
   ELit, EIdent, ECall, EField, EAwait, EUnary, EBinary, ECons, EPipe,
   EIf, EWhile, EMatch, ELambda, ETemplate, EList, ERecord, ETuple,
@@ -163,6 +163,20 @@ export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit
   CF.mbSetMaxs(mb, 1, 8)
 }
 
+fun emitExternOverride(cf: CF.ClassFileBuilder, ov: Ast.ExternOverride): Unit = {
+  val desc = objectMethodDesc(Lst.length(ov.params))
+  val mb = CF.cfAddMethod(cf, ov.name, desc, Op.Acc.public_ + Op.Acc.static_)
+  pushNull(newCodegenContext(cf, mb))
+  CF.mbEmit1(mb, Op.JvmOp.areturn)
+  CF.mbSetMaxs(mb, 1, 8)
+}
+
+fun emitExternImportOverrides(cf: CF.ClassFileBuilder, overrides: List<Ast.ExternOverride>): Unit =
+  match (overrides) {
+    [] => ()
+    ov :: rest => { emitExternOverride(cf, ov); emitExternImportOverrides(cf, rest) }
+  }
+
 export fun emitVal(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr): Unit = {
   CF.cfAddField(cf, name, "Ljava/lang/Object;", Op.Acc.public_ + Op.Acc.static_ + Op.Acc.final_)
   val mb = CF.cfAddMethod(cf, "init$${name}", "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
@@ -209,6 +223,7 @@ fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, decl: Ast.TopDecl, cla
   match (decl) {
     TDFun(funDecl) => { emitFunDecl(cf, funDecl); classes }
     TDExternFun(externDecl) => { emitExternFun(cf, externDecl); classes }
+    TDExternImport(eid) => { emitExternImportOverrides(cf, eid.overrides); classes }
     TDExternType(_) => classes
     TDType(typeDecl) => {
       match (typeDecl.body) {

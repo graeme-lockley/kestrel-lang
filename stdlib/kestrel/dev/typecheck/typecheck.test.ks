@@ -183,5 +183,26 @@ export async fun run(s: Suite): Task<Unit> =
       val paramExt = runTc("extern type Map<K, V> = jvm(\"java.util.Map\")")
       eq(sg, "parameterised extern type ok", paramExt.ok, True);
       isTrue(sg, "parameterised extern type no diagnostics", Lst.isEmpty(paramExt.diagnostics))
+    });
+
+    group(s1, "extern import declarations", (sg: Suite) => {
+      // extern import with two overrides typechecks with no diagnostics
+      Ty.resetVarId()
+      val twoOverrides = runTc("extern import \"java:java.lang.StringBuilder\" as SB {\n  fun append(sb: String, s: String): String\n  fun clear(sb: String): String\n}")
+      eq(sg, "two-override extern import ok", twoOverrides.ok, True);
+      isTrue(sg, "two-override extern import no diagnostics", Lst.isEmpty(twoOverrides.diagnostics));
+
+      // extern import override names are local — they do NOT appear in exports
+      Ty.resetVarId()
+      val localCheck = runTc("extern import \"java:java.lang.StringBuilder\" as SB {\n  fun append(sb: String, s: String): String\n}")
+      eq(sg, "extern import local only ok", localCheck.ok, True);
+      eq(sg, "extern import name absent from exports", findExportType(localCheck, "append"), "<missing>");
+
+      // override names are accessible within the module: exported wrapper using override name typechecks
+      Ty.resetVarId()
+      val wrapperSrc = "extern import \"java:java.lang.StringBuilder\" as SB {\n  fun append(sb: String, s: String): String\n}\nexport fun wrapAppend(a: String, b: String): String = append(a, b)"
+      val wrapResult = runTc(wrapperSrc)
+      eq(sg, "exported wrapper using extern import name ok", wrapResult.ok, True);
+      eq(sg, "wrapper export type correct", findExportType(wrapResult, "wrapAppend"), "(String, String) -> String")
     })
   })
