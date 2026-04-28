@@ -1,4 +1,4 @@
-import { Suite, group, isTrue } from "kestrel:dev/test"
+import { Suite, group, isTrue, eq } from "kestrel:dev/test"
 import * as BA from "kestrel:data/bytearray"
 import * as Dict from "kestrel:data/dict"
 import * as Lex from "kestrel:dev/parser/lexer"
