@@ -11,6 +11,9 @@ echo "== Compiler tests =="
 echo "== E2E =="
 "$ROOT/scripts/run-e2e.sh"
 
+echo "== Kestrel compiler test corpora (self-hosted) =="
+"$ROOT/scripts/test-kestrel.sh"
+
 echo "== Kestrel unit tests (JVM) =="
 # NOTE: ./kestrel test currently fails because the self-hosted codegen stub does not yet
 # emit runnable entrypoint methods for compiled test modules (missing main).
