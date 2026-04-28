@@ -266,6 +266,7 @@ The self-hosted typechecker (`stdlib/kestrel/dev/typecheck/typecheck.ks`) handle
 | `var` / `export var` | Yes | Full inference |
 | `extern fun` / `export extern fun` | Yes | Signature-only registration; no body inference required. Exported extern funs appear in `TypecheckResult.exports` and are emitted to `.kti` files. |
 | `extern type` / `export extern type` | Yes | Nominal type registration; no constructors. Exported/opaque extern types appear in `TypecheckResult.exportedTypeVisibility` and `exportedTypeAliases`, and are serialised to `.kti` files. |
+| `extern import` | Yes | Each override's name is bound into the local type environment with its declared `(params) -> retType` signature (generalized). Names are local only — `extern import` does not add to `TypecheckResult.exports`. The codegen emits a stub static bridge method per override. |
 | `type` / `export type` | Yes | ADT and alias registration |
 | `exception` / `export exception` | Yes | Constructor registration |
 
