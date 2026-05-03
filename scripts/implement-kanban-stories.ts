@@ -398,7 +398,7 @@ async function planStory(machine: Machine): Promise<void> {
   const result = await invokePi(machine, {
     phaseName: "PLAN",
     skillPath: machine.config.planSkillPath,
-    tools: ["read", "grep", "find", "ls"],
+    tools: ["read", "grep", "find", "ls", "write", "bash"],
     files: [story.storyPath],
     message: prompt,
     outputPath: planRawPath,
