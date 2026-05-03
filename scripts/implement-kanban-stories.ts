@@ -1618,7 +1618,7 @@ function resolveFromRoot(config: Config, value: string): string {
 function nextStoryArtifactPath(story: StoryContext, fileName: string): string {
   story.artifactSequence += 1;
   const sequence = String(story.artifactSequence).padStart(3, "0");
-  return path.join(story.storyRunDir, `###${sequence}-${fileName}`);
+  return path.join(story.storyRunDir, `${sequence}-${fileName}`);
 }
 
 function resolveExpectedPlannedStoryPath(machine: Machine, story: StoryContext): string {
