@@ -239,6 +239,9 @@ async function main(): Promise<void> {
 
   await ensureRuntimeDirectories(machine);
 
+  // Phases that emit their own console output via Pi heartbeats — skip the redundant banner.
+  const silentPhases = new Set<string>(["PLAN_STORY", "BUILD_STORY", "VERIFY_STORY"]);
+
   while (machine.phase !== "FINISHED" && machine.phase !== "FAILED") {
     await journal(machine, {
       event: "phase.entered",
@@ -246,6 +249,12 @@ async function main(): Promise<void> {
       story: machine.current?.storyPath ?? null,
       attempt: machine.current?.attempt ?? null,
     });
+
+    if (!silentPhases.has(machine.phase)) {
+      const storyId = machine.current?.storyId ?? null;
+      const label = storyId ? `${machine.phase} ${storyId}` : machine.phase;
+      log(machine, label);
+    }
 
     await transition(machine);
   }
