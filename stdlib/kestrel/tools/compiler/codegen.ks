@@ -73,6 +73,7 @@ export type CodegenContext = {
   mctx: ModuleContext,
   locals: mut Dict<String, Int>,
   nextLocal: mut Int,
+  varLocals: mut Dict<String, Unit>,
   getInferredType: (Ast.Expr) -> Option<Ty.InternalType>
 }
 
@@ -109,6 +110,7 @@ export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, mctx
   mctx = mctx,
   mut locals = Dict.emptyStringDict(),
   mut nextLocal = 0,
+  mut varLocals = Dict.emptyStringDict(),
   getInferredType = getInferredType
 }
 
@@ -898,6 +900,18 @@ fun emitCallIndirect(ctx: CodegenContext, callee: Ast.Expr, args: List<Ast.Expr>
   CF.mbPushByte(ctx.mb, 0)
 }
 
+fun emitRecordFields(ctx: CodegenContext, fields: List<Ast.RecField>): Unit =
+  match (fields) {
+    [] => ()
+    f :: rest => {
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, f.name))
+      emitExpr(ctx, f.value)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "set", "(Ljava/lang/String;Ljava/lang/Object;)V"))
+      emitRecordFields(ctx, rest)
+    }
+  }
+
 fun emitExprList(ctx: CodegenContext, xs: List<Ast.Expr>): Unit =
   match (xs) {
     [] => ()
@@ -932,7 +946,7 @@ fun emitTemplateParts(ctx: CodegenContext, parts: List<Ast.TmplPart>): Unit =
     }
   }
 
-fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
+export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
   match (stmt) {
     SVal(name, _ann, e) => {
       emitExpr(ctx, e)
@@ -940,13 +954,64 @@ fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
       storeLocal(ctx, idx)
     }
     SVar(name, _ann, e) => {
+      val tempSlot = ctx.nextLocal
+      ctx.nextLocal := tempSlot + 1
       emitExpr(ctx, e)
+      storeLocal(ctx, tempSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KRECORD))
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, KRECORD, "<init>", "()V"))
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, "0"))
+      loadLocalSlot(ctx, tempSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "set", "(Ljava/lang/String;Ljava/lang/Object;)V"))
       val idx = bindLocal(ctx, name)
       storeLocal(ctx, idx)
+      ctx.varLocals := Dict.insert(ctx.varLocals, name, ())
     }
-    SAssign(_target, rhs) => {
-      emitExpr(ctx, rhs)
-      CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+    SAssign(target, rhs) => {
+      match (target) {
+        EIdent(name) => {
+          val slotOpt = Dict.get(ctx.locals, name)
+          match (slotOpt) {
+            Some(slot) => {
+              if (Dict.member(ctx.varLocals, name)) {
+                val tempSlot = ctx.nextLocal
+                ctx.nextLocal := tempSlot + 1
+                emitExpr(ctx, rhs)
+                storeLocal(ctx, tempSlot)
+                loadLocalSlot(ctx, slot)
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, "0"))
+                loadLocalSlot(ctx, tempSlot)
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "set", "(Ljava/lang/String;Ljava/lang/Object;)V"))
+              } else {
+                emitExpr(ctx, rhs)
+                storeLocal(ctx, slot)
+              }
+            }
+            None => {
+              emitExpr(ctx, rhs)
+              CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+            }
+          }
+        }
+        EField(obj, field) => {
+          val tempSlot = ctx.nextLocal
+          ctx.nextLocal := tempSlot + 1
+          emitExpr(ctx, rhs)
+          storeLocal(ctx, tempSlot)
+          emitExpr(ctx, obj)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, field))
+          loadLocalSlot(ctx, tempSlot)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "set", "(Ljava/lang/String;Ljava/lang/Object;)V"))
+        }
+        _ => {
+          emitExpr(ctx, rhs)
+          CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+        }
+      }
     }
     SExpr(e) => {
       emitExpr(ctx, e)
@@ -1034,7 +1099,9 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       }
     }
     EIdent(name) => {
-      if (loadLocal(ctx, name)) ()
+      if (loadLocal(ctx, name)) {
+        if (Dict.member(ctx.varLocals, name)) emitVarUnbox(ctx) else ()
+      }
       else {
         val mctx = ctx.mctx
         if (Dict.member(mctx.globalNames, name)) {
@@ -1274,10 +1341,11 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
         _ => emitCallIndirect(ctx, fn, args)
       }
     }
-    EField(obj, _field) => {
+    EField(obj, field) => {
       emitExpr(ctx, obj)
-      CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
-      pushNull(ctx)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, field))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "get", "(Ljava/lang/String;)Ljava/lang/Object;"))
     }
     EAwait(e) => { emitExpr(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
     EUnary(op, e) => emitUnaryExpr(ctx, op, e)
@@ -1311,13 +1379,18 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
     EList(elems) => { emitListElems(ctx, elems); pushNull(ctx) }
     ERecord(spreadOpt, fields) => {
       match (spreadOpt) {
-        Some(sp) => { emitExpr(ctx, sp); CF.mbEmit1(ctx.mb, Op.JvmOp.pop) }
-        None => ()
+        Some(sp) => {
+          emitExpr(ctx, sp)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "copy", "()Lkestrel/runtime/KRecord;"))
+        }
+        None => {
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KRECORD))
+          CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, KRECORD, "<init>", "()V"))
+        }
       }
-      val values = Lst.map(fields, (f: Ast.RecField) => f.value)
-      emitExprList(ctx, values)
-      if (!Lst.isEmpty(values)) CF.mbEmit1(ctx.mb, Op.JvmOp.pop) else ()
-      pushNull(ctx)
+      emitRecordFields(ctx, fields)
     }
     ETuple(xs) => { emitExprList(ctx, xs); if (!Lst.isEmpty(xs)) CF.mbEmit1(ctx.mb, Op.JvmOp.pop) else (); pushNull(ctx) }
     EThrow(e) => { emitExpr(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }

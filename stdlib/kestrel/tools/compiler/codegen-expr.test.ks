@@ -6,7 +6,7 @@ import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Ty from "kestrel:dev/typecheck/types"
-import { ELit, EIdent, EBinary, EUnary, EIf, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild } from "kestrel:dev/parser/ast"
+import { ELit, EIdent, EBinary, EUnary, EIf, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, EField, SVal, SVar, SAssign, SExpr } from "kestrel:dev/parser/ast"
 import * as Ast from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
@@ -383,5 +383,96 @@ export async fun run(s: Suite): Task<Unit> =
       // UTF-8 bytes for "KFunction" = [75, 70, 117, 110, 99, 116, 105, 111, 110]
       isTrue(sg, "indirect: pool contains KFunction",
         containsSeq(BA.toList(bytes), [75, 70, 117, 110, 99, 116, 105, 111, 110]))
+    })
+
+    group(s1, "ERecord no-spread creates KRecord", (sg: Suite) => {
+      val t = baseContext()
+      val rec = ERecord(None, [{ name = "x", mut_ = False, value = ELit("int", "1") }, { name = "y", mut_ = False, value = ELit("int", "2") }])
+      CG.emitExpr(t.ctx, rec)
+      val bytes = finish(t.cf, t.mb)
+      // NEW = 187 (0xBB)
+      isTrue(sg, "ERecord no-spread: contains NEW(187)", containsSeq(BA.toList(bytes), [187]))
+      // UTF-8 bytes for "KRecord" = [75, 82, 101, 99, 111, 114, 100]
+      isTrue(sg, "ERecord no-spread: pool contains KRecord utf8",
+        containsSeq(BA.toList(bytes), [75, 82, 101, 99, 111, 114, 100]))
+      // INVOKEVIRTUAL = 182 for set
+      isTrue(sg, "ERecord no-spread: contains INVOKEVIRTUAL(182)", containsSeq(BA.toList(bytes), [182]))
+      // UTF-8 bytes for "set" = [115, 101, 116]
+      isTrue(sg, "ERecord no-spread: pool contains set utf8",
+        containsSeq(BA.toList(bytes), [115, 101, 116]))
+    })
+
+    group(s1, "ERecord spread calls copy", (sg: Suite) => {
+      val t = baseContext()
+      // Spread from a local; put base in locals first via SVal
+      val baseRec = ERecord(None, [{ name = "a", mut_ = False, value = ELit("int", "10") }])
+      CG.emitBlockStmt(t.ctx, SVal("base", None, baseRec))
+      val spread = ERecord(Some(EIdent("base")), [{ name = "b", mut_ = False, value = ELit("int", "20") }])
+      CG.emitExpr(t.ctx, spread)
+      val bytes = finish(t.cf, t.mb)
+      // UTF-8 bytes for "copy" = [99, 111, 112, 121]
+      isTrue(sg, "ERecord spread: pool contains copy utf8",
+        containsSeq(BA.toList(bytes), [99, 111, 112, 121]))
+      // CHECKCAST = 192
+      isTrue(sg, "ERecord spread: contains CHECKCAST(192)", containsSeq(BA.toList(bytes), [192]))
+    })
+
+    group(s1, "EField emits get invokevirtual", (sg: Suite) => {
+      val t = baseContext()
+      // Store a record in a local, then access a field
+      val rec = ERecord(None, [{ name = "x", mut_ = False, value = ELit("int", "42") }])
+      CG.emitBlockStmt(t.ctx, SVal("r", None, rec))
+      CG.emitExpr(t.ctx, EField(EIdent("r"), "x"))
+      val bytes = finish(t.cf, t.mb)
+      // INVOKEVIRTUAL = 182 for get
+      isTrue(sg, "EField: contains INVOKEVIRTUAL(182)", containsSeq(BA.toList(bytes), [182]))
+      // UTF-8 bytes for "get" = [103, 101, 116]
+      isTrue(sg, "EField: pool contains get utf8",
+        containsSeq(BA.toList(bytes), [103, 101, 116]))
+      // CHECKCAST = 192
+      isTrue(sg, "EField: contains CHECKCAST(192)", containsSeq(BA.toList(bytes), [192]))
+    })
+
+    group(s1, "SVar boxes in KRecord", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitBlockStmt(t.ctx, SVar("n", None, ELit("int", "0")))
+      val bytes = finish(t.cf, t.mb)
+      // NEW = 187 for KRecord boxing
+      isTrue(sg, "SVar: contains NEW(187)", containsSeq(BA.toList(bytes), [187]))
+      // UTF-8 bytes for "KRecord" = [75, 82, 101, 99, 111, 114, 100]
+      isTrue(sg, "SVar: pool contains KRecord utf8",
+        containsSeq(BA.toList(bytes), [75, 82, 101, 99, 111, 114, 100]))
+      // INVOKEVIRTUAL = 182 for set
+      isTrue(sg, "SVar: contains INVOKEVIRTUAL(182)", containsSeq(BA.toList(bytes), [182]))
+    })
+
+    group(s1, "SAssign var-local updates KRecord box", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitBlockStmt(t.ctx, SVar("n", None, ELit("int", "0")))
+      CG.emitBlockStmt(t.ctx, SAssign(EIdent("n"), ELit("int", "1")))
+      val bytes = finish(t.cf, t.mb)
+      // CHECKCAST = 192 for KRecord
+      isTrue(sg, "SAssign var-local: contains CHECKCAST(192)", containsSeq(BA.toList(bytes), [192]))
+      // INVOKEVIRTUAL = 182 for set
+      isTrue(sg, "SAssign var-local: contains INVOKEVIRTUAL(182)", containsSeq(BA.toList(bytes), [182]))
+      // UTF-8 bytes for "set" = [115, 101, 116]
+      isTrue(sg, "SAssign var-local: pool contains set utf8",
+        containsSeq(BA.toList(bytes), [115, 101, 116]))
+    })
+
+    group(s1, "SAssign field-expr updates KRecord field", (sg: Suite) => {
+      val t = baseContext()
+      // Store a record in a local
+      val rec = ERecord(None, [{ name = "x", mut_ = False, value = ELit("int", "0") }])
+      CG.emitBlockStmt(t.ctx, SVal("r", None, rec))
+      CG.emitBlockStmt(t.ctx, SAssign(EField(EIdent("r"), "x"), ELit("int", "99")))
+      val bytes = finish(t.cf, t.mb)
+      // CHECKCAST = 192 for KRecord
+      isTrue(sg, "SAssign field: contains CHECKCAST(192)", containsSeq(BA.toList(bytes), [192]))
+      // INVOKEVIRTUAL = 182 for set
+      isTrue(sg, "SAssign field: contains INVOKEVIRTUAL(182)", containsSeq(BA.toList(bytes), [182]))
+      // UTF-8 bytes for "set" = [115, 101, 116]
+      isTrue(sg, "SAssign field: pool contains set utf8",
+        containsSeq(BA.toList(bytes), [115, 101, 116]))
     })
   })
