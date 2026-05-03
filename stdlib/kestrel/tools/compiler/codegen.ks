@@ -35,10 +35,33 @@ export val BOOLEAN = "java/lang/Boolean"
 export val STRING_BUILDER = "java/lang/StringBuilder"
 export val KFUNCTION = "kestrel/runtime/KFunction"
 export val INTEGER = "java/lang/Integer"
+export val KFUNCTION_REF = "kestrel/runtime/KFunctionRef"
+export val KNONE = "kestrel/runtime/KNone"
+export val KNIL = "kestrel/runtime/KNil"
+
+export type JvmCodegenOptions = {
+  importedValVarToClass: Dict<String, String>,
+  importedVarNames: Dict<String, Unit>,
+  importedFunArities: Dict<String, Int>,
+  importedNameToClass: Dict<String, String>,
+  importedNameToOriginal: Dict<String, String>,
+  importedAdtClasses: Dict<String, (String, Int)>
+}
+
+export type ModuleContext = {
+  className: String,
+  globalNames: Dict<String, Unit>,
+  globalVarNames: Dict<String, Unit>,
+  funArities: Dict<String, Int>,
+  adtClassByConstructor: Dict<String, String>,
+  adtConstructorArity: Dict<String, Int>,
+  options: JvmCodegenOptions
+}
 
 export type CodegenContext = {
   cf: CF.ClassFileBuilder,
   mb: CF.MethodBuilder,
+  mctx: ModuleContext,
   locals: mut Dict<String, Int>,
   nextLocal: mut Int
 }
@@ -47,9 +70,29 @@ export type JvmCodegenResult = {
   classes: Dict<String, ByteArray>
 }
 
-export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder): CodegenContext = {
+export fun emptyJvmCodegenOptions(): JvmCodegenOptions = {
+  importedValVarToClass = Dict.emptyStringDict(),
+  importedVarNames = Dict.emptyStringDict(),
+  importedFunArities = Dict.emptyStringDict(),
+  importedNameToClass = Dict.emptyStringDict(),
+  importedNameToOriginal = Dict.emptyStringDict(),
+  importedAdtClasses = Dict.emptyStringDict()
+}
+
+export fun emptyModuleContext(className: String): ModuleContext = {
+  className = className,
+  globalNames = Dict.emptyStringDict(),
+  globalVarNames = Dict.emptyStringDict(),
+  funArities = Dict.emptyStringDict(),
+  adtClassByConstructor = Dict.emptyStringDict(),
+  adtConstructorArity = Dict.emptyStringDict(),
+  options = emptyJvmCodegenOptions()
+}
+
+export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, mctx: ModuleContext): CodegenContext = {
   cf = cf,
   mb = mb,
+  mctx = mctx,
   mut locals = Dict.emptyStringDict(),
   mut nextLocal = 0
 }
@@ -92,6 +135,33 @@ fun pushLongBoxed(ctx: CodegenContext, n: Int): Unit = {
   };
   val ref = CF.cfMethodref(ctx.cf, LONG, "valueOf", "(J)Ljava/lang/Long;")
   CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, ref)
+}
+
+fun emitFunctionRef(ctx: CodegenContext, ownerClass: String, methodName: String, arity: Int): Unit = {
+  val classRef = CF.cfClassRef(ctx.cf, ownerClass)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, classRef);
+  val strRef = CF.cfString(ctx.cf, methodName)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, strRef);
+  val intRef = CF.cfConstantInt(ctx.cf, arity)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, intRef);
+  val ofDesc = "(Ljava/lang/Class;Ljava/lang/String;I)L${KFUNCTION_REF};"
+  val mref = CF.cfMethodref(ctx.cf, KFUNCTION_REF, "of", ofDesc)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+}
+
+fun emitVarUnbox(ctx: CodegenContext): Unit = {
+  val classRef = CF.cfClassRef(ctx.cf, KRECORD)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, classRef);
+  val strRef = CF.cfString(ctx.cf, "0")
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, strRef);
+  val mref = CF.cfMethodref(ctx.cf, KRECORD, "get", "(Ljava/lang/String;)Ljava/lang/Object;")
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, mref)
+}
+
+fun emitInitCall(ctx: CodegenContext, targetClass: String): Unit = {
+  val initMethodName = Str.append("$", "init")
+  val mref = CF.cfMethodref(ctx.cf, targetClass, initMethodName, "()V")
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
 }
 
 fun loadLocal(ctx: CodegenContext, name: String): Bool = {
@@ -237,10 +307,10 @@ fun emitMainStub(cf: CF.ClassFileBuilder): Unit = {
   CF.mbSetMaxs(mb, 0, 1)
 }
 
-export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl): Unit = {
+export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl, mctx: ModuleContext): Unit = {
   val desc = objectMethodDesc(Lst.length(decl.params))
   val mb = CF.cfAddMethod(cf, decl.name, desc, Op.Acc.public_ + Op.Acc.static_)
-  val ctx = newCodegenContext(cf, mb)
+  val ctx = newCodegenContext(cf, mb, mctx)
   bindParams(ctx, decl.params)
   emitTailLoopScaffold(mb)
   emitExpr(ctx, decl.body)
@@ -272,7 +342,7 @@ export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit
     };
     emitExternReturn(cf, mb, retDesc)
   } else
-    pushNull(newCodegenContext(cf, mb));
+    pushNull(newCodegenContext(cf, mb, emptyModuleContext("")));
   CF.mbEmit1(mb, Op.JvmOp.areturn)
   CF.mbSetMaxs(mb, 1, arity + 8)
 }
@@ -280,7 +350,7 @@ export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit
 fun emitExternOverride(cf: CF.ClassFileBuilder, ov: Ast.ExternOverride): Unit = {
   val desc = objectMethodDesc(Lst.length(ov.params))
   val mb = CF.cfAddMethod(cf, ov.name, desc, Op.Acc.public_ + Op.Acc.static_)
-  pushNull(newCodegenContext(cf, mb))
+  pushNull(newCodegenContext(cf, mb, emptyModuleContext("")))
   CF.mbEmit1(mb, Op.JvmOp.areturn)
   CF.mbSetMaxs(mb, 1, 8)
 }
@@ -311,6 +381,20 @@ fun emitCtorClass(moduleName: String, ctor: Ast.CtorDef): (String, ByteArray) = 
   val className = "${moduleName}$${ctor.name}"
   val cf = CF.newClassFile(className, "java/lang/Object", Op.Acc.public_ + Op.Acc.super_)
   emitDefaultCtor(cf);
+  if (Lst.isEmpty(ctor.params)) {
+    val instanceDesc = "L${className};"
+    CF.cfAddField(cf, "INSTANCE", instanceDesc, Op.Acc.public_ + Op.Acc.static_ + Op.Acc.final_);
+    val clinit = CF.cfAddMethod(cf, "<clinit>", "()V", Op.Acc.static_)
+    val classRef = CF.cfClassRef(cf, className)
+    CF.mbEmit1s(clinit, Op.JvmOp.new_, classRef);
+    CF.mbEmit1(clinit, Op.JvmOp.dup);
+    val initRef = CF.cfMethodref(cf, className, "<init>", "()V")
+    CF.mbEmit1s(clinit, Op.JvmOp.invokespecial, initRef);
+    val instanceFieldRef = CF.cfFieldref(cf, className, "INSTANCE", instanceDesc)
+    CF.mbEmit1s(clinit, Op.JvmOp.putstatic, instanceFieldRef);
+    CF.mbEmit1(clinit, Op.JvmOp.return_);
+    CF.mbSetMaxs(clinit, 2, 0)
+  } else ();
   (className, CF.cfToBytes(cf))
 }
 
@@ -333,9 +417,9 @@ fun emitTypeCtors(moduleName: String, ctors: List<Ast.CtorDef>, classes: Dict<St
     }
   }
 
-fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, decl: Ast.TopDecl, classes: Dict<String, ByteArray>): Dict<String, ByteArray> =
+fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, decl: Ast.TopDecl, classes: Dict<String, ByteArray>): Dict<String, ByteArray> =
   match (decl) {
-    TDFun(funDecl) => { emitFunDecl(cf, funDecl); classes }
+    TDFun(funDecl) => { emitFunDecl(cf, funDecl, mctx); classes }
     TDExternFun(externDecl) => { emitExternFun(cf, externDecl); classes }
     TDExternImport(eid) => { emitExternImportOverrides(cf, eid.overrides); classes }
     TDExternType(_) => classes
@@ -351,7 +435,7 @@ fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, decl: Ast.TopDecl, cla
     }
     TDExport(inner) => {
       match (inner) {
-        EIDecl(d) => emitDecl(moduleName, cf, d, classes)
+        EIDecl(d) => emitDecl(moduleName, cf, mctx, d, classes)
         _ => classes
       }
     }
@@ -362,16 +446,17 @@ fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, decl: Ast.TopDecl, cla
     _ => classes
   }
 
-fun emitDecls(moduleName: String, cf: CF.ClassFileBuilder, decls: List<Ast.TopDecl>, classes: Dict<String, ByteArray>): Dict<String, ByteArray> =
+fun emitDecls(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, decls: List<Ast.TopDecl>, classes: Dict<String, ByteArray>): Dict<String, ByteArray> =
   match (decls) {
     [] => classes
-    d :: rest => emitDecls(moduleName, cf, rest, emitDecl(moduleName, cf, d, classes))
+    d :: rest => emitDecls(moduleName, cf, mctx, rest, emitDecl(moduleName, cf, mctx, d, classes))
   }
 
-export fun jvmCodegen(moduleName: String, prog: Ast.Program): JvmCodegenResult = {
+export fun jvmCodegen(mctx: ModuleContext, prog: Ast.Program): JvmCodegenResult = {
+  val moduleName = mctx.className
   val cf = CF.newClassFile(moduleName, "java/lang/Object", Op.Acc.public_ + Op.Acc.super_)
   emitDefaultCtor(cf)
-  val extraClasses = emitDecls(moduleName, cf, prog.body, Dict.emptyStringDict())
+  val extraClasses = emitDecls(moduleName, cf, mctx, prog.body, Dict.emptyStringDict())
   emitMainStub(cf)
   val initMethodName = Str.append("$", "init")
   val initMb = CF.cfAddMethod(cf, initMethodName, "()V", Op.Acc.public_ + Op.Acc.static_)
@@ -380,6 +465,147 @@ export fun jvmCodegen(moduleName: String, prog: Ast.Program): JvmCodegenResult =
   val mainBytes = CF.cfToBytes(cf)
   {
     classes = Dict.insert(extraClasses, moduleName, mainBytes)
+  }
+}
+
+fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopDecl): ModuleContext =
+  match (decl) {
+    TDFun(fd) => {
+      className = mctx.className,
+      globalNames = mctx.globalNames,
+      globalVarNames = mctx.globalVarNames,
+      funArities = Dict.insert(mctx.funArities, fd.name, Lst.length(fd.params)),
+      adtClassByConstructor = mctx.adtClassByConstructor,
+      adtConstructorArity = mctx.adtConstructorArity,
+      options = mctx.options
+    }
+    TDExternFun(fd) => {
+      className = mctx.className,
+      globalNames = mctx.globalNames,
+      globalVarNames = mctx.globalVarNames,
+      funArities = Dict.insert(mctx.funArities, fd.name, Lst.length(fd.params)),
+      adtClassByConstructor = mctx.adtClassByConstructor,
+      adtConstructorArity = mctx.adtConstructorArity,
+      options = mctx.options
+    }
+    TDVal(name, _, _) => {
+      className = mctx.className,
+      globalNames = Dict.insert(mctx.globalNames, name, ()),
+      globalVarNames = mctx.globalVarNames,
+      funArities = mctx.funArities,
+      adtClassByConstructor = mctx.adtClassByConstructor,
+      adtConstructorArity = mctx.adtConstructorArity,
+      options = mctx.options
+    }
+    TDVar(name, _, _) => {
+      className = mctx.className,
+      globalNames = Dict.insert(mctx.globalNames, name, ()),
+      globalVarNames = Dict.insert(mctx.globalVarNames, name, ()),
+      funArities = mctx.funArities,
+      adtClassByConstructor = mctx.adtClassByConstructor,
+      adtConstructorArity = mctx.adtConstructorArity,
+      options = mctx.options
+    }
+    TDSVal(name, _, _) => {
+      className = mctx.className,
+      globalNames = Dict.insert(mctx.globalNames, name, ()),
+      globalVarNames = mctx.globalVarNames,
+      funArities = mctx.funArities,
+      adtClassByConstructor = mctx.adtClassByConstructor,
+      adtConstructorArity = mctx.adtConstructorArity,
+      options = mctx.options
+    }
+    TDSVar(name, _, _) => {
+      className = mctx.className,
+      globalNames = Dict.insert(mctx.globalNames, name, ()),
+      globalVarNames = Dict.insert(mctx.globalVarNames, name, ()),
+      funArities = mctx.funArities,
+      adtClassByConstructor = mctx.adtClassByConstructor,
+      adtConstructorArity = mctx.adtConstructorArity,
+      options = mctx.options
+    }
+    TDType(td) => {
+      match (td.body) {
+        TBAdt(ctors) => {
+          val newAbc = Lst.foldl(ctors, mctx.adtClassByConstructor, (acc: Dict<String, String>, c: Ast.CtorDef) =>
+            Dict.insert(acc, c.name, "${className}$${c.name}")
+          )
+          val newAca = Lst.foldl(ctors, mctx.adtConstructorArity, (acc: Dict<String, Int>, c: Ast.CtorDef) =>
+            Dict.insert(acc, c.name, Lst.length(c.params))
+          )
+          {
+            className = mctx.className,
+            globalNames = mctx.globalNames,
+            globalVarNames = mctx.globalVarNames,
+            funArities = mctx.funArities,
+            adtClassByConstructor = newAbc,
+            adtConstructorArity = newAca,
+            options = mctx.options
+          }
+        }
+        _ => mctx
+      }
+    }
+    TDException(exn) => {
+      val exnClass = "${className}$${exn.name}"
+      val exnArity = match (exn.fields) {
+        Some(fs) => Lst.length(fs)
+        None => 0
+      }
+      {
+        className = mctx.className,
+        globalNames = mctx.globalNames,
+        globalVarNames = mctx.globalVarNames,
+        funArities = mctx.funArities,
+        adtClassByConstructor = Dict.insert(mctx.adtClassByConstructor, exn.name, exnClass),
+        adtConstructorArity = Dict.insert(mctx.adtConstructorArity, exn.name, exnArity),
+        options = mctx.options
+      }
+    }
+    TDExport(inner) => {
+      match (inner) {
+        EIDecl(d) => accumDeclForModuleCtx(className, mctx, d)
+        _ => mctx
+      }
+    }
+    _ => mctx
+  }
+
+fun mergeImportedAdtClasses(entries: List<(String, (String, Int))>, adtAcc: Dict<String, String>, arityAcc: Dict<String, Int>): (Dict<String, String>, Dict<String, Int>) =
+  match (entries) {
+    [] => (adtAcc, arityAcc)
+    e :: rest => {
+      val localName = e.0
+      val classAndArity = e.1
+      val adtCls = classAndArity.0
+      val adtAr = classAndArity.1
+      mergeImportedAdtClasses(rest, Dict.insert(adtAcc, localName, adtCls), Dict.insert(arityAcc, localName, adtAr))
+    }
+  }
+
+export fun buildModuleContext(className: String, prog: Ast.Program, options: JvmCodegenOptions): ModuleContext = {
+  val base = {
+    className = className,
+    globalNames = Dict.emptyStringDict(),
+    globalVarNames = Dict.emptyStringDict(),
+    funArities = Dict.emptyStringDict(),
+    adtClassByConstructor = Dict.emptyStringDict(),
+    adtConstructorArity = Dict.emptyStringDict(),
+    options = options
+  }
+  val afterDecls = Lst.foldl(prog.body, base, (m: ModuleContext, d: Ast.TopDecl) =>
+    accumDeclForModuleCtx(className, m, d)
+  )
+  val importedAdtEntries = Dict.toList(options.importedAdtClasses)
+  val adtMerge = mergeImportedAdtClasses(importedAdtEntries, afterDecls.adtClassByConstructor, afterDecls.adtConstructorArity)
+  {
+    className = afterDecls.className,
+    globalNames = afterDecls.globalNames,
+    globalVarNames = afterDecls.globalVarNames,
+    funArities = afterDecls.funArities,
+    adtClassByConstructor = adtMerge.0,
+    adtConstructorArity = adtMerge.1,
+    options = afterDecls.options
   }
 }
 
@@ -518,7 +744,72 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
         pushNull(ctx)
       }
     }
-    EIdent(name) => if (!loadLocal(ctx, name)) pushNull(ctx) else ()
+    EIdent(name) => {
+      if (loadLocal(ctx, name)) ()
+      else {
+        val mctx = ctx.mctx
+        if (Dict.member(mctx.globalNames, name)) {
+          val fref = CF.cfFieldref(ctx.cf, mctx.className, name, "Ljava/lang/Object;")
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref);
+          if (Dict.member(mctx.globalVarNames, name)) emitVarUnbox(ctx) else ()
+        }
+        else if (Dict.member(mctx.funArities, name)) {
+          val arity = Opt.getOrElse(Dict.get(mctx.funArities, name), 0)
+          emitFunctionRef(ctx, mctx.className, name, arity)
+        }
+        else {
+          val importedValClass = Dict.get(mctx.options.importedValVarToClass, name)
+          match (importedValClass) {
+            Some(valCls) => {
+              val origName = Opt.getOrElse(Dict.get(mctx.options.importedNameToOriginal, name), name)
+              emitInitCall(ctx, valCls);
+              val fref = CF.cfFieldref(ctx.cf, valCls, origName, "Ljava/lang/Object;")
+              CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref);
+              if (Dict.member(mctx.options.importedVarNames, name)) emitVarUnbox(ctx) else ()
+            }
+            None => {
+              val importedFunClass = Dict.get(mctx.options.importedNameToClass, name)
+              match (importedFunClass) {
+                Some(funCls) => {
+                  val importedFunArity = Dict.get(mctx.options.importedFunArities, name)
+                  match (importedFunArity) {
+                    Some(funArity) => {
+                      val origName = Opt.getOrElse(Dict.get(mctx.options.importedNameToOriginal, name), name)
+                      emitInitCall(ctx, funCls);
+                      emitFunctionRef(ctx, funCls, origName, funArity)
+                    }
+                    None => pushNull(ctx)
+                  }
+                }
+                None => {
+                  if (name == "None") {
+                    val fref = CF.cfFieldref(ctx.cf, KNONE, "INSTANCE", "Lkestrel/runtime/KNone;")
+                    CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
+                  }
+                  else if (name == "Nil" | name == "[]") {
+                    val fref = CF.cfFieldref(ctx.cf, KNIL, "INSTANCE", "Lkestrel/runtime/KNil;")
+                    CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
+                  }
+                  else {
+                    val adtClassOpt = Dict.get(mctx.adtClassByConstructor, name)
+                    match (adtClassOpt) {
+                      Some(adtCls) => {
+                        val adtArity = Opt.getOrElse(Dict.get(mctx.adtConstructorArity, name), 1)
+                        if (adtArity == 0) {
+                          val fref = CF.cfFieldref(ctx.cf, adtCls, "INSTANCE", "L${adtCls};")
+                          CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
+                        } else pushNull(ctx)
+                      }
+                      None => pushNull(ctx)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
     ECall(fn, args) => {
       emitExpr(ctx, fn)
       CF.mbEmit1(ctx.mb, Op.JvmOp.pop)

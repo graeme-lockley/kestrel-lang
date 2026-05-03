@@ -11,7 +11,7 @@ import * as Opt from "kestrel:data/option"
 import * as Res from "kestrel:data/result"
 import * as Str from "kestrel:data/string"
 import * as Ast from "kestrel:dev/parser/ast"
-import { TDFun, TDVar, TDVal, TDType, TBAdt, TDExternFun, TDException, TDExport, EIDecl, IDNamed, IDNamespace } from "kestrel:dev/parser/ast"
+import { TDFun, TDVar, TDVal, TDSVal, TDSVar, TDType, TBAdt, TDExternFun, TDException, TDExport, EIDecl, IDNamed, IDNamespace } from "kestrel:dev/parser/ast"
 import * as Fs from "kestrel:io/fs"
 import { NotFound, PermissionDenied, IoError } from "kestrel:io/fs"
 import * as Ty from "kestrel:dev/typecheck/types"
@@ -450,16 +450,120 @@ fun parseKti(v: Json.Value): Result<KtiV4, String> =
     }
   }
 
-export fun extractCodegenMeta(prog: Ast.Program, exports: Dict<String, Ty.InternalType>): KtiCodegenMeta =
-  {
-    // Lightweight scaffold metadata keyed by current export names.
-    funArities = Lst.foldl(Dict.keys(exports), Dict.emptyStringDict(), (acc: Dict<String, Int>, n: String) => Dict.insert(acc, n, 0)),
+fun extractDeclCodegen(decl: Ast.TopDecl, meta: KtiCodegenMeta): KtiCodegenMeta =
+  match (decl) {
+    TDFun(fd) => {
+      val newAsync = if (fd.async_) fd.name :: meta.asyncFunNames else meta.asyncFunNames
+      {
+        funArities = Dict.insert(meta.funArities, fd.name, Lst.length(fd.params)),
+        asyncFunNames = newAsync,
+        varNames = meta.varNames,
+        valOrVarNames = meta.valOrVarNames,
+        adtConstructors = meta.adtConstructors,
+        exceptionDecls = meta.exceptionDecls
+      }
+    }
+    TDExternFun(efd) => {
+      {
+        funArities = Dict.insert(meta.funArities, efd.name, Lst.length(efd.params)),
+        asyncFunNames = meta.asyncFunNames,
+        varNames = meta.varNames,
+        valOrVarNames = meta.valOrVarNames,
+        adtConstructors = meta.adtConstructors,
+        exceptionDecls = meta.exceptionDecls
+      }
+    }
+    TDVar(name, _, _) => {
+      {
+        funArities = meta.funArities,
+        asyncFunNames = meta.asyncFunNames,
+        varNames = name :: meta.varNames,
+        valOrVarNames = name :: meta.valOrVarNames,
+        adtConstructors = meta.adtConstructors,
+        exceptionDecls = meta.exceptionDecls
+      }
+    }
+    TDSVar(name, _, _) => {
+      {
+        funArities = meta.funArities,
+        asyncFunNames = meta.asyncFunNames,
+        varNames = name :: meta.varNames,
+        valOrVarNames = name :: meta.valOrVarNames,
+        adtConstructors = meta.adtConstructors,
+        exceptionDecls = meta.exceptionDecls
+      }
+    }
+    TDVal(name, _, _) => {
+      {
+        funArities = meta.funArities,
+        asyncFunNames = meta.asyncFunNames,
+        varNames = meta.varNames,
+        valOrVarNames = name :: meta.valOrVarNames,
+        adtConstructors = meta.adtConstructors,
+        exceptionDecls = meta.exceptionDecls
+      }
+    }
+    TDSVal(name, _, _) => {
+      {
+        funArities = meta.funArities,
+        asyncFunNames = meta.asyncFunNames,
+        varNames = meta.varNames,
+        valOrVarNames = name :: meta.valOrVarNames,
+        adtConstructors = meta.adtConstructors,
+        exceptionDecls = meta.exceptionDecls
+      }
+    }
+    TDType(td) => {
+      match (td.body) {
+        TBAdt(ctors) => {
+          val group = {
+            typeName = td.name,
+            constructors = Lst.map(ctors, (c: Ast.CtorDef) => (c.name, Lst.length(c.params)))
+          }
+          {
+            funArities = meta.funArities,
+            asyncFunNames = meta.asyncFunNames,
+            varNames = meta.varNames,
+            valOrVarNames = meta.valOrVarNames,
+            adtConstructors = group :: meta.adtConstructors,
+            exceptionDecls = meta.exceptionDecls
+          }
+        }
+        _ => meta
+      }
+    }
+    TDException(exn) => {
+      val arity = match (exn.fields) {
+        Some(fs) => Lst.length(fs)
+        None => 0
+      }
+      {
+        funArities = meta.funArities,
+        asyncFunNames = meta.asyncFunNames,
+        varNames = meta.varNames,
+        valOrVarNames = meta.valOrVarNames,
+        adtConstructors = meta.adtConstructors,
+        exceptionDecls = { name = exn.name, arity = arity } :: meta.exceptionDecls
+      }
+    }
+    TDExport(inner) => {
+      match (inner) {
+        EIDecl(d) => extractDeclCodegen(d, meta)
+        _ => meta
+      }
+    }
+    _ => meta
+  }
+
+export fun extractCodegenMeta(prog: Ast.Program, _exports: Dict<String, Ty.InternalType>): KtiCodegenMeta =
+  Lst.foldl(prog.body, {
+    funArities = Dict.emptyStringDict(),
     asyncFunNames = [],
     varNames = [],
-    valOrVarNames = Dict.keys(exports),
+    valOrVarNames = [],
     adtConstructors = [],
     exceptionDecls = []
-  }
+  }, (meta: KtiCodegenMeta, d: Ast.TopDecl) => extractDeclCodegen(d, meta))
 
 fun buildEntries(names: List<String>, exports: Dict<String, Ty.InternalType>, idx: Int, acc: Dict<String, KtiExportEntry>): Dict<String, KtiExportEntry> =
   match (names) {
@@ -651,7 +755,12 @@ export type DepBindingBundle = {
   depSnapshotsBySpec: Dict<String, DepSnapshotEntry>,
   importCtorEnv: Dict<String, Ty.InternalType>,
   importAdtConstructors: Dict<String, List<String>>,
-  importCtorOwners: Dict<String, String>
+  importCtorOwners: Dict<String, String>,
+  importedNameToClass: Dict<String, String>,
+  importedFunArities: Dict<String, Int>,
+  importedValVarToClass: Dict<String, String>,
+  importedVarNames: Dict<String, Unit>,
+  importedNameToOriginal: Dict<String, String>
 }
 
 /// Result of loading all dep KTIs — either a combined binding bundle or an error message.
@@ -700,6 +809,73 @@ fun mergeAdtCtorMapsForTypes(typeNames: List<String>, depAdtCtors: Dict<String, 
       }
   }
 
+// Accumulate codegen import maps for one ImportSpec from a named import statement.
+// Returns updated (importedNameToClass, importedFunArities, importedValVarToClass, importedVarNames, importedNameToOriginal).
+fun addSpecCodegenFun(ext: String, loc: String, arity: Int, depClassName: String, nameToClass: Dict<String, String>, funArities: Dict<String, Int>, nameToOriginal: Dict<String, String>): (Dict<String, String>, Dict<String, Int>, Dict<String, String>) = {
+  val nc = Dict.insert(nameToClass, loc, depClassName);
+  val na = Dict.insert(funArities, loc, arity);
+  val no = if (loc != ext) { Dict.insert(nameToOriginal, loc, ext) } else { nameToOriginal };
+  (nc, na, no)
+}
+
+fun addSpecCodegenVal(ext: String, loc: String, depClassName: String, isVar: Bool, valVarToClass: Dict<String, String>, varNames: Dict<String, Unit>, nameToOriginal: Dict<String, String>): (Dict<String, String>, Dict<String, Unit>, Dict<String, String>) = {
+  val nv = Dict.insert(valVarToClass, loc, depClassName);
+  val nvn = if (isVar) { Dict.insert(varNames, loc, ()) } else { varNames };
+  val no = if (loc != ext) { Dict.insert(nameToOriginal, loc, ext) } else { nameToOriginal };
+  (nv, nvn, no)
+}
+
+fun applySpecCodegen(spec: Ast.ImportSpec, meta: KtiCodegenMeta, depClassName: String, b: DepBindingBundle): DepBindingBundle = {
+  val ext = spec.external;
+  val loc = spec.local;
+  if (Dict.member(meta.funArities, ext)) {
+    val arity = Opt.getOrElse(Dict.get(meta.funArities, ext), 0);
+    val updated = addSpecCodegenFun(ext, loc, arity, depClassName, b.importedNameToClass, b.importedFunArities, b.importedNameToOriginal);
+    {
+      importBindings = b.importBindings,
+      typeAliasBindings = b.typeAliasBindings,
+      importOpaqueTypes = b.importOpaqueTypes,
+      depSnapshotsBySpec = b.depSnapshotsBySpec,
+      importCtorEnv = b.importCtorEnv,
+      importAdtConstructors = b.importAdtConstructors,
+      importCtorOwners = b.importCtorOwners,
+      importedNameToClass = updated.0,
+      importedFunArities = updated.1,
+      importedValVarToClass = b.importedValVarToClass,
+      importedVarNames = b.importedVarNames,
+      importedNameToOriginal = updated.2
+    }
+  } else if (Lst.member(meta.valOrVarNames, ext)) {
+    val isVar = Lst.member(meta.varNames, ext);
+    val updated = addSpecCodegenVal(ext, loc, depClassName, isVar, b.importedValVarToClass, b.importedVarNames, b.importedNameToOriginal);
+    {
+      importBindings = b.importBindings,
+      typeAliasBindings = b.typeAliasBindings,
+      importOpaqueTypes = b.importOpaqueTypes,
+      depSnapshotsBySpec = b.depSnapshotsBySpec,
+      importCtorEnv = b.importCtorEnv,
+      importAdtConstructors = b.importAdtConstructors,
+      importCtorOwners = b.importCtorOwners,
+      importedNameToClass = b.importedNameToClass,
+      importedFunArities = b.importedFunArities,
+      importedValVarToClass = updated.0,
+      importedVarNames = updated.1,
+      importedNameToOriginal = updated.2
+    }
+  } else {
+    b
+  }
+}
+
+fun applySpecsCodegen(specs: List<Ast.ImportSpec>, meta: KtiCodegenMeta, depClassName: String, b: DepBindingBundle): DepBindingBundle =
+  match (specs) {
+    [] => b
+    sp :: rest => applySpecsCodegen(rest, meta, depClassName, applySpecCodegen(sp, meta, depClassName, b))
+  }
+
+fun addNamedImportCodegen(specs: List<Ast.ImportSpec>, meta: KtiCodegenMeta, depClassName: String, b: DepBindingBundle): DepBindingBundle =
+  applySpecsCodegen(specs, meta, depClassName, b)
+
 fun emptyDepBundle(): DepBindingBundle = {
   importBindings = Dict.emptyStringDict(),
   typeAliasBindings = Dict.emptyStringDict(),
@@ -707,18 +883,24 @@ fun emptyDepBundle(): DepBindingBundle = {
   depSnapshotsBySpec = Dict.emptyStringDict(),
   importCtorEnv = Dict.emptyStringDict(),
   importAdtConstructors = Dict.emptyStringDict(),
-  importCtorOwners = Dict.emptyStringDict()
+  importCtorOwners = Dict.emptyStringDict(),
+  importedNameToClass = Dict.emptyStringDict(),
+  importedFunArities = Dict.emptyStringDict(),
+  importedValVarToClass = Dict.emptyStringDict(),
+  importedVarNames = Dict.emptyStringDict(),
+  importedNameToOriginal = Dict.emptyStringDict()
 }
 
-/// Load import bindings from dep KTIs. deps is a list of (spec, ktiPath) pairs.
+/// Load import bindings from dep KTIs. deps is a list of (spec, ktiPath, className) triples.
 /// For each dep, read its KTI and process matching import decls.
-export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast.ImportDecl>): Task<DepLoadResult> =
+export async fun loadDepBindings(deps: List<(String, String, String)>, imports: List<Ast.ImportDecl>): Task<DepLoadResult> =
   match (deps) {
     [] => DepLoadOk(emptyDepBundle())
     dep :: rest => {
       match (await readKtiFile(dep.1)) {
         Err(_) => DepLoadErr("dependency not compiled yet: ${dep.0} (missing ${dep.1})")
         Ok(depKti) => {
+          val depClassName = dep.2;
           val depExports = deserializeExports(depKti);
           val depTypeAliases = deserializeTypeAliases(depKti);
           val depTypeVisibility = deserializeTypeVisibility(depKti);
@@ -734,12 +916,13 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
                 match (imp) {
                   IDNamed(spec, specs2) => {
                     if (spec == dep.0) {
-                      val valueBindings = addNamedImportBindings(specs2, depExports, b.importBindings)
-                      val typeBindings = addNamedTypeAliasBindings(specs2, depTypeAliases, b.typeAliasBindings)
-                      val opaqueLocals = collectOpaqueNamedImports(specs2, depTypeAliases, depTypeVisibility, [])
-                      val newCtorEnv = collectNamedImportCtorEnv(specs2, depCtorEnv, depCtorOwners, b.importCtorEnv)
-                      val adtTypeNames = collectNamedImportAdtTypeNames(specs2, depCtorOwners, [])
-                      val adtMaps = mergeAdtCtorMapsForTypes(adtTypeNames, depAdtCtors, b.importAdtConstructors, b.importCtorOwners)
+                      val valueBindings = addNamedImportBindings(specs2, depExports, b.importBindings);
+                      val typeBindings = addNamedTypeAliasBindings(specs2, depTypeAliases, b.typeAliasBindings);
+                      val opaqueLocals = collectOpaqueNamedImports(specs2, depTypeAliases, depTypeVisibility, []);
+                      val newCtorEnv = collectNamedImportCtorEnv(specs2, depCtorEnv, depCtorOwners, b.importCtorEnv);
+                      val adtTypeNames = collectNamedImportAdtTypeNames(specs2, depCtorOwners, []);
+                      val adtMaps = mergeAdtCtorMapsForTypes(adtTypeNames, depAdtCtors, b.importAdtConstructors, b.importCtorOwners);
+                      val codegenBundle = addNamedImportCodegen(specs2, depKti.codegenMeta, depClassName, b);
                       {
                         importBindings = valueBindings,
                         typeAliasBindings = typeBindings,
@@ -747,7 +930,12 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
                         depSnapshotsBySpec = b.depSnapshotsBySpec,
                         importCtorEnv = newCtorEnv,
                         importAdtConstructors = adtMaps.0,
-                        importCtorOwners = adtMaps.1
+                        importCtorOwners = adtMaps.1,
+                        importedNameToClass = codegenBundle.importedNameToClass,
+                        importedFunArities = codegenBundle.importedFunArities,
+                        importedValVarToClass = codegenBundle.importedValVarToClass,
+                        importedVarNames = codegenBundle.importedVarNames,
+                        importedNameToOriginal = codegenBundle.importedNameToOriginal
                       }
                     } else b
                   }
@@ -761,7 +949,12 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
                         depSnapshotsBySpec = b.depSnapshotsBySpec,
                         importCtorEnv = b.importCtorEnv,
                         importAdtConstructors = Dict.union(depAdtCtors, b.importAdtConstructors),
-                        importCtorOwners = Dict.union(depCtorOwners, b.importCtorOwners)
+                        importCtorOwners = Dict.union(depCtorOwners, b.importCtorOwners),
+                        importedNameToClass = b.importedNameToClass,
+                        importedFunArities = b.importedFunArities,
+                        importedValVarToClass = b.importedValVarToClass,
+                        importedVarNames = b.importedVarNames,
+                        importedNameToOriginal = b.importedNameToOriginal
                       }
                     } else b
                   }
@@ -777,7 +970,12 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
                 depSnapshotsBySpec = Dict.insert(merged.depSnapshotsBySpec, dep.0, snapshot),
                 importCtorEnv = merged.importCtorEnv,
                 importAdtConstructors = merged.importAdtConstructors,
-                importCtorOwners = merged.importCtorOwners
+                importCtorOwners = merged.importCtorOwners,
+                importedNameToClass = merged.importedNameToClass,
+                importedFunArities = merged.importedFunArities,
+                importedValVarToClass = merged.importedValVarToClass,
+                importedVarNames = merged.importedVarNames,
+                importedNameToOriginal = merged.importedNameToOriginal
               })
             }
           }

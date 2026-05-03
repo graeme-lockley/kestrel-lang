@@ -221,8 +221,8 @@ async fun writeKtiIfNeeded(opts: CompileOptions, ktiPath: String, prog: Program,
   }
 
 /// Codegen and write class files + KTI (extracted to reduce async locals).
-async fun doCodegenAndWrite(moduleName: String, prog: Program, tcResult: TC.TypecheckResult, entryPath: String, opts: CompileOptions, ktiPath: String, source: String, depHashes: Dict<String, String>): Task<CompileResult> = {
-  val codegenResult = Codegen.jvmCodegen(moduleName, prog);
+async fun doCodegenAndWrite(mctx: Codegen.ModuleContext, prog: Program, tcResult: TC.TypecheckResult, entryPath: String, opts: CompileOptions, ktiPath: String, source: String, depHashes: Dict<String, String>): Task<CompileResult> = {
+  val codegenResult = Codegen.jvmCodegen(mctx, prog);
   match (await Fs.mkdirAll(opts.outDir)) {
     Err(_) =>
       failResult(entryPath, Diag.CODES.file.readError,
@@ -241,7 +241,7 @@ async fun doCodegenAndWrite(moduleName: String, prog: Program, tcResult: TC.Type
 /// Typecheck, codegen, and write output for a parsed program (extracted to reduce async locals).
 async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: String, source: String, opts: CompileOptions, ktiPath: String, deps: List<Resolve.ResolvedDep>, depHashes: Dict<String, String>): Task<CompileResult> = {
   // 4. Load dep KTIs for import bindings
-  val depPairs = Lst.map(deps, (d: Resolve.ResolvedDep) => (d.spec, "${opts.outDir}/${classNameForPath(canonicalPath(d.path))}.kti"));
+  val depPairs = Lst.map(deps, (d: Resolve.ResolvedDep) => (d.spec, "${opts.outDir}/${classNameForPath(canonicalPath(d.path))}.kti", classNameForPath(canonicalPath(d.path))));
   match (await Kti.loadDepBindings(depPairs, prog.imports)) {
     DepLoadErr(depErr) =>
       failWithDiags([diag(entryPath, Diag.CODES.resolve.moduleNotFound, depErr)])
@@ -274,7 +274,16 @@ async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: Strin
       if (!tc.ok) {
         failWithDiags(tc.diagnostics)
       } else {
-        await doCodegenAndWrite(moduleName, prog, tc, entryPath, opts, ktiPath, source, depHashes)
+        val codegenOptions: Codegen.JvmCodegenOptions = {
+          importedValVarToClass = depBindings.importedValVarToClass,
+          importedVarNames = depBindings.importedVarNames,
+          importedFunArities = depBindings.importedFunArities,
+          importedNameToClass = depBindings.importedNameToClass,
+          importedNameToOriginal = depBindings.importedNameToOriginal,
+          importedAdtClasses = Dict.emptyStringDict()
+        }
+        val mctx = Codegen.buildModuleContext(moduleName, prog, codegenOptions)
+        await doCodegenAndWrite(mctx, prog, tc, entryPath, opts, ktiPath, source, depHashes)
       }
     }
   }

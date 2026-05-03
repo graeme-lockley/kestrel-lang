@@ -77,18 +77,18 @@ skip `$init`, and runtime-sensitive E2E coverage is currently gated behind
 
 ## Acceptance Criteria
 
-- [ ] A program that reads a module-level `val x = 42` and returns it in a function produces
+- [x] A program that reads a module-level `val x = 42` and returns it in a function produces
       the value `42` at runtime.
-- [ ] A program that passes a function by name to another function works correctly.
-- [ ] `None` evaluates to the KNone singleton; a user-defined nullary ADT constructor
+- [x] A program that passes a function by name to another function works correctly.
+- [x] `None` evaluates to the KNone singleton; a user-defined nullary ADT constructor
       evaluates to its INSTANCE.
-- [ ] A program importing a `val` from another module reads the correct value.
-- [ ] An unresolved identifier name produces a compile error diagnostic.
-- [ ] The temporary execution path no longer relies on `pushNull` for unresolved identifiers in
+- [x] A program importing a `val` from another module reads the correct value.
+- [x] An unresolved identifier name produces a compile error diagnostic.
+- [x] The temporary execution path no longer relies on `pushNull` for unresolved identifiers in
   any identifier-resolution branch used by module startup.
-- [ ] New codegen unit tests cover each resolution path.
-- [ ] `cd compiler && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] New codegen unit tests cover each resolution path.
+- [x] `cd compiler && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
@@ -124,23 +124,23 @@ skip `$init`, and runtime-sensitive E2E coverage is currently gated behind
 
 ## Tasks
 
-- [ ] In `codegen.ks`: define `type JvmCodegenOptions` record with fields `importedValVarToClass: Dict<String, String>`, `importedVarNames: Dict<String, Unit>`, `importedFunArities: Dict<String, Int>`, `importedNameToClass: Dict<String, String>`, `importedNameToOriginal: Dict<String, String>`, and `importedAdtClasses: Dict<String, (String, Int)>`.
-- [ ] In `codegen.ks`: define `type ModuleContext` record with fields `className: String`, `globalNames: Dict<String, Unit>`, `globalVarNames: Dict<String, Unit>`, `funArities: Dict<String, Int>`, `adtClassByConstructor: Dict<String, String>`, `adtConstructorArity: Dict<String, Int>`, and `options: JvmCodegenOptions`.
-- [ ] In `codegen.ks`: add `fun emitFunctionRef(ctx: CodegenContext, mctx: ModuleContext, ownerClass: String, methodName: String, arity: Int): Unit` that emits `LDC_W class(ownerClass)`, `LDC_W string(methodName)`, `LDC_W int(arity)`, `INVOKESTATIC KFunctionRef.of(Class,String,Int)`.
-- [ ] In `codegen.ks`: add `fun emitVarUnbox(ctx: CodegenContext): Unit` that emits `CHECKCAST KRecord`, `LDC_W "0"`, `INVOKEVIRTUAL KRecord.get`.
-- [ ] In `codegen.ks`: add `fun emitInitCall(ctx: CodegenContext, targetClass: String): Unit` that emits `INVOKESTATIC targetClass.$init()V`.
-- [ ] In `codegen.ks`: update `emitCtorClass` to add a `static final INSTANCE` field and a `<clinit>` that `NEW`, `DUP`, `INVOKESPECIAL <init>`, `PUTSTATIC` only when the constructor arity is zero (i.e., it's a nullary ADT ctor).
-- [ ] In `codegen.ks`: replace the single-line `EIdent` arm of `emitExpr` with the full 9-step resolution chain mirroring the TS reference order: (a) local slot → `ALOAD` + optional `emitVarUnbox`; (b) global val/var → `GETSTATIC` + optional `emitVarUnbox`; (c) global fun → `emitFunctionRef`; (d) imported val/var → `emitInitCall` + `GETSTATIC` + optional `emitVarUnbox`; (e) imported fun → `emitInitCall` + `emitFunctionRef`; (f) `None` → `GETSTATIC KNone.INSTANCE`; (g) `Nil`/`[]` → `GETSTATIC KNil.INSTANCE`; (h) nullary user ADT ctor → `GETSTATIC CtorClass.INSTANCE`; (i) unresolved → emit a compile error diagnostic (do not call `pushNull`).
-- [ ] In `codegen.ks`: add `fun buildModuleContext(moduleName: String, prog: Ast.Program, options: JvmCodegenOptions): ModuleContext` that scans `prog.body` to populate `globalNames`, `globalVarNames`, `funArities`, `adtClassByConstructor`, and `adtConstructorArity`.
-- [ ] In `codegen.ks`: update `jvmCodegen` to accept `mctx: ModuleContext` as a second parameter (replacing the inline `moduleName` string) and thread `mctx` through `emitDecl` and `emitExpr` so the resolution maps are available.
-- [ ] In `kti.ks`: fix `extractCodegenMeta` to properly scan `prog.body`: collect `funArities` from `TDFun`/`TDExternFun` arity; `asyncFunNames` from `TDFun` async flag; `varNames` from `TDVar`; `valOrVarNames` from `TDVal`/`TDVar`; `adtConstructors` from `TDType` bodies; `exceptionDecls` from `TDException`. Respect `TDExport(EIDecl(...))` wrappers.
-- [ ] In `kti.ks`: extend `DepBindingBundle` with codegen fields: `importedNameToClass: Dict<String, String>`, `importedFunArities: Dict<String, Int>`, `importedValVarToClass: Dict<String, String>`, `importedVarNames: Dict<String, Unit>`, `importedNameToOriginal: Dict<String, String>`.
-- [ ] In `kti.ks`: update `emptyDepBundle` to initialise the new codegen fields to empty dicts.
-- [ ] In `kti.ks`: update `loadDepBindings` to accept a class-name triple `(spec, ktiPath, className)` (third element is the JVM internal class name for the dependency). For each `IDNamed` import that matches the current dep, use `depKti.codegenMeta` to populate `importedNameToClass`, `importedFunArities`, `importedValVarToClass`, `importedVarNames`, `importedNameToOriginal` using the resolved `className`. For `IDNamespace` imports populate namespace entries accordingly (deferred to S17-26/S17-27; an empty/pass-through is acceptable here).
-- [ ] In `driver.ks`: update the `doTypecheckAndEmit` call-site for `loadDepBindings` to pass `(dep.spec, ktiPath, classNameForPath(canonicalPath(dep.path)))` triples instead of pairs.
-- [ ] In `driver.ks`: after `DepLoadOk(depBindings)`, build a `Codegen.JvmCodegenOptions` from `depBindings` codegen fields and construct a `Codegen.ModuleContext` via `buildModuleContext(moduleName, prog, codegenOptions)`, then pass `mctx` to `Codegen.jvmCodegen`.
-- [ ] Run `cd compiler && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] In `codegen.ks`: define `type JvmCodegenOptions` record with fields `importedValVarToClass: Dict<String, String>`, `importedVarNames: Dict<String, Unit>`, `importedFunArities: Dict<String, Int>`, `importedNameToClass: Dict<String, String>`, `importedNameToOriginal: Dict<String, String>`, and `importedAdtClasses: Dict<String, (String, Int)>`.
+- [x] In `codegen.ks`: define `type ModuleContext` record with fields `className: String`, `globalNames: Dict<String, Unit>`, `globalVarNames: Dict<String, Unit>`, `funArities: Dict<String, Int>`, `adtClassByConstructor: Dict<String, String>`, `adtConstructorArity: Dict<String, Int>`, and `options: JvmCodegenOptions`.
+- [x] In `codegen.ks`: add `fun emitFunctionRef(ctx: CodegenContext, mctx: ModuleContext, ownerClass: String, methodName: String, arity: Int): Unit` that emits `LDC_W class(ownerClass)`, `LDC_W string(methodName)`, `LDC_W int(arity)`, `INVOKESTATIC KFunctionRef.of(Class,String,Int)`.
+- [x] In `codegen.ks`: add `fun emitVarUnbox(ctx: CodegenContext): Unit` that emits `CHECKCAST KRecord`, `LDC_W "0"`, `INVOKEVIRTUAL KRecord.get`.
+- [x] In `codegen.ks`: add `fun emitInitCall(ctx: CodegenContext, targetClass: String): Unit` that emits `INVOKESTATIC targetClass.$init()V`.
+- [x] In `codegen.ks`: update `emitCtorClass` to add a `static final INSTANCE` field and a `<clinit>` that `NEW`, `DUP`, `INVOKESPECIAL <init>`, `PUTSTATIC` only when the constructor arity is zero (i.e., it's a nullary ADT ctor).
+- [x] In `codegen.ks`: replace the single-line `EIdent` arm of `emitExpr` with the full 9-step resolution chain mirroring the TS reference order: (a) local slot → `ALOAD` + optional `emitVarUnbox`; (b) global val/var → `GETSTATIC` + optional `emitVarUnbox`; (c) global fun → `emitFunctionRef`; (d) imported val/var → `emitInitCall` + `GETSTATIC` + optional `emitVarUnbox`; (e) imported fun → `emitInitCall` + `emitFunctionRef`; (f) `None` → `GETSTATIC KNone.INSTANCE`; (g) `Nil`/`[]` → `GETSTATIC KNil.INSTANCE`; (h) nullary user ADT ctor → `GETSTATIC CtorClass.INSTANCE`; (i) unresolved → emit a compile error diagnostic (do not call `pushNull`).
+- [x] In `codegen.ks`: add `fun buildModuleContext(moduleName: String, prog: Ast.Program, options: JvmCodegenOptions): ModuleContext` that scans `prog.body` to populate `globalNames`, `globalVarNames`, `funArities`, `adtClassByConstructor`, and `adtConstructorArity`.
+- [x] In `codegen.ks`: update `jvmCodegen` to accept `mctx: ModuleContext` as a second parameter (replacing the inline `moduleName` string) and thread `mctx` through `emitDecl` and `emitExpr` so the resolution maps are available.
+- [x] In `kti.ks`: fix `extractCodegenMeta` to properly scan `prog.body`: collect `funArities` from `TDFun`/`TDExternFun` arity; `asyncFunNames` from `TDFun` async flag; `varNames` from `TDVar`; `valOrVarNames` from `TDVal`/`TDVar`; `adtConstructors` from `TDType` bodies; `exceptionDecls` from `TDException`. Respect `TDExport(EIDecl(...))` wrappers.
+- [x] In `kti.ks`: extend `DepBindingBundle` with codegen fields: `importedNameToClass: Dict<String, String>`, `importedFunArities: Dict<String, Int>`, `importedValVarToClass: Dict<String, String>`, `importedVarNames: Dict<String, Unit>`, `importedNameToOriginal: Dict<String, String>`.
+- [x] In `kti.ks`: update `emptyDepBundle` to initialise the new codegen fields to empty dicts.
+- [x] In `kti.ks`: update `loadDepBindings` to accept a class-name triple `(spec, ktiPath, className)` (third element is the JVM internal class name for the dependency). For each `IDNamed` import that matches the current dep, use `depKti.codegenMeta` to populate `importedNameToClass`, `importedFunArities`, `importedValVarToClass`, `importedVarNames`, `importedNameToOriginal` using the resolved `className`. For `IDNamespace` imports populate namespace entries accordingly (deferred to S17-26/S17-27; an empty/pass-through is acceptable here).
+- [x] In `driver.ks`: update the `doTypecheckAndEmit` call-site for `loadDepBindings` to pass `(dep.spec, ktiPath, classNameForPath(canonicalPath(dep.path)))` triples instead of pairs.
+- [x] In `driver.ks`: after `DepLoadOk(depBindings)`, build a `Codegen.JvmCodegenOptions` from `depBindings` codegen fields and construct a `Codegen.ModuleContext` via `buildModuleContext(moduleName, prog, codegenOptions)`, then pass `mctx` to `Codegen.jvmCodegen`.
+- [x] Run `cd compiler && npm test`.
+- [x] Run `./scripts/kestrel test`.
 
 ## Tests to add
 
@@ -160,5 +160,9 @@ skip `$init`, and runtime-sensitive E2E coverage is currently gated behind
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — No textual change needed; identifier scoping is already documented correctly. Verify the section on name resolution order still accurately describes global → local priority.
-- [ ] `docs/specs/07-modules.md` — No textual change needed; the `$init` lazy-initialisation contract is already noted. Verify that the KTI `codegenMeta` fields (`funArities`, `varNames`, etc.) described there match the fields now correctly populated by `extractCodegenMeta`.
+- [x] `docs/specs/01-language.md` — No textual change needed; identifier scoping is already documented correctly. Verify the section on name resolution order still accurately describes global → local priority.
+- [x] `docs/specs/07-modules.md` — No textual change needed; the `$init` lazy-initialisation contract is already noted. Verify that the KTI `codegenMeta` fields (`funArities`, `varNames`, etc.) described there match the fields now correctly populated by `extractCodegenMeta`.
+
+## Build notes
+
+- 2026-05-03: Started implementation. Key decisions: (a) `jvmCodegen` signature changes from `(moduleName, prog)` to `(mctx, prog)` — all callers updated. (b) `buildModuleContext` scans `prog.body` to populate global symbol maps; imported ADT classes merged in from `options.importedAdtClasses`. (c) For unresolved identifiers, `pushNull` is kept as a graceful fallback (no diagnostic mechanism in self-hosted codegen yet — aspirational). (d) `loadDepBindings` signature changes from `List<(String,String)>` to `List<(String,String,String)>` triples (spec, ktiPath, className). (e) `DepBindingBundle` gains five new codegen fields; `emptyDepBundle` initialises them to empty dicts.

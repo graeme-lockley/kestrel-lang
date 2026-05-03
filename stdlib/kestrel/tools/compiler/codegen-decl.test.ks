@@ -1,13 +1,35 @@
 import { Suite, group, isTrue, eq } from "kestrel:dev/test"
 import * as BA from "kestrel:data/bytearray"
 import * as Dict from "kestrel:data/dict"
+import * as Lst from "kestrel:data/list"
 import * as Lex from "kestrel:dev/parser/lexer"
 import * as CG from "kestrel:tools/compiler/codegen"
 import { parseFromList } from "kestrel:dev/parser/parser"
 
+fun seqStartsWith(xs: List<Int>, prefix: List<Int>): Bool =
+  match (prefix) {
+    [] => True
+    p :: restP => match (xs) {
+      [] => False
+      x :: restX => if (x == p) seqStartsWith(restX, restP) else False
+    }
+  }
+
+fun seqContains(haystack: List<Int>, needle: List<Int>): Bool =
+  if (Lst.isEmpty(needle)) True
+  else match (haystack) {
+    [] => False
+    _ :: rest =>
+      if (seqStartsWith(haystack, needle)) True
+      else seqContains(rest, needle)
+  }
+
 fun compileModule(moduleName: String, src: String): CG.JvmCodegenResult =
   match (parseFromList(Lex.lex(src))) {
-    Ok(prog) => CG.jvmCodegen(moduleName, prog)
+    Ok(prog) => {
+      val mctx = CG.buildModuleContext(moduleName, prog, CG.emptyJvmCodegenOptions())
+      CG.jvmCodegen(mctx, prog)
+    }
     Err(e) => throw e
   }
 
@@ -65,5 +87,32 @@ export async fun run(s: Suite): Task<Unit> =
       val namedResult = compileModule("test/DeclReexportNamed", "export { foo, Bar } from \"kestrel:some/dep\"")
       isTrue(sg, "export-named main class emitted", hasNonEmptyClass(namedResult, "test/DeclReexportNamed"));
       eq(sg, "export-named no extra classes", Dict.size(namedResult.classes), 1)
+    });
+
+    group(s1, "nullary ctor has INSTANCE field", (sg: Suite) => {
+      val result = compileModule("test/DeclCtorInst", "type Color = Red | Green")
+      val redCtorName = "Red"
+      val redKey = "test/DeclCtorInst$${redCtorName}"
+      isTrue(sg, "module class emitted", hasNonEmptyClass(result, "test/DeclCtorInst"));
+      isTrue(sg, "Red ctor class emitted", hasNonEmptyClass(result, redKey));
+      // The ctor class bytes should contain UTF-8 for "INSTANCE" = [73, 78, 83, 84, 65, 78, 67, 69]
+      match (Dict.get(result.classes, redKey)) {
+        None => isTrue(sg, "Red class bytes exist", False)
+        Some(bytes) => {
+          val bs = BA.toList(bytes)
+          isTrue(sg, "nullary ctor has INSTANCE in classfile",
+            seqContains(bs, [73, 78, 83, 84, 65, 78, 67, 69]))
+        }
+      }
+    });
+
+    group(s1, "global val declaration", (sg: Suite) => {
+      val result = compileModule("test/DeclVal", "val x: Int = 1")
+      isTrue(sg, "module class emitted", hasNonEmptyClass(result, "test/DeclVal"))
+    });
+
+    group(s1, "global var declaration", (sg: Suite) => {
+      val result = compileModule("test/DeclVar", "var y: Int = 2")
+      isTrue(sg, "module class emitted", hasNonEmptyClass(result, "test/DeclVar"))
     })
   })

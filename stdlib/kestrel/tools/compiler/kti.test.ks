@@ -94,7 +94,7 @@ export async fun run(s: Suite): Task<Unit> =
       )
       val meta = Kti.extractCodegenMeta(prog, exports)
       match (Dict.get(meta.funArities, "f")) {
-        Some(n) => eq(sg, "arity tracked", n, 0)
+        Some(n) => eq(sg, "arity tracked", n, 1)
         None => isTrue(sg, "missing arity", False)
       }
       isTrue(sg, "exported names tracked", Lst.member(meta.valOrVarNames, "c"))
