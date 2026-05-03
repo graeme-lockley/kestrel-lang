@@ -18,7 +18,8 @@ import {
   LElem, LSpread,
   SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue,
   TmplLit, TmplExpr,
-  PWild, PVar, PLit, PCon, PList, PCons, PTuple
+  PWild, PVar, PLit, PCon, PList, PCons, PTuple,
+  ATPrim, ATApp
 } from "kestrel:dev/parser/ast"
 import * as CF from "kestrel:tools/compiler/classfile"
 import * as Op from "kestrel:tools/compiler/opcodes"
@@ -122,6 +123,76 @@ fun objectArgs(n: Int): String =
 fun objectMethodDesc(arity: Int): String =
   "(${objectArgs(arity)})Ljava/lang/Object;"
 
+// ---------------------------------------------------------------------------
+// Extern JVM dispatch helpers
+// ---------------------------------------------------------------------------
+
+fun firstIndexOf(needle: String, s: String): Int =
+  match (Str.indexes(needle, s)) {
+    [] => -1
+    i :: _ => i
+  }
+
+// Map a Kestrel declared return type to a JVM return descriptor.
+fun externReturnDesc(retType: Ast.AstType): String =
+  match (retType) {
+    ATPrim(name) =>
+      if (name == "Int") "Ljava/lang/Long;"
+      else if (name == "Bool") "Ljava/lang/Boolean;"
+      else if (name == "String") "Ljava/lang/String;"
+      else if (name == "Float") "Ljava/lang/Double;"
+      else if (name == "Unit") "V"
+      else if (name == "Char") "Ljava/lang/Integer;"
+      else "Ljava/lang/Object;"
+    ATApp(name, _) =>
+      if (name == "Task") "Lkestrel/runtime/KTask;"
+      else if (name == "List") "Lkestrel/runtime/KList;"
+      else "Ljava/lang/Object;"
+    _ => "Ljava/lang/Object;"
+  }
+
+// Parse "Owner.Class#method(ArgType,...)" -> owner in JVM internal form (dots -> slashes).
+fun parseJvmOwner(raw: String): String = {
+  val hashIdx = firstIndexOf("#", raw)
+  Str.replace(".", "/", Str.left(raw, hashIdx))
+}
+
+// Parse "Owner.Class#method(ArgType,...)" -> method name.
+fun parseJvmMethodName(raw: String): String = {
+  val hashIdx = firstIndexOf("#", raw)
+  val openIdx = firstIndexOf("(", raw)
+  Str.sliceRel(hashIdx + 1, openIdx, raw)
+}
+
+// Parse "Owner.Class#method(ArgType,...)" -> number of declared arguments.
+fun parseJvmArgCount(raw: String): Int = {
+  val openIdx = firstIndexOf("(", raw)
+  val closeIdx = firstIndexOf(")", raw)
+  val argsRaw = Str.sliceRel(openIdx + 1, closeIdx, raw)
+  val trimmed = Str.trimLeft(Str.trimRight(argsRaw))
+  if (Str.length(trimmed) == 0) 0
+  else Lst.length(Str.indexes(",", argsRaw)) + 1
+}
+
+// Emit ALOAD instructions for params from `start` (inclusive) to `end` (exclusive).
+fun emitLoadArgs(mb: CF.MethodBuilder, start: Int, end: Int): Unit =
+  if (start >= end) ()
+  else {
+    if (start == 0) CF.mbEmit1(mb, Op.JvmOp.aload0)
+    else if (start == 1) CF.mbEmit1(mb, Op.JvmOp.aload1)
+    else if (start == 2) CF.mbEmit1(mb, Op.JvmOp.aload2)
+    else if (start == 3) CF.mbEmit1(mb, Op.JvmOp.aload3)
+    else CF.mbEmit1b(mb, Op.JvmOp.aload, start);
+    emitLoadArgs(mb, start + 1, end)
+  }
+
+// After the JVM call: if return was void (Unit), push KUnit; otherwise leave result on stack.
+fun emitExternReturn(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, retDesc: String): Unit =
+  if (retDesc == "V") {
+    val kunitRef = CF.cfFieldref(cf, KUNIT, "INSTANCE", "Lkestrel/runtime/KUnit;")
+    CF.mbEmit1s(mb, Op.JvmOp.getstatic, kunitRef)
+  } else ()
+
 fun emitDefaultCtor(cf: CF.ClassFileBuilder): Unit = {
   val mb = CF.cfAddMethod(cf, "<init>", "()V", Op.Acc.public_)
   CF.mbEmit1(mb, Op.JvmOp.aload0)
@@ -156,11 +227,32 @@ export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl): Unit = {
 }
 
 export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit = {
-  val desc = if (Str.length(decl.jvmDesc) > 0) decl.jvmDesc else objectMethodDesc(Lst.length(decl.params))
+  val arity = Lst.length(decl.params)
+  val desc = objectMethodDesc(arity)
   val mb = CF.cfAddMethod(cf, decl.name, desc, Op.Acc.public_ + Op.Acc.static_)
-  pushNull(newCodegenContext(cf, mb))
+  if (Str.length(decl.jvmDesc) > 0) {
+    val owner = parseJvmOwner(decl.jvmDesc)
+    val methodName = parseJvmMethodName(decl.jvmDesc)
+    val argCount = parseJvmArgCount(decl.jvmDesc)
+    val retDesc = externReturnDesc(decl.retType)
+    val callDesc = "(${objectArgs(argCount)})${retDesc}"
+    if (arity == argCount) {
+      emitLoadArgs(mb, 0, arity)
+      val mref = CF.cfMethodref(cf, owner, methodName, callDesc)
+      CF.mbEmit1s(mb, Op.JvmOp.invokestatic, mref)
+    } else {
+      CF.mbEmit1(mb, Op.JvmOp.aload0)
+      val ownerRef = CF.cfClassRef(cf, owner)
+      CF.mbEmit1s(mb, Op.JvmOp.checkcast, ownerRef)
+      emitLoadArgs(mb, 1, arity)
+      val mref = CF.cfMethodref(cf, owner, methodName, callDesc)
+      CF.mbEmit1s(mb, Op.JvmOp.invokevirtual, mref)
+    };
+    emitExternReturn(cf, mb, retDesc)
+  } else
+    pushNull(newCodegenContext(cf, mb));
   CF.mbEmit1(mb, Op.JvmOp.areturn)
-  CF.mbSetMaxs(mb, 1, 8)
+  CF.mbSetMaxs(mb, 1, arity + 8)
 }
 
 fun emitExternOverride(cf: CF.ClassFileBuilder, ov: Ast.ExternOverride): Unit = {
@@ -259,6 +351,10 @@ export fun jvmCodegen(moduleName: String, prog: Ast.Program): JvmCodegenResult =
   emitDefaultCtor(cf)
   val extraClasses = emitDecls(moduleName, cf, prog.body, Dict.emptyStringDict())
   emitMainStub(cf)
+  val initMethodName = Str.append("$", "init")
+  val initMb = CF.cfAddMethod(cf, initMethodName, "()V", Op.Acc.public_ + Op.Acc.static_)
+  CF.mbEmit1(initMb, Op.JvmOp.return_)
+  CF.mbSetMaxs(initMb, 0, 0)
   val mainBytes = CF.cfToBytes(cf)
   {
     classes = Dict.insert(extraClasses, moduleName, mainBytes)
