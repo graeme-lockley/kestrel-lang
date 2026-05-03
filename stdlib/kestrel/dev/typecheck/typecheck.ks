@@ -21,7 +21,7 @@ import {
   SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue,
   PWild, PVar, PLit, PCon, PList, PCons, PTuple,
   LElem, LSpread,
-  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr, TDExternFun, TDExternType, TDExternImport, TDExport,
+  TDFun, TDType, TDException, TDVal, TDVar, TDSVal, TDSVar, TDSExpr, TDSAssign, TDExternFun, TDExternType, TDExternImport, TDExport,
   EIStar, EINamed, EIDecl,
   TBAdt, TBAlias,
   TmplLit, TmplExpr
@@ -1219,6 +1219,12 @@ fun checkDecls(
             }
           }
           TDExport(EIDecl(d)) => checkDecls(state, env, typeAliases, exports, exportedTypeAliases, [d])
+          TDSAssign(target, rhs) => {
+            val targetT = inferExpr(state, env, typeAliases, target)
+            val rhsT = inferExpr(state, env, typeAliases, rhs)
+            unifyEq(state, rhsT, targetT);
+            (env, exports, exportedTypeAliases)
+          }
           _ => {
             addDiag(state, Diag.CODES.type_.check, "Unsupported top-level declaration in self-hosted checker MVP");
             (env, exports, exportedTypeAliases)

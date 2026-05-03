@@ -333,5 +333,26 @@ export async fun run(s: Suite): Task<Unit> =
       val snapMap6 = Dict.insert(Dict.emptyStringDict(), "kestrel:test/dep6", depSnap6)
       val typeCheckResult = runTcWithSnap("export * from \"kestrel:test/dep6\"", snapMap6)
       eq(sg, "EIStar type forwarded", findExportType(typeCheckResult, "compute"), "(Int) -> Bool")
+    });
+
+    group(s1, "top-level assignment", (sg: Suite) => {
+      // happy path: var decl followed by reassignment of the same type
+      Ty.resetVarId()
+      val happyRes = runTc("var x: Int = 0\nx := 1")
+      eq(sg, "top-level assign same type ok", happyRes.ok, True);
+      isTrue(sg, "no diagnostics on happy path", Lst.isEmpty(happyRes.diagnostics));
+
+      // type mismatch: assigning Bool to an Int var
+      Ty.resetVarId()
+      val mismatchRes = runTc("var x: Int = 0\nx := True")
+      eq(sg, "top-level assign type mismatch fails", mismatchRes.ok, False);
+      isTrue(sg, "type mismatch has unify diagnostic",
+        hasDiagCode(mismatchRes.diagnostics, Diag.CODES.type_.unify));
+
+      // record field mutation at top level
+      Ty.resetVarId()
+      val recRes = runTc("var p = { x = 1 }\np.x := 2")
+      eq(sg, "top-level record field assign ok", recRes.ok, True);
+      isTrue(sg, "no diagnostics on field assign", Lst.isEmpty(recRes.diagnostics))
     })
   })

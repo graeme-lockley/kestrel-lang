@@ -231,7 +231,7 @@ before the self-hosted compiler can typecheck its own stdlib modules.
     — Add the `EIStar` and `EINamed` arms to `TDExport` handling in both typecheck and
     codegen so aggregator modules typecheck and emit correct KTI.
 
-24. [S17-21 — Self-hosted typecheck for top-level assignments (`TDSAssign`)](../../unplanned/S17-21-self-hosted-typecheck-top-level-assignment.md)
+24. ✅ [S17-21 — Self-hosted typecheck for top-level assignments (`TDSAssign`)](../../done/S17-21-self-hosted-typecheck-top-level-assignment.md)
     — Add a `TDSAssign` arm to `checkDecls` reusing the existing `SAssign` rule.
 
 25. [S17-22 — Cross-module ADT constructor environment for the self-hosted typechecker](../../unplanned/S17-22-self-hosted-cross-module-ctor-exhaustiveness.md)
