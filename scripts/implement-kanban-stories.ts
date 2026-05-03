@@ -176,6 +176,15 @@ interface Machine {
   failure?: string;
 }
 
+type LogLevel = "info" | "success" | "error";
+
+const ANSI = {
+  reset: "\x1b[0m",
+  grey: "\x1b[90m",
+  green: "\x1b[32m",
+  red: "\x1b[31m",
+} as const;
+
 const DEFAULT_CONFIG: Config = {
   piCommand: "pi",
   rootDir: process.cwd(),
@@ -443,11 +452,24 @@ async function evaluateBuild(machine: Machine): Promise<void> {
 async function runTests(machine: Machine): Promise<void> {
   const story = requireStory(machine);
 
-  log(machine, `Running tests for ${story.storyId}, attempt ${story.attempt}`);
+  if (!story.build || story.build.status !== "success") {
+    story.blockedReason =
+      "Invariant violated: RUN_TESTS reached before a successful build.";
+    log(machine, story.blockedReason, "error");
+    machine.phase = "MARK_BLOCKED";
+    return;
+  }
+
+  log(
+    machine,
+    `Running post-build tests for ${story.storyId}, attempt ${story.attempt}`,
+  );
 
   story.testResult = machine.config.dryRun
     ? dryRunCommand(machine.config.testCommand)
-    : await runShell(machine.config.testCommand, machine.config.rootDir);
+    : await runShell(machine.config.testCommand, machine.config.rootDir, {
+        streamOutput: true,
+      });
 
   await writeJson(path.join(story.storyRunDir, `test-${story.attempt}.json`), story.testResult);
   await writeFile(path.join(story.storyRunDir, `test-${story.attempt}.stdout.log`), story.testResult.stdout, "utf8");
@@ -468,6 +490,7 @@ async function evaluateTests(machine: Machine): Promise<void> {
   }
 
   if (result.exitCode !== 0) {
+    log(machine, `Tests failed for ${story.storyId} (attempt ${story.attempt}).`, "error");
     story.issues = [
       `Tests failed on attempt ${story.attempt}.`,
       `Command: ${result.command}`,
@@ -481,17 +504,32 @@ async function evaluateTests(machine: Machine): Promise<void> {
     return;
   }
 
+  log(machine, `Tests passed for ${story.storyId} (attempt ${story.attempt}).`, "success");
+
   machine.phase = "RUN_LINT";
 }
 
 async function runLint(machine: Machine): Promise<void> {
   const story = requireStory(machine);
 
-  log(machine, `Running lint for ${story.storyId}, attempt ${story.attempt}`);
+  if (!story.build || story.build.status !== "success") {
+    story.blockedReason =
+      "Invariant violated: RUN_LINT reached before a successful build.";
+    log(machine, story.blockedReason, "error");
+    machine.phase = "MARK_BLOCKED";
+    return;
+  }
+
+  log(
+    machine,
+    `Running post-build lint for ${story.storyId}, attempt ${story.attempt}`,
+  );
 
   story.lintResult = machine.config.dryRun
     ? dryRunCommand(machine.config.lintCommand)
-    : await runShell(machine.config.lintCommand, machine.config.rootDir);
+    : await runShell(machine.config.lintCommand, machine.config.rootDir, {
+        streamOutput: true,
+      });
 
   await writeJson(path.join(story.storyRunDir, `lint-${story.attempt}.json`), story.lintResult);
   await writeFile(path.join(story.storyRunDir, `lint-${story.attempt}.stdout.log`), story.lintResult.stdout, "utf8");
@@ -512,6 +550,7 @@ async function evaluateLint(machine: Machine): Promise<void> {
   }
 
   if (result.exitCode !== 0) {
+    log(machine, `Lint failed for ${story.storyId} (attempt ${story.attempt}).`, "error");
     story.issues = [
       `Lint failed on attempt ${story.attempt}.`,
       `Command: ${result.command}`,
@@ -524,6 +563,8 @@ async function evaluateLint(machine: Machine): Promise<void> {
     machine.phase = nextAttemptOrBlocked(machine, "Lint failed.");
     return;
   }
+
+  log(machine, `Lint passed for ${story.storyId} (attempt ${story.attempt}).`, "success");
 
   machine.phase = "VERIFY_STORY";
 }
@@ -566,9 +607,12 @@ async function evaluateVerify(machine: Machine): Promise<void> {
   }
 
   if (story.verify.status === "success") {
+    log(machine, `Verification passed for ${story.storyId}.`, "success");
     machine.phase = "MARK_DONE";
     return;
   }
+
+  log(machine, `Verification failed for ${story.storyId} (attempt ${story.attempt}).`, "error");
 
   story.issues = [
     `Verification failed on attempt ${story.attempt}.`,
@@ -607,7 +651,7 @@ async function markDone(machine: Machine): Promise<void> {
     attempts: story.attempt,
   });
 
-  log(machine, `Done: ${story.storyPath}`);
+  log(machine, `Done: ${story.storyPath}`, "success");
   machine.phase = "NEXT_STORY";
 }
 
@@ -647,8 +691,8 @@ async function markBlocked(machine: Machine): Promise<void> {
     reason,
   });
 
-  log(machine, `Blocked: ${story.storyPath}`);
-  log(machine, `Reason: ${reason}`);
+  log(machine, `Blocked: ${story.storyPath}`, "error");
+  log(machine, `Reason: ${reason}`, "error");
 
   if (machine.config.continueOnBlocked) {
     machine.phase = "NEXT_STORY";
@@ -691,14 +735,22 @@ async function invokePi(
 ): Promise<PiInvocationResult> {
   const story = requireStory(machine);
   const args = buildPiArgs(machine, options);
+  const phaseLog =
+    options.phaseName === "VERIFY"
+      ? `Invoking Pi for VERIFY: ${story.storyId} (checking implementation against acceptance criteria using story, plan, build, test, and lint artifacts)`
+      : `Invoking Pi for ${options.phaseName}: ${story.storyId}`;
+  const heartbeatLabel =
+    options.phaseName === "VERIFY"
+      ? `VERIFY ${story.storyId} (acceptance criteria + test/lint validation)`
+      : `${options.phaseName} ${story.storyId}`;
 
-  log(machine, `Invoking Pi for ${options.phaseName}: ${story.storyId}`);
+  log(machine, phaseLog);
 
   const result = machine.config.dryRun
     ? dryRunPi(options)
     : await runCommand(machine.config.piCommand, args, machine.config.rootDir, {
         streamOutput: true,
-        heartbeatLabel: `${options.phaseName} ${story.storyId}`,
+        heartbeatLabel,
         heartbeatMs: 15000,
       });
 
@@ -798,8 +850,10 @@ async function runCommand(
     if (streamOutput && heartbeatLabel && heartbeatMs > 0) {
       heartbeatTimer = setInterval(() => {
         const seconds = Math.floor((Date.now() - started) / 1000);
-        process.stderr.write(
-          `[runner] ${heartbeatLabel} still running (${seconds}s elapsed)\n`,
+        writeRunnerLine(
+          `${heartbeatLabel} still running (${seconds}s elapsed)`,
+          "info",
+          "stderr",
         );
       }, heartbeatMs);
     }
@@ -849,8 +903,13 @@ async function runCommand(
   });
 }
 
-async function runShell(command: string, cwd: string): Promise<CommandResult> {
-  const started = Date.now();
+async function runShellWithOptions(
+  command: string,
+  cwd: string,
+  options: { streamOutput: boolean; started?: number },
+): Promise<CommandResult> {
+  const started = options.started ?? Date.now();
+  const streamOutput = options.streamOutput;
 
   return new Promise((resolve) => {
     const child = spawn(command, {
@@ -865,10 +924,16 @@ async function runShell(command: string, cwd: string): Promise<CommandResult> {
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
+      if (streamOutput) {
+        process.stdout.write(chunk);
+      }
     });
 
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
+      if (streamOutput) {
+        process.stderr.write(chunk);
+      }
     });
 
     child.on("close", (exitCode) => {
@@ -890,6 +955,16 @@ async function runShell(command: string, cwd: string): Promise<CommandResult> {
         durationMs: Date.now() - started,
       });
     });
+  });
+}
+
+async function runShell(
+  command: string,
+  cwd: string,
+  options?: { streamOutput?: boolean },
+): Promise<CommandResult> {
+  return runShellWithOptions(command, cwd, {
+    streamOutput: options?.streamOutput ?? false,
   });
 }
 
@@ -1335,9 +1410,30 @@ function truncate(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength)}\n\n[truncated ${value.length - maxLength} chars]`;
 }
 
-function log(machine: Machine, message: string): void {
+function levelColor(level: LogLevel): string | undefined {
+  if (level === "success") return ANSI.green;
+  if (level === "error") return ANSI.red;
+  return undefined;
+}
+
+function writeRunnerLine(
+  message: string,
+  level: LogLevel,
+  stream: "stdout" | "stderr",
+): void {
+  const prefix = `${ANSI.grey}[runner]${ANSI.reset}`;
+  const color = levelColor(level);
+  const body = color ? `${color}${message}${ANSI.reset}` : message;
+  const writer = stream === "stderr" ? process.stderr : process.stdout;
+  writer.write(`${prefix} ${body}\n`);
+}
+
+function log(machine: Machine, message: string, level: LogLevel = "info"): void {
   if (machine.config.verbose) {
-    console.log(message);
+    const lines = message.split(/\r?\n/);
+    for (const line of lines) {
+      writeRunnerLine(line, level, "stdout");
+    }
   }
 }
 
@@ -1488,6 +1584,10 @@ Options:
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
+  writeRunnerLine(
+    error instanceof Error ? error.message : String(error),
+    "error",
+    "stderr",
+  );
   process.exit(1);
 });
