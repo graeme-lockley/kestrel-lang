@@ -66,6 +66,8 @@ type Phase =
   | "START_STORY"
   | "PLAN_STORY"
   | "EVALUATE_PLAN"
+  | "VERIFY_PLAN"
+  | "COMMIT_PLAN"
   | "BUILD_STORY"
   | "EVALUATE_BUILD"
   | "RUN_TESTS"
@@ -151,11 +153,13 @@ interface VerifyResult {
 }
 
 interface StoryContext {
+  originalStoryPath: string;
   storyPath: string;
   storyId: string;
   storyRunDir: string;
   sessionPath: string;
   attempt: number;
+  planRepairAttempts: number;
   issues: string[];
   blockedReason?: string;
   plan?: PlanResult;
@@ -174,6 +178,13 @@ interface Machine {
   storyIndex: number;
   current?: StoryContext;
   failure?: string;
+}
+
+interface PlanVerificationResult {
+  ok: boolean;
+  plannedStoryPath: string;
+  gitStatus: CommandResult;
+  reasons: string[];
 }
 
 type LogLevel = "info" | "success" | "error";
@@ -259,6 +270,12 @@ async function transition(machine: Machine): Promise<void> {
 
     case "EVALUATE_PLAN":
       return evaluatePlan(machine);
+
+    case "VERIFY_PLAN":
+      return verifyPlan(machine);
+
+    case "COMMIT_PLAN":
+      return commitPlan(machine);
 
     case "BUILD_STORY":
       return buildStory(machine);
@@ -347,11 +364,13 @@ async function startStory(machine: Machine): Promise<void> {
   await mkdir(path.dirname(sessionPath), { recursive: true });
 
   machine.current = {
+    originalStoryPath: storyPath,
     storyPath,
     storyId,
     storyRunDir,
     sessionPath,
     attempt: 1,
+    planRepairAttempts: 0,
     issues: [],
   };
 
@@ -364,7 +383,7 @@ async function startStory(machine: Machine): Promise<void> {
 async function planStory(machine: Machine): Promise<void> {
   const story = requireStory(machine);
 
-  const prompt = buildPlanPrompt();
+  const prompt = buildPlanPrompt(story);
   await writeFile(path.join(story.storyRunDir, "plan.prompt.md"), prompt, "utf8");
 
   const result = await invokePi(machine, {
@@ -399,7 +418,125 @@ async function evaluatePlan(machine: Machine): Promise<void> {
     return;
   }
 
-  story.issues = [];
+  machine.phase = "VERIFY_PLAN";
+}
+
+async function verifyPlan(machine: Machine): Promise<void> {
+  const story = requireStory(machine);
+  const plannedStoryPath = resolveExpectedPlannedStoryPath(machine, story);
+
+  if (machine.config.dryRun) {
+    story.storyPath = plannedStoryPath;
+    story.issues = [];
+    machine.phase = "COMMIT_PLAN";
+    return;
+  }
+
+  const oldStoryPath = path.resolve(story.storyPath);
+  const plannedExists = await fileExists(plannedStoryPath);
+  const oldStillExists = await fileExists(oldStoryPath);
+  const gitStatus = await runShell("git status --porcelain", machine.config.rootDir);
+  const reasons: string[] = [];
+
+  if (!plannedExists) {
+    reasons.push(`Planned story file does not exist: ${plannedStoryPath}`);
+  }
+
+  if (oldStillExists) {
+    reasons.push(`Original story file still exists (story was not moved): ${oldStoryPath}`);
+  }
+
+  if (gitStatus.exitCode !== 0) {
+    reasons.push(`git status failed with exit code ${gitStatus.exitCode}`);
+  }
+
+  if (gitStatus.exitCode === 0) {
+    const changedPaths = parseGitStatusPaths(gitStatus.stdout).map((changedPath) =>
+      toRepoRelativePosix(machine.config.rootDir, path.resolve(machine.config.rootDir, changedPath)),
+    );
+
+    const oldRelative = toRepoRelativePosix(machine.config.rootDir, oldStoryPath);
+    const plannedRelative = toRepoRelativePosix(machine.config.rootDir, plannedStoryPath);
+    const allowed = new Set<string>([oldRelative, plannedRelative]);
+
+    const unexpected = changedPaths.filter((changedPath) => !allowed.has(changedPath));
+    if (unexpected.length > 0) {
+      reasons.push(
+        `Unexpected changed paths after planning: ${unexpected.join(", ")}. Only the story move is allowed.`,
+      );
+    }
+
+    const hasOldPathChange = changedPaths.includes(oldRelative);
+    const hasPlannedPathChange = changedPaths.includes(plannedRelative);
+
+    if (!hasOldPathChange || !hasPlannedPathChange) {
+      reasons.push(
+        `git status must show both paths for the move: deleted ${oldRelative} and added ${plannedRelative}.`,
+      );
+    }
+  }
+
+  const verification: PlanVerificationResult = {
+    ok: reasons.length === 0,
+    plannedStoryPath,
+    gitStatus,
+    reasons,
+  };
+
+  await writeJson(path.join(story.storyRunDir, `plan-verify-${story.planRepairAttempts + 1}.json`), verification);
+
+  if (verification.ok) {
+    story.storyPath = plannedStoryPath;
+    story.issues = [];
+    machine.phase = "COMMIT_PLAN";
+    return;
+  }
+
+  story.planRepairAttempts += 1;
+  story.issues = [
+    "Deterministic plan verification failed.",
+    ...verification.reasons,
+    "Repair required: only the story file may change. Move it to planned and undo any other edits.",
+  ];
+  machine.phase = "PLAN_STORY";
+}
+
+async function commitPlan(machine: Machine): Promise<void> {
+  const story = requireStory(machine);
+  const currentStoryPath = path.resolve(story.storyPath);
+  const originalStoryPath = path.resolve(story.originalStoryPath);
+
+  if (!machine.config.dryRun) {
+    const currentStoryRelative = toRepoRelativePosix(machine.config.rootDir, currentStoryPath);
+    const originalStoryRelative = toRepoRelativePosix(machine.config.rootDir, originalStoryPath);
+    const addResult = await runCommand(
+      "git",
+      ["add", "-A", "--", originalStoryRelative, currentStoryRelative],
+      machine.config.rootDir,
+    );
+
+    if (addResult.exitCode !== 0) {
+      story.blockedReason =
+        `Failed to stage planned story during commit phase. Exit code ${addResult.exitCode}.`;
+      machine.phase = "MARK_BLOCKED";
+      return;
+    }
+
+    const commitMessage = `docs(kanban): move ${story.storyId} to planned`;
+    const commitResult = await runCommand(
+      "git",
+      ["commit", "-m", commitMessage],
+      machine.config.rootDir,
+    );
+
+    if (commitResult.exitCode !== 0) {
+      story.blockedReason =
+        `Failed to commit planned story during commit phase. Exit code ${commitResult.exitCode}.`;
+      machine.phase = "MARK_BLOCKED";
+      return;
+    }
+  }
+
   machine.phase = "BUILD_STORY";
 }
 
@@ -1017,20 +1154,24 @@ function dryRunPi(options: PiInvocationOptions): CommandResult {
   };
 }
 
-function buildPlanPrompt(): string {
+function buildPlanPrompt(story: StoryContext): string {
   return [
     "PHASE: PLAN",
     "",
-    "You are planning exactly one Kanban story.",
+    "You are planning exactly one Kanban story using the plan-story skill.",
+    `Story: ${story.storyPath}`,
     "",
     "Rules:",
-    "- Do not edit files.",
-    "- Do not implement anything.",
-    "- Do not run tests.",
-    "- Read the story and inspect only the files needed to produce a credible plan.",
-    "- Identify acceptance criteria, likely files to change, risks, and a build plan.",
-    "- Keep the plan narrowly scoped to the story.",
+    "- Do not edit ANY files other than story itself.",
+    "- You must move the story from unplanned to planned.",
+    "- You must not change any file other than the story file move/content.",
+    "- Apply the skill plan-story skill as written, without deviation.",
     "- Return only strict JSON. No Markdown. No prose outside JSON.",
+    "",
+    "Deterministic verification feedback from previous attempt (if any):",
+    ...(story.issues.length === 0
+      ? ["- None"]
+      : story.issues.map((issue) => `- ${issue}`)),
     "",
     "Return JSON with this shape:",
     "{",
@@ -1250,10 +1391,12 @@ async function writeStoryState(machine: Machine): Promise<void> {
 
   await writeJson(path.join(story.storyRunDir, "state.json"), {
     phase: machine.phase,
+    originalStoryPath: story.originalStoryPath,
     storyPath: story.storyPath,
     storyId: story.storyId,
     sessionPath: story.sessionPath,
     attempt: story.attempt,
+    planRepairAttempts: story.planRepairAttempts,
     issues: story.issues,
     blockedReason: story.blockedReason ?? null,
     plan: story.plan ?? null,
@@ -1391,6 +1534,35 @@ function requireStory(machine: Machine): StoryContext {
 
 function resolveFromRoot(config: Config, value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(config.rootDir, value);
+}
+
+function resolveExpectedPlannedStoryPath(machine: Machine, story: StoryContext): string {
+  const plannedDir = resolveFromRoot(machine.config, "./docs/kanban/planned");
+  return path.resolve(plannedDir, path.basename(story.storyPath));
+}
+
+function toRepoRelativePosix(rootDir: string, absolutePath: string): string {
+  return path.relative(rootDir, absolutePath).split(path.sep).join("/");
+}
+
+function parseGitStatusPaths(porcelain: string): string[] {
+  const paths: string[] = [];
+
+  for (const line of porcelain.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const body = line.slice(3).trim();
+    if (!body) continue;
+
+    if (body.includes(" -> ")) {
+      const [fromPath, toPath] = body.split(" -> ").map((part) => part.trim());
+      if (fromPath) paths.push(fromPath);
+      if (toPath) paths.push(toPath);
+    } else {
+      paths.push(body);
+    }
+  }
+
+  return paths;
 }
 
 function safeName(value: string): string {
