@@ -5,7 +5,9 @@ import * as BA from "kestrel:data/bytearray"
 import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
-import { ELit, EIdent, EBinary, EIf, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild } from "kestrel:dev/parser/ast"
+import * as Ty from "kestrel:dev/typecheck/types"
+import { ELit, EIdent, EBinary, EUnary, EIf, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild } from "kestrel:dev/parser/ast"
+import * as Ast from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
 
@@ -35,7 +37,7 @@ fun containsSeq(haystack: List<Int>, needle: List<Int>): Bool =
 fun baseContext(): TestCtx = {
   val cf = CF.newClassFile("test/CodegenExpr", "java/lang/Object", 0x0021)
   val mb = CF.cfAddMethod(cf, "emit", "()Ljava/lang/Object;", 0x0009)
-  { cf = cf, mb = mb, ctx = CG.newCodegenContext(cf, mb, CG.emptyModuleContext("test/CodegenExpr")) }
+  { cf = cf, mb = mb, ctx = CG.newCodegenContext(cf, mb, CG.emptyModuleContext("test/CodegenExpr"), CG.noTypeInfo) }
 }
 
 fun finish(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder): ByteArray = {
@@ -180,7 +182,7 @@ export async fun run(s: Suite): Task<Unit> =
         adtConstructorArity = Dict.emptyStringDict(),
         options = opts
       }
-      val ctx2 = CG.newCodegenContext(cf2, mb2, mctxWithGlobal)
+      val ctx2 = CG.newCodegenContext(cf2, mb2, mctxWithGlobal, CG.noTypeInfo)
       CG.emitExpr(ctx2, EIdent("myVal"))
       eq(sg, "global val: opcode[0] is getstatic", codeAt(mb2, 0), 178)
     })
@@ -198,11 +200,115 @@ export async fun run(s: Suite): Task<Unit> =
         adtConstructorArity = Dict.emptyStringDict(),
         options = opts
       }
-      val ctx3 = CG.newCodegenContext(cf3, mb3, mctxWithFun)
+      val ctx3 = CG.newCodegenContext(cf3, mb3, mctxWithFun, CG.noTypeInfo)
       CG.emitExpr(ctx3, EIdent("myFun"))
       val bytes3 = finish(cf3, mb3)
       // invokestatic(184) must appear somewhere for KFunctionRef.of
       isTrue(sg, "global fun: invokestatic(184) appears in bytecode",
         containsSeq(BA.toList(bytes3), [184]))
+    })
+
+    group(s1, "int add", (sg: Suite) => {
+      val cf2 = CF.newClassFile("test/CodegenExpr", "java/lang/Object", 0x0021)
+      val mb2 = CF.cfAddMethod(cf2, "emit", "()Ljava/lang/Object;", 0x0009)
+      val intTypeInfo: (Ast.Expr) -> Option<Ty.InternalType> = (_: Ast.Expr) => Some(Ty.tInt)
+      val ctx2 = CG.newCodegenContext(cf2, mb2, CG.emptyModuleContext("test/CodegenExpr"), intTypeInfo)
+      CG.emitExpr(ctx2, EBinary("+", ELit("int", "1"), ELit("int", "2")))
+      val bytes = finish(cf2, mb2)
+      // invokestatic(184) must appear for KMath.add
+      isTrue(sg, "int add: invokestatic(184) in bytecode",
+        containsSeq(BA.toList(bytes), [184]))
+      // UTF-8 bytes for "KMath" = [75, 77, 97, 116, 104]
+      isTrue(sg, "int add: pool contains KMath",
+        containsSeq(BA.toList(bytes), [75, 77, 97, 116, 104]))
+    })
+
+    group(s1, "string concat", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EBinary("++", ELit("string", "hello"), ELit("string", "world")))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "concat: invokestatic(184) in bytecode",
+        containsSeq(BA.toList(bytes), [184]))
+      // UTF-8 bytes for "concat" = [99, 111, 110, 99, 97, 116]
+      isTrue(sg, "concat: pool contains concat",
+        containsSeq(BA.toList(bytes), [99, 111, 110, 99, 97, 116]))
+    })
+
+    group(s1, "equality ==", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EBinary("==", ELit("int", "1"), ELit("int", "1")))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "eq: invokestatic(184) in bytecode",
+        containsSeq(BA.toList(bytes), [184]))
+      // UTF-8 bytes for "equals" = [101, 113, 117, 97, 108, 115]
+      isTrue(sg, "eq: pool contains equals",
+        containsSeq(BA.toList(bytes), [101, 113, 117, 97, 108, 115]))
+    })
+
+    group(s1, "inequality !=", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EBinary("!=", ELit("int", "1"), ELit("int", "2")))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "ne: bytecode non-empty", BA.length(bytes) > 0)
+      // UTF-8 bytes for "equals" = [101, 113, 117, 97, 108, 115]
+      isTrue(sg, "ne: pool contains equals",
+        containsSeq(BA.toList(bytes), [101, 113, 117, 97, 108, 115]))
+    })
+
+    group(s1, "comparison <", (sg: Suite) => {
+      val cf2 = CF.newClassFile("test/CodegenExpr", "java/lang/Object", 0x0021)
+      val mb2 = CF.cfAddMethod(cf2, "emit", "()Ljava/lang/Object;", 0x0009)
+      val intTypeInfo: (Ast.Expr) -> Option<Ty.InternalType> = (_: Ast.Expr) => Some(Ty.tInt)
+      val ctx2 = CG.newCodegenContext(cf2, mb2, CG.emptyModuleContext("test/CodegenExpr"), intTypeInfo)
+      CG.emitExpr(ctx2, EBinary("<", ELit("int", "1"), ELit("int", "2")))
+      val bytes = finish(cf2, mb2)
+      isTrue(sg, "lt: invokestatic(184) in bytecode",
+        containsSeq(BA.toList(bytes), [184]))
+      // UTF-8 bytes for "$less" = [36, 108, 101, 115, 115]
+      isTrue(sg, "lt: pool contains mangled-less",
+        containsSeq(BA.toList(bytes), [36, 108, 101, 115, 115]))
+    })
+
+    group(s1, "unary not", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EUnary("!", ELit("true", "True")))
+      val bytes = finish(t.cf, t.mb)
+      // getstatic(178) for Boolean.TRUE and Boolean.FALSE
+      isTrue(sg, "not: getstatic(178) in bytecode",
+        containsSeq(BA.toList(bytes), [178]))
+      // UTF-8 bytes for "FALSE" = [70, 65, 76, 83, 69]
+      isTrue(sg, "not: pool contains FALSE",
+        containsSeq(BA.toList(bytes), [70, 65, 76, 83, 69]))
+    })
+
+    group(s1, "unary negate int", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EUnary("-", ELit("int", "5")))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "neg: invokestatic(184) in bytecode",
+        containsSeq(BA.toList(bytes), [184]))
+      // UTF-8 bytes for "KMath" = [75, 77, 97, 116, 104]
+      isTrue(sg, "neg: pool contains KMath",
+        containsSeq(BA.toList(bytes), [75, 77, 97, 116, 104]))
+    })
+
+    group(s1, "short-circuit and", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EBinary("&", ELit("true", "True"), ELit("true", "True")))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "and: bytecode non-empty", BA.length(bytes) > 0)
+      // UTF-8 bytes for "FALSE" = [70, 65, 76, 83, 69]
+      isTrue(sg, "and: pool contains FALSE for short-circuit",
+        containsSeq(BA.toList(bytes), [70, 65, 76, 83, 69]))
+    })
+
+    group(s1, "short-circuit or", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EBinary("|", ELit("false", "False"), ELit("true", "True")))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "or: bytecode non-empty", BA.length(bytes) > 0)
+      // UTF-8 bytes for "TRUE" = [84, 82, 85, 69]
+      isTrue(sg, "or: pool contains TRUE for short-circuit",
+        containsSeq(BA.toList(bytes), [84, 82, 85, 69]))
     })
   })

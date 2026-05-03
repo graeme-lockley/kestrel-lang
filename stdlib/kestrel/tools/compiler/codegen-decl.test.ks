@@ -28,7 +28,7 @@ fun compileModule(moduleName: String, src: String): CG.JvmCodegenResult =
   match (parseFromList(Lex.lex(src))) {
     Ok(prog) => {
       val mctx = CG.buildModuleContext(moduleName, prog, CG.emptyJvmCodegenOptions())
-      CG.jvmCodegen(mctx, prog)
+      CG.jvmCodegen(mctx, prog, CG.noTypeInfo)
     }
     Err(e) => throw e
   }

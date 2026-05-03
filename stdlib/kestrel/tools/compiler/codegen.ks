@@ -21,6 +21,8 @@ import {
   PWild, PVar, PLit, PCon, PList, PCons, PTuple,
   ATPrim, ATApp
 } from "kestrel:dev/parser/ast"
+import * as Arr from "kestrel:data/array"
+import * as Ty from "kestrel:dev/typecheck/types"
 import * as CF from "kestrel:tools/compiler/classfile"
 import * as Op from "kestrel:tools/compiler/opcodes"
 
@@ -63,7 +65,8 @@ export type CodegenContext = {
   mb: CF.MethodBuilder,
   mctx: ModuleContext,
   locals: mut Dict<String, Int>,
-  nextLocal: mut Int
+  nextLocal: mut Int,
+  getInferredType: (Ast.Expr) -> Option<Ty.InternalType>
 }
 
 export type JvmCodegenResult = {
@@ -89,12 +92,15 @@ export fun emptyModuleContext(className: String): ModuleContext = {
   options = emptyJvmCodegenOptions()
 }
 
-export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, mctx: ModuleContext): CodegenContext = {
+export val noTypeInfo: (Ast.Expr) -> Option<Ty.InternalType> = (_: Ast.Expr) => None
+
+export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, mctx: ModuleContext, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): CodegenContext = {
   cf = cf,
   mb = mb,
   mctx = mctx,
   mut locals = Dict.emptyStringDict(),
-  mut nextLocal = 0
+  mut nextLocal = 0,
+  getInferredType = getInferredType
 }
 
 fun pushNull(ctx: CodegenContext): Unit = CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
@@ -307,10 +313,10 @@ fun emitMainStub(cf: CF.ClassFileBuilder): Unit = {
   CF.mbSetMaxs(mb, 0, 1)
 }
 
-export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl, mctx: ModuleContext): Unit = {
+export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl, mctx: ModuleContext, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
   val desc = objectMethodDesc(Lst.length(decl.params))
   val mb = CF.cfAddMethod(cf, decl.name, desc, Op.Acc.public_ + Op.Acc.static_)
-  val ctx = newCodegenContext(cf, mb, mctx)
+  val ctx = newCodegenContext(cf, mb, mctx, getInferredType)
   bindParams(ctx, decl.params)
   emitTailLoopScaffold(mb)
   emitExpr(ctx, decl.body)
@@ -342,7 +348,7 @@ export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit
     };
     emitExternReturn(cf, mb, retDesc)
   } else
-    pushNull(newCodegenContext(cf, mb, emptyModuleContext("")));
+    pushNull(newCodegenContext(cf, mb, emptyModuleContext(""), noTypeInfo));
   CF.mbEmit1(mb, Op.JvmOp.areturn)
   CF.mbSetMaxs(mb, 1, arity + 8)
 }
@@ -350,7 +356,7 @@ export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit
 fun emitExternOverride(cf: CF.ClassFileBuilder, ov: Ast.ExternOverride): Unit = {
   val desc = objectMethodDesc(Lst.length(ov.params))
   val mb = CF.cfAddMethod(cf, ov.name, desc, Op.Acc.public_ + Op.Acc.static_)
-  pushNull(newCodegenContext(cf, mb, emptyModuleContext("")))
+  pushNull(newCodegenContext(cf, mb, emptyModuleContext(""), noTypeInfo))
   CF.mbEmit1(mb, Op.JvmOp.areturn)
   CF.mbSetMaxs(mb, 1, 8)
 }
@@ -417,9 +423,9 @@ fun emitTypeCtors(moduleName: String, ctors: List<Ast.CtorDef>, classes: Dict<St
     }
   }
 
-fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, decl: Ast.TopDecl, classes: Dict<String, ByteArray>): Dict<String, ByteArray> =
+fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, decl: Ast.TopDecl, classes: Dict<String, ByteArray>, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Dict<String, ByteArray> =
   match (decl) {
-    TDFun(funDecl) => { emitFunDecl(cf, funDecl, mctx); classes }
+    TDFun(funDecl) => { emitFunDecl(cf, funDecl, mctx, getInferredType); classes }
     TDExternFun(externDecl) => { emitExternFun(cf, externDecl); classes }
     TDExternImport(eid) => { emitExternImportOverrides(cf, eid.overrides); classes }
     TDExternType(_) => classes
@@ -435,7 +441,7 @@ fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, d
     }
     TDExport(inner) => {
       match (inner) {
-        EIDecl(d) => emitDecl(moduleName, cf, mctx, d, classes)
+        EIDecl(d) => emitDecl(moduleName, cf, mctx, d, classes, getInferredType)
         _ => classes
       }
     }
@@ -446,17 +452,17 @@ fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, d
     _ => classes
   }
 
-fun emitDecls(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, decls: List<Ast.TopDecl>, classes: Dict<String, ByteArray>): Dict<String, ByteArray> =
+fun emitDecls(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, decls: List<Ast.TopDecl>, classes: Dict<String, ByteArray>, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Dict<String, ByteArray> =
   match (decls) {
     [] => classes
-    d :: rest => emitDecls(moduleName, cf, mctx, rest, emitDecl(moduleName, cf, mctx, d, classes))
+    d :: rest => emitDecls(moduleName, cf, mctx, rest, emitDecl(moduleName, cf, mctx, d, classes, getInferredType), getInferredType)
   }
 
-export fun jvmCodegen(mctx: ModuleContext, prog: Ast.Program): JvmCodegenResult = {
+export fun jvmCodegen(mctx: ModuleContext, prog: Ast.Program, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): JvmCodegenResult = {
   val moduleName = mctx.className
   val cf = CF.newClassFile(moduleName, "java/lang/Object", Op.Acc.public_ + Op.Acc.super_)
   emitDefaultCtor(cf)
-  val extraClasses = emitDecls(moduleName, cf, mctx, prog.body, Dict.emptyStringDict())
+  val extraClasses = emitDecls(moduleName, cf, mctx, prog.body, Dict.emptyStringDict(), getInferredType)
   emitMainStub(cf)
   val initMethodName = Str.append("$", "init")
   val initMb = CF.cfAddMethod(cf, initMethodName, "()V", Op.Acc.public_ + Op.Acc.static_)
@@ -608,6 +614,222 @@ export fun buildModuleContext(className: String, prog: Ast.Program, options: Jvm
     options = afterDecls.options
   }
 }
+
+fun patchShort(code: Array<Int>, pos: Int, offset: Int): Unit = {
+  Arr.set(code, pos, offset / 256);
+  Arr.set(code, pos + 1, offset % 256)
+}
+
+fun jvmMangleName(op: String): String = {
+  val d = "$"
+  if (op == "<") "${d}less"
+  else if (op == ">") "${d}greater"
+  else if (op == "<=") "${d}less${d}eq"
+  else if (op == ">=") "${d}greater${d}eq"
+  else op
+}
+
+fun primNameFromType(t: Option<Ty.InternalType>): String =
+  match (t) {
+    Some(typ) =>
+      match (Ty.primName(typ)) {
+        Some(name) =>
+          if (name == "Int") "Int"
+          else if (name == "Float") "Float"
+          else if (name == "Char" | name == "Rune") "Char"
+          else "Other"
+        None => "Other"
+      }
+    None => "Other"
+  }
+
+fun emitShortCircuitAnd(ctx: CodegenContext, left: Ast.Expr, right: Ast.Expr): Unit = {
+  emitExpr(ctx, left)
+  val boolClassRef = CF.cfClassRef(ctx.cf, BOOLEAN)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, boolClassRef)
+  val bvMref = CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z")
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, bvMref)
+  val code = CF.mbGetCode(ctx.mb)
+  val ifeqStart = CF.mbLength(ctx.mb)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+  CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), None)
+  emitExpr(ctx, right)
+  val gotoEnd = CF.mbLength(ctx.mb)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)
+  val pushFalse = CF.mbLength(ctx.mb)
+  CF.mbAddBranchTarget(ctx.mb, pushFalse, None)
+  pushBoolBoxed(ctx, False)
+  val afterAnd = CF.mbLength(ctx.mb)
+  CF.mbAddBranchTarget(ctx.mb, afterAnd, None)
+  patchShort(code, ifeqStart + 1, pushFalse - ifeqStart)
+  patchShort(code, gotoEnd + 1, afterAnd - gotoEnd)
+}
+
+fun emitShortCircuitOr(ctx: CodegenContext, left: Ast.Expr, right: Ast.Expr): Unit = {
+  emitExpr(ctx, left)
+  val boolClassRef = CF.cfClassRef(ctx.cf, BOOLEAN)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, boolClassRef)
+  val bvMref = CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z")
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, bvMref)
+  val code = CF.mbGetCode(ctx.mb)
+  val ifeqStart = CF.mbLength(ctx.mb)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+  CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), None)
+  pushBoolBoxed(ctx, True)
+  val gotoSkip = CF.mbLength(ctx.mb)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)
+  val rightStart = CF.mbLength(ctx.mb)
+  CF.mbAddBranchTarget(ctx.mb, rightStart, None)
+  emitExpr(ctx, right)
+  val afterOr = CF.mbLength(ctx.mb)
+  CF.mbAddBranchTarget(ctx.mb, afterOr, None)
+  patchShort(code, ifeqStart + 1, rightStart - ifeqStart)
+  patchShort(code, gotoSkip + 1, afterOr - gotoSkip)
+}
+
+fun emitEqExpr(ctx: CodegenContext, left: Ast.Expr, right: Ast.Expr): Unit = {
+  emitExpr(ctx, left)
+  emitExpr(ctx, right)
+  val mref = CF.cfMethodref(ctx.cf, RUNTIME, "equals", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;")
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+}
+
+fun emitNeExpr(ctx: CodegenContext, left: Ast.Expr, right: Ast.Expr): Unit = {
+  emitEqExpr(ctx, left, right)
+  val boolClassRef = CF.cfClassRef(ctx.cf, BOOLEAN)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, boolClassRef)
+  val bvMref = CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z")
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, bvMref)
+  val code = CF.mbGetCode(ctx.mb)
+  val ifneStart = CF.mbLength(ctx.mb)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ifne, 0)
+  CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), None)
+  pushBoolBoxed(ctx, True)
+  val gotoEnd = CF.mbLength(ctx.mb)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)
+  val pushFalse = CF.mbLength(ctx.mb)
+  CF.mbAddBranchTarget(ctx.mb, pushFalse, None)
+  pushBoolBoxed(ctx, False)
+  val afterNe = CF.mbLength(ctx.mb)
+  CF.mbAddBranchTarget(ctx.mb, afterNe, None)
+  patchShort(code, ifneStart + 1, pushFalse - ifneStart)
+  patchShort(code, gotoEnd + 1, afterNe - gotoEnd)
+}
+
+fun emitUnaryExpr(ctx: CodegenContext, op: String, e: Ast.Expr): Unit =
+  if (op == "!") {
+    emitExpr(ctx, e)
+    val boolFieldref = CF.cfFieldref(ctx.cf, BOOLEAN, "TRUE", "Ljava/lang/Boolean;")
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, boolFieldref)
+    val code = CF.mbGetCode(ctx.mb)
+    val ifAcmpeqStart = CF.mbLength(ctx.mb)
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.ifAcmpeq, 0)
+    CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), None)
+    pushBoolBoxed(ctx, True)
+    val gotoEnd = CF.mbLength(ctx.mb)
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)
+    val falseLabel = CF.mbLength(ctx.mb)
+    CF.mbAddBranchTarget(ctx.mb, falseLabel, None)
+    pushBoolBoxed(ctx, False)
+    val afterNot = CF.mbLength(ctx.mb)
+    CF.mbAddBranchTarget(ctx.mb, afterNot, None)
+    patchShort(code, ifAcmpeqStart + 1, falseLabel - ifAcmpeqStart)
+    patchShort(code, gotoEnd + 1, afterNot - gotoEnd)
+  } else if (op == "-") {
+    val prim = primNameFromType(ctx.getInferredType(e))
+    if (prim == "Float") {
+      val zeroIdx = CF.cfConstantDouble(ctx.cf, 0.0)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ldc2W, zeroIdx)
+      val dblRef = CF.cfMethodref(ctx.cf, DOUBLE, "valueOf", "(D)Ljava/lang/Double;")
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, dblRef)
+      emitExpr(ctx, e)
+      val doubleClassRef = CF.cfClassRef(ctx.cf, DOUBLE)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, doubleClassRef)
+      val mref = CF.cfMethodref(ctx.cf, KMATH, "subFloat", "(Ljava/lang/Double;Ljava/lang/Double;)Ljava/lang/Double;")
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+    } else {
+      pushLongBoxed(ctx, 0)
+      emitExpr(ctx, e)
+      val longClassRef = CF.cfClassRef(ctx.cf, LONG)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, longClassRef)
+      val mref = CF.cfMethodref(ctx.cf, KMATH, "sub", "(Ljava/lang/Long;Ljava/lang/Long;)Ljava/lang/Long;")
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+    }
+  } else
+    emitExpr(ctx, e)
+
+fun emitBinaryExpr(ctx: CodegenContext, op: String, left: Ast.Expr, right: Ast.Expr): Unit =
+  if (op == "&") emitShortCircuitAnd(ctx, left, right)
+  else if (op == "|") emitShortCircuitOr(ctx, left, right)
+  else if (op == "==") emitEqExpr(ctx, left, right)
+  else if (op == "!=") emitNeExpr(ctx, left, right)
+  else if (op == "++") {
+    emitExpr(ctx, left)
+    emitExpr(ctx, right)
+    val mref = CF.cfMethodref(ctx.cf, RUNTIME, "concat", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;")
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+  } else {
+    val leftPrim = primNameFromType(ctx.getInferredType(left))
+    val rightPrim = primNameFromType(ctx.getInferredType(right))
+    val isInt = leftPrim == "Int" & rightPrim == "Int"
+    val isFloat = (leftPrim == "Float") | (rightPrim == "Float")
+    emitExpr(ctx, left)
+    if (isInt) {
+      val longRef = CF.cfClassRef(ctx.cf, LONG)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, longRef)
+    } else if (isFloat) {
+      val dblRef = CF.cfClassRef(ctx.cf, DOUBLE)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, dblRef)
+    } else ()
+    emitExpr(ctx, right)
+    if (isInt) {
+      val longRef = CF.cfClassRef(ctx.cf, LONG)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, longRef)
+    } else if (isFloat) {
+      val dblRef = CF.cfClassRef(ctx.cf, DOUBLE)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, dblRef)
+    } else ()
+    if (op == "<" | op == ">" | op == "<=" | op == ">=") {
+      if (isInt) {
+        val mangledOp = jvmMangleName(op)
+        val mref = CF.cfMethodref(ctx.cf, KMATH, mangledOp, "(Ljava/lang/Long;Ljava/lang/Long;)Ljava/lang/Boolean;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+      } else if (isFloat) {
+        val mangledOp = "${jvmMangleName(op)}Float"
+        val mref = CF.cfMethodref(ctx.cf, KMATH, mangledOp, "(Ljava/lang/Double;Ljava/lang/Double;)Ljava/lang/Boolean;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+      } else {
+        CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+        CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+        pushBoolBoxed(ctx, False)
+      }
+    } else {
+      if (isInt) {
+        val kop =
+          if (op == "+") "add"
+          else if (op == "-") "sub"
+          else if (op == "*") "mul"
+          else if (op == "/") "div"
+          else if (op == "%") "mod"
+          else "pow"
+        val mref = CF.cfMethodref(ctx.cf, KMATH, kop, "(Ljava/lang/Long;Ljava/lang/Long;)Ljava/lang/Long;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+      } else if (isFloat) {
+        val kop =
+          if (op == "+") "addFloat"
+          else if (op == "-") "subFloat"
+          else if (op == "*") "mulFloat"
+          else if (op == "/") "divFloat"
+          else "powFloat"
+        val mref = CF.cfMethodref(ctx.cf, KMATH, kop, "(Ljava/lang/Double;Ljava/lang/Double;)Ljava/lang/Double;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+      } else {
+        CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+        CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+        pushNull(ctx)
+      }
+    }
+  }
 
 fun emitExprList(ctx: CodegenContext, xs: List<Ast.Expr>): Unit =
   match (xs) {
@@ -823,8 +1045,8 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       pushNull(ctx)
     }
     EAwait(e) => { emitExpr(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
-    EUnary(_op, e) => { emitExpr(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
-    EBinary(_op, l, r) => { emitExpr(ctx, l); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); emitExpr(ctx, r); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
+    EUnary(op, e) => emitUnaryExpr(ctx, op, e)
+    EBinary(op, l, r) => emitBinaryExpr(ctx, op, l, r)
     ECons(h, t) => { emitExpr(ctx, h); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); emitExpr(ctx, t); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
     EPipe(_op, l, r) => { emitExpr(ctx, l); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); emitExpr(ctx, r); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
     EIf(c, t, eOpt) => {
