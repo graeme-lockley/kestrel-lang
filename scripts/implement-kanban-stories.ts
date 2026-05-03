@@ -99,6 +99,8 @@ interface Config {
   maxAttempts: number;
   testCommand: string;
   lintCommand: string;
+  piTimeoutMs: number;
+  testTimeoutMs: number;
   storyPattern: RegExp;
   continueOnBlocked: boolean;
   dryRun: boolean;
@@ -114,6 +116,7 @@ interface CommandResult {
   stdout: string;
   stderr: string;
   durationMs: number;
+  timedOut?: boolean;
 }
 
 interface PiInvocationResult extends CommandResult {
@@ -217,6 +220,8 @@ const DEFAULT_CONFIG: Config = {
   maxAttempts: 8,
   testCommand: "./scripts/test-all.sh",
   lintCommand: "./scripts/lint-all.sh",
+  piTimeoutMs: 10 * 60 * 1000,
+  testTimeoutMs: 10 * 60 * 1000,
   storyPattern: /\.md$/i,
   continueOnBlocked: false,
   dryRun: false,
@@ -637,6 +642,7 @@ async function runTests(machine: Machine): Promise<void> {
     ? dryRunCommand(machine.config.testCommand)
     : await runShell(machine.config.testCommand, machine.config.rootDir, {
         streamOutput: true,
+        timeoutMs: machine.config.testTimeoutMs,
       });
 
   story.testJsonPath = nextStoryArtifactPath(story, `test-${story.attempt}.json`);
@@ -706,6 +712,7 @@ async function runLint(machine: Machine): Promise<void> {
     ? dryRunCommand(machine.config.lintCommand)
     : await runShell(machine.config.lintCommand, machine.config.rootDir, {
         streamOutput: true,
+        timeoutMs: machine.config.testTimeoutMs,
       });
 
   story.lintJsonPath = nextStoryArtifactPath(story, `lint-${story.attempt}.json`);
@@ -946,7 +953,14 @@ async function invokePi(
         streamOutput: true,
         heartbeatLabel,
         heartbeatMs: 15000,
+        timeoutMs: machine.config.piTimeoutMs,
       });
+
+  if (result.timedOut) {
+    throw new Error(
+      `Pi invocation timed out after ${machine.config.piTimeoutMs / 1000}s during ${options.phaseName} for ${story.storyId}. Aborting run.`,
+    );
+  }
 
   await writeFile(options.outputPath, result.stdout, "utf8");
 
@@ -1022,12 +1036,14 @@ async function runCommand(
     streamOutput?: boolean;
     heartbeatLabel?: string;
     heartbeatMs?: number;
+    timeoutMs?: number;
   },
 ): Promise<CommandResult> {
   const started = Date.now();
   const streamOutput = options?.streamOutput ?? false;
   const heartbeatLabel = options?.heartbeatLabel;
   const heartbeatMs = options?.heartbeatMs ?? 0;
+  const timeoutMs = options?.timeoutMs;
 
   return new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -1040,6 +1056,8 @@ async function runCommand(
     let stdout = "";
     let stderr = "";
     let heartbeatTimer: NodeJS.Timeout | undefined;
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    let timedOut = false;
 
     if (streamOutput && heartbeatLabel && heartbeatMs > 0) {
       heartbeatTimer = setInterval(() => {
@@ -1052,10 +1070,27 @@ async function runCommand(
       }, heartbeatMs);
     }
 
-    const clearHeartbeat = () => {
+    if (timeoutMs && timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        writeRunnerLine(
+          `Command timed out after ${timeoutMs / 1000}s, killing: ${command}`,
+          "error",
+          "stderr",
+        );
+        child.kill("SIGTERM");
+        setTimeout(() => { child.kill("SIGKILL"); }, 5000);
+      }, timeoutMs);
+    }
+
+    const clearTimers = () => {
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = undefined;
+      }
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = undefined;
       }
     };
 
@@ -1074,18 +1109,19 @@ async function runCommand(
     });
 
     child.on("close", (exitCode) => {
-      clearHeartbeat();
+      clearTimers();
       resolve({
         command: [command, ...args].join(" "),
         exitCode,
         stdout,
-        stderr,
+        stderr: timedOut ? `${stderr}\nTIMEOUT: command exceeded ${timeoutMs}ms` : stderr,
         durationMs: Date.now() - started,
+        timedOut,
       });
     });
 
     child.on("error", (error) => {
-      clearHeartbeat();
+      clearTimers();
       resolve({
         command: [command, ...args].join(" "),
         exitCode: -1,
@@ -1100,10 +1136,11 @@ async function runCommand(
 async function runShellWithOptions(
   command: string,
   cwd: string,
-  options: { streamOutput: boolean; started?: number },
+  options: { streamOutput: boolean; started?: number; timeoutMs?: number },
 ): Promise<CommandResult> {
   const started = options.started ?? Date.now();
   const streamOutput = options.streamOutput;
+  const timeoutMs = options.timeoutMs;
 
   return new Promise((resolve) => {
     const child = spawn(command, {
@@ -1115,6 +1152,28 @@ async function runShellWithOptions(
 
     let stdout = "";
     let stderr = "";
+    let timeoutTimer: NodeJS.Timeout | undefined;
+    let timedOut = false;
+
+    if (timeoutMs && timeoutMs > 0) {
+      timeoutTimer = setTimeout(() => {
+        timedOut = true;
+        writeRunnerLine(
+          `Command timed out after ${timeoutMs / 1000}s, killing: ${command}`,
+          "error",
+          "stderr",
+        );
+        child.kill("SIGTERM");
+        setTimeout(() => { child.kill("SIGKILL"); }, 5000);
+      }, timeoutMs);
+    }
+
+    const clearTimers = () => {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = undefined;
+      }
+    };
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
@@ -1131,16 +1190,19 @@ async function runShellWithOptions(
     });
 
     child.on("close", (exitCode) => {
+      clearTimers();
       resolve({
         command,
         exitCode,
         stdout,
-        stderr,
+        stderr: timedOut ? `${stderr}\nTIMEOUT: command exceeded ${timeoutMs}ms` : stderr,
         durationMs: Date.now() - started,
+        timedOut,
       });
     });
 
     child.on("error", (error) => {
+      clearTimers();
       resolve({
         command,
         exitCode: -1,
@@ -1155,10 +1217,11 @@ async function runShellWithOptions(
 async function runShell(
   command: string,
   cwd: string,
-  options?: { streamOutput?: boolean },
+  options?: { streamOutput?: boolean; timeoutMs?: number },
 ): Promise<CommandResult> {
   return runShellWithOptions(command, cwd, {
     streamOutput: options?.streamOutput ?? false,
+    timeoutMs: options?.timeoutMs,
   });
 }
 
@@ -1766,6 +1829,24 @@ function parseArgs(args: string[]): Config {
         }
         break;
 
+      case "--pi-timeout": {
+        const piSecs = Number.parseInt(readValue(), 10);
+        if (!Number.isFinite(piSecs) || piSecs < 1) {
+          throw new Error("--pi-timeout must be a positive integer (seconds)");
+        }
+        config.piTimeoutMs = piSecs * 1000;
+        break;
+      }
+
+      case "--test-timeout": {
+        const testSecs = Number.parseInt(readValue(), 10);
+        if (!Number.isFinite(testSecs) || testSecs < 1) {
+          throw new Error("--test-timeout must be a positive integer (seconds)");
+        }
+        config.testTimeoutMs = testSecs * 1000;
+        break;
+      }
+
       case "--limit":
         config.limit = Number.parseInt(readValue(), 10);
         if (!Number.isFinite(config.limit) || config.limit < 1) {
@@ -1836,6 +1917,8 @@ Options:
   --verify-skill <path>          Verify skill path. Default: .github/skills/verify-story/SKILL.md
   --limit <n>                    Limit number of stories processed (sorted order).
   --max-attempts <n>             Maximum build/fix attempts. Default: 8
+  --pi-timeout <seconds>         Timeout for each Pi invocation. Default: 600 (10 min). Aborts the run on expiry.
+  --test-timeout <seconds>       Timeout for each test/lint command. Default: 600 (10 min).
   --test <command>               Test command. Default: ./scripts/test-all.sh
   --lint <command>               Lint command. Default: ./scripts/lint-all.sh
   --provider <provider>          Optional Pi provider.
