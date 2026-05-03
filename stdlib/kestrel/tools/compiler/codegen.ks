@@ -67,6 +67,8 @@ export type ModuleContext = {
   options: JvmCodegenOptions
 }
 
+type LoopBreakLayer = { breakJumps: Array<Int>, loopHead: Int }
+
 export type CodegenContext = {
   cf: CF.ClassFileBuilder,
   mb: CF.MethodBuilder,
@@ -74,6 +76,7 @@ export type CodegenContext = {
   locals: mut Dict<String, Int>,
   nextLocal: mut Int,
   varLocals: mut Dict<String, Unit>,
+  loopBreakStack: mut List<LoopBreakLayer>,
   getInferredType: (Ast.Expr) -> Option<Ty.InternalType>
 }
 
@@ -111,6 +114,7 @@ export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, mctx
   mut locals = Dict.emptyStringDict(),
   mut nextLocal = 0,
   mut varLocals = Dict.emptyStringDict(),
+  mut loopBreakStack = [],
   getInferredType = getInferredType
 }
 
@@ -626,6 +630,79 @@ export fun buildModuleContext(className: String, prog: Ast.Program, options: Jvm
   }
 }
 
+// ---------------------------------------------------------------------------
+// estimateBodyLocals — conservative count of local slots declared in a loop body.
+// Mirrors the TS `estimateBodyLocals` helper: counts Val/Var/Fun stmts and
+// pattern-bound variables so the loop-head StackMapFrameState has a wide-enough
+// numLocals to satisfy the JVM verifier on back-edge GOTOs.
+// ---------------------------------------------------------------------------
+
+fun countPatternVars(p: Ast.Pattern): Int =
+  match (p) {
+    PWild => 0
+    PVar(_) => 1
+    PLit(_, _) => 0
+    PCon(_, fields) =>
+      Lst.foldl(fields, 0, (acc: Int, f: Ast.ConField) =>
+        match (f.pattern) {
+          Some(pat) => acc + countPatternVars(pat)
+          None => acc
+        })
+    PList(parts, _rest) =>
+      Lst.foldl(parts, 0, (acc: Int, pat: Ast.Pattern) => acc + countPatternVars(pat))
+    PCons(h, t) => countPatternVars(h) + countPatternVars(t)
+    PTuple(parts) =>
+      Lst.foldl(parts, 0, (acc: Int, pat: Ast.Pattern) => acc + countPatternVars(pat))
+  }
+
+fun countStmtLocals(stmts: List<Ast.Stmt>): Int =
+  match (stmts) {
+    [] => 0
+    s :: rest => {
+      val here =
+        match (s) {
+          SVal(_, _, _) => 1
+          SVar(_, _, _) => 1
+          SFun(_, _, _, _, _, _) => 1
+          SExpr(e) => estimateBodyLocals(e)
+          SAssign(tgt, rhs) => estimateBodyLocals(tgt) + estimateBodyLocals(rhs)
+          SBreak => 0
+          SContinue => 0
+        }
+      here + countStmtLocals(rest)
+    }
+  }
+
+fun estimateBodyLocals(expr: Ast.Expr): Int =
+  match (expr) {
+    EBlock(b) => countStmtLocals(b.stmts) + estimateBodyLocals(b.result)
+    EIf(_, t, eOpt) => {
+      val elseCount =
+        match (eOpt) {
+          Some(e) => estimateBodyLocals(e)
+          None => 0
+        }
+      estimateBodyLocals(t) + elseCount
+    }
+    EWhile(_, b) => estimateBodyLocals(EBlock(b))
+    EMatch(_, arms) =>
+      Lst.foldl(arms, 0, (acc: Int, arm: Ast.Case_) =>
+        acc + countPatternVars(arm.pattern) + estimateBodyLocals(arm.body))
+    ETry(b, _, arms) => {
+      val bodyCount = estimateBodyLocals(EBlock(b))
+      val armCount = Lst.foldl(arms, 0, (acc: Int, arm: Ast.Case_) =>
+        acc + countPatternVars(arm.pattern) + estimateBodyLocals(arm.body))
+      bodyCount + armCount
+    }
+    _ => 0
+  }
+
+fun backpatchBreakJumps(code: Array<Int>, jumps: List<Int>, exitPos: Int): Unit =
+  match (jumps) {
+    [] => ()
+    j :: rest => { patchShort(code, j + 1, exitPos - j); backpatchBreakJumps(code, rest, exitPos) }
+  }
+
 fun patchShort(code: Array<Int>, pos: Int, offset: Int): Unit = {
   Arr.set(code, pos, offset / 256);
   Arr.set(code, pos + 1, offset % 256)
@@ -1076,8 +1153,27 @@ export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
       CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
     }
     SFun(_async, _name, _tp, _params, _rt, _body) => ()
-    SBreak => ()
-    SContinue => ()
+    SBreak => {
+      match (ctx.loopBreakStack) {
+        layer :: _ => {
+          val gotoPos = CF.mbLength(ctx.mb)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)                        // placeholder; backpatched at loop exit
+          Arr.push(layer.breakJumps, gotoPos)
+        }
+        [] => ()  // typechecker ensures break is always inside a loop
+      }
+    }
+    SContinue => {
+      match (ctx.loopBreakStack) {
+        layer :: _ => {
+          val code = CF.mbGetCode(ctx.mb)
+          val gotoPos = CF.mbLength(ctx.mb)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)                        // placeholder; patched immediately
+          patchShort(code, gotoPos + 1, layer.loopHead - gotoPos)
+        }
+        [] => ()  // typechecker ensures continue is always inside a loop
+      }
+    }
   }
 
 fun emitBlockStmts(ctx: CodegenContext, stmts: List<Ast.Stmt>): Unit =
@@ -1494,12 +1590,40 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       loadLocalSlot(ctx, ifResultSlot)
     }
     EWhile(c, b) => {
+      val code = CF.mbGetCode(ctx.mb)
+      val loopBodyExtra = estimateBodyLocals(EBlock(b))
+      val numLocals = if (ctx.nextLocal + loopBodyExtra > 70) ctx.nextLocal + loopBodyExtra else 70
+      val loopState = CF.paramOnlyFrame(numLocals)
+      val loopHead = CF.mbLength(ctx.mb)
+      CF.mbAddBranchTarget(ctx.mb, loopHead, Some(loopState))
+      // Evaluate condition and branch to exit if false.
       emitExpr(ctx, c)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, BOOLEAN))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z"))
+      val ifeqPos = CF.mbLength(ctx.mb)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)                             // placeholder
+      // Body entry stackmap.
+      CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(loopState))
+      // Push break layer so SBreak/SContinue can find the loop head and break list.
+      val layer = { breakJumps = Arr.new(), loopHead = loopHead }
+      ctx.loopBreakStack := layer :: ctx.loopBreakStack
+      // Emit body; discard its value.
+      emitExpr(ctx, EBlock(b))
       CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
-      emitBlockStmts(ctx, b.stmts)
-      emitExpr(ctx, b.result)
-      CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
-      pushNull(ctx)
+      // Pop break layer.
+      ctx.loopBreakStack := Lst.tail(ctx.loopBreakStack)
+      // Back-edge GOTO to loop head.
+      val gotoPos = CF.mbLength(ctx.mb)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)                            // placeholder
+      patchShort(code, gotoPos + 1, loopHead - gotoPos)
+      // Exit position: backpatch IFEQ and all break jumps.
+      val exitPos = CF.mbLength(ctx.mb)
+      CF.mbAddBranchTarget(ctx.mb, exitPos, Some(loopState))
+      patchShort(code, ifeqPos + 1, exitPos - ifeqPos)
+      backpatchBreakJumps(code, Arr.toList(layer.breakJumps), exitPos)
+      // Push KUnit as the while expression result.
+      val kunitRef = CF.cfFieldref(ctx.cf, KUNIT, "INSTANCE", "Lkestrel/runtime/KUnit;")
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, kunitRef)
     }
     EMatch(scrut, arms) => {
       emitExpr(ctx, scrut)

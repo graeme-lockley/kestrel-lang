@@ -6,7 +6,7 @@ import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Ty from "kestrel:dev/typecheck/types"
-import { ELit, EIdent, EBinary, EUnary, EIf, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, EField, SVal, SVar, SAssign, SExpr, EList, ECons, EPipe, LElem } from "kestrel:dev/parser/ast"
+import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, EField, SVal, SVar, SAssign, SExpr, SBreak, SContinue, EList, ECons, EPipe, LElem } from "kestrel:dev/parser/ast"
 import * as Ast from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
@@ -585,5 +585,51 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(sg, "EPipe forward: bytes emitted", BA.length(bytes) > 0)
       // Must not start with aconstNull
       isTrue(sg, "EPipe forward: does not start with aconstNull", codeAt(mb2, 0) != 1)
+    })
+
+    group(s1, "EWhile: basic loop emits ifeq and goto", (sg: Suite) => {
+      // while (True) { } — always-true condition, empty body.
+      // Expect: CHECKCAST(192) for Boolean unboxing, IFEQ(153) for exit test,
+      //         GOTO(167) for back-edge, GETSTATIC(178) for KUnit result.
+      val t = baseContext()
+      val emptyBlock = { stmts = [], result = ELit("unit", "") }
+      CG.emitExpr(t.ctx, EWhile(ELit("true", "True"), emptyBlock))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EWhile: emits ifeq opcode (153)",  containsSeq(code, [153]))
+      isTrue(sg, "EWhile: emits goto opcode (167)",  containsSeq(code, [167]))
+      isTrue(sg, "EWhile: emits getstatic (178) for KUnit", containsSeq(code, [178]))
+      // Must not push aconstNull (1) as the result
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EWhile: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EWhile: SBreak exits loop", (sg: Suite) => {
+      // while (True) { break }  — one SBreak inside the body.
+      // Expect an extra GOTO (for break) whose target is the exit position.
+      val t = baseContext()
+      val breakBlock = { stmts = [SBreak], result = ELit("unit", "") }
+      CG.emitExpr(t.ctx, EWhile(ELit("true", "True"), breakBlock))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      // At least two GOTO opcodes: break jump + back-edge.
+      val gotoCount = Lst.length(Lst.filter(code, (b: Int) => b == 167))
+      isTrue(sg, "EWhile break: at least two GOTO opcodes", gotoCount >= 2)
+      // GETSTATIC(178) for KUnit result
+      isTrue(sg, "EWhile break: emits getstatic (178) for KUnit", containsSeq(code, [178]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EWhile break: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EWhile: SContinue jumps to loop head", (sg: Suite) => {
+      // while (True) { continue }  — one SContinue inside the body.
+      // Expect a GOTO that targets the loop head offset (0).
+      val t = baseContext()
+      val continueBlock = { stmts = [SContinue], result = ELit("unit", "") }
+      CG.emitExpr(t.ctx, EWhile(ELit("true", "True"), continueBlock))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      // GOTO(167) for continue + back-edge; at least two
+      val gotoCount = Lst.length(Lst.filter(code, (b: Int) => b == 167))
+      isTrue(sg, "EWhile continue: at least two GOTO opcodes", gotoCount >= 2)
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EWhile continue: class bytes produced", BA.length(bytes) > 0)
     })
   })

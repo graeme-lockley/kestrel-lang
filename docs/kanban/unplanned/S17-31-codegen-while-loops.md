@@ -138,3 +138,7 @@ TS reference:
 ## Documentation and specs to update
 
 - [ ] `docs/specs/01-language.md` — No change required; the while/break/continue semantics are already accurately documented.
+
+## Note
+
+- Make sure that all tests that are run have a timeout to avoid an accidental or purposeful infinite loop.
