@@ -696,7 +696,9 @@ async function invokePi(
 
   const result = machine.config.dryRun
     ? dryRunPi(options)
-    : await runCommand(machine.config.piCommand, args, machine.config.rootDir);
+    : await runCommand(machine.config.piCommand, args, machine.config.rootDir, {
+        streamOutput: true,
+      });
 
   await writeFile(options.outputPath, result.stdout, "utf8");
 
@@ -768,8 +770,10 @@ async function runCommand(
   command: string,
   args: string[],
   cwd: string,
+  options?: { streamOutput?: boolean },
 ): Promise<CommandResult> {
   const started = Date.now();
+  const streamOutput = options?.streamOutput ?? false;
 
   return new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -784,10 +788,16 @@ async function runCommand(
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
+      if (streamOutput) {
+        process.stdout.write(chunk);
+      }
     });
 
     child.stderr.on("data", (chunk) => {
       stderr += chunk.toString();
+      if (streamOutput) {
+        process.stderr.write(chunk);
+      }
     });
 
     child.on("close", (exitCode) => {
