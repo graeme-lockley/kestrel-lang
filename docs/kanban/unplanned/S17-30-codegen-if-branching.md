@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-29, S17-31 through S17-38, S17-41
+- Companion stories: S17-24 through S17-29, S17-31 through S17-38, S17-44
 
 ## Summary
 
@@ -46,7 +46,7 @@ Also handles the tail-call optimisation case where `then` ends with `ARETURN`
   backpatching infrastructure. `EIf` is the simplest form to implement first.
 - **Blocks**: restoring meaningful runtime-negative execution, because `if`-driven control flow is
   required before runtime stack/throw/catch scenarios can be trusted again.
-- **Blocks**: S17-41 (E2E).
+- **Blocks**: S17-44 (E2E).
 
 ## Goals
 

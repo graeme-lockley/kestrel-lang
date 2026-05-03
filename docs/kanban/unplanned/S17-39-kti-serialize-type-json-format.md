@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-40, S17-24 through S17-38, S17-41
+- Companion stories: S17-40, S17-24 through S17-38, S17-44
 
 ## Summary
 
@@ -47,7 +47,7 @@ export fun serializeType(t: Ty.InternalType): Json.Value =
 ## Relationship to other stories
 
 - **Depends on**: nothing (standalone KTI utility fix).
-- **Blocks**: S17-41 (E2E gate) — multi-module self-hosted compilation produces wrong type
+- **Blocks**: S17-44 (E2E gate) — multi-module self-hosted compilation produces wrong type
   bindings without this fix.
 - **Companion**: S17-40 (freshen imported type vars — depends on correct serialisation).
 

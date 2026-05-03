@@ -1,13 +1,13 @@
 # Future: flag-based CLI unification (`--compiler=ts|self`)
 
-## Sequence: S17-44
+## Sequence: S17-45
 ## Tier: 9
 ## Former ID: (none)
 
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-45, S17-46, S17-47, S17-48, S17-50
+- Companion stories: S17-43, S17-46, S17-47, S17-48, S17-50
 
 ## Summary
 
@@ -20,13 +20,13 @@ return to a unified `KESTREL_JVM_CACHE` pointing at the active compiler's cache.
 ## Current State
 
 Not started. `./kestrel` and `./kestrel-self` are deliberately separate scripts until the
-self-hosted compiler reaches parity (by design from the S17-45..S17-50 pivot). This story is a
-placeholder capturing the intended end state; it must not be built until S17-41 (final
+self-hosted compiler reaches parity (by design from the S17-43..S17-50 pivot). This story is a
+placeholder capturing the intended end state; it must not be built until S17-44 (final
 no-Node validation) is complete.
 
 ## Relationship to other stories
 
-- **Depends on**: S17-41 (no-Node validation), all E17 gap-closure stories
+- **Depends on**: S17-44 (no-Node validation), all E17 gap-closure stories
 - **Blocks**: nothing (last story in E17)
 
 ## Goals
@@ -56,7 +56,7 @@ no-Node validation) is complete.
 
 - This story is intentionally a **placeholder**. Do not build it until the self-hosted
   compiler is stable enough to be the default.
-- The transition point is S17-41 (end-to-end validation without Node). Once S17-41 is green,
+- The transition point is S17-44 (end-to-end validation without Node). Once S17-44 is green,
   this story can be planned and built.
-- KESTREL_JVM_CACHE deprecation (from S17-45) expires with this story — the warning should
+- KESTREL_JVM_CACHE deprecation (from S17-43) expires with this story — the warning should
   be removed here.

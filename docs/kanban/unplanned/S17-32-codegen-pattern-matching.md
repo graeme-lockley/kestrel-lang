@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-31, S17-33 through S17-38, S17-41
+- Companion stories: S17-24 through S17-31, S17-33 through S17-38, S17-44
 
 ## Summary
 
@@ -48,7 +48,7 @@ TS reference `emitExpr` case `'MatchExpr'` (~500+ lines, the largest single case
   S17-28 (`EField`).
 - **Feeds**: S17-33 catch-arm dispatch, S17-35 local fun/lambda-heavy higher-order code, and the
   runtime-negative re-enable tranche for exception/pattern scenarios.
-- **Blocks**: S17-41 (E2E). Pattern matching is the core control flow of nearly all Kestrel
+- **Blocks**: S17-44 (E2E). Pattern matching is the core control flow of nearly all Kestrel
   programs.
 
 ## Goals

@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-30, S17-32 through S17-38, S17-41
+- Companion stories: S17-24 through S17-30, S17-32 through S17-38, S17-44
 
 ## Summary
 
@@ -43,7 +43,7 @@ TS reference:
 - **Depends on**: S17-30 (`EIf` — shares backpatching infrastructure; should be done first).
 - **Feeds**: re-enabling `runtime_stack_overflow.ks` once loop and break/continue semantics are
    real and the execution path is no longer masked by the temporary startup shim.
-- **Blocks**: S17-41 (E2E). Loops are used in many stdlib algorithms.
+- **Blocks**: S17-44 (E2E). Loops are used in many stdlib algorithms.
 
 ## Goals
 

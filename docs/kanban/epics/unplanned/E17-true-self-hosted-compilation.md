@@ -33,7 +33,7 @@ independently testable. No story should touch more than one concern at a time.
 
 ## Pivot — 2026-04-28
 
-The original epic plan (S17-01..S17-43) wired all `./kestrel` commands through the self-hosted
+The original epic plan (S17-01..S17-42) wired all `./kestrel` commands through the self-hosted
 `Driver.compileFile` as each story landed. In practice this caused the self-hosted compiler's
 immaturity to degrade the TS compiler's test suite: ~20 E2E scenarios were suppressed with
 `// E2E_SKIP_PENDING_CODEGEN` markers and two unit tests were TEMP-stubbed. This weakens the TS
@@ -51,10 +51,10 @@ compiler's ability to detect regressions.
   (`tests/unit/`, `tests/fixtures/`, `tests/conformance/`) are restored to their full strength.
 - `./scripts/test-kestrel.sh` runs the self-hosted compiler against the `k*` corpora. It is
   NOT added to `scripts/test-all.sh` until a stable baseline is established.
-- The flag-based CLI unification (`--compiler=ts|self`) is deferred to S17-44, a future story
-  that must not be built until S17-41 (no-Node final validation) is complete.
+- The flag-based CLI unification (`--compiler=ts|self`) is deferred to S17-45, a future story
+  that must not be built until S17-44 (no-Node final validation) is complete.
 
-Stories S17-45..S17-50 must land **before** any further gap-closure work (S17-39, S17-16..S17-43)
+Stories S17-43..S17-50 must land **before** any further gap-closure work (S17-39, S17-16..S17-42)
 so that all subsequent stories are measured against the new `k*` corpora via `./kestrel-self`.
 
 ## Stories (ordered — implement sequentially)
@@ -144,7 +144,7 @@ These five stories implement the 2026-04-28 pivot (see § Pivot above). They mus
 via `./kestrel-self`. Acceptance for all subsequent stories is measured via
 `./scripts/test-kestrel.sh` rather than `./kestrel test` / `tests/unit/`.
 
-16. ✅ [S17-45 — Dual cache layout (`~/.kestrel/ts/` + `~/.kestrel/self/`)](../../done/S17-45-dual-cache-layout.md)
+16. ✅ [S17-43 — Dual cache layout (`~/.kestrel/ts/` + `~/.kestrel/self/`)](../../done/S17-43-dual-cache-layout.md)
     — Split the single JVM class cache into two sub-directories under one root. `KESTREL_JVM_CACHE`
     is kept as a deprecated read-only alias for one release. Maven cache unchanged.
 
@@ -168,11 +168,11 @@ via `./kestrel-self`. Acceptance for all subsequent stories is measured via
     `./scripts/test-kestrel.sh` must exit 0 over the baseline. Discovery script is temporary
     and removed after the baseline is committed.
 
-21. [S17-44 — Future: flag-based CLI unification (`--compiler=ts|self`)](../../unplanned/S17-44-flag-based-cli-unification.md)
+21. [S17-45 — Future: flag-based CLI unification (`--compiler=ts|self`)](../../unplanned/S17-45-flag-based-cli-unification.md)
     — **Placeholder only.** Unify `./kestrel` and `./kestrel-self` into a single entry point with
-    a `--compiler` flag once S17-41 (no-Node final validation) is complete. Not built now.
+    a `--compiler` flag once S17-44 (no-Node final validation) is complete. Not built now.
 
-22. [S17-45 — Codegen: emit diagnostic for unresolved identifiers](../../unplanned/S17-45-codegen-unresolved-ident-diagnostic.md)
+22. [S17-43 — Codegen: emit diagnostic for unresolved identifiers](../../unplanned/S17-43-codegen-unresolved-ident-diagnostic.md)
     — Replace the silent `pushNull` fallback at the end of the `EIdent` resolution chain with a
     proper `Diagnostic` record. Wire accumulated codegen diagnostics through `jvmCodegen`'s
     return value and `driver.ks` so the CLI reports the error. Completes the PARTIAL acceptance
@@ -183,8 +183,8 @@ via `./kestrel-self`. Acceptance for all subsequent stories is measured via
 Three interconnected correctness bugs in the KTI subsystem must be fixed before the
 self-hosted typechecker and codegen can produce correct multi-module output. These stories
 precede the typechecker and codegen gap closures because several later stories depend on them:
-S17-42 (codegenMeta) is a prerequisite for S17-22 (cross-module ADT environment) and S17-38
-(JvmCodegenOptions), and S17-39 (serializeType) is a prerequisite for S17-42.
+S17-41 (codegenMeta) is a prerequisite for S17-22 (cross-module ADT environment) and S17-38
+(JvmCodegenOptions), and S17-39 (serializeType) is a prerequisite for S17-41.
 
 16. [S17-39 — Fix KTI `serializeType` to write JSON object format](../../unplanned/S17-39-kti-serialize-type-json-format.md)
     — The self-hosted `serializeType` currently writes types as human-readable strings via
@@ -202,7 +202,7 @@ S17-42 (codegenMeta) is a prerequisite for S17-22 (cross-module ADT environment)
     incorrectly merge them. Fix: remap all imported type vars to negative IDs (mirroring the
     TS compiler's `freshenImportedTypeVars` with `importedTypeVarIdRef = { value: -1 }`).
 
-18. [S17-42 — Fix KTI `codegenMeta` extraction and serialisation](../../unplanned/S17-42-kti-codegenmeta-correctness.md)
+18. [S17-41 — Fix KTI `codegenMeta` extraction and serialisation](../../unplanned/S17-41-kti-codegenmeta-correctness.md)
     — The self-hosted `extractCodegenMeta` is a stub: all arities are 0, and `asyncFunNames`,
     `varNames`, `adtConstructors`, and `exceptionDecls` are empty. `buildEntries` always writes
     `kind="function"` with `arity=0`. `buildTypeEntries` always writes `kind="alias"`, never
@@ -243,7 +243,7 @@ before the self-hosted compiler can typecheck its own stdlib modules.
 25. [S17-22 — Cross-module ADT constructor environment for the self-hosted typechecker](../../done/S17-22-self-hosted-cross-module-ctor-exhaustiveness.md) ✅
     — Plumb `adtConstructors` / `ctorOwners` / `ctorEnv` from imported KTIs through
     `DepBindingBundle` and `TypecheckOptions` so imported constructors are recognised in
-    pattern matching and exhaustiveness checking. Depends on S17-42.
+    pattern matching and exhaustiveness checking. Depends on S17-41.
 
 ### Self-hosted codegen gap closure
 
@@ -337,17 +337,17 @@ markers, but those are considered tranche-local scaffolding, not the final state
 40. [S17-38 — Codegen: `EIs` type narrowing, `ENever`, and `JvmCodegenOptions`](../../unplanned/S17-38-codegen-is-never-options.md)
     — Emit real `INSTANCEOF` for `EIs`; extend `jvmCodegen` with an options parameter carrying
     cross-module import maps (class names, arities, var sets) built from KTI `codegenMeta`.
-    Depends on S17-42 for correct `codegenMeta` data. **The `JvmCodegenOptions` plumbing is needed
+    Depends on S17-41 for correct `codegenMeta` data. **The `JvmCodegenOptions` plumbing is needed
     early alongside S17-25/S17-27 even if the narrower `EIs` semantics finish later.**
 
 ### Final validation
 
-41. [S17-43 — Self-hosted typecheck: `is` narrowing for union-typed identifiers](../../unplanned/S17-43-self-hosted-typecheck-is-narrowing-union.md)
+41. [S17-42 — Self-hosted typecheck: `is` narrowing for union-typed identifiers](../../unplanned/S17-42-self-hosted-typecheck-is-narrowing-union.md)
     — Implement branch-local narrowing for `if (x is T)` in the self-hosted typechecker,
     re-enable `tests/unit/union_intersection.test.ks`, and keep the scenario green under
     `./kestrel test` before final no-Node validation.
 
-42. [S17-41 — End-to-end validation without Node; CI gate and spec update](../../unplanned/S17-41-e2e-validation-no-node.md)
+42. [S17-44 — End-to-end validation without Node; CI gate and spec update](../../unplanned/S17-44-e2e-validation-no-node.md)
     — Rename `compiler/` to verify the full test suite passes with Node unreachable. Add a
     CI step that runs `mv compiler compiler_DISABLED && ./kestrel test` and must exit 0.
     Restore `compiler/`. Update `docs/specs/11-bootstrap.md` and
@@ -381,10 +381,10 @@ Each story corresponds to one vertical slice of `compile-file-jvm.ts`:
 - S17-10–S17-11 cover sidecar emission.
 - S17-12 covers the CLI wiring (the call site in `cli.ks`).
 - S17-13–S17-15 are bugfix / test-refactor stories scheduled before the gap-closure block.
-- S17-39, S17-40, S17-42 fix KTI correctness gaps (type serialisation format, imported type var
+- S17-39, S17-40, S17-41 fix KTI correctness gaps (type serialisation format, imported type var
   freshening, codegenMeta extraction/serialisation). Scheduled before the typechecker and
-  codegen gap closures because S17-42 is a prerequisite for S17-22 and S17-38, and S17-39 is
-  a prerequisite for S17-42.
+  codegen gap closures because S17-41 is a prerequisite for S17-22 and S17-38, and S17-39 is
+  a prerequisite for S17-41.
 - S17-16–S17-22 close the self-hosted typechecker MVP gaps.
 - S17-24–S17-38 close the self-hosted codegen gaps — the much larger body of work: the
     self-hosted `emitExpr` is currently a stub that pushes `null` for every expression except
@@ -392,7 +392,7 @@ Each story corresponds to one vertical slice of `compile-file-jvm.ts`:
     tranche, then the runtime/control-flow/async tranche (S17-26 through S17-34), then the later
     parity tranche (S17-35, S17-36, remaining S17-38 work). Each story must still pass focused
     unit tests that verify real bytecode is emitted and executes correctly.
-- S17-41 is the final validation gate only after temporary startup/E2E workarounds are gone and
+- S17-44 is the final validation gate only after temporary startup/E2E workarounds are gone and
     strict pipeline gating has been restored.
 
 **Key implementation invariants to preserve (match TS compiler exactly):**

@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-36, S17-38, S17-41
+- Companion stories: S17-24 through S17-36, S17-38, S17-44
 
 ## Summary
 
@@ -46,7 +46,7 @@ TS reference:
   fixed together.
 - **Blocks**: re-enabling the runtime-negative E2E scenarios currently skipped behind
   `E2E_SKIP_PENDING_CODEGEN`.
-- **Blocks**: S17-41 (E2E / no-Node validation). Every program that uses any module-level value
+- **Blocks**: S17-44 (E2E / no-Node validation). Every program that uses any module-level value
   (which is all of them) will read `null` or fail to execute meaningful top-level code without
   `$init` and a real entrypoint.
 

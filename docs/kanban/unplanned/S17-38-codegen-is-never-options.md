@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-37, S17-41
+- Companion stories: S17-24 through S17-37, S17-44
 
 ## Summary
 
@@ -42,7 +42,7 @@ Three remaining codegen gaps:
 - **Implement early sub-slice**: the `JvmCodegenOptions` part should land with or immediately
    adjacent to the S17-25 + S17-27 execution tranche, even if the `EIs` and `ENever` parts remain
    later in the roadmap sequence.
-- **Blocks**: S17-41 (E2E) for programs using `is` type narrowing or cross-module import
+- **Blocks**: S17-44 (E2E) for programs using `is` type narrowing or cross-module import
   resolution.
 
 ## Goals

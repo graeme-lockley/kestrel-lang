@@ -1,13 +1,13 @@
 # Fix KTI `codegenMeta` extraction and serialisation
 
-## Sequence: S17-42
+## Sequence: S17-41
 ## Tier: 8
 ## Former ID: (none)
 
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-01 through S17-41
+- Companion stories: S17-01 through S17-44
 
 ## Summary
 

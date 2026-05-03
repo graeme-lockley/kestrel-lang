@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-34, S17-36 through S17-38, S17-41
+- Companion stories: S17-24 through S17-34, S17-36 through S17-38, S17-44
 
 ## Summary
 
@@ -43,7 +43,7 @@ TS reference: lambdas are compiled in two passes:
    comes back only after direct call/control-flow paths are already stable.
 - **Feeds**: re-enabling higher-order positive E2Es and the full stdlib test framework without
    temporary execution gaps.
-- **Blocks**: S17-41 (E2E). Higher-order functions and the entire functional stdlib depend
+- **Blocks**: S17-44 (E2E). Higher-order functions and the entire functional stdlib depend
   on lambdas.
 
 ## Goals

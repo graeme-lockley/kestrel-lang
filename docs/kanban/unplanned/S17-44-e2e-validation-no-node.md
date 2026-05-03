@@ -1,6 +1,6 @@
 # End-to-end validation without Node; CI gate and spec update
 
-## Sequence: S17-41
+## Sequence: S17-44
 ## Tier: 9
 ## Former ID: S17-13 (then S17-23, then S17-39)
 

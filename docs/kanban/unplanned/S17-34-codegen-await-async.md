@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-33, S17-35 through S17-38, S17-41
+- Companion stories: S17-24 through S17-33, S17-35 through S17-38, S17-44
 
 ## Summary
 
@@ -40,7 +40,7 @@ TS reference:
 - **Depends on**: the real startup/runtime tranche led by S17-25 + S17-37; async E2Es are not
   meaningful while compiled modules still execute through the temporary no-op `main` shim.
 - **Feeds**: the first positive E2E re-enable slice (async/task/core fs-process scenarios).
-- **Blocks**: S17-41 (E2E). All filesystem and process operations are async; the stdlib
+- **Blocks**: S17-44 (E2E). All filesystem and process operations are async; the stdlib
   test runner is async.
 
 ## Goals

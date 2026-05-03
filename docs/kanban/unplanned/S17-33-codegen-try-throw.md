@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-32, S17-34 through S17-38, S17-41
+- Companion stories: S17-24 through S17-32, S17-34 through S17-38, S17-44
 
 ## Summary
 
@@ -41,7 +41,7 @@ TS reference:
   shares pattern infrastructure).
 - **Runtime-negative tranche**: this story is the direct gate for re-enabling
   `uncaught_throw.ks` and `runtime_catch_no_match_rethrow.ks` once real startup is in place.
-- **Blocks**: S17-41 (E2E). Exception handling is used throughout the stdlib for IO errors.
+- **Blocks**: S17-44 (E2E). Exception handling is used throughout the stdlib for IO errors.
 
 ## Goals
 
