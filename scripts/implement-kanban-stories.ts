@@ -160,6 +160,12 @@ interface StoryContext {
   sessionPath: string;
   attempt: number;
   planRepairAttempts: number;
+  artifactSequence: number;
+  planJsonPath?: string;
+  buildJsonPath?: string;
+  testJsonPath?: string;
+  lintJsonPath?: string;
+  verifyJsonPath?: string;
   issues: string[];
   blockedReason?: string;
   plan?: PlanResult;
@@ -371,6 +377,7 @@ async function startStory(machine: Machine): Promise<void> {
     sessionPath,
     attempt: 1,
     planRepairAttempts: 0,
+    artifactSequence: 0,
     issues: [],
   };
 
@@ -384,7 +391,9 @@ async function planStory(machine: Machine): Promise<void> {
   const story = requireStory(machine);
 
   const prompt = buildPlanPrompt(story);
-  await writeFile(path.join(story.storyRunDir, "plan.prompt.md"), prompt, "utf8");
+  await writeFile(nextStoryArtifactPath(story, "plan.prompt.md"), prompt, "utf8");
+
+  const planRawPath = nextStoryArtifactPath(story, "plan.raw.txt");
 
   const result = await invokePi(machine, {
     phaseName: "PLAN",
@@ -392,12 +401,13 @@ async function planStory(machine: Machine): Promise<void> {
     tools: ["read", "grep", "find", "ls"],
     files: [story.storyPath],
     message: prompt,
-    outputPath: path.join(story.storyRunDir, "plan.raw.txt"),
+    outputPath: planRawPath,
   });
 
-  await writeJson(path.join(story.storyRunDir, "plan.invocation.json"), result);
+  await writeJson(nextStoryArtifactPath(story, "plan.invocation.json"), result);
   story.plan = coercePlanResult(result.parsed);
-  await writeJson(path.join(story.storyRunDir, "plan.json"), story.plan);
+  story.planJsonPath = nextStoryArtifactPath(story, "plan.json");
+  await writeJson(story.planJsonPath, story.plan);
   await writeStoryState(machine);
 
   machine.phase = "EVALUATE_PLAN";
@@ -483,7 +493,10 @@ async function verifyPlan(machine: Machine): Promise<void> {
     reasons,
   };
 
-  await writeJson(path.join(story.storyRunDir, `plan-verify-${story.planRepairAttempts + 1}.json`), verification);
+  await writeJson(
+    nextStoryArtifactPath(story, `plan-verify-${story.planRepairAttempts + 1}.json`),
+    verification,
+  );
 
   if (verification.ok) {
     story.storyPath = plannedStoryPath;
@@ -542,13 +555,21 @@ async function commitPlan(machine: Machine): Promise<void> {
 
 async function buildStory(machine: Machine): Promise<void> {
   const story = requireStory(machine);
+  const planPath = story.planJsonPath;
 
-  const issuesPath = path.join(story.storyRunDir, `issues-${story.attempt}.md`);
+  if (!planPath) {
+    story.blockedReason = "Invariant violated: missing plan JSON artifact before build.";
+    machine.phase = "MARK_BLOCKED";
+    return;
+  }
+
+  const issuesPath = nextStoryArtifactPath(story, `issues-${story.attempt}.md`);
   const prompt = buildBuildPrompt(story);
-  const planPath = path.join(story.storyRunDir, "plan.json");
 
   await writeFile(issuesPath, renderIssues(story.issues), "utf8");
-  await writeFile(path.join(story.storyRunDir, `build-${story.attempt}.prompt.md`), prompt, "utf8");
+  await writeFile(nextStoryArtifactPath(story, `build-${story.attempt}.prompt.md`), prompt, "utf8");
+
+  const buildRawPath = nextStoryArtifactPath(story, `build-${story.attempt}.raw.txt`);
 
   const result = await invokePi(machine, {
     phaseName: "BUILD",
@@ -556,12 +577,13 @@ async function buildStory(machine: Machine): Promise<void> {
     tools: ["read", "grep", "find", "ls", "edit", "write", "bash"],
     files: [story.storyPath, planPath, issuesPath],
     message: prompt,
-    outputPath: path.join(story.storyRunDir, `build-${story.attempt}.raw.txt`),
+    outputPath: buildRawPath,
   });
 
-  await writeJson(path.join(story.storyRunDir, `build-${story.attempt}.invocation.json`), result);
+  await writeJson(nextStoryArtifactPath(story, `build-${story.attempt}.invocation.json`), result);
   story.build = coerceBuildResult(result.parsed);
-  await writeJson(path.join(story.storyRunDir, `build-${story.attempt}.json`), story.build);
+  story.buildJsonPath = nextStoryArtifactPath(story, `build-${story.attempt}.json`);
+  await writeJson(story.buildJsonPath, story.build);
   await writeStoryState(machine);
 
   machine.phase = "EVALUATE_BUILD";
@@ -608,9 +630,18 @@ async function runTests(machine: Machine): Promise<void> {
         streamOutput: true,
       });
 
-  await writeJson(path.join(story.storyRunDir, `test-${story.attempt}.json`), story.testResult);
-  await writeFile(path.join(story.storyRunDir, `test-${story.attempt}.stdout.log`), story.testResult.stdout, "utf8");
-  await writeFile(path.join(story.storyRunDir, `test-${story.attempt}.stderr.log`), story.testResult.stderr, "utf8");
+  story.testJsonPath = nextStoryArtifactPath(story, `test-${story.attempt}.json`);
+  await writeJson(story.testJsonPath, story.testResult);
+  await writeFile(
+    nextStoryArtifactPath(story, `test-${story.attempt}.stdout.log`),
+    story.testResult.stdout,
+    "utf8",
+  );
+  await writeFile(
+    nextStoryArtifactPath(story, `test-${story.attempt}.stderr.log`),
+    story.testResult.stderr,
+    "utf8",
+  );
   await writeStoryState(machine);
 
   machine.phase = "EVALUATE_TESTS";
@@ -668,9 +699,18 @@ async function runLint(machine: Machine): Promise<void> {
         streamOutput: true,
       });
 
-  await writeJson(path.join(story.storyRunDir, `lint-${story.attempt}.json`), story.lintResult);
-  await writeFile(path.join(story.storyRunDir, `lint-${story.attempt}.stdout.log`), story.lintResult.stdout, "utf8");
-  await writeFile(path.join(story.storyRunDir, `lint-${story.attempt}.stderr.log`), story.lintResult.stderr, "utf8");
+  story.lintJsonPath = nextStoryArtifactPath(story, `lint-${story.attempt}.json`);
+  await writeJson(story.lintJsonPath, story.lintResult);
+  await writeFile(
+    nextStoryArtifactPath(story, `lint-${story.attempt}.stdout.log`),
+    story.lintResult.stdout,
+    "utf8",
+  );
+  await writeFile(
+    nextStoryArtifactPath(story, `lint-${story.attempt}.stderr.log`),
+    story.lintResult.stderr,
+    "utf8",
+  );
   await writeStoryState(machine);
 
   machine.phase = "EVALUATE_LINT";
@@ -708,14 +748,21 @@ async function evaluateLint(machine: Machine): Promise<void> {
 
 async function verifyStory(machine: Machine): Promise<void> {
   const story = requireStory(machine);
+  const planPath = story.planJsonPath;
+  const buildPath = story.buildJsonPath;
+  const testPath = story.testJsonPath;
+  const lintPath = story.lintJsonPath;
+
+  if (!planPath || !buildPath || !testPath || !lintPath) {
+    story.blockedReason = "Invariant violated: missing plan/build/test/lint artifacts before verify.";
+    machine.phase = "MARK_BLOCKED";
+    return;
+  }
 
   const prompt = buildVerifyPrompt(story);
-  const planPath = path.join(story.storyRunDir, "plan.json");
-  const buildPath = path.join(story.storyRunDir, `build-${story.attempt}.json`);
-  const testPath = path.join(story.storyRunDir, `test-${story.attempt}.json`);
-  const lintPath = path.join(story.storyRunDir, `lint-${story.attempt}.json`);
+  await writeFile(nextStoryArtifactPath(story, `verify-${story.attempt}.prompt.md`), prompt, "utf8");
 
-  await writeFile(path.join(story.storyRunDir, `verify-${story.attempt}.prompt.md`), prompt, "utf8");
+  const verifyRawPath = nextStoryArtifactPath(story, `verify-${story.attempt}.raw.txt`);
 
   const result = await invokePi(machine, {
     phaseName: "VERIFY",
@@ -723,12 +770,13 @@ async function verifyStory(machine: Machine): Promise<void> {
     tools: ["read", "grep", "find", "ls"],
     files: [story.storyPath, planPath, buildPath, testPath, lintPath],
     message: prompt,
-    outputPath: path.join(story.storyRunDir, `verify-${story.attempt}.raw.txt`),
+    outputPath: verifyRawPath,
   });
 
-  await writeJson(path.join(story.storyRunDir, `verify-${story.attempt}.invocation.json`), result);
+  await writeJson(nextStoryArtifactPath(story, `verify-${story.attempt}.invocation.json`), result);
   story.verify = coerceVerifyResult(result.parsed);
-  await writeJson(path.join(story.storyRunDir, `verify-${story.attempt}.json`), story.verify);
+  story.verifyJsonPath = nextStoryArtifactPath(story, `verify-${story.attempt}.json`);
+  await writeJson(story.verifyJsonPath, story.verify);
   await writeStoryState(machine);
 
   machine.phase = "EVALUATE_VERIFY";
@@ -776,7 +824,7 @@ async function markDone(machine: Machine): Promise<void> {
   }
 
   await writeFile(
-    path.join(story.storyRunDir, "final-report.md"),
+    nextStoryArtifactPath(story, "final-report.md"),
     renderFinalReport(machine, story, "done"),
     "utf8",
   );
@@ -807,7 +855,7 @@ async function markBlocked(machine: Machine): Promise<void> {
   story.blockedReason = reason;
 
   await writeFile(
-    path.join(story.storyRunDir, "final-report.md"),
+    nextStoryArtifactPath(story, "final-report.md"),
     renderFinalReport(machine, story, "blocked"),
     "utf8",
   );
@@ -1389,7 +1437,7 @@ async function ensureExists(filePath: string, label: string): Promise<void> {
 async function writeStoryState(machine: Machine): Promise<void> {
   const story = requireStory(machine);
 
-  await writeJson(path.join(story.storyRunDir, "state.json"), {
+  await writeJson(nextStoryArtifactPath(story, "state.json"), {
     phase: machine.phase,
     originalStoryPath: story.originalStoryPath,
     storyPath: story.storyPath,
@@ -1397,6 +1445,14 @@ async function writeStoryState(machine: Machine): Promise<void> {
     sessionPath: story.sessionPath,
     attempt: story.attempt,
     planRepairAttempts: story.planRepairAttempts,
+    artifactSequence: story.artifactSequence,
+    artifacts: {
+      planJsonPath: story.planJsonPath ?? null,
+      buildJsonPath: story.buildJsonPath ?? null,
+      testJsonPath: story.testJsonPath ?? null,
+      lintJsonPath: story.lintJsonPath ?? null,
+      verifyJsonPath: story.verifyJsonPath ?? null,
+    },
     issues: story.issues,
     blockedReason: story.blockedReason ?? null,
     plan: story.plan ?? null,
@@ -1534,6 +1590,12 @@ function requireStory(machine: Machine): StoryContext {
 
 function resolveFromRoot(config: Config, value: string): string {
   return path.isAbsolute(value) ? value : path.resolve(config.rootDir, value);
+}
+
+function nextStoryArtifactPath(story: StoryContext, fileName: string): string {
+  story.artifactSequence += 1;
+  const sequence = String(story.artifactSequence).padStart(3, "0");
+  return path.join(story.storyRunDir, `###${sequence}-${fileName}`);
 }
 
 function resolveExpectedPlannedStoryPath(machine: Machine, story: StoryContext): string {
