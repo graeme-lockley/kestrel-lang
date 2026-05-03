@@ -1386,23 +1386,46 @@ function asStringArray(value: unknown): string[] {
 function extractJsonObject(text: string): string | null {
   const trimmed = text.trim();
 
+  // Whole output is a bare JSON object — fast path.
   if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
     return trimmed;
   }
 
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced?.[1]) {
-    const candidate = fenced[1].trim();
-    if (candidate.startsWith("{") && candidate.endsWith("}")) {
-      return candidate;
+  // Priority 1: Find the LAST raw JSON object in the output by walking
+  // backwards from the last '}'. This correctly handles the common Pi pattern
+  // of emitting prose or placeholder fenced blocks followed by a final bare
+  // JSON answer at the end.
+  const lastClose = trimmed.lastIndexOf("}");
+  if (lastClose >= 0) {
+    let depth = 0;
+    for (let i = lastClose; i >= 0; i -= 1) {
+      if (trimmed[i] === "}") depth += 1;
+      else if (trimmed[i] === "{") {
+        depth -= 1;
+        if (depth === 0) {
+          return trimmed.slice(i, lastClose + 1);
+        }
+      }
     }
   }
 
-  const first = trimmed.indexOf("{");
-  const last = trimmed.lastIndexOf("}");
+  // Priority 2: Collect every fenced code block and try them in REVERSE order.
+  // Only reached when no bare JSON object was found in the output at all.
+  const fencePattern = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/gi;
+  const fencedCandidates: string[] = [];
+  let match: RegExpExecArray | null;
 
-  if (first >= 0 && last > first) {
-    return trimmed.slice(first, last + 1);
+  while ((match = fencePattern.exec(trimmed)) !== null) {
+    if (match[1]) {
+      fencedCandidates.push(match[1].trim());
+    }
+  }
+
+  for (let i = fencedCandidates.length - 1; i >= 0; i -= 1) {
+    const candidate = fencedCandidates[i];
+    if (candidate && candidate.startsWith("{") && candidate.endsWith("}")) {
+      return candidate;
+    }
   }
 
   return null;
