@@ -299,7 +299,7 @@ markers, but those are considered tranche-local scaffolding, not the final state
     — Emit `CHECKCAST Boolean; booleanValue; IFEQ; GOTO; ASTORE/ALOAD` with correct JVM
     stackmap frames at branch targets.
 
-33. [S17-31 — Codegen: `EWhile` — loops with real `break` / `continue`](../../unplanned/S17-31-codegen-while-loops.md)
+33. ✅ [S17-31 — Codegen: `EWhile` — loops with real `break` / `continue`](../../done/S17-31-codegen-while-loops.md)
     — Emit loop-head label, `IFEQ` exit test, back-edge `GOTO`, `SBreak` / `SContinue` GOTO
     patching, and wide stackmap frame for the JVM verifier.
 

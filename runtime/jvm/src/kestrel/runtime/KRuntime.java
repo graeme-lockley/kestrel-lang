@@ -227,7 +227,10 @@ public final class KRuntime {
     }
 
     public static void runMain(String[] args, KFunction init) {
+        String[] previousMainArgs = mainArgs;
+        Object previousMainResult = mainResult;
         setMainArgs(args);
+        mainResult = null;
         initAsyncRuntime();
         boolean waitForAsync = exitWaitEnabled();
         Throwable mainFailure = null;
@@ -263,6 +266,8 @@ public final class KRuntime {
             } else {
                 shutdownAsyncRuntimeNow();
             }
+            mainArgs = previousMainArgs;
+            mainResult = previousMainResult;
         }
         if (mainFailure != null) {
             mainFailure.printStackTrace(System.err);

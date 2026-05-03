@@ -704,8 +704,9 @@ fun backpatchBreakJumps(code: Array<Int>, jumps: List<Int>, exitPos: Int): Unit 
   }
 
 fun patchShort(code: Array<Int>, pos: Int, offset: Int): Unit = {
-  Arr.set(code, pos, offset / 256);
-  Arr.set(code, pos + 1, offset % 256)
+  val u = if (offset >= 0) offset else offset + 65536
+  Arr.set(code, pos, u / 256);
+  Arr.set(code, pos + 1, u % 256)
 }
 
 fun jvmMangleName(op: String): String = {

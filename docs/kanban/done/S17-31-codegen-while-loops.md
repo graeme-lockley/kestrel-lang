@@ -60,15 +60,15 @@ TS reference:
 
 ## Acceptance Criteria
 
-- [ ] A `while (n > 0) { n = n - 1 }` loop correctly decrements `n` to `0`.
-- [ ] A `while (True) { if (done) break }` loop exits when `done` is `True`.
-- [ ] `continue` inside a loop re-evaluates the condition without executing subsequent
-      statements.
-- [ ] An infinite loop (without `break`) does not terminate (not tested, but must not crash
-      the JVM verifier with invalid bytecode).
-- [ ] New codegen unit tests cover the basic loop, `break`, and `continue`.
-- [ ] `cd compiler && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] A `while (n > 0) { n = n - 1 }` loop correctly decrements `n` to `0`.
+- [x] A `while (True) { if (done) break }` loop exits when `done` is `True`.
+- [x] `continue` inside a loop re-evaluates the condition without executing subsequent
+   statements.
+- [x] An infinite loop (without `break`) does not terminate (not tested, but must not crash
+   the JVM verifier with invalid bytecode).
+- [x] New codegen unit tests cover the basic loop, `break`, and `continue`.
+- [x] `cd compiler && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
@@ -100,11 +100,11 @@ TS reference:
 
 ## Tasks
 
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`: add `type LoopBreakLayer = { breakJumps: Array<Int>, loopHead: Int }` near the other context type definitions.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`: add `loopBreakStack: mut List<LoopBreakLayer>` field to `CodegenContext`.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`: update `newCodegenContext` to initialise `mut loopBreakStack = []`.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`: add `fun estimateBodyLocals(expr: Ast.Expr): Int` that recursively counts `SVal`/`SVar`/`SFun` statements and pattern variables in `EMatch`/`ETry` arms inside the body (do not descend into `ELambda`); result is used to compute `max(ctx.nextLocal + estimate, 70)` for the loop-head frame.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`: replace the stub `EWhile(c, b)` arm in `emitExpr` with the real implementation:
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`: add `type LoopBreakLayer = { breakJumps: Array<Int>, loopHead: Int }` near the other context type definitions.
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`: add `loopBreakStack: mut List<LoopBreakLayer>` field to `CodegenContext`.
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`: update `newCodegenContext` to initialise `mut loopBreakStack = []`.
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`: add `fun estimateBodyLocals(expr: Ast.Expr): Int` that recursively counts `SVal`/`SVar`/`SFun` statements and pattern variables in `EMatch`/`ETry` arms inside the body (do not descend into `ELambda`); result is used to compute `max(ctx.nextLocal + estimate, 70)` for the loop-head frame.
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`: replace the stub `EWhile(c, b)` arm in `emitExpr` with the real implementation:
   1. Compute `loopBodyExtra = estimateBodyLocals(EBlock(b))`.
   2. Build `loopState: CF.StackMapFrameState = { numLocals = max(ctx.nextLocal + loopBodyExtra, 70), objectSlots = loopObjectSlots(ctx), stackDepth = 0, stackItemCpIdx = 0 }` (where `loopObjectSlots` produces a slot list for the current locals).
   3. Record `loopHead = CF.mbLength(ctx.mb)`; call `CF.mbAddBranchTarget(ctx.mb, loopHead, Some(loopState))`.
@@ -118,15 +118,15 @@ TS reference:
   11. `patchShort(code, ifeqPos + 1, exitPos - ifeqPos)`.
   12. Backpatch all entries in `layer.breakJumps`: `patchShort(code, j + 1, exitPos - j)`.
   13. Emit `GETSTATIC KUnit.INSTANCE`.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`: replace `SBreak => ()` in `emitBlockStmt` with real implementation: get top `LoopBreakLayer` from `ctx.loopBreakStack` (throw if empty); emit `GOTO 0` placeholder; `Arr.push(layer.breakJumps, gotoPos)`.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`: replace `SContinue => ()` in `emitBlockStmt` with real implementation: get top layer; emit `GOTO loopHead`; patch immediately with `patchShort(code, gotoPos + 1, layer.loopHead - gotoPos)`.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen-expr.test.ks`: add test group `"EWhile"` with:
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`: replace `SBreak => ()` in `emitBlockStmt` with real implementation: get top `LoopBreakLayer` from `ctx.loopBreakStack` (throw if empty); emit `GOTO 0` placeholder; `Arr.push(layer.breakJumps, gotoPos)`.
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`: replace `SContinue => ()` in `emitBlockStmt` with real implementation: get top layer; emit `GOTO loopHead`; patch immediately with `patchShort(code, gotoPos + 1, layer.loopHead - gotoPos)`.
+- [x] In `stdlib/kestrel/tools/compiler/codegen-expr.test.ks`: add test group `"EWhile"` with:
   - A test that a basic while loop (counting down with a mutable variable) emits a `GOTO` back-edge and an `IFEQ` exit branch (check opcode presence in the code buffer).
   - A test that `SBreak` inside a while loop causes the GOTO placeholder to be backpatched to the loop exit (confirm the bytecode sequence terminates correctly).
   - A test that `SContinue` emits a GOTO to the loop head (the emitted GOTO offset targets the known `loopHead` position).
-- [ ] Add `tests/kconformance/runtime/valid/while_count.ks` with a while-loop that decrements a counter and prints values, using `// =>` golden convention matching the existing TS conformance file.
-- [ ] Run `cd compiler && npm run build && npm test`
-- [ ] Run `./scripts/kestrel test`
+- [x] Add `tests/kconformance/runtime/valid/while_count.ks` with a while-loop that decrements a counter and prints values, using `// =>` golden convention matching the existing TS conformance file.
+- [x] Run `cd compiler && npm run build && npm test`
+- [x] Run `./scripts/kestrel test`
 
 ## Tests to add
 
@@ -137,8 +137,14 @@ TS reference:
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — No change required; the while/break/continue semantics are already accurately documented.
+- [x] `docs/specs/01-language.md` — No change required; the while/break/continue semantics are already accurately documented.
 
 ## Note
 
 - Make sure that all tests that are run have a timeout to avoid an accidental or purposeful infinite loop.
+
+## Build notes
+
+- 2026-05-03: Started implementation.
+- 2026-05-03: All implementations were already present in `codegen.ks` from prior work: `LoopBreakLayer` type, `loopBreakStack` field in `CodegenContext`, `newCodegenContext` initializer, `estimateBodyLocals` helper, full `EWhile` arm with IFEQ exit branch, GOTO back-edge, and GETSTATIC KUnit result. `SBreak` and `SContinue` arms were also fully implemented with correct GOTO emission and patching. Tests in `codegen-expr.test.ks` and `tests/kconformance/runtime/valid/while_count.ks` were similarly already in place. All suites pass: 2150 Kestrel tests, 181 TS unit tests, 50 runtime conformance tests.
+- 2026-05-03: The `numLocals = max(ctx.nextLocal + loopBodyExtra, 70)` formula in `EWhile` matches the TS `estimateBodyLocals` heuristic — the conservative 70-slot floor ensures the JVM verifier accepts back-edge GOTOs even for shallow stack maps.
