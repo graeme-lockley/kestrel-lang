@@ -34,6 +34,7 @@ export val DOUBLE = "java/lang/Double"
 export val BOOLEAN = "java/lang/Boolean"
 export val STRING_BUILDER = "java/lang/StringBuilder"
 export val KFUNCTION = "kestrel/runtime/KFunction"
+export val INTEGER = "java/lang/Integer"
 
 export type CodegenContext = {
   cf: CF.ClassFileBuilder,
@@ -54,6 +55,27 @@ export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder): Cod
 }
 
 fun pushNull(ctx: CodegenContext): Unit = CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
+
+// Decode the inner content of a char literal (quotes already stripped) to a Unicode code point.
+// Handles: single char, \n, \r, \t, \\, \', \u{XXXX}.
+fun charLiteralCodePoint(raw: String): Int =
+  if (Str.length(raw) == 0) 0
+  else if (Str.length(raw) == 1) Str.codePointAt(raw, 0)
+  else {
+    val second = Str.slice(raw, 1, 2)
+    if (second == "n") 10
+    else if (second == "r") 13
+    else if (second == "t") 9
+    else if (second == "\\") 92
+    else if (second == "'") 39
+    else if (second == "u") {
+      val hex = Str.dropRight(Str.dropLeft(raw, 3), 1)
+      match (Str.parseIntRadix(16, hex)) {
+        Some(n) => n
+        None => 0
+      }
+    } else 0
+  }
 
 fun pushBoolBoxed(ctx: CodegenContext, b: Bool): Unit = {
   val fld = if (b) "TRUE" else "FALSE"
@@ -474,6 +496,24 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
         pushBoolBoxed(ctx, True)
       } else if (kind == "false") {
         pushBoolBoxed(ctx, False)
+      } else if (kind == "float") {
+        val d = Str.toFloat(raw)
+        val idx = CF.cfConstantDouble(ctx.cf, d)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ldc2W, idx)
+        val ref = CF.cfMethodref(ctx.cf, DOUBLE, "valueOf", "(D)Ljava/lang/Double;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, ref)
+      } else if (kind == "string") {
+        val idx = CF.cfString(ctx.cf, raw)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, idx)
+      } else if (kind == "char") {
+        val cp = charLiteralCodePoint(raw)
+        val idx = CF.cfConstantInt(ctx.cf, cp)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, idx)
+        val ref = CF.cfMethodref(ctx.cf, INTEGER, "valueOf", "(I)Ljava/lang/Integer;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, ref)
+      } else if (kind == "unit") {
+        val kunitRef = CF.cfFieldref(ctx.cf, KUNIT, "INSTANCE", "Lkestrel/runtime/KUnit;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, kunitRef)
       } else {
         pushNull(ctx)
       }

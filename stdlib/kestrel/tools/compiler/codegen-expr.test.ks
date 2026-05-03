@@ -2,9 +2,34 @@ import { Suite, group, eq, isTrue } from "kestrel:dev/test"
 import * as CF from "kestrel:tools/compiler/classfile"
 import * as CG from "kestrel:tools/compiler/codegen"
 import * as BA from "kestrel:data/bytearray"
+import * as Arr from "kestrel:data/array"
+import * as Lst from "kestrel:data/list"
 import { ELit, EIdent, EBinary, EIf, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild } from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
+
+// Return the byte at position i in the method's code buffer.
+fun codeAt(mb: CF.MethodBuilder, i: Int): Int = Arr.get(CF.mbGetCode(mb), i)
+
+// True iff `haystack` starts with all bytes of `prefix`.
+fun seqStartsWith(xs: List<Int>, prefix: List<Int>): Bool =
+  match (prefix) {
+    [] => True
+    p :: restP => match (xs) {
+      [] => False
+      x :: restX => if (x == p) seqStartsWith(restX, restP) else False
+    }
+  }
+
+// True iff `needle` appears as a contiguous subsequence anywhere in `haystack`.
+fun containsSeq(haystack: List<Int>, needle: List<Int>): Bool =
+  if (Lst.isEmpty(needle)) True
+  else match (haystack) {
+    [] => False
+    _ :: rest =>
+      if (seqStartsWith(haystack, needle)) True
+      else containsSeq(rest, needle)
+  }
 
 fun baseContext(): TestCtx = {
   val cf = CF.newClassFile("test/CodegenExpr", "java/lang/Object", 0x0021)
@@ -59,5 +84,64 @@ export async fun run(s: Suite): Task<Unit> =
       val bytes = finish(t.cf, t.mb)
       isTrue(sg, "lambda/template/call emit", BA.length(bytes) > 0)
       eq(sg, "runtime const exported", CG.RUNTIME, "kestrel/runtime/KRuntime")
+    })
+
+    group(s1, "float literal", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ELit("float", "3.14"))
+      // Opcode sequence: ldc2W(20) at offset 0, invokestatic(184) at offset 3
+      eq(sg, "float: opcode[0] is ldc2W", codeAt(t.mb, 0), 20)
+      eq(sg, "float: opcode[3] is invokestatic", codeAt(t.mb, 3), 184)
+      val bytes = finish(t.cf, t.mb)
+      // Constant-pool: "java/lang/Double" UTF-8 entry must be present (from Double.valueOf ref)
+      // ASCII for "Double": [68, 111, 117, 98, 108, 101]
+      isTrue(sg, "float: pool contains Double ref",
+        containsSeq(BA.toList(bytes), [68, 111, 117, 98, 108, 101]))
+    })
+
+    group(s1, "string literal", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ELit("string", "hello"))
+      // Opcode sequence: ldcW(19) at offset 0
+      eq(sg, "string: opcode[0] is ldcW", codeAt(t.mb, 0), 19)
+      val bytes = finish(t.cf, t.mb)
+      // Constant-pool: UTF-8 bytes for "hello" = [104, 101, 108, 108, 111]
+      isTrue(sg, "string: pool contains hello utf8",
+        containsSeq(BA.toList(bytes), [104, 101, 108, 108, 111]))
+    })
+
+    group(s1, "char literal plain", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ELit("char", "a"))
+      // Opcode sequence: ldcW(19) at offset 0, invokestatic(184) at offset 3
+      eq(sg, "char plain: opcode[0] is ldcW", codeAt(t.mb, 0), 19)
+      eq(sg, "char plain: opcode[3] is invokestatic", codeAt(t.mb, 3), 184)
+      val bytes = finish(t.cf, t.mb)
+      // Constant-pool: cpInteger(3) entry for code point 97 ('a') = [3, 0, 0, 0, 97]
+      isTrue(sg, "char plain: pool contains int constant 97",
+        containsSeq(BA.toList(bytes), [3, 0, 0, 0, 97]))
+    })
+
+    group(s1, "char literal escape", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ELit("char", "\\n"))
+      // Opcode sequence: ldcW(19) at offset 0, invokestatic(184) at offset 3
+      eq(sg, "char esc: opcode[0] is ldcW", codeAt(t.mb, 0), 19)
+      eq(sg, "char esc: opcode[3] is invokestatic", codeAt(t.mb, 3), 184)
+      val bytes = finish(t.cf, t.mb)
+      // Constant-pool: cpInteger(3) entry for code point 10 ('\n') = [3, 0, 0, 0, 10]
+      isTrue(sg, "char esc: pool contains int constant 10",
+        containsSeq(BA.toList(bytes), [3, 0, 0, 0, 10]))
+    })
+
+    group(s1, "unit literal", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ELit("unit", ""))
+      // Opcode sequence: getstatic(178) at offset 0
+      eq(sg, "unit: opcode[0] is getstatic", codeAt(t.mb, 0), 178)
+      val bytes = finish(t.cf, t.mb)
+      // Constant-pool: UTF-8 for "INSTANCE" = [73, 78, 83, 84, 65, 78, 67, 69]
+      isTrue(sg, "unit: pool contains INSTANCE utf8",
+        containsSeq(BA.toList(bytes), [73, 78, 83, 84, 65, 78, 67, 69]))
     })
   })

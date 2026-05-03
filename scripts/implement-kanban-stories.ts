@@ -698,6 +698,8 @@ async function invokePi(
     ? dryRunPi(options)
     : await runCommand(machine.config.piCommand, args, machine.config.rootDir, {
         streamOutput: true,
+        heartbeatLabel: `${options.phaseName} ${story.storyId}`,
+        heartbeatMs: 15000,
       });
 
   await writeFile(options.outputPath, result.stdout, "utf8");
@@ -770,10 +772,16 @@ async function runCommand(
   command: string,
   args: string[],
   cwd: string,
-  options?: { streamOutput?: boolean },
+  options?: {
+    streamOutput?: boolean;
+    heartbeatLabel?: string;
+    heartbeatMs?: number;
+  },
 ): Promise<CommandResult> {
   const started = Date.now();
   const streamOutput = options?.streamOutput ?? false;
+  const heartbeatLabel = options?.heartbeatLabel;
+  const heartbeatMs = options?.heartbeatMs ?? 0;
 
   return new Promise((resolve) => {
     const child = spawn(command, args, {
@@ -785,6 +793,23 @@ async function runCommand(
 
     let stdout = "";
     let stderr = "";
+    let heartbeatTimer: NodeJS.Timeout | undefined;
+
+    if (streamOutput && heartbeatLabel && heartbeatMs > 0) {
+      heartbeatTimer = setInterval(() => {
+        const seconds = Math.floor((Date.now() - started) / 1000);
+        process.stderr.write(
+          `[runner] ${heartbeatLabel} still running (${seconds}s elapsed)\n`,
+        );
+      }, heartbeatMs);
+    }
+
+    const clearHeartbeat = () => {
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = undefined;
+      }
+    };
 
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
@@ -801,6 +826,7 @@ async function runCommand(
     });
 
     child.on("close", (exitCode) => {
+      clearHeartbeat();
       resolve({
         command: [command, ...args].join(" "),
         exitCode,
@@ -811,6 +837,7 @@ async function runCommand(
     });
 
     child.on("error", (error) => {
+      clearHeartbeat();
       resolve({
         command: [command, ...args].join(" "),
         exitCode: -1,
