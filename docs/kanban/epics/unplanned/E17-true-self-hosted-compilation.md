@@ -172,6 +172,12 @@ via `./kestrel-self`. Acceptance for all subsequent stories is measured via
     — **Placeholder only.** Unify `./kestrel` and `./kestrel-self` into a single entry point with
     a `--compiler` flag once S17-42 (no-Node final validation) is complete. Not built now.
 
+22. [S17-51 — Codegen: emit diagnostic for unresolved identifiers](../../unplanned/S17-51-codegen-unresolved-ident-diagnostic.md)
+    — Replace the silent `pushNull` fallback at the end of the `EIdent` resolution chain with a
+    proper `Diagnostic` record. Wire accumulated codegen diagnostics through `jvmCodegen`'s
+    return value and `driver.ks` so the CLI reports the error. Completes the PARTIAL acceptance
+    criterion left open in S17-25.
+
 ### KTI correctness (foundation for multi-module self-hosted compilation)
 
 Three interconnected correctness bugs in the KTI subsystem must be fixed before the
@@ -265,12 +271,10 @@ markers, but those are considered tranche-local scaffolding, not the final state
     — Add `"string"` (`LDC_W`), `"char"` (code-point boxing), `"float"` (`LDC2_W` double),
     and `"unit"` (`GETSTATIC KUnit.INSTANCE`) arms. Int and bool already work.
 
-27. [S17-25 — Codegen: `EIdent` — global vals/vars, imported names, function references](../../unplanned/S17-25-codegen-ident-resolution.md)
-    — Implement full identifier resolution: local slots (already done), global `val`/`var`
+27. ~~[S17-25 — Codegen: `EIdent` — global vals/vars, imported names, function references](../../done/S17-25-codegen-ident-resolution.md)~~
+    **DONE.** Full identifier resolution implemented: local slots, global `val`/`var`
     (`GETSTATIC`), nullary ADT constructors (`GETSTATIC INSTANCE`), imported val/var/fun,
-    and module-level function references. Emit compile errors for unresolved identifiers.
-    Depends on S17-43 for accurate `varNames` metadata. **Deliver together with S17-37 as the
-    first real execution tranche.**
+    and module-level function references. All tests passing.
 
 28. [S17-26 — Codegen: `EBinary` and `EUnary` operator emission](../../unplanned/S17-26-codegen-binary-unary-operators.md)
     — Emit real arithmetic (`+`, `-`, `*`, `/`, `%`), comparison (`<`, `>`, `<=`, `>=`),
