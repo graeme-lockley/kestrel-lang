@@ -1,5 +1,6 @@
 # Build artifacts
---target/
+.pi/
+.pi/**
 
 out/
 compiler/dist/
