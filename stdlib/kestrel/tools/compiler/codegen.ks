@@ -40,6 +40,11 @@ export val INTEGER = "java/lang/Integer"
 export val KFUNCTION_REF = "kestrel/runtime/KFunctionRef"
 export val KNONE = "kestrel/runtime/KNone"
 export val KNIL = "kestrel/runtime/KNil"
+val KSOME = "kestrel/runtime/KSome"
+val KCONS = "kestrel/runtime/KCons"
+val KLIST = "kestrel/runtime/KList"
+val KERR = "kestrel/runtime/KErr"
+val KOK = "kestrel/runtime/KOk"
 
 export type JvmCodegenOptions = {
   importedValVarToClass: Dict<String, String>,
@@ -47,7 +52,9 @@ export type JvmCodegenOptions = {
   importedFunArities: Dict<String, Int>,
   importedNameToClass: Dict<String, String>,
   importedNameToOriginal: Dict<String, String>,
-  importedAdtClasses: Dict<String, (String, Int)>
+  importedAdtClasses: Dict<String, (String, Int)>,
+  namespaceClasses: Dict<String, String>,
+  namespaceAdtConstructors: Dict<String, Dict<String, String>>
 }
 
 export type ModuleContext = {
@@ -79,7 +86,9 @@ export fun emptyJvmCodegenOptions(): JvmCodegenOptions = {
   importedFunArities = Dict.emptyStringDict(),
   importedNameToClass = Dict.emptyStringDict(),
   importedNameToOriginal = Dict.emptyStringDict(),
-  importedAdtClasses = Dict.emptyStringDict()
+  importedAdtClasses = Dict.emptyStringDict(),
+  namespaceClasses = Dict.emptyStringDict(),
+  namespaceAdtConstructors = Dict.emptyStringDict()
 }
 
 export fun emptyModuleContext(className: String): ModuleContext = {
@@ -831,6 +840,64 @@ fun emitBinaryExpr(ctx: CodegenContext, op: String, left: Ast.Expr, right: Ast.E
     }
   }
 
+// Load a local variable by slot index (mirrors storeLocal).
+fun loadLocalSlot(ctx: CodegenContext, idx: Int): Unit =
+  if (idx == 0) CF.mbEmit1(ctx.mb, Op.JvmOp.aload0)
+  else if (idx == 1) CF.mbEmit1(ctx.mb, Op.JvmOp.aload1)
+  else if (idx == 2) CF.mbEmit1(ctx.mb, Op.JvmOp.aload2)
+  else if (idx == 3) CF.mbEmit1(ctx.mb, Op.JvmOp.aload3)
+  else CF.mbEmit1b(ctx.mb, Op.JvmOp.aload, idx)
+
+// Emit call arguments leaving every value on the stack (unlike emitExprList which discards intermediates).
+fun emitCallArgs(ctx: CodegenContext, xs: List<Ast.Expr>): Unit =
+  match (xs) {
+    [] => ()
+    x :: rest => { emitExpr(ctx, x); emitCallArgs(ctx, rest) }
+  }
+
+// Store n stack values (top = arg_{n-1}) right-to-left so slot (base+i) = arg_i.
+fun storeArgsRtoL(ctx: CodegenContext, base: Int, i: Int): Unit =
+  if (i < 0) ()
+  else { storeLocal(ctx, base + i); storeArgsRtoL(ctx, base, i - 1) }
+
+// Fill Object[] at top of stack: array[i] = ALOAD slot(base+i), for i in [0, n).
+fun fillArgsToArray(ctx: CodegenContext, base: Int, i: Int, n: Int): Unit =
+  if (i >= n) ()
+  else {
+    CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+    val iIdx = CF.cfConstantInt(ctx.cf, i)
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, iIdx)
+    loadLocalSlot(ctx, base + i)
+    CF.mbEmit1(ctx.mb, Op.JvmOp.aastore)
+    fillArgsToArray(ctx, base, i + 1, n)
+  }
+
+// Indirect call fallback: emit callee, build Object[], INVOKEINTERFACE KFunction.apply.
+fun emitCallIndirect(ctx: CodegenContext, callee: Ast.Expr, args: List<Ast.Expr>): Unit = {
+  val n = Lst.length(args)
+  val calleeSlot = ctx.nextLocal
+  val argBase = calleeSlot + 1
+  ctx.nextLocal := argBase + n
+  emitExpr(ctx, callee)
+  storeLocal(ctx, calleeSlot)
+  emitCallArgs(ctx, args)
+  storeArgsRtoL(ctx, argBase, n - 1)
+  val nIdx = CF.cfConstantInt(ctx.cf, n)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, nIdx)
+  val objRef = CF.cfClassRef(ctx.cf, "java/lang/Object")
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.anewarray, objRef)
+  fillArgsToArray(ctx, argBase, 0, n)
+  loadLocalSlot(ctx, calleeSlot)
+  val kfRef = CF.cfClassRef(ctx.cf, KFUNCTION)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, kfRef)
+  CF.mbEmit1(ctx.mb, Op.JvmOp.swap)
+  val applyIdx = CF.cfIfaceMethodref(ctx.cf, KFUNCTION, "apply", "([Ljava/lang/Object;)Ljava/lang/Object;")
+  CF.mbEmit1(ctx.mb, Op.JvmOp.invokeinterface)
+  CF.mbPushShort(ctx.mb, applyIdx)
+  CF.mbPushByte(ctx.mb, 2)
+  CF.mbPushByte(ctx.mb, 0)
+}
+
 fun emitExprList(ctx: CodegenContext, xs: List<Ast.Expr>): Unit =
   match (xs) {
     [] => ()
@@ -1033,11 +1100,179 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       }
     }
     ECall(fn, args) => {
-      emitExpr(ctx, fn)
-      CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
-      emitExprList(ctx, args)
-      if (!Lst.isEmpty(args)) CF.mbEmit1(ctx.mb, Op.JvmOp.pop) else ()
-      pushNull(ctx)
+      val mctx = ctx.mctx
+      match (fn) {
+        EIdent(name) => {
+          if (name == "Some") {
+            match (args) {
+              a :: [] => {
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KSOME))
+                CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+                emitExpr(ctx, a)
+                val mref = CF.cfMethodref(ctx.cf, KSOME, "<init>", "(Ljava/lang/Object;)V")
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, mref)
+              }
+              _ => emitCallIndirect(ctx, fn, args)
+            }
+          } else if (name == "Cons") {
+            match (args) {
+              h :: t :: [] => {
+                val headSlot = ctx.nextLocal
+                val tailSlot = headSlot + 1
+                ctx.nextLocal := tailSlot + 1
+                emitExpr(ctx, h)
+                storeLocal(ctx, headSlot)
+                emitExpr(ctx, t)
+                storeLocal(ctx, tailSlot)
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KCONS))
+                CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+                loadLocalSlot(ctx, headSlot)
+                loadLocalSlot(ctx, tailSlot)
+                val mref = CF.cfMethodref(ctx.cf, KCONS, "<init>", "(Ljava/lang/Object;L${KLIST};)V")
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, mref)
+              }
+              _ => emitCallIndirect(ctx, fn, args)
+            }
+          } else if (name == "Err") {
+            match (args) {
+              a :: [] => {
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KERR))
+                CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+                emitExpr(ctx, a)
+                val mref = CF.cfMethodref(ctx.cf, KERR, "<init>", "(Ljava/lang/Object;)V")
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, mref)
+              }
+              _ => emitCallIndirect(ctx, fn, args)
+            }
+          } else if (name == "Ok") {
+            match (args) {
+              a :: [] => {
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KOK))
+                CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+                emitExpr(ctx, a)
+                val mref = CF.cfMethodref(ctx.cf, KOK, "<init>", "(Ljava/lang/Object;)V")
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, mref)
+              }
+              _ => emitCallIndirect(ctx, fn, args)
+            }
+          } else {
+            val adtCtorClassOpt = Dict.get(mctx.adtClassByConstructor, name)
+            match (adtCtorClassOpt) {
+              Some(adtCls) => {
+                val arity = Lst.length(args)
+                val expectedArity = Opt.getOrElse(Dict.get(mctx.adtConstructorArity, name), arity)
+                if (arity == expectedArity) {
+                  CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, adtCls))
+                  CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+                  emitCallArgs(ctx, args)
+                  val ctorDesc = "(${objectArgs(arity)})V"
+                  val mref = CF.cfMethodref(ctx.cf, adtCls, "<init>", ctorDesc)
+                  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, mref)
+                } else emitCallIndirect(ctx, fn, args)
+              }
+              None => {
+                if (name == "println" | name == "print") {
+                  val runtimeMethod = if (name == "println") "println" else "print"
+                  val n = Lst.length(args)
+                  val argBase = ctx.nextLocal
+                  ctx.nextLocal := argBase + n
+                  emitCallArgs(ctx, args)
+                  storeArgsRtoL(ctx, argBase, n - 1)
+                  val nIdx = CF.cfConstantInt(ctx.cf, n)
+                  CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, nIdx)
+                  val objRef = CF.cfClassRef(ctx.cf, "java/lang/Object")
+                  CF.mbEmit1s(ctx.mb, Op.JvmOp.anewarray, objRef)
+                  fillArgsToArray(ctx, argBase, 0, n)
+                  val printRef = CF.cfMethodref(ctx.cf, RUNTIME, runtimeMethod, "([Ljava/lang/Object;)V")
+                  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, printRef)
+                  val kunitRef = CF.cfFieldref(ctx.cf, KUNIT, "INSTANCE", "Lkestrel/runtime/KUnit;")
+                  CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, kunitRef)
+                } else if (name == "exit") {
+                  match (args) {
+                    a :: [] => {
+                      emitExpr(ctx, a)
+                      val mref = CF.cfMethodref(ctx.cf, RUNTIME, "exit", "(Ljava/lang/Object;)V")
+                      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+                      val kunitRef = CF.cfFieldref(ctx.cf, KUNIT, "INSTANCE", "Lkestrel/runtime/KUnit;")
+                      CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, kunitRef)
+                    }
+                    _ => emitCallIndirect(ctx, fn, args)
+                  }
+                } else if (name == "concat") {
+                  match (args) {
+                    a :: b :: [] => {
+                      emitExpr(ctx, a)
+                      emitExpr(ctx, b)
+                      val mref = CF.cfMethodref(ctx.cf, RUNTIME, "concat", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;")
+                      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+                    }
+                    _ => emitCallIndirect(ctx, fn, args)
+                  }
+                } else if (Dict.member(mctx.funArities, name)) {
+                  val arity = Opt.getOrElse(Dict.get(mctx.funArities, name), 0)
+                  emitCallArgs(ctx, args)
+                  val desc = objectMethodDesc(arity)
+                  val mref = CF.cfMethodref(ctx.cf, mctx.className, jvmMangleName(name), desc)
+                  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+                } else {
+                  val importedClassOpt = Dict.get(mctx.options.importedNameToClass, name)
+                  match (importedClassOpt) {
+                    Some(cls) => {
+                      val origName = Opt.getOrElse(Dict.get(mctx.options.importedNameToOriginal, name), name)
+                      val arity = Lst.length(args)
+                      emitInitCall(ctx, cls)
+                      emitCallArgs(ctx, args)
+                      val desc = objectMethodDesc(arity)
+                      val mref = CF.cfMethodref(ctx.cf, cls, jvmMangleName(origName), desc)
+                      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+                    }
+                    None => emitCallIndirect(ctx, fn, args)
+                  }
+                }
+              }
+            }
+          }
+        }
+        EField(obj, method) => {
+          match (obj) {
+            EIdent(ns) => {
+              val nsClassOpt = Dict.get(mctx.options.namespaceClasses, ns)
+              match (nsClassOpt) {
+                Some(nsClass) => {
+                  val nsAdtCtorsOpt = Dict.get(mctx.options.namespaceAdtConstructors, ns)
+                  val ctorClassOpt = match (nsAdtCtorsOpt) {
+                    Some(ctorMap) => Dict.get(ctorMap, method)
+                    None => None
+                  }
+                  match (ctorClassOpt) {
+                    Some(ctorClass) => {
+                      if (nsClass != mctx.className) emitInitCall(ctx, nsClass) else ()
+                      val arity = Lst.length(args)
+                      CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, ctorClass))
+                      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+                      emitCallArgs(ctx, args)
+                      val ctorDesc = "(${objectArgs(arity)})V"
+                      val mref = CF.cfMethodref(ctx.cf, ctorClass, "<init>", ctorDesc)
+                      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, mref)
+                    }
+                    None => {
+                      if (nsClass != mctx.className) emitInitCall(ctx, nsClass) else ()
+                      val arity = Lst.length(args)
+                      emitCallArgs(ctx, args)
+                      val desc = objectMethodDesc(arity)
+                      val mref = CF.cfMethodref(ctx.cf, nsClass, jvmMangleName(method), desc)
+                      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+                    }
+                  }
+                }
+                None => emitCallIndirect(ctx, fn, args)
+              }
+            }
+            _ => emitCallIndirect(ctx, fn, args)
+          }
+        }
+        _ => emitCallIndirect(ctx, fn, args)
+      }
     }
     EField(obj, _field) => {
       emitExpr(ctx, obj)

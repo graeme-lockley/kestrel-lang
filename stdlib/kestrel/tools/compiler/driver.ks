@@ -280,7 +280,9 @@ async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: Strin
           importedFunArities = depBindings.importedFunArities,
           importedNameToClass = depBindings.importedNameToClass,
           importedNameToOriginal = depBindings.importedNameToOriginal,
-          importedAdtClasses = Dict.emptyStringDict()
+          importedAdtClasses = Dict.emptyStringDict(),
+          namespaceClasses = depBindings.namespaceClasses,
+          namespaceAdtConstructors = depBindings.namespaceAdtConstructors
         }
         val mctx = Codegen.buildModuleContext(moduleName, prog, codegenOptions)
         await doCodegenAndWrite(mctx, prog, tc, entryPath, opts, ktiPath, source, depHashes)

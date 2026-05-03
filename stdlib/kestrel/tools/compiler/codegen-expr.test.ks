@@ -311,4 +311,77 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(sg, "or: pool contains TRUE for short-circuit",
         containsSeq(BA.toList(bytes), [84, 82, 85, 69]))
     })
+
+    group(s1, "local direct call", (sg: Suite) => {
+      // Build a ModuleContext with a known local function 'myFun' of arity 2.
+      val cf = CF.newClassFile("test/CallDirect", "java/lang/Object", 0x0021)
+      val mb = CF.cfAddMethod(cf, "emit", "()Ljava/lang/Object;", 0x0009)
+      val mctx = {
+        className = "test/CallDirect",
+        globalNames = Dict.emptyStringDict(),
+        globalVarNames = Dict.emptyStringDict(),
+        funArities = Dict.insert(Dict.emptyStringDict(), "myFun", 2),
+        adtClassByConstructor = Dict.emptyStringDict(),
+        adtConstructorArity = Dict.emptyStringDict(),
+        options = CG.emptyJvmCodegenOptions()
+      }
+      val ctx = CG.newCodegenContext(cf, mb, mctx, CG.noTypeInfo)
+      CG.emitExpr(ctx, ECall(EIdent("myFun"), [ELit("int", "1"), ELit("int", "2")]))
+      CF.mbEmit1(mb, 0xB0)
+      CF.mbSetMaxs(mb, 8, 16)
+      val bytes = CF.cfToBytes(cf)
+      isTrue(sg, "direct call: class bytes exist", BA.length(bytes) > 0)
+      // INVOKESTATIC = 184 (0xB8)
+      isTrue(sg, "direct call: contains INVOKESTATIC(184)",
+        containsSeq(BA.toList(bytes), [184]))
+      // UTF-8 for "myFun" = [109, 121, 70, 117, 110]
+      isTrue(sg, "direct call: pool contains myFun",
+        containsSeq(BA.toList(bytes), [109, 121, 70, 117, 110]))
+    })
+
+    group(s1, "ADT ctor call - Some", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ECall(EIdent("Some"), [ELit("int", "42")]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "Some: class bytes exist", BA.length(bytes) > 0)
+      // NEW = 187 (0xBB)
+      isTrue(sg, "Some: contains NEW(187)", containsSeq(BA.toList(bytes), [187]))
+      // INVOKESPECIAL = 183 (0xB7)
+      isTrue(sg, "Some: contains INVOKESPECIAL(183)", containsSeq(BA.toList(bytes), [183]))
+      // UTF-8 bytes for "KSome" = [75, 83, 111, 109, 101]
+      isTrue(sg, "Some: pool contains KSome",
+        containsSeq(BA.toList(bytes), [75, 83, 111, 109, 101]))
+    })
+
+    group(s1, "println call", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ECall(EIdent("println"), [ELit("string", "hello")]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "println: class bytes exist", BA.length(bytes) > 0)
+      // INVOKESTATIC = 184 (0xB8)
+      isTrue(sg, "println: contains INVOKESTATIC(184)",
+        containsSeq(BA.toList(bytes), [184]))
+      // UTF-8 bytes for "println" = [112, 114, 105, 110, 116, 108, 110]
+      isTrue(sg, "println: pool contains println",
+        containsSeq(BA.toList(bytes), [112, 114, 105, 110, 116, 108, 110]))
+      // GETSTATIC = 178 for KUnit.INSTANCE
+      isTrue(sg, "println: contains GETSTATIC(178) for KUnit",
+        containsSeq(BA.toList(bytes), [178]))
+    })
+
+    group(s1, "indirect call", (sg: Suite) => {
+      val t = baseContext()
+      val lam = ELambda(False, [], [{name = "x", type_ = None}], EIdent("x"))
+      CG.emitExpr(t.ctx, ECall(lam, [ELit("int", "5")]))
+      CF.mbEmit1(t.mb, 0xB0)
+      CF.mbSetMaxs(t.mb, 8, 16)
+      val bytes = CF.cfToBytes(t.cf)
+      isTrue(sg, "indirect: class bytes exist", BA.length(bytes) > 0)
+      // INVOKEINTERFACE = 185 (0xB9)
+      isTrue(sg, "indirect: contains INVOKEINTERFACE(185)",
+        containsSeq(BA.toList(bytes), [185]))
+      // UTF-8 bytes for "KFunction" = [75, 70, 117, 110, 99, 116, 105, 111, 110]
+      isTrue(sg, "indirect: pool contains KFunction",
+        containsSeq(BA.toList(bytes), [75, 70, 117, 110, 99, 116, 105, 111, 110]))
+    })
   })

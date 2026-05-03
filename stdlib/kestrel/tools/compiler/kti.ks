@@ -760,7 +760,9 @@ export type DepBindingBundle = {
   importedFunArities: Dict<String, Int>,
   importedValVarToClass: Dict<String, String>,
   importedVarNames: Dict<String, Unit>,
-  importedNameToOriginal: Dict<String, String>
+  importedNameToOriginal: Dict<String, String>,
+  namespaceClasses: Dict<String, String>,
+  namespaceAdtConstructors: Dict<String, Dict<String, String>>
 }
 
 /// Result of loading all dep KTIs — either a combined binding bundle or an error message.
@@ -843,7 +845,9 @@ fun applySpecCodegen(spec: Ast.ImportSpec, meta: KtiCodegenMeta, depClassName: S
       importedFunArities = updated.1,
       importedValVarToClass = b.importedValVarToClass,
       importedVarNames = b.importedVarNames,
-      importedNameToOriginal = updated.2
+      importedNameToOriginal = updated.2,
+      namespaceClasses = b.namespaceClasses,
+      namespaceAdtConstructors = b.namespaceAdtConstructors
     }
   } else if (Lst.member(meta.valOrVarNames, ext)) {
     val isVar = Lst.member(meta.varNames, ext);
@@ -860,7 +864,9 @@ fun applySpecCodegen(spec: Ast.ImportSpec, meta: KtiCodegenMeta, depClassName: S
       importedFunArities = b.importedFunArities,
       importedValVarToClass = updated.0,
       importedVarNames = updated.1,
-      importedNameToOriginal = updated.2
+      importedNameToOriginal = updated.2,
+      namespaceClasses = b.namespaceClasses,
+      namespaceAdtConstructors = b.namespaceAdtConstructors
     }
   } else {
     b
@@ -876,6 +882,19 @@ fun applySpecsCodegen(specs: List<Ast.ImportSpec>, meta: KtiCodegenMeta, depClas
 fun addNamedImportCodegen(specs: List<Ast.ImportSpec>, meta: KtiCodegenMeta, depClassName: String, b: DepBindingBundle): DepBindingBundle =
   applySpecsCodegen(specs, meta, depClassName, b)
 
+// Build ctor-name → JVM-class map for a namespace dep's ADT constructors.
+// depCtorOwners: ctor-name → ADT-type-name; ctorClass = depClassName + "$" + typeName + "$" + ctorName.
+fun buildNsAdtCtorMap(entries: List<(String, String)>, depClassName: String, acc: Dict<String, String>): Dict<String, String> =
+  match (entries) {
+    [] => acc
+    e :: rest => {
+      val ctorName = e.0
+      val typeName = e.1
+      val ctorClass = "${depClassName}$${typeName}$${ctorName}"
+      buildNsAdtCtorMap(rest, depClassName, Dict.insert(acc, ctorName, ctorClass))
+    }
+  }
+
 fun emptyDepBundle(): DepBindingBundle = {
   importBindings = Dict.emptyStringDict(),
   typeAliasBindings = Dict.emptyStringDict(),
@@ -888,7 +907,9 @@ fun emptyDepBundle(): DepBindingBundle = {
   importedFunArities = Dict.emptyStringDict(),
   importedValVarToClass = Dict.emptyStringDict(),
   importedVarNames = Dict.emptyStringDict(),
-  importedNameToOriginal = Dict.emptyStringDict()
+  importedNameToOriginal = Dict.emptyStringDict(),
+  namespaceClasses = Dict.emptyStringDict(),
+  namespaceAdtConstructors = Dict.emptyStringDict()
 }
 
 /// Load import bindings from dep KTIs. deps is a list of (spec, ktiPath, className) triples.
@@ -935,13 +956,17 @@ export async fun loadDepBindings(deps: List<(String, String, String)>, imports: 
                         importedFunArities = codegenBundle.importedFunArities,
                         importedValVarToClass = codegenBundle.importedValVarToClass,
                         importedVarNames = codegenBundle.importedVarNames,
-                        importedNameToOriginal = codegenBundle.importedNameToOriginal
+                        importedNameToOriginal = codegenBundle.importedNameToOriginal,
+                        namespaceClasses = b.namespaceClasses,
+                        namespaceAdtConstructors = b.namespaceAdtConstructors
                       }
                     } else b
                   }
                   IDNamespace(spec, alias) => {
                     if (spec == dep.0) {
                       val nsBindings = Dict.union(depExports, depTypeAliases)
+                      val nsAdtCtorMap = buildNsAdtCtorMap(Dict.toList(depCtorOwners), depClassName, Dict.emptyStringDict())
+                      val newNsAdtCtors = if (Dict.isEmpty(nsAdtCtorMap)) b.namespaceAdtConstructors else Dict.insert(b.namespaceAdtConstructors, alias, nsAdtCtorMap)
                       {
                         importBindings = Dict.insert(b.importBindings, alias, makeNamespaceType(nsBindings)),
                         typeAliasBindings = b.typeAliasBindings,
@@ -954,7 +979,9 @@ export async fun loadDepBindings(deps: List<(String, String, String)>, imports: 
                         importedFunArities = b.importedFunArities,
                         importedValVarToClass = b.importedValVarToClass,
                         importedVarNames = b.importedVarNames,
-                        importedNameToOriginal = b.importedNameToOriginal
+                        importedNameToOriginal = b.importedNameToOriginal,
+                        namespaceClasses = Dict.insert(b.namespaceClasses, alias, depClassName),
+                        namespaceAdtConstructors = newNsAdtCtors
                       }
                     } else b
                   }
@@ -975,7 +1002,9 @@ export async fun loadDepBindings(deps: List<(String, String, String)>, imports: 
                 importedFunArities = merged.importedFunArities,
                 importedValVarToClass = merged.importedValVarToClass,
                 importedVarNames = merged.importedVarNames,
-                importedNameToOriginal = merged.importedNameToOriginal
+                importedNameToOriginal = merged.importedNameToOriginal,
+                namespaceClasses = merged.namespaceClasses,
+                namespaceAdtConstructors = merged.namespaceAdtConstructors
               })
             }
           }
