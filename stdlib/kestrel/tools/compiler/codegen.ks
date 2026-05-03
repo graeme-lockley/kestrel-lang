@@ -1122,6 +1122,22 @@ fun emitMatchArms(ctx: CodegenContext, arms: List<Ast.Case_>): Unit =
     }
   }
 
+// True if the then-arm of an if expression falls through with a value on the JVM stack.
+// False when the arm transfers control unconditionally (ENever, or block ending with break/continue),
+// which means emitting ASTORE/GOTO after it would produce unreachable bytecode the verifier rejects.
+fun thenArmPushesValue(expr: Ast.Expr): Bool =
+  match (expr) {
+    ENever => False
+    EBlock(block) =>
+      match (Lst.last(block.stmts)) {
+        Some(SBreak) => False
+        Some(SContinue) => False
+        None => thenArmPushesValue(block.result)
+        _ => True
+      }
+    _ => True
+  }
+
 export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
   match (expr) {
     ELit(kind, raw) => {
@@ -1436,13 +1452,46 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
         }
       }
     EIf(c, t, eOpt) => {
+      val ifResultSlot = 53
+      // Evaluate condition and unbox to JVM int.
       emitExpr(ctx, c)
-      CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+      val boolClassRef = CF.cfClassRef(ctx.cf, BOOLEAN)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, boolClassRef)
+      val bvMref = CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z")
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, bvMref)
+      val code = CF.mbGetCode(ctx.mb)
+      val ifeqPos = CF.mbLength(ctx.mb)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)                              // placeholder
+      CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), None)            // stackmap: then-arm entry
+      // Emit then-arm.
       emitExpr(ctx, t)
+      val thenPushes = thenArmPushesValue(t)
+      val gotoPos =
+        if (thenPushes) {
+          storeLocal(ctx, ifResultSlot)
+          val gp = CF.mbLength(ctx.mb)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)                         // placeholder
+          gp
+        } else
+          -1
+      // Else-arm entry: backpatch IFEQ.
+      val elseStart = CF.mbLength(ctx.mb)
+      CF.mbAddBranchTarget(ctx.mb, elseStart, None)                      // stackmap: else-arm entry
+      patchShort(code, ifeqPos + 1, elseStart - ifeqPos)
+      // Emit else-arm (or KUnit if no else clause).
       match (eOpt) {
-        Some(e) => { CF.mbEmit1(ctx.mb, Op.JvmOp.pop); emitExpr(ctx, e) }
-        None => ()
+        Some(e) => emitExpr(ctx, e)
+        None => {
+          val kunitRef = CF.cfFieldref(ctx.cf, KUNIT, "INSTANCE", "Lkestrel/runtime/KUnit;")
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, kunitRef)
+        }
       }
+      storeLocal(ctx, ifResultSlot)
+      // Join point: backpatch GOTO.
+      val ifEndPos = CF.mbLength(ctx.mb)
+      CF.mbAddBranchTarget(ctx.mb, ifEndPos, None)                       // stackmap: join point
+      if (thenPushes) patchShort(code, gotoPos + 1, ifEndPos - gotoPos) else ()
+      loadLocalSlot(ctx, ifResultSlot)
     }
     EWhile(c, b) => {
       emitExpr(ctx, c)

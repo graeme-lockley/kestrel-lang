@@ -56,12 +56,22 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(sg, "class bytes exist", BA.length(bytes) > 0)
     })
 
-    group(s1, "if and block", (sg: Suite) => {
+    group(s1, "if: then/else branch emits ifeq", (sg: Suite) => {
+      // if (True) 1 else 2  — must emit IFEQ (opcode 153) for real conditional branching
       val t = baseContext()
-      val block = { stmts = [], result = ELit("int", "5") }
-      CG.emitExpr(t.ctx, EIf(ELit("true", "True"), EBlock(block), Some(ELit("int", "0"))))
-      val bytes = finish(t.cf, t.mb)
-      isTrue(sg, "if emits", BA.length(bytes) > 0)
+      CG.emitExpr(t.ctx, EIf(ELit("true", "True"), ELit("int", "1"), Some(ELit("int", "2"))))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "if emits ifeq opcode (153)", containsSeq(code, [153]))
+    })
+
+    group(s1, "if: no-else arm emits KUnit getstatic", (sg: Suite) => {
+      // if (True) println() — no else; KUnit.INSTANCE is loaded via getstatic (opcode 178)
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EIf(ELit("true", "True"), ELit("unit", ""), None))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "no-else arm emits ifeq opcode (153)", containsSeq(code, [153]))
+      // getstatic = 178 (0xB2), present for KUnit.INSTANCE in the else path
+      isTrue(sg, "no-else arm emits getstatic (178) for KUnit", containsSeq(code, [178]))
     })
 
     group(s1, "record tuple match", (sg: Suite) => {
