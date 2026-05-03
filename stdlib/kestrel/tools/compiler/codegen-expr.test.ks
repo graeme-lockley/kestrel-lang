@@ -6,7 +6,7 @@ import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Ty from "kestrel:dev/typecheck/types"
-import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, EField, SVal, SVar, SAssign, SExpr, SBreak, SContinue, EList, ECons, EPipe, LElem } from "kestrel:dev/parser/ast"
+import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, PVar, PLit, PCon, PList, PCons, PTuple, EField, SVal, SVar, SAssign, SExpr, SBreak, SContinue, EList, ECons, EPipe, LElem } from "kestrel:dev/parser/ast"
 import * as Ast from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
@@ -631,5 +631,106 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(sg, "EWhile continue: at least two GOTO opcodes", gotoCount >= 2)
       val bytes = finish(t.cf, t.mb)
       isTrue(sg, "EWhile continue: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EMatch PWild — no INSTANCEOF emitted", (sg: Suite) => {
+      // match (42) { _ => 99 }  — PWild arm: unconditional, no type test
+      val t = baseContext()
+      val arm = { pattern = PWild, body = ELit("int", "99") }
+      CG.emitExpr(t.ctx, EMatch(ELit("int", "42"), [arm]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      // GOTO(167) emitted for arm end-jump
+      isTrue(sg, "EMatch PWild: emits GOTO(167)", containsSeq(code, [167]))
+      // No INSTANCEOF(193) — PWild has no type guard
+      val hasInstanceof = Lst.length(Lst.filter(code, (b: Int) => b == 193)) > 0
+      isTrue(sg, "EMatch PWild: no INSTANCEOF opcode", !hasInstanceof)
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EMatch PWild: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EMatch PVar — binding stored via ASTORE", (sg: Suite) => {
+      // match (42) { x => x }  — PVar arm: bind scrutinee to x, then EIdent("x")
+      val t = baseContext()
+      val arm = { pattern = PVar("x"), body = ELit("int", "99") }
+      CG.emitExpr(t.ctx, EMatch(ELit("int", "42"), [arm]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      // ASTORE(58) to store scrutinee in dedicated slot
+      isTrue(sg, "EMatch PVar: emits ASTORE(58)", containsSeq(code, [58]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EMatch PVar: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EMatch PLit int — invokestatic equals + ifeq", (sg: Suite) => {
+      // match (42) { 1 => 10; _ => 99 }  — PLit arm emits equality check and IFEQ guard
+      val t = baseContext()
+      val arm1 = { pattern = PLit("int", "1"), body = ELit("int", "10") }
+      val arm2 = { pattern = PWild, body = ELit("int", "99") }
+      CG.emitExpr(t.ctx, EMatch(ELit("int", "42"), [arm1, arm2]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      // INVOKESTATIC(184) for Runtime.equals
+      isTrue(sg, "EMatch PLit: emits INVOKESTATIC(184)", containsSeq(code, [184]))
+      // IFEQ(153) for the equality guard
+      isTrue(sg, "EMatch PLit: emits IFEQ(153)", containsSeq(code, [153]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EMatch PLit: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EMatch PCon None — instanceof KNone + ifeq", (sg: Suite) => {
+      // match (e) { None => 0; _ => 1 }  — None arm emits INSTANCEOF(193) test
+      val t = baseContext()
+      val arm1 = { pattern = PCon("None", []), body = ELit("int", "0") }
+      val arm2 = { pattern = PWild, body = ELit("int", "1") }
+      CG.emitExpr(t.ctx, EMatch(ELit("unit", ""), [arm1, arm2]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EMatch PCon None: emits INSTANCEOF(193)", containsSeq(code, [193]))
+      isTrue(sg, "EMatch PCon None: emits IFEQ(153)", containsSeq(code, [153]))
+      isTrue(sg, "EMatch PCon None: emits GOTO(167)", containsSeq(code, [167]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EMatch PCon None: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EMatch PCon Some(v) — instanceof + checkcast + getfield", (sg: Suite) => {
+      // match (e) { Some(v) => v; _ => 0 }  — Some arm: INSTANCEOF, CHECKCAST, GETFIELD for value
+      val t = baseContext()
+      val someField = { name = "value", pattern = Some(PVar("v")) }
+      val arm1 = { pattern = PCon("Some", [someField]), body = ELit("int", "0") }
+      val arm2 = { pattern = PWild, body = ELit("int", "1") }
+      CG.emitExpr(t.ctx, EMatch(ELit("unit", ""), [arm1, arm2]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EMatch PCon Some: emits INSTANCEOF(193)", containsSeq(code, [193]))
+      isTrue(sg, "EMatch PCon Some: emits IFEQ(153)", containsSeq(code, [153]))
+      // CHECKCAST(192) and GETFIELD(180) for extracting value field
+      isTrue(sg, "EMatch PCon Some: emits CHECKCAST(192)", containsSeq(code, [192]))
+      isTrue(sg, "EMatch PCon Some: emits GETFIELD(180)", containsSeq(code, [180]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EMatch PCon Some: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EMatch PList [] — instanceof KNil + ifeq", (sg: Suite) => {
+      // match ([]) { [] => 0; _ => 1 }  — empty list pattern emits INSTANCEOF for KNil
+      val t = baseContext()
+      val arm1 = { pattern = PList([], None), body = ELit("int", "0") }
+      val arm2 = { pattern = PWild, body = ELit("int", "1") }
+      CG.emitExpr(t.ctx, EMatch(ELit("unit", ""), [arm1, arm2]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EMatch PList []: emits INSTANCEOF(193)", containsSeq(code, [193]))
+      isTrue(sg, "EMatch PList []: emits IFEQ(153)", containsSeq(code, [153]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EMatch PList []: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EMatch PCons h::t — instanceof KCons + getfields", (sg: Suite) => {
+      // match (e) { h :: t => h; _ => 0 }  — PCons arm: INSTANCEOF KCons, CHECKCAST, GETFIELD x2
+      val t = baseContext()
+      val arm1 = { pattern = PCons(PVar("h"), PVar("t")), body = ELit("int", "0") }
+      val arm2 = { pattern = PWild, body = ELit("int", "1") }
+      CG.emitExpr(t.ctx, EMatch(ELit("unit", ""), [arm1, arm2]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EMatch PCons: emits INSTANCEOF(193)", containsSeq(code, [193]))
+      isTrue(sg, "EMatch PCons: emits IFEQ(153)", containsSeq(code, [153]))
+      isTrue(sg, "EMatch PCons: emits CHECKCAST(192)", containsSeq(code, [192]))
+      isTrue(sg, "EMatch PCons: emits GETFIELD(180)", containsSeq(code, [180]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EMatch PCons: class bytes produced", BA.length(bytes) > 0)
     })
   })

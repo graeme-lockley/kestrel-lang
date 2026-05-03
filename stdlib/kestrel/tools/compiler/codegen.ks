@@ -1183,39 +1183,576 @@ fun emitBlockStmts(ctx: CodegenContext, stmts: List<Ast.Stmt>): Unit =
     s :: rest => { emitBlockStmt(ctx, s); emitBlockStmts(ctx, rest) }
   }
 
-export fun emitPattern(ctx: CodegenContext, pattern: Ast.Pattern): Unit =
-  match (pattern) {
-    PWild => ()
-    PVar(_) => ()
-    PLit(_, _) => ()
-    PCon(_, fields) => {
-      val pats = Lst.filterMap(fields, (f: Ast.ConField) => f.pattern)
-      emitPatternList(ctx, pats)
+// Emit pattern — replaced by per-arm inline logic in emitExpr; kept as no-op for compatibility.
+export fun emitPattern(_ctx: CodegenContext, _pattern: Ast.Pattern): Unit = ()
+
+// ---------------------------------------------------------------------------
+// Sub-pattern binding helpers (for nested PCon patterns)
+// ---------------------------------------------------------------------------
+
+// Emit bindings for a nested PCon pattern where `valueSlot` already holds the value.
+// Returns a list of IFEQ positions (all needing backpatch to the arm miss target).
+fun emitSubPatternBindings(ctx: CodegenContext, valueSlot: Int, pat: Ast.Pattern): List<Int> =
+  match (pat) {
+    PVar(name) => { ctx.locals := Dict.insert(ctx.locals, name, valueSlot); [] }
+    PCon(ctorName, fields) =>
+      match (Dict.get(ctx.mctx.adtClassByConstructor, ctorName)) {
+        Some(adtClass) => {
+          loadLocalSlot(ctx, valueSlot)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, adtClass))
+          val ifeq = CF.mbLength(ctx.mb)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+          val fieldIfeqs = emitSubPatConFields(ctx, valueSlot, adtClass, fields)
+          ifeq :: fieldIfeqs
+        }
+        None => []
+      }
+    _ => []
+  }
+
+// Emit GETFIELD bindings for each field of a nested PCon constructor pattern.
+fun emitSubPatConFields(ctx: CodegenContext, scrutSlot: Int, adtClass: String, fields: List<Ast.ConField>): List<Int> =
+  match (fields) {
+    [] => []
+    f :: rest => {
+      loadLocalSlot(ctx, scrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, adtClass))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, adtClass, f.name, "Ljava/lang/Object;"))
+      val thisIfeqs =
+        match (f.pattern) {
+          Some(PVar(bindName)) => {
+            val slot = ctx.nextLocal
+            ctx.nextLocal := slot + 1
+            storeLocal(ctx, slot)
+            ctx.locals := Dict.insert(ctx.locals, bindName, slot)
+            []
+          }
+          Some(PWild) => { CF.mbEmit1(ctx.mb, Op.JvmOp.pop); [] }
+          Some(nestedPat) => {
+            val subSlot = ctx.nextLocal
+            ctx.nextLocal := subSlot + 1
+            storeLocal(ctx, subSlot)
+            emitSubPatternBindings(ctx, subSlot, nestedPat)
+          }
+          None => { CF.mbEmit1(ctx.mb, Op.JvmOp.pop); [] }
+        }
+      Lst.append(thisIfeqs, emitSubPatConFields(ctx, scrutSlot, adtClass, rest))
     }
-    PList(parts, _rest) => emitPatternList(ctx, parts)
-    PCons(h, t) => { emitPattern(ctx, h); emitPattern(ctx, t) }
-    PTuple(parts) => emitPatternList(ctx, parts)
   }
 
-fun emitPatternList(ctx: CodegenContext, ps: List<Ast.Pattern>): Unit =
-  match (ps) {
+// Backpatch all IFEQ positions in `ifeqs` to jump to `target`.
+fun backpatchIfeqList(code: Array<Int>, ifeqs: List<Int>, target: Int): Unit =
+  match (ifeqs) {
     [] => ()
-    p :: rest => { emitPattern(ctx, p); emitPatternList(ctx, rest) }
+    iq :: rest => { patchShort(code, iq + 1, target - iq); backpatchIfeqList(code, rest, target) }
   }
 
-export fun emitMatchArm(ctx: CodegenContext, arm: Ast.Case_): Unit = {
-  emitPattern(ctx, arm.pattern)
-  emitExpr(ctx, arm.body)
+// ---------------------------------------------------------------------------
+// PCons spine walk
+// ---------------------------------------------------------------------------
+
+// Walk a PCons spine emitting INSTANCEOF KCons checks and variable bindings at each level.
+// Returns all IFEQ positions (to backpatch to the arm miss target).
+// firstLevel: whether this is the outermost cons cell (controls arm-entry branch target).
+fun emitConsSpine(ctx: CodegenContext, currentScrutSlot: Int, pat: Ast.Pattern, matchBaseState: CF.StackMapFrameState, firstLevel: Bool, accIfeqs: List<Int>): List<Int> =
+  match (pat) {
+    PCons(headPat, tailPat) => {
+      loadLocalSlot(ctx, currentScrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KCONS))
+      val levelIfeq = CF.mbLength(ctx.mb)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+      if (firstLevel) CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState)) else ()
+      emitConsHeadAndTail(ctx, currentScrutSlot, headPat, tailPat, matchBaseState, levelIfeq :: accIfeqs)
+    }
+    _ => accIfeqs
+  }
+
+fun emitConsHeadAndTail(ctx: CodegenContext, currentScrutSlot: Int, headPat: Ast.Pattern, tailPat: Ast.Pattern, matchBaseState: CF.StackMapFrameState, accIfeqs: List<Int>): List<Int> = {
+  val headIfeqs =
+    match (headPat) {
+      PVar(name) => {
+        loadLocalSlot(ctx, currentScrutSlot)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KCONS))
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, KCONS, "head", "Ljava/lang/Object;"))
+        val slot = ctx.nextLocal
+        ctx.nextLocal := slot + 1
+        ctx.locals := Dict.insert(ctx.locals, name, slot)
+        storeLocal(ctx, slot)
+        []
+      }
+      PCon(ctorName, fields) =>
+        match (Dict.get(ctx.mctx.adtClassByConstructor, ctorName)) {
+          Some(adtClass) => {
+            loadLocalSlot(ctx, currentScrutSlot)
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KCONS))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, KCONS, "head", "Ljava/lang/Object;"))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, adtClass))
+            val ifeqHead = CF.mbLength(ctx.mb)
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+            CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+            val fieldIfeqs = emitConsHeadAdtFields(ctx, currentScrutSlot, adtClass, fields)
+            ifeqHead :: fieldIfeqs
+          }
+          None => []
+        }
+      _ => []
+    }
+  emitConsTailBinding(ctx, currentScrutSlot, tailPat, matchBaseState, Lst.append(accIfeqs, headIfeqs))
 }
 
-fun emitMatchArms(ctx: CodegenContext, arms: List<Ast.Case_>): Unit =
+fun emitConsHeadAdtFields(ctx: CodegenContext, currentScrutSlot: Int, adtClass: String, fields: List<Ast.ConField>): List<Int> =
+  match (fields) {
+    [] => []
+    f :: rest =>
+      match (f.pattern) {
+        Some(PVar(bindName)) => {
+          loadLocalSlot(ctx, currentScrutSlot)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KCONS))
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, KCONS, "head", "Ljava/lang/Object;"))
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, adtClass))
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, adtClass, f.name, "Ljava/lang/Object;"))
+          val slot = ctx.nextLocal
+          ctx.nextLocal := slot + 1
+          ctx.locals := Dict.insert(ctx.locals, bindName, slot)
+          storeLocal(ctx, slot)
+          emitConsHeadAdtFields(ctx, currentScrutSlot, adtClass, rest)
+        }
+        _ => emitConsHeadAdtFields(ctx, currentScrutSlot, adtClass, rest)
+      }
+  }
+
+fun emitConsTailBinding(ctx: CodegenContext, currentScrutSlot: Int, tailPat: Ast.Pattern, matchBaseState: CF.StackMapFrameState, accIfeqs: List<Int>): List<Int> =
+  match (tailPat) {
+    PCons(_, _) => {
+      loadLocalSlot(ctx, currentScrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KCONS))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, KCONS, "tail", "Lkestrel/runtime/KList;"))
+      val tailSlot = ctx.nextLocal
+      ctx.nextLocal := tailSlot + 1
+      storeLocal(ctx, tailSlot)
+      emitConsSpine(ctx, tailSlot, tailPat, matchBaseState, False, accIfeqs)
+    }
+    PVar(name) => {
+      loadLocalSlot(ctx, currentScrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KCONS))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, KCONS, "tail", "Lkestrel/runtime/KList;"))
+      val slot = ctx.nextLocal
+      ctx.nextLocal := slot + 1
+      ctx.locals := Dict.insert(ctx.locals, name, slot)
+      storeLocal(ctx, slot)
+      accIfeqs
+    }
+    PList([], _) => {
+      // h :: [] — check tail is KNil.
+      loadLocalSlot(ctx, currentScrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KCONS))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, KCONS, "tail", "Lkestrel/runtime/KList;"))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KNIL))
+      val ifeqTailNil = CF.mbLength(ctx.mb)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+      ifeqTailNil :: accIfeqs
+    }
+    _ => accIfeqs
+  }
+
+// ---------------------------------------------------------------------------
+// PList element pattern helper
+// ---------------------------------------------------------------------------
+
+// Emit INSTANCEOF KCons checks and head bindings for a [p1, p2, ...rest] list pattern.
+// Returns all IFEQ positions (accumulated in reverse; to backpatch to arm miss target).
+fun emitListPatternElems(ctx: CodegenContext, scrutSlot: Int, pats: List<Ast.Pattern>, restOpt: Option<String>, matchBaseState: CF.StackMapFrameState, accIfeqs: List<Int>): List<Int> =
+  match (pats) {
+    [] =>
+      match (restOpt) {
+        None => {
+          loadLocalSlot(ctx, scrutSlot)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KNIL))
+          val ifeq = CF.mbLength(ctx.mb)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+          ifeq :: accIfeqs
+        }
+        Some(restName) => {
+          ctx.locals := Dict.insert(ctx.locals, restName, scrutSlot)
+          accIfeqs
+        }
+      }
+    p :: restPats => {
+      loadLocalSlot(ctx, scrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KCONS))
+      val ifeq = CF.mbLength(ctx.mb)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+      CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+      match (p) {
+        PVar(name) => {
+          loadLocalSlot(ctx, scrutSlot)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KCONS))
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, KCONS, "head", "Ljava/lang/Object;"))
+          val slot = ctx.nextLocal
+          ctx.nextLocal := slot + 1
+          ctx.locals := Dict.insert(ctx.locals, name, slot)
+          storeLocal(ctx, slot)
+        }
+        _ => ()
+      }
+      loadLocalSlot(ctx, scrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KCONS))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, KCONS, "tail", "Lkestrel/runtime/KList;"))
+      val tailSlot = ctx.nextLocal
+      ctx.nextLocal := tailSlot + 1
+      storeLocal(ctx, tailSlot)
+      emitListPatternElems(ctx, tailSlot, restPats, restOpt, matchBaseState, ifeq :: accIfeqs)
+    }
+  }
+
+// ---------------------------------------------------------------------------
+// PTuple element pattern helper
+// ---------------------------------------------------------------------------
+
+// Emit KRecord.get() extractions for a tuple pattern (a, b, ...).
+// Returns accumulated IFEQ positions (for literal sub-patterns) to backpatch.
+fun emitTuplePatternElems(ctx: CodegenContext, scrutSlot: Int, pats: List<Ast.Pattern>, idx: Int, missIfeqs: List<Int>): List<Int> =
+  match (pats) {
+    [] => missIfeqs
+    p :: rest => {
+      val thisMiss =
+        match (p) {
+          PVar(name) => {
+            loadLocalSlot(ctx, scrutSlot)
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, "${idx}"))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "get", "(Ljava/lang/String;)Ljava/lang/Object;"))
+            val slot = ctx.nextLocal
+            ctx.nextLocal := slot + 1
+            ctx.locals := Dict.insert(ctx.locals, name, slot)
+            storeLocal(ctx, slot)
+            []
+          }
+          PWild => {
+            val toss = ctx.nextLocal
+            ctx.nextLocal := toss + 1
+            loadLocalSlot(ctx, scrutSlot)
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, "${idx}"))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "get", "(Ljava/lang/String;)Ljava/lang/Object;"))
+            storeLocal(ctx, toss)
+            []
+          }
+          PLit(litKind, litRaw) => {
+            val tmp = ctx.nextLocal
+            ctx.nextLocal := tmp + 1
+            loadLocalSlot(ctx, scrutSlot)
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, "${idx}"))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "get", "(Ljava/lang/String;)Ljava/lang/Object;"))
+            storeLocal(ctx, tmp)
+            val ifeq =
+              if (litKind == "float" & litRaw == "NaN") {
+                loadLocalSlot(ctx, tmp)
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, CF.cfMethodref(ctx.cf, RUNTIME, "floatIsNan", "(Ljava/lang/Object;)Ljava/lang/Boolean;"))
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z"))
+                val iq = CF.mbLength(ctx.mb)
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+                iq
+              } else {
+                loadLocalSlot(ctx, tmp)
+                emitExpr(ctx, ELit(litKind, litRaw))
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, CF.cfMethodref(ctx.cf, RUNTIME, "equals", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;"))
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z"))
+                val iq = CF.mbLength(ctx.mb)
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+                iq
+              }
+            [ifeq]
+          }
+          _ => []
+        }
+      emitTuplePatternElems(ctx, scrutSlot, rest, idx + 1, Lst.append(missIfeqs, thisMiss))
+    }
+  }
+
+// ---------------------------------------------------------------------------
+// Arm body helpers
+// ---------------------------------------------------------------------------
+
+// Emit the body of a conditional arm (one with IFEQ guards).
+// Backpatches all `ifeqs` to the miss target (position after the GOTO).
+// Returns a list of GOTO-to-matchEnd positions to backpatch later.
+fun emitArmBodyConditional(ctx: CodegenContext, body: Ast.Expr, ifeqs: List<Int>, matchResultSlot: Int, matchBaseState: CF.StackMapFrameState, code: Array<Int>): List<Int> = {
+  val pushes = thenArmPushesValue(body)
+  emitExpr(ctx, body)
+  val gotoOpt =
+    if (pushes) {
+      storeLocal(ctx, matchResultSlot)
+      val gotoPos = CF.mbLength(ctx.mb)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)
+      Some(gotoPos)
+    } else
+      None
+  val afterGoto = CF.mbLength(ctx.mb)
+  backpatchIfeqList(code, ifeqs, afterGoto)
+  CF.mbAddBranchTarget(ctx.mb, afterGoto, Some(matchBaseState))
+  match (gotoOpt) {
+    Some(gotoPos) => [gotoPos]
+    None => []
+  }
+}
+
+// Emit the body of an unconditional arm (PWild, PVar — no IFEQ guard).
+// Returns a list of GOTO-to-matchEnd positions.
+fun emitArmBodyUnconditional(ctx: CodegenContext, body: Ast.Expr, matchResultSlot: Int): List<Int> = {
+  val pushes = thenArmPushesValue(body)
+  emitExpr(ctx, body)
+  if (pushes) {
+    storeLocal(ctx, matchResultSlot)
+    val gotoPos = CF.mbLength(ctx.mb)
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)
+    [gotoPos]
+  } else
+    []
+}
+
+// Emit a single-field binding for a constructor with one payload field (e.g. Some, Ok, Err).
+// fieldDesc: JVM field descriptor string (e.g. "Ljava/lang/Object;").
+fun emitSingleFieldBinding(ctx: CodegenContext, scrutSlot: Int, ctorClass: String, fieldName: String, fieldDesc: String, fieldPat: Option<Ast.Pattern>): List<Int> =
+  match (fieldPat) {
+    Some(PVar(name)) => {
+      loadLocalSlot(ctx, scrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, ctorClass))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, ctorClass, fieldName, fieldDesc))
+      val slot = ctx.nextLocal
+      ctx.nextLocal := slot + 1
+      ctx.locals := Dict.insert(ctx.locals, name, slot)
+      storeLocal(ctx, slot)
+      []
+    }
+    Some(PWild) => {
+      loadLocalSlot(ctx, scrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, ctorClass))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, ctorClass, fieldName, fieldDesc))
+      CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+      []
+    }
+    Some(nestedPat) => {
+      loadLocalSlot(ctx, scrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, ctorClass))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, ctorClass, fieldName, fieldDesc))
+      val innerSlot = ctx.nextLocal
+      ctx.nextLocal := innerSlot + 1
+      storeLocal(ctx, innerSlot)
+      emitSubPatternBindings(ctx, innerSlot, nestedPat)
+    }
+    None => {
+      loadLocalSlot(ctx, scrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, ctorClass))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.getfield, CF.cfFieldref(ctx.cf, ctorClass, fieldName, fieldDesc))
+      CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+      []
+    }
+  }
+
+// Helper: extract the pattern of the first ConField (or None if empty).
+fun firstFieldPat(fields: List<Ast.ConField>): Option<Ast.Pattern> =
+  match (fields) {
+    [] => None
+    f :: _ => f.pattern
+  }
+
+// Helper: extract the pattern of the second ConField (or None if fewer than 2 fields).
+fun secondFieldPat(fields: List<Ast.ConField>): Option<Ast.Pattern> =
+  match (fields) {
+    [] => None
+    _ :: rest =>
+      match (rest) {
+        [] => None
+        f :: _ => f.pattern
+      }
+  }
+
+// ---------------------------------------------------------------------------
+// Main arm dispatcher
+// ---------------------------------------------------------------------------
+
+// Emit one match arm (test + bindings + body + GOTO). Returns GOTO-to-matchEnd positions.
+fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultSlot: Int, matchBaseState: CF.StackMapFrameState, code: Array<Int>): List<Int> =
+  match (arm.pattern) {
+    PWild =>
+      emitArmBodyUnconditional(ctx, arm.body, matchResultSlot)
+
+    PVar(name) => {
+      val slot = ctx.nextLocal
+      ctx.nextLocal := slot + 1
+      ctx.locals := Dict.insert(ctx.locals, name, slot)
+      loadLocalSlot(ctx, scrutSlot)
+      storeLocal(ctx, slot)
+      emitArmBodyUnconditional(ctx, arm.body, matchResultSlot)
+    }
+
+    PLit(kind, raw) => {
+      val ifeq =
+        if (kind == "float" & raw == "NaN") {
+          loadLocalSlot(ctx, scrutSlot)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, CF.cfMethodref(ctx.cf, RUNTIME, "floatIsNan", "(Ljava/lang/Object;)Ljava/lang/Boolean;"))
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z"))
+          val iq = CF.mbLength(ctx.mb)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+          iq
+        } else {
+          loadLocalSlot(ctx, scrutSlot)
+          emitExpr(ctx, ELit(kind, raw))
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, CF.cfMethodref(ctx.cf, RUNTIME, "equals", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;"))
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z"))
+          val iq = CF.mbLength(ctx.mb)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+          iq
+        }
+      CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+      emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+    }
+
+    PCon(ctorName, fields) => {
+      if (ctorName == "None") {
+        loadLocalSlot(ctx, scrutSlot)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KNONE))
+        val ifeq = CF.mbLength(ctx.mb)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+        CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+        emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+      } else if (ctorName == "Some") {
+        loadLocalSlot(ctx, scrutSlot)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KSOME))
+        val ifeq = CF.mbLength(ctx.mb)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+        CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+        val fieldPat = firstFieldPat(fields)
+        val subIfeqs = emitSingleFieldBinding(ctx, scrutSlot, KSOME, "value", "Ljava/lang/Object;", fieldPat)
+        emitArmBodyConditional(ctx, arm.body, ifeq :: subIfeqs, matchResultSlot, matchBaseState, code)
+      } else if (ctorName == "Nil") {
+        loadLocalSlot(ctx, scrutSlot)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KNIL))
+        val ifeq = CF.mbLength(ctx.mb)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+        CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+        emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+      } else if (ctorName == "Cons") {
+        loadLocalSlot(ctx, scrutSlot)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KCONS))
+        val ifeq = CF.mbLength(ctx.mb)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+        CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+        val headPat = firstFieldPat(fields)
+        val tailPat = secondFieldPat(fields)
+        val headIfeqs = emitSingleFieldBinding(ctx, scrutSlot, KCONS, "head", "Ljava/lang/Object;", headPat)
+        val tailIfeqs = emitSingleFieldBinding(ctx, scrutSlot, KCONS, "tail", "Lkestrel/runtime/KList;", tailPat)
+        emitArmBodyConditional(ctx, arm.body, Lst.append(ifeq :: headIfeqs, tailIfeqs), matchResultSlot, matchBaseState, code)
+      } else if (ctorName == "Ok" | ctorName == "Err") {
+        val ctorClass = if (ctorName == "Ok") KOK else KERR
+        loadLocalSlot(ctx, scrutSlot)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, ctorClass))
+        val ifeq = CF.mbLength(ctx.mb)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+        CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+        val fieldPat = firstFieldPat(fields)
+        val subIfeqs = emitSingleFieldBinding(ctx, scrutSlot, ctorClass, "value", "Ljava/lang/Object;", fieldPat)
+        emitArmBodyConditional(ctx, arm.body, ifeq :: subIfeqs, matchResultSlot, matchBaseState, code)
+      } else if (ctorName == "True" | ctorName == "False") {
+        val boolField = if (ctorName == "True") "TRUE" else "FALSE"
+        loadLocalSlot(ctx, scrutSlot)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, CF.cfFieldref(ctx.cf, BOOLEAN, boolField, "Ljava/lang/Boolean;"))
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, CF.cfMethodref(ctx.cf, RUNTIME, "equals", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Boolean;"))
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z"))
+        val ifeq = CF.mbLength(ctx.mb)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+        CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+        emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+      } else {
+        // User-defined ADT constructor
+        match (Dict.get(ctx.mctx.adtClassByConstructor, ctorName)) {
+          Some(adtClass) => {
+            loadLocalSlot(ctx, scrutSlot)
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, adtClass))
+            val ifeq = CF.mbLength(ctx.mb)
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+            CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+            val fieldIfeqs = emitSubPatConFields(ctx, scrutSlot, adtClass, fields)
+            emitArmBodyConditional(ctx, arm.body, ifeq :: fieldIfeqs, matchResultSlot, matchBaseState, code)
+          }
+          None =>
+            // Unknown constructor — fall through unconditionally
+            emitArmBodyUnconditional(ctx, arm.body, matchResultSlot)
+        }
+      }
+    }
+
+    PList(elems, restOpt) =>
+      match (elems) {
+        [] =>
+          match (restOpt) {
+            None => {
+              // [] — empty list pattern
+              loadLocalSlot(ctx, scrutSlot)
+              CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KNIL))
+              val ifeq = CF.mbLength(ctx.mb)
+              CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+              CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
+              emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+            }
+            Some(restName) => {
+              // [...rest] — matches any list, bind it unconditionally
+              ctx.locals := Dict.insert(ctx.locals, restName, scrutSlot)
+              emitArmBodyUnconditional(ctx, arm.body, matchResultSlot)
+            }
+          }
+        _ => {
+          // [p1, p2, ...] non-empty element list
+          val ifeqs = emitListPatternElems(ctx, scrutSlot, elems, restOpt, matchBaseState, [])
+          emitArmBodyConditional(ctx, arm.body, ifeqs, matchResultSlot, matchBaseState, code)
+        }
+      }
+
+    PCons(headPat, tailPat) => {
+      val ifeqs = emitConsSpine(ctx, scrutSlot, PCons(headPat, tailPat), matchBaseState, True, [])
+      emitArmBodyConditional(ctx, arm.body, ifeqs, matchResultSlot, matchBaseState, code)
+    }
+
+    PTuple(pats) => {
+      // INSTANCEOF KRecord test (no arm-entry frame — PTuple doesn't add one per TS reference).
+      loadLocalSlot(ctx, scrutSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KRECORD))
+      val ifNotTuple = CF.mbLength(ctx.mb)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+      val elemMissIfeqs = emitTuplePatternElems(ctx, scrutSlot, pats, 0, [])
+      emitArmBodyConditional(ctx, arm.body, ifNotTuple :: elemMissIfeqs, matchResultSlot, matchBaseState, code)
+    }
+  }
+
+// ---------------------------------------------------------------------------
+// Full match arm emitter
+// ---------------------------------------------------------------------------
+
+// Emit all match arms with real JVM branching.
+// Returns the list of GOTO positions that need to be backpatched to matchEnd.
+fun emitMatchArmsFull(ctx: CodegenContext, arms: List<Ast.Case_>, scrutSlot: Int, matchResultSlot: Int, savedNextLocal: Int, matchBaseState: CF.StackMapFrameState, code: Array<Int>): List<Int> =
+  match (arms) {
+    [] => []
+    arm :: rest => {
+      ctx.nextLocal := savedNextLocal
+      val savedLocals = ctx.locals
+      val armEndLabels = emitOneArm(ctx, arm, scrutSlot, matchResultSlot, matchBaseState, code)
+      ctx.locals := savedLocals
+      Lst.append(armEndLabels, emitMatchArmsFull(ctx, rest, scrutSlot, matchResultSlot, savedNextLocal, matchBaseState, code))
+    }
+  }
+
+// Legacy stub used by ETry (replaced by proper exception dispatch in S17-33).
+fun emitMatchArmsStub(ctx: CodegenContext, arms: List<Ast.Case_>): Unit =
   match (arms) {
     [] => pushNull(ctx)
-    a :: [] => emitMatchArm(ctx, a)
+    a :: [] => emitExpr(ctx, a.body)
     a :: rest => {
-      emitMatchArm(ctx, a)
+      emitExpr(ctx, a.body)
       CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
-      emitMatchArms(ctx, rest)
+      emitMatchArmsStub(ctx, rest)
     }
   }
 
@@ -1628,8 +2165,20 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
     }
     EMatch(scrut, arms) => {
       emitExpr(ctx, scrut)
-      CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
-      emitMatchArms(ctx, arms)
+      val scrutSlot = 55
+      val matchResultSlot = 54
+      storeLocal(ctx, scrutSlot)
+      pushNull(ctx)
+      storeLocal(ctx, matchResultSlot)
+      val numLocals = if (ctx.nextLocal > 56) ctx.nextLocal else 56
+      val matchBaseState = CF.paramOnlyFrame(numLocals)
+      val savedNextLocal = ctx.nextLocal
+      val code = CF.mbGetCode(ctx.mb)
+      val endLabels = emitMatchArmsFull(ctx, arms, scrutSlot, matchResultSlot, savedNextLocal, matchBaseState, code)
+      val endPos = CF.mbLength(ctx.mb)
+      CF.mbAddBranchTarget(ctx.mb, endPos, Some(matchBaseState))
+      backpatchBreakJumps(code, endLabels, endPos)
+      loadLocalSlot(ctx, matchResultSlot)
     }
     ELambda(_async, _tp, _params, _body) => pushNull(ctx)
     ETemplate(parts) => {
@@ -1679,7 +2228,7 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       emitBlockStmts(ctx, block.stmts)
       emitExpr(ctx, block.result)
       CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
-      emitMatchArms(ctx, cases)
+      emitMatchArmsStub(ctx, cases)
     }
     EBlock(block) => {
       emitBlockStmts(ctx, block.stmts)
