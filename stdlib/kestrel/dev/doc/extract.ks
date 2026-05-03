@@ -87,18 +87,14 @@ fun hasExplicitTypeAnnotation(sig: String): Bool =
 fun inferExportTypeStrings(source: String): Dict<String, String> =
   match (parseFromList(Lex.lex(source))) {
     Err(_) => Dict.emptyStringDict()
-    Ok(program) => {
-      Ty.resetVarId();
-      val tc = TC.typecheck(program, {
-        importBindings = None,
-        typeAliasBindings = None,
-        importOpaqueTypes = None,
-        depSnapshots = None,
-        sourceFile = "<doc-extract>"
-      });
-      Dict.map(tc.exports.items, (_name: String, t) => Ty.typeToString(t))
-    }
+    Ok(program) => inferExportTypeStringsOk(program)
   }
+
+fun inferExportTypeStringsOk(program: Ast.Program): Dict<String, String> = {
+  Ty.resetVarId();
+  val tc = TC.typecheck(program, TC.defaultTypecheckOptions);
+  Dict.map(tc.exports.items, (_name: String, t) => Ty.typeToString(t))
+}
 
 fun applyInferredBindingType(entry: DocEntry, inferredTypes: Dict<String, String>): DocEntry = {
   val shouldInfer = (entry.kind == DKVal | entry.kind == DKVar) & !hasExplicitTypeAnnotation(entry.signature);

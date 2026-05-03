@@ -234,7 +234,7 @@ before the self-hosted compiler can typecheck its own stdlib modules.
 24. ✅ [S17-21 — Self-hosted typecheck for top-level assignments (`TDSAssign`)](../../done/S17-21-self-hosted-typecheck-top-level-assignment.md)
     — Add a `TDSAssign` arm to `checkDecls` reusing the existing `SAssign` rule.
 
-25. [S17-22 — Cross-module ADT constructor environment for the self-hosted typechecker](../../unplanned/S17-22-self-hosted-cross-module-ctor-exhaustiveness.md)
+25. [S17-22 — Cross-module ADT constructor environment for the self-hosted typechecker](../../done/S17-22-self-hosted-cross-module-ctor-exhaustiveness.md) ✅
     — Plumb `adtConstructors` / `ctorOwners` / `ctorEnv` from imported KTIs through
     `DepBindingBundle` and `TypecheckOptions` so imported constructors are recognised in
     pattern matching and exhaustiveness checking. Depends on S17-43.

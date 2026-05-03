@@ -257,11 +257,17 @@ async fun doTypecheckAndEmit(prog: Program, entryPath: String, moduleName: Strin
         exportedTypeVisibility = e.depTypeVisibility
       })
       val depSnapshotsOpt = if (Dict.isEmpty(depSnapshotsDict)) None else Some(depSnapshotsDict)
+      val importCtorEnvOpt = if (Dict.isEmpty(depBindings.importCtorEnv)) None else Some(depBindings.importCtorEnv)
+      val importAdtCtorsOpt = if (Dict.isEmpty(depBindings.importAdtConstructors)) None else Some(depBindings.importAdtConstructors)
+      val importCtorOwnersOpt = if (Dict.isEmpty(depBindings.importCtorOwners)) None else Some(depBindings.importCtorOwners)
       val tcOpts = {
         importBindings = importEnv,
         typeAliasBindings = typeAliasEnv,
         importOpaqueTypes = opaqueTypes,
         depSnapshots = depSnapshotsOpt,
+        importCtorEnv = importCtorEnvOpt,
+        importAdtConstructors = importAdtCtorsOpt,
+        importCtorOwners = importCtorOwnersOpt,
         sourceFile = entryPath
       };
       val tc = TC.typecheck(prog, tcOpts);

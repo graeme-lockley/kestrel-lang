@@ -164,10 +164,20 @@ fun typeEntryToJson(entry: KtiTypeEntry): Json.Value = {
     ("kind", StrVal(entry.kind)),
     ("typeParams", Array(Lst.map(entry.typeParams, (s: String) => StrVal(s))))
   ]
-  match (entry.type_) {
-    Some(tv) => Object(Lst.append(base, [("type", tv)]))
-    None => Object(base)
+  val withType = match (entry.type_) {
+    Some(tv) => Lst.append(base, [("type", tv)])
+    None => base
   }
+  val withCtors = match (entry.constructors) {
+    None => withType
+    Some(ctors) => {
+      val ctorJson = Array(Lst.map(ctors, (c: (String, Int)) =>
+        Object([("name", StrVal(c.0)), ("params", Array([]))])
+      ));
+      Lst.append(withType, [("constructors", ctorJson)])
+    }
+  }
+  Object(withCtors)
 }
 
 fun intMapToJson(d: Dict<String, Int>): Json.Value =
@@ -326,6 +336,32 @@ fun parseFunctions(v: Json.Value): Dict<String, KtiExportEntry> =
     )
   }
 
+fun parseConstructorsField(v: Json.Value): Option<List<(String, Int)>> =
+  match (v) {
+    Array(items) =>
+      Some(Lst.foldl(items, [], (acc: List<(String, Int)>, item: Json.Value) =>
+        match (asObj(item)) {
+          None => acc
+          Some(ps) => {
+            match (Opt.andThen(objGet(ps, "name"), asStr)) {
+              None => acc
+              Some(name) => {
+                val arity = match (objGet(ps, "params")) {
+                  None => 0
+                  Some(paramsVal) => match (paramsVal) {
+                    Array(plist) => Lst.length(plist)
+                    _ => 0
+                  }
+                };
+                Lst.append(acc, [(name, arity)])
+              }
+            }
+          }
+        }
+      ))
+    _ => None
+  }
+
 fun parseTypeEntry(v: Json.Value): Option<KtiTypeEntry> =
   match (asObj(v)) {
     None => None
@@ -337,7 +373,11 @@ fun parseTypeEntry(v: Json.Value): Option<KtiTypeEntry> =
         Some(tv) => Some(tv)
       }
       val typeParams = parseStringList(Opt.getOrElse(objGet(eps, "typeParams"), Array([])))
-      Some({ visibility = visibility, kind = kind, type_ = typeOpt, constructors = None, typeParams = typeParams })
+      val constructors = match (objGet(eps, "constructors")) {
+        None => None
+        Some(cv) => parseConstructorsField(cv)
+      }
+      Some({ visibility = visibility, kind = kind, type_ = typeOpt, constructors = constructors, typeParams = typeParams })
     }
   }
 
@@ -427,24 +467,48 @@ fun buildEntries(names: List<String>, exports: Dict<String, Ty.InternalType>, id
     n :: rest => buildEntries(rest, exports, idx + 1, Dict.insert(acc, n, KtiFunction({ kind = "function", function_index = idx, arity = 0, type_ = serializeType(Opt.getOrElse(Dict.get(exports, n), Ty.tUnit)) })))
   }
 
-fun buildTypeEntries(names: List<String>, exportedTypeAliases: Dict<String, Ty.InternalType>, exportedTypeVisibility: Dict<String, String>, acc: Dict<String, KtiTypeEntry>): Dict<String, KtiTypeEntry> =
+fun buildTypeEntries(names: List<String>, exportedTypeAliases: Dict<String, Ty.InternalType>, exportedTypeVisibility: Dict<String, String>, adtCtorGroups: Dict<String, List<String>>, acc: Dict<String, KtiTypeEntry>): Dict<String, KtiTypeEntry> =
   match (names) {
     [] => acc
     n :: rest => {
       val vis = Opt.getOrElse(Dict.get(exportedTypeVisibility, n), "export")
       val ty = Opt.getOrElse(Dict.get(exportedTypeAliases, n), Ty.TApp(n, []))
       val typeOpt = if (vis == "opaque") None else Some(serializeType(ty))
-      val entry = { visibility = vis, kind = "alias", type_ = typeOpt, constructors = None, typeParams = [] }
-      buildTypeEntries(rest, exportedTypeAliases, exportedTypeVisibility, Dict.insert(acc, n, entry))
+      val ctors = match (Dict.get(adtCtorGroups, n)) {
+        None => None
+        Some(ctorNames) => Some(Lst.map(ctorNames, (c: String) => (c, 0)))
+      }
+      val entryKind = if (ctors == None) "alias" else "adt"
+      val entry = { visibility = vis, kind = entryKind, type_ = typeOpt, constructors = ctors, typeParams = [] }
+      buildTypeEntries(rest, exportedTypeAliases, exportedTypeVisibility, adtCtorGroups, Dict.insert(acc, n, entry))
     }
+  }
+
+fun computeAdtCtorGroups(decls: List<Ast.TopDecl>, exportedTypeVisibility: Dict<String, String>, acc: Dict<String, List<String>>): Dict<String, List<String>> =
+  match (decls) {
+    [] => acc
+    d :: rest =>
+      match (d) {
+        TDType(td) =>
+          match (td.body) {
+            TBAdt(ctors) => {
+              val vis = Opt.getOrElse(Dict.get(exportedTypeVisibility, td.name), "export");
+              if (vis == "opaque") computeAdtCtorGroups(rest, exportedTypeVisibility, acc)
+              else computeAdtCtorGroups(rest, exportedTypeVisibility, Dict.insert(acc, td.name, Lst.map(ctors, (c: Ast.CtorDef) => c.name)))
+            }
+            _ => computeAdtCtorGroups(rest, exportedTypeVisibility, acc)
+          }
+        _ => computeAdtCtorGroups(rest, exportedTypeVisibility, acc)
+      }
   }
 
 export fun buildKtiV4(prog: Ast.Program, exports: Dict<String, Ty.InternalType>, exportedTypeAliases: Dict<String, Ty.InternalType>, exportedConstructors: Dict<String, Ty.InternalType>, exportedTypeVisibility: Dict<String, String>, source: String, depHashes: Dict<String, String>): KtiV4 = {
   val allFunctions = Dict.union(exports, exportedConstructors)
+  val adtCtorGroups = computeAdtCtorGroups(prog.body, exportedTypeVisibility, Dict.emptyStringDict())
   {
     version = 4,
     functions = buildEntries(Dict.keys(allFunctions), allFunctions, 0, Dict.emptyStringDict()),
-    types = buildTypeEntries(Dict.keys(exportedTypeAliases), exportedTypeAliases, exportedTypeVisibility, Dict.emptyStringDict()),
+    types = buildTypeEntries(Dict.keys(exportedTypeAliases), exportedTypeAliases, exportedTypeVisibility, adtCtorGroups, Dict.emptyStringDict()),
     sourceHash = sourceHash(source),
     depHashes = depHashes,
     codegenMeta = extractCodegenMeta(prog, allFunctions)
@@ -486,6 +550,34 @@ export fun deserializeTypeAliases(kti: KtiV4): Dict<String, Ty.InternalType> =
 export fun deserializeTypeVisibility(kti: KtiV4): Dict<String, String> =
   Lst.foldl(Dict.toList(kti.types), Dict.emptyStringDict(), (acc: Dict<String, String>, p: (String, KtiTypeEntry)) =>
     Dict.insert(acc, p.0, p.1.visibility)
+  )
+
+/// Deserialize ADT constructor maps from a KTI's `types` section.
+///
+/// Returns a 3-tuple:
+/// 1. `ctorEnv`        — ctor name → deserialized InternalType (from `functions`)
+/// 2. `adtConstructors` — ADT type name → ordered list of ctor names
+/// 3. `ctorOwners`     — ctor name → owning ADT type name
+export fun deserializeCtorMaps(kti: KtiV4): (Dict<String, Ty.InternalType>, Dict<String, List<String>>, Dict<String, String>) =
+  Lst.foldl(Dict.toList(kti.types), (Dict.emptyStringDict(), Dict.emptyStringDict(), Dict.emptyStringDict()), (acc: (Dict<String, Ty.InternalType>, Dict<String, List<String>>, Dict<String, String>), p: (String, KtiTypeEntry)) =>
+    match (p.1.constructors) {
+      None => acc
+      Some(ctors) => {
+        val typeName = p.0
+        val ctorNames = Lst.map(ctors, (c: (String, Int)) => c.0)
+        val ctorEnv = Lst.foldl(ctors, acc.0, (env: Dict<String, Ty.InternalType>, c: (String, Int)) =>
+          match (Dict.get(kti.functions, c.0)) {
+            None => env
+            Some(KtiFunction(fe)) => Dict.insert(env, c.0, deserializeType(fe.type_))
+          }
+        )
+        val adtCtors = Dict.insert(acc.1, typeName, ctorNames)
+        val ctorOwners = Lst.foldl(ctorNames, acc.2, (owners: Dict<String, String>, cn: String) =>
+          Dict.insert(owners, cn, typeName)
+        );
+        (ctorEnv, adtCtors, ctorOwners)
+      }
+    }
   )
 
 /// Wrap a namespace export map as a TNamespace InternalType (for import * as X bindings).
@@ -556,17 +648,73 @@ export type DepBindingBundle = {
   importBindings: Dict<String, Ty.InternalType>,
   typeAliasBindings: Dict<String, Ty.InternalType>,
   importOpaqueTypes: List<String>,
-  depSnapshotsBySpec: Dict<String, DepSnapshotEntry>
+  depSnapshotsBySpec: Dict<String, DepSnapshotEntry>,
+  importCtorEnv: Dict<String, Ty.InternalType>,
+  importAdtConstructors: Dict<String, List<String>>,
+  importCtorOwners: Dict<String, String>
 }
 
 /// Result of loading all dep KTIs — either a combined binding bundle or an error message.
 export type DepLoadResult = DepLoadOk(DepBindingBundle) | DepLoadErr(String)
 
+// Collect ctorEnv entries (local name → type) for named imports that are ADT constructors.
+fun collectNamedImportCtorEnv(specs: List<Ast.ImportSpec>, depCtorEnv: Dict<String, Ty.InternalType>, depCtorOwners: Dict<String, String>, acc: Dict<String, Ty.InternalType>): Dict<String, Ty.InternalType> =
+  match (specs) {
+    [] => acc
+    h :: rest =>
+      match (Dict.get(depCtorOwners, h.external)) {
+        None => collectNamedImportCtorEnv(rest, depCtorEnv, depCtorOwners, acc)
+        Some(_) =>
+          match (Dict.get(depCtorEnv, h.external)) {
+            None => collectNamedImportCtorEnv(rest, depCtorEnv, depCtorOwners, acc)
+            Some(ty) => collectNamedImportCtorEnv(rest, depCtorEnv, depCtorOwners, Dict.insert(acc, h.local, ty))
+          }
+      }
+  }
+
+// Collect ADT type names that have at least one constructor in the named import spec.
+fun collectNamedImportAdtTypeNames(specs: List<Ast.ImportSpec>, depCtorOwners: Dict<String, String>, acc: List<String>): List<String> =
+  match (specs) {
+    [] => acc
+    h :: rest =>
+      match (Dict.get(depCtorOwners, h.external)) {
+        None => collectNamedImportAdtTypeNames(rest, depCtorOwners, acc)
+        Some(typeName) =>
+          if (Lst.member(acc, typeName)) collectNamedImportAdtTypeNames(rest, depCtorOwners, acc)
+          else collectNamedImportAdtTypeNames(rest, depCtorOwners, typeName :: acc)
+      }
+  }
+
+// Merge full ADT ctor groups for the given type names into the accumulators.
+fun mergeAdtCtorMapsForTypes(typeNames: List<String>, depAdtCtors: Dict<String, List<String>>, accAdtCtors: Dict<String, List<String>>, accCtorOwners: Dict<String, String>): (Dict<String, List<String>>, Dict<String, String>) =
+  match (typeNames) {
+    [] => (accAdtCtors, accCtorOwners)
+    typeName :: rest =>
+      match (Dict.get(depAdtCtors, typeName)) {
+        None => mergeAdtCtorMapsForTypes(rest, depAdtCtors, accAdtCtors, accCtorOwners)
+        Some(ctorNames) => {
+          val newAdtCtors = Dict.insert(accAdtCtors, typeName, ctorNames)
+          val newCtorOwners = Lst.foldl(ctorNames, accCtorOwners, (co: Dict<String, String>, cn: String) => Dict.insert(co, cn, typeName))
+          mergeAdtCtorMapsForTypes(rest, depAdtCtors, newAdtCtors, newCtorOwners)
+        }
+      }
+  }
+
+fun emptyDepBundle(): DepBindingBundle = {
+  importBindings = Dict.emptyStringDict(),
+  typeAliasBindings = Dict.emptyStringDict(),
+  importOpaqueTypes = [],
+  depSnapshotsBySpec = Dict.emptyStringDict(),
+  importCtorEnv = Dict.emptyStringDict(),
+  importAdtConstructors = Dict.emptyStringDict(),
+  importCtorOwners = Dict.emptyStringDict()
+}
+
 /// Load import bindings from dep KTIs. deps is a list of (spec, ktiPath) pairs.
 /// For each dep, read its KTI and process matching import decls.
 export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast.ImportDecl>): Task<DepLoadResult> =
   match (deps) {
-    [] => DepLoadOk({ importBindings = Dict.emptyStringDict(), typeAliasBindings = Dict.emptyStringDict(), importOpaqueTypes = [], depSnapshotsBySpec = Dict.emptyStringDict() })
+    [] => DepLoadOk(emptyDepBundle())
     dep :: rest => {
       match (await readKtiFile(dep.1)) {
         Err(_) => DepLoadErr("dependency not compiled yet: ${dep.0} (missing ${dep.1})")
@@ -574,6 +722,10 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
           val depExports = deserializeExports(depKti);
           val depTypeAliases = deserializeTypeAliases(depKti);
           val depTypeVisibility = deserializeTypeVisibility(depKti);
+          val depCtorMaps = deserializeCtorMaps(depKti);
+          val depCtorEnv = depCtorMaps.0;
+          val depAdtCtors = depCtorMaps.1;
+          val depCtorOwners = depCtorMaps.2;
           val next: Task<DepLoadResult> = loadDepBindings(rest, imports)
           match (await next) {
             DepLoadErr(e) => DepLoadErr(e)
@@ -585,11 +737,17 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
                       val valueBindings = addNamedImportBindings(specs2, depExports, b.importBindings)
                       val typeBindings = addNamedTypeAliasBindings(specs2, depTypeAliases, b.typeAliasBindings)
                       val opaqueLocals = collectOpaqueNamedImports(specs2, depTypeAliases, depTypeVisibility, [])
+                      val newCtorEnv = collectNamedImportCtorEnv(specs2, depCtorEnv, depCtorOwners, b.importCtorEnv)
+                      val adtTypeNames = collectNamedImportAdtTypeNames(specs2, depCtorOwners, [])
+                      val adtMaps = mergeAdtCtorMapsForTypes(adtTypeNames, depAdtCtors, b.importAdtConstructors, b.importCtorOwners)
                       {
                         importBindings = valueBindings,
                         typeAliasBindings = typeBindings,
                         importOpaqueTypes = appendUniqueStrings(b.importOpaqueTypes, opaqueLocals),
-                        depSnapshotsBySpec = b.depSnapshotsBySpec
+                        depSnapshotsBySpec = b.depSnapshotsBySpec,
+                        importCtorEnv = newCtorEnv,
+                        importAdtConstructors = adtMaps.0,
+                        importCtorOwners = adtMaps.1
                       }
                     } else b
                   }
@@ -600,7 +758,10 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
                         importBindings = Dict.insert(b.importBindings, alias, makeNamespaceType(nsBindings)),
                         typeAliasBindings = b.typeAliasBindings,
                         importOpaqueTypes = b.importOpaqueTypes,
-                        depSnapshotsBySpec = b.depSnapshotsBySpec
+                        depSnapshotsBySpec = b.depSnapshotsBySpec,
+                        importCtorEnv = b.importCtorEnv,
+                        importAdtConstructors = Dict.union(depAdtCtors, b.importAdtConstructors),
+                        importCtorOwners = Dict.union(depCtorOwners, b.importCtorOwners)
                       }
                     } else b
                   }
@@ -613,7 +774,10 @@ export async fun loadDepBindings(deps: List<(String, String)>, imports: List<Ast
                 importBindings = merged.importBindings,
                 typeAliasBindings = merged.typeAliasBindings,
                 importOpaqueTypes = merged.importOpaqueTypes,
-                depSnapshotsBySpec = Dict.insert(merged.depSnapshotsBySpec, dep.0, snapshot)
+                depSnapshotsBySpec = Dict.insert(merged.depSnapshotsBySpec, dep.0, snapshot),
+                importCtorEnv = merged.importCtorEnv,
+                importAdtConstructors = merged.importAdtConstructors,
+                importCtorOwners = merged.importCtorOwners
               })
             }
           }

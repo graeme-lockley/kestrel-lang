@@ -234,6 +234,12 @@ When a `.kti` file is present alongside a dependency's `.class` output, the comp
 
 **Self-hosted KTI import binding load and graph freshness:** In the JVM self-hosted compiler path, direct dependencies are resolved first, then each dependency's `.kti` is read before typechecking the current module. The compiler reconstructs `importBindings` from dependency exports (`import { ... }` maps selected names; `import * as Ns` maps a namespace binding) and passes those bindings into typecheck. During graph compilation, each module performs the same freshness check (`sourceHash` + direct `depHashes`) before compile: fresh modules are skipped, stale modules are rebuilt, and direct dependency hash inputs are computed from dependency `.kti` content in the current run cache (falling back to disk only when needed). If a direct dependency `.kti` is missing, compilation fails with a module-resolution diagnostic indicating that the dependency must be compiled first.
 
+**Cross-module ADT constructor environment (self-hosted):** In addition to `importBindings`, the self-hosted `loadDepBindings` extracts ADT constructor maps from each dependency's KTI `types` section. For each KTI type entry that carries a `constructors` list (non-opaque exported ADTs), three maps are populated:
+- `importCtorEnv` — ctor name → generalized type (enables `PCon` pattern binding for imported constructors).
+- `importAdtConstructors` — ADT type name → ordered list of constructor names (enables exhaustiveness checking for imported ADTs).
+- `importCtorOwners` — ctor name → owning ADT type name (reverse index).
+These maps are passed to `TypecheckOptions` and used by `emptyTypeRegistry` to seed the type registry before local type prebinding runs. Named imports (`import { Ctor }`) add only the ADT groups for which at least one constructor was imported; namespace imports add all ADT groups from the dependency.
+
 **`--clean` flag:** `kestrel build --clean` and `kestrel run --clean` delete all `.kti` files in the configured output directory before compilation begins, bypassing steps 1 and 2 entirely and forcing a full rebuild from source. `--clean` is composable with `--refresh` for a fully-from-scratch build including URL re-download.
 
 ---

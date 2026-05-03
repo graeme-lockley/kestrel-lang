@@ -1,6 +1,8 @@
 import { Suite, asyncGroup, isTrue } from "kestrel:dev/test"
 import * as Lst from "kestrel:data/list"
+import * as Str from "kestrel:data/string"
 import * as Driver from "kestrel:tools/compiler/driver"
+import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as Fs from "kestrel:io/fs"
 
 fun ktiOpts(outDir: String): Driver.CompileOptions = {
@@ -107,6 +109,54 @@ export async fun run(s: Suite): Task<Unit> = {
                       val mainResult = await Driver.compileFile(mainPath, opts)
                       isTrue(s1, "ns import compile ok", mainResult.ok)
                       isTrue(s1, "ns import no diagnostics", Lst.isEmpty(mainResult.diagnostics))
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    await asyncGroup(sg, "compileFile - ADT ctor exhaustiveness via KTI", async (s1: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s1722_adt_src"
+      val outDir = "/tmp/kestrel_driver_test_s1722_adt_out"
+      val depPath = "${srcDir}/adtdep.ks"
+      val okPath = "${srcDir}/adtmain_ok.ks"
+      val badPath = "${srcDir}/adtmain_bad.ks"
+      val depSrc = "export type Color = Red | Green"
+      val okSrc = "import { Color, Red, Green } from \"./adtdep\"\nexport fun f(c: Color): Int = match (c) { Red => 1  Green => 2 }"
+      val badSrc = "import { Color, Red, Green } from \"./adtdep\"\nexport fun f(c: Color): Int = match (c) { Red => 1 }"
+      val opts = ktiOpts(outDir)
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(s1, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(s1, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(depPath, depSrc)) {
+                Err(_) => isTrue(s1, "writeText dep failed", False)
+                Ok(()) => {
+                  val depResult = await Driver.compileFile(depPath, opts)
+                  isTrue(s1, "dep compile ok", depResult.ok);
+                  // complete match compiles ok
+                  match (await Fs.writeText(okPath, okSrc)) {
+                    Err(_) => isTrue(s1, "writeText ok main failed", False)
+                    Ok(()) => {
+                      val okResult = await Driver.compileFile(okPath, opts)
+                      isTrue(s1, "complete match ok", okResult.ok);
+                      isTrue(s1, "complete match no diagnostics", Lst.isEmpty(okResult.diagnostics))
+                    }
+                  };
+                  // incomplete match fails with nonExhaustiveMatch
+                  match (await Fs.writeText(badPath, badSrc)) {
+                    Err(_) => isTrue(s1, "writeText bad main failed", False)
+                    Ok(()) => {
+                      val badResult = await Driver.compileFile(badPath, opts)
+                      isTrue(s1, "incomplete match rejected", !badResult.ok);
+                      isTrue(s1, "has nonExhaustiveMatch diag",
+                        Lst.any(badResult.diagnostics, (d: Diag.Diagnostic) => d.code == Diag.CODES.type_.nonExhaustiveMatch))
                     }
                   }
                 }

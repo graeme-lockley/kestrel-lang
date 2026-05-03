@@ -22,6 +22,9 @@ fun runTc(src: String): TC.TypecheckResult =
     typeAliasBindings = None,
     importOpaqueTypes = None,
     depSnapshots = None,
+    importCtorEnv = None,
+    importAdtConstructors = None,
+    importCtorOwners = None,
     sourceFile = "typecheck.test.ks"
   })
 
@@ -155,6 +158,9 @@ export async fun run(s: Suite): Task<Unit> =
         typeAliasBindings = None,
         importOpaqueTypes = None,
         depSnapshots = None,
+        importCtorEnv = None,
+        importAdtConstructors = None,
+        importCtorOwners = None,
         sourceFile = "consumer.ks"
       })
       eq(sg, "downstream consumer ok", consumer.ok, True);
@@ -253,6 +259,9 @@ export async fun run(s: Suite): Task<Unit> =
         typeAliasBindings = None,
         importOpaqueTypes = None,
         depSnapshots = None,
+        importCtorEnv = None,
+        importAdtConstructors = None,
+        importCtorOwners = None,
         sourceFile = "consumer.ks"
       })
       eq(sg, "cross-module exception consumer ok", consumer.ok, True);
@@ -277,6 +286,9 @@ export async fun run(s: Suite): Task<Unit> =
           typeAliasBindings = None,
           importOpaqueTypes = None,
           depSnapshots = Some(snapsBySpec),
+          importCtorEnv = None,
+          importAdtConstructors = None,
+          importCtorOwners = None,
           sourceFile = "reexport.test.ks"
         })
 
@@ -354,5 +366,66 @@ export async fun run(s: Suite): Task<Unit> =
       val recRes = runTc("var p = { x = 1 }\np.x := 2")
       eq(sg, "top-level record field assign ok", recRes.ok, True);
       isTrue(sg, "no diagnostics on field assign", Lst.isEmpty(recRes.diagnostics))
+    });
+
+    group(s1, "cross-module ADT ctor exhaustiveness", (sg: Suite) => {
+      // Set up: a two-ctor ADT "Color" with constructors "Red" and "Blue".
+      // We manually seed importCtorEnv, importAdtConstructors, importCtorOwners as if
+      // these were loaded from a dep KTI.
+      Ty.resetVarId();
+      val colorType = Ty.TApp("Color", []);
+      val redType = Ty.generalize(Dict.emptyStringDict(), colorType);
+      val blueType = Ty.generalize(Dict.emptyStringDict(), colorType);
+      val seedCtorEnv = Dict.insert(Dict.insert(Dict.emptyStringDict(), "Red", redType), "Blue", blueType);
+      val seedAdtCtors = Dict.insert(Dict.emptyStringDict(), "Color", ["Red", "Blue"]);
+      val seedCtorOwners = Dict.insert(Dict.insert(Dict.emptyStringDict(), "Red", "Color"), "Blue", "Color");
+
+      // (a) Happy-path: complete match with both arms — should typecheck OK
+      val happySrc = "export fun f(c: Color): Int = match (c) { Red => 1  Blue => 2 }";
+      val happyResult = TC.typecheck(program(happySrc), {
+        importBindings = Some({ items = seedCtorEnv }),
+        typeAliasBindings = None,
+        importOpaqueTypes = None,
+        depSnapshots = None,
+        importCtorEnv = Some(seedCtorEnv),
+        importAdtConstructors = Some(seedAdtCtors),
+        importCtorOwners = Some(seedCtorOwners),
+        sourceFile = "cross_module_ctor.ks"
+      });
+      eq(sg, "complete cross-module match ok", happyResult.ok, True);
+      isTrue(sg, "complete match no diagnostics", Lst.isEmpty(happyResult.diagnostics));
+
+      // (b) Incomplete match: only one arm — should emit nonExhaustiveMatch
+      Ty.resetVarId();
+      val incompleteSrc = "export fun f(c: Color): Int = match (c) { Red => 1 }";
+      val incompleteResult = TC.typecheck(program(incompleteSrc), {
+        importBindings = Some({ items = seedCtorEnv }),
+        typeAliasBindings = None,
+        importOpaqueTypes = None,
+        depSnapshots = None,
+        importCtorEnv = Some(seedCtorEnv),
+        importAdtConstructors = Some(seedAdtCtors),
+        importCtorOwners = Some(seedCtorOwners),
+        sourceFile = "cross_module_ctor.ks"
+      });
+      eq(sg, "incomplete cross-module match rejected", incompleteResult.ok, False);
+      isTrue(sg, "incomplete match has nonExhaustiveMatch", hasDiagCode(incompleteResult.diagnostics, Diag.CODES.type_.nonExhaustiveMatch));
+
+      // (c) Pattern binding: imported ctor resolves in bindPattern without "Unknown constructor"
+      Ty.resetVarId();
+      val bindSrc = "export fun f(c: Color): Int = match (c) { Red => 0  _ => 1 }";
+      val bindResult = TC.typecheck(program(bindSrc), {
+        importBindings = Some({ items = seedCtorEnv }),
+        typeAliasBindings = None,
+        importOpaqueTypes = None,
+        depSnapshots = None,
+        importCtorEnv = Some(seedCtorEnv),
+        importAdtConstructors = Some(seedAdtCtors),
+        importCtorOwners = Some(seedCtorOwners),
+        sourceFile = "cross_module_ctor.ks"
+      });
+      eq(sg, "imported ctor binding ok", bindResult.ok, True);
+      isTrue(sg, "no unknown-constructor diagnostic",
+        !Lst.any(bindResult.diagnostics, (d: Diag.Diagnostic) => d.code == Diag.CODES.type_.unknownVariable))
     })
   })

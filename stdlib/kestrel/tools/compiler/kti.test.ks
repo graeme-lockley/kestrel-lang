@@ -99,5 +99,105 @@ export async fun run(s: Suite): Task<Unit> =
       }
       isTrue(sg, "exported names tracked", Lst.member(meta.valOrVarNames, "c"))
     })
+
+    group(s1, "buildKtiV4 ADT constructor groups", (sg: Suite) => {
+      val src = "export type Color = Red | Green | Blue\nexport val x: Int = 1"
+      val prog = program(src)
+      val colorType = Ty.TApp("Color", [])
+      val ctorExports = Dict.insert(
+        Dict.insert(
+          Dict.insert(Dict.emptyStringDict(), "Red", colorType),
+          "Green", colorType),
+        "Blue", colorType)
+      val typeAliases = Dict.insert(Dict.emptyStringDict(), "Color", colorType)
+      val typeVis = Dict.insert(Dict.emptyStringDict(), "Color", "export")
+      val kti = Kti.buildKtiV4(
+        prog,
+        Dict.insert(Dict.emptyStringDict(), "x", Ty.tInt),
+        typeAliases,
+        ctorExports,
+        typeVis,
+        "src",
+        Dict.emptyStringDict()
+      )
+      val colorEntry = Dict.get(kti.types, "Color")
+      match (colorEntry) {
+        None => isTrue(sg, "Color type entry present", False)
+        Some(entry) => {
+          match (entry.constructors) {
+            None => isTrue(sg, "constructors present", False)
+            Some(ctors) => {
+              eq(sg, "ctor count", Lst.length(ctors), 3);
+              isTrue(sg, "Red in ctors", Lst.any(ctors, (c: (String, Int)) => c.0 == "Red"));
+              isTrue(sg, "Green in ctors", Lst.any(ctors, (c: (String, Int)) => c.0 == "Green"));
+              isTrue(sg, "Blue in ctors", Lst.any(ctors, (c: (String, Int)) => c.0 == "Blue"))
+            }
+          }
+        }
+      }
+    });
+
+    group(s1, "deserializeCtorMaps round-trip", (sg: Suite) => {
+      val src = "export type Color = Red | Green\nexport val x: Int = 1"
+      val prog = program(src)
+      val colorType = Ty.TApp("Color", [])
+      val ctorExports = Dict.insert(
+        Dict.insert(Dict.emptyStringDict(), "Red", colorType),
+        "Green", colorType)
+      val typeAliases = Dict.insert(Dict.emptyStringDict(), "Color", colorType)
+      val typeVis = Dict.insert(Dict.emptyStringDict(), "Color", "export")
+      val kti = Kti.buildKtiV4(
+        prog,
+        Dict.insert(Dict.emptyStringDict(), "x", Ty.tInt),
+        typeAliases,
+        ctorExports,
+        typeVis,
+        "src",
+        Dict.emptyStringDict()
+      )
+      val maps = Kti.deserializeCtorMaps(kti)
+      val ctorEnv = maps.0
+      val adtCtors = maps.1
+      val ctorOwners = maps.2
+
+      // adtConstructors
+      match (Dict.get(adtCtors, "Color")) {
+        None => isTrue(sg, "Color in adtConstructors", False)
+        Some(ctorList) => {
+          eq(sg, "ctor list length", Lst.length(ctorList), 2);
+          isTrue(sg, "Red in list", Lst.member(ctorList, "Red"));
+          isTrue(sg, "Green in list", Lst.member(ctorList, "Green"))
+        }
+      };
+
+      // ctorOwners
+      eq(sg, "Red owner", Dict.get(ctorOwners, "Red"), Some("Color"));
+      eq(sg, "Green owner", Dict.get(ctorOwners, "Green"), Some("Color"));
+
+      // ctorEnv types
+      isTrue(sg, "Red in ctorEnv", Dict.member(ctorEnv, "Red"));
+      isTrue(sg, "Green in ctorEnv", Dict.member(ctorEnv, "Green"))
+    });
+
+    group(s1, "opaque ADT excluded from ctor maps", (sg: Suite) => {
+      val src = "export type Secret = SecretCtor"
+      val prog = program(src)
+      val secretType = Ty.TApp("Secret", [])
+      val ctorExports = Dict.emptyStringDict()
+      val typeAliases = Dict.insert(Dict.emptyStringDict(), "Secret", secretType)
+      val typeVis = Dict.insert(Dict.emptyStringDict(), "Secret", "opaque")
+      val kti = Kti.buildKtiV4(
+        prog,
+        Dict.emptyStringDict(),
+        typeAliases,
+        ctorExports,
+        typeVis,
+        "src",
+        Dict.emptyStringDict()
+      )
+      val maps = Kti.deserializeCtorMaps(kti)
+      val adtCtors = maps.1
+      isTrue(sg, "opaque type excluded from adtConstructors", !Dict.member(adtCtors, "Secret"))
+    })
     })
   }

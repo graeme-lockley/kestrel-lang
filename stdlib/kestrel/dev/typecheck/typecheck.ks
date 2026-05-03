@@ -61,6 +61,9 @@ export type TypecheckOptions = {
   typeAliasBindings: Option<Dict<String, Ty.InternalType>>,
   importOpaqueTypes: Option<List<String>>,
   depSnapshots: Option<Dict<String, DependencyExportSnapshot>>,
+  importCtorEnv: Option<Dict<String, Ty.InternalType>>,
+  importAdtConstructors: Option<Dict<String, List<String>>>,
+  importCtorOwners: Option<Dict<String, String>>,
   sourceFile: String
 }
 
@@ -115,6 +118,9 @@ export val defaultTypecheckOptions: TypecheckOptions = {
   typeAliasBindings = None,
   importOpaqueTypes = None,
   depSnapshots = None,
+  importCtorEnv = None,
+  importAdtConstructors = None,
+  importCtorOwners = None,
   sourceFile = ""
 }
 
@@ -1091,7 +1097,12 @@ fun checkTypeDeclExports(
   val aliasOut =
     match (td.body) {
       TBAlias(bodyType) => Dict.insert(exportedTypeAliases, td.name, FA.astTypeToInternalWithScope(bodyType, typeAliases, []))
-      _ => exportedTypeAliases
+      TBAdt(_) =>
+        // Export ADT type itself so consumers can use it as a type annotation and KTI
+        // records it in the `types` section (enabling cross-module constructor maps).
+        if (td.visibility == "export" | td.visibility == "opaque")
+          Dict.insert(exportedTypeAliases, td.name, Opt.getOrElse(Dict.get(typeAliases, td.name), Ty.TApp(td.name, [])))
+        else exportedTypeAliases
     };
   (env, exports, aliasOut)
 }
@@ -1246,11 +1257,29 @@ fun resolvedImportEnv(opts: TypecheckOptions): TypeEnv =
     None => emptyTypeEnv()
   }
 
+fun resolvedImportCtorEnv(opts: TypecheckOptions): Dict<String, Ty.InternalType> =
+  match (opts.importCtorEnv) {
+    Some(e) => e
+    None => Dict.emptyStringDict()
+  }
+
+fun resolvedImportAdtConstructors(opts: TypecheckOptions): Dict<String, List<String>> =
+  match (opts.importAdtConstructors) {
+    Some(m) => m
+    None => Dict.emptyStringDict()
+  }
+
+fun resolvedImportCtorOwners(opts: TypecheckOptions): Dict<String, String> =
+  match (opts.importCtorOwners) {
+    Some(m) => m
+    None => Dict.emptyStringDict()
+  }
+
 fun emptyTypeRegistry(opts: TypecheckOptions): TypeRegistry = {
   typeAliases = resolvedTypeAliasBindings(opts),
-  ctorEnv = Dict.emptyStringDict(),
-  adtConstructors = Dict.emptyStringDict(),
-  ctorOwners = Dict.emptyStringDict(),
+  ctorEnv = resolvedImportCtorEnv(opts),
+  adtConstructors = resolvedImportAdtConstructors(opts),
+  ctorOwners = resolvedImportCtorOwners(opts),
   exportedConstructors = Dict.emptyStringDict(),
   exportedTypeVisibility = Dict.emptyStringDict()
 }

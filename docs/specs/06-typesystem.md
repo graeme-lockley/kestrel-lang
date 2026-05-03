@@ -182,6 +182,8 @@ Constructors are in scope wherever the type name is in scope (module-level or im
 
 **Exhaustiveness** for user-defined ADTs: the compiler builds a **constructor registry** from type declarations mapping each ADT name to the set of its constructors. When `match (e) { ... }` has `e` of a user-defined ADT type, every constructor must be covered by at least one case, or a catch-all (`_` or variable) must be present.
 
+**Cross-module ADTs:** When a non-opaque ADT is imported from another module, its complete constructor list is available via the dependency's KTI `types` section (07 §5). The compiler seeds the constructor registry from these KTI entries before local type prebinding, so exhaustiveness is enforced for imported ADTs the same way it is for locally-declared ones. Opaque imported ADTs are excluded from exhaustiveness checking since their constructors are not visible.
+
 **Tuple patterns in `match`:** The scrutinee must have a **tuple** type whose arity matches the tuple pattern. A tuple pattern with **literal** (or otherwise non–variable-only) subpatterns is **not** exhaustive by itself: a catch-all case (`_` or a variable pattern) is required unless there is an arm that matches all tuple values with only variables and wildcards in every slot (including nested tuple patterns), e.g. a single arm `(x, y) => …` for a pair type. Arity mismatch or a tuple pattern against a non-tuple scrutinee is a **type error**.
 
 ### 5.2 Recursive and mutually recursive types
