@@ -19,6 +19,17 @@ ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
 KSELF="$ROOT/kestrel-self"
 JVM_CACHE="${KESTREL_SELF_CACHE:-$HOME/.kestrel/self}"
 
+# Redirect build outputs to a throwaway cache so the self-hosted compiler's
+# (currently incomplete) codegen for stdlib modules cannot pollute the user's
+# normal ~/.kestrel/ts cache and break a subsequent `./kestrel test`. The
+# self-hosted CLI writes compile output to KESTREL_TS_CACHE; classloading also
+# uses it, but a throwaway empty dir is fine because real classes are loaded
+# from $JVM_CACHE (self-hosted bootstrap cache) which we leave untouched.
+TS_CACHE_OVERRIDE="${TMPDIR:-/tmp}/kestrel-test-corpus-ts.$$"
+trap 'rm -rf "$TS_CACHE_OVERRIDE"' EXIT
+mkdir -p "$TS_CACHE_OVERRIDE"
+export KESTREL_TS_CACHE="$TS_CACHE_OVERRIDE"
+
 # ── Bootstrap guard ──────────────────────────────────────────────────────────
 if ! find "$JVM_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null | grep -q .; then
   echo "test-kestrel: self-hosted cache missing — bootstrapping..." >&2
