@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-28, S17-30 through S17-38, S17-42
+- Companion stories: S17-24 through S17-28, S17-30 through S17-38, S17-41
 
 ## Summary
 
@@ -40,7 +40,7 @@ TS reference:
   record/value paths.
 - **Feeds**: the first positive E2E re-enable slice for core async/task and collection-heavy
   scenarios.
-- **Blocks**: S17-42 (E2E). List literals and string templates are ubiquitous in Kestrel.
+- **Blocks**: S17-41 (E2E). List literals and string templates are ubiquitous in Kestrel.
 
 ## Goals
 

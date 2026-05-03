@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-26, S17-28 through S17-38, S17-42
+- Companion stories: S17-24 through S17-26, S17-28 through S17-38, S17-41
 
 ## Summary
 
@@ -45,7 +45,7 @@ The TS reference has ~350 lines for call emission covering:
   S17-26 (operators — prerequisite for non-trivial arguments).
 - **Execution tranche priority**: this is the first runtime-sensitive story after S17-25 + S17-37.
   Real calls are required before re-enabling almost any skipped runtime-negative or positive E2E.
-- **Blocks**: effectively every other codegen story and S17-42 (E2E) — no useful code can
+- **Blocks**: effectively every other codegen story and S17-41 (E2E) — no useful code can
   be generated without function calls.
 
 ## Goals

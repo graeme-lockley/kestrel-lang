@@ -1,13 +1,13 @@
 # Fix KTI `codegenMeta` extraction and serialisation
 
-## Sequence: S17-43
+## Sequence: S17-42
 ## Tier: 8
 ## Former ID: (none)
 
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-01 through S17-42
+- Companion stories: S17-01 through S17-41
 
 ## Summary
 
@@ -27,7 +27,7 @@ TS reference: `compiler/src/kti.ts` lines 202–282 (`extractCodegenMeta`) and 3
 
 ## Current State
 
-After S17-40 (serializeType JSON format) and S17-41 (freshenImportedTypeVars), KTI type
+After S17-39 (serializeType JSON format) and S17-40 (freshenImportedTypeVars), KTI type
 serialisation is structurally correct. However, the `codegenMeta` field written to every KTI
 by the self-hosted compiler is still wrong:
 
@@ -44,7 +44,7 @@ by the self-hosted compiler is still wrong:
 
 ## Relationship to other stories
 
-- **Depends on**: S17-40 (serializeType JSON format), since `buildEntries` and `buildTypeEntries`
+- **Depends on**: S17-39 (serializeType JSON format), since `buildEntries` and `buildTypeEntries`
   call `serializeType`.
 - **Blocks**: S17-22 (cross-module ADT exhaustiveness), which relies on accurate
   `adtConstructors` being present in KTI.

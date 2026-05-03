@@ -1,13 +1,13 @@
 # End-to-end validation without Node; CI gate and spec update
 
-## Sequence: S17-42
+## Sequence: S17-41
 ## Tier: 9
 ## Former ID: S17-13 (then S17-23, then S17-39)
 
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-01 through S17-41
+- Companion stories: S17-01 through S17-40
 
 ## Summary
 

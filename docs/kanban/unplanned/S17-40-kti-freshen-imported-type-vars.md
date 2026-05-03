@@ -1,13 +1,13 @@
 # Add `freshenImportedTypeVars` to KTI `loadDepBindings`
 
-## Sequence: S17-41
+## Sequence: S17-40
 ## Tier: 9
 ## Former ID: (none)
 
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-40, S17-24 through S17-38, S17-42
+- Companion stories: S17-39, S17-24 through S17-38, S17-41
 
 ## Summary
 
@@ -53,11 +53,11 @@ TS reference:
 
 ## Relationship to other stories
 
-- **Depends on**: S17-40 (KTI JSON serialisation must be correct before type var IDs in
+- **Depends on**: S17-39 (KTI JSON serialisation must be correct before type var IDs in
   deserialized types are meaningful).
-- **Blocks**: S17-42 (E2E gate) — type var ID collision causes incorrect unification in
+- **Blocks**: S17-41 (E2E gate) — type var ID collision causes incorrect unification in
   any multi-module compilation scenario.
-- **Companion**: S17-40.
+- **Companion**: S17-39.
 
 ## Goals
 

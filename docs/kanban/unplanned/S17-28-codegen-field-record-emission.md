@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-27, S17-29 through S17-38, S17-42
+- Companion stories: S17-24 through S17-27, S17-29 through S17-38, S17-41
 
 ## Summary
 
@@ -41,7 +41,7 @@ TS reference:
   uses `INVOKEVIRTUAL`).
 - **Recommended early in the tranche**: records are needed before most stdlib-backed positive
   E2Es can be re-enabled, especially fs/process/http result-handling scenarios.
-- **Blocks**: S17-42 (E2E). Records are used everywhere.
+- **Blocks**: S17-41 (E2E). Records are used everywhere.
 
 ## Goals
 

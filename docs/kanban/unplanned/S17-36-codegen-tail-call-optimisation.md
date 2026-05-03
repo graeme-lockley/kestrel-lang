@@ -7,7 +7,7 @@
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-24 through S17-35, S17-37 through S17-38, S17-42
+- Companion stories: S17-24 through S17-35, S17-37 through S17-38, S17-41
 
 ## Summary
 
@@ -40,7 +40,7 @@ TS reference:
 - **Recommended after**: the first real execution tranche and basic runtime-negative re-enable.
   TCO matters for parity and deep recursion, but it is not the first gate to remove the temporary
   startup/E2E workarounds.
-- **Blocks**: S17-42 (E2E) only indirectly — programs will still run without TCO but will
+- **Blocks**: S17-41 (E2E) only indirectly — programs will still run without TCO but will
   stack-overflow on deeply recursive calls.
 
 ## Goals

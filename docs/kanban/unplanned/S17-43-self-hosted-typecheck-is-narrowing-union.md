@@ -1,13 +1,13 @@
 # Self-hosted typecheck: `is` narrowing for union-typed identifiers
 
-## Sequence: S17-44
+## Sequence: S17-43
 ## Tier: 8
 ## Former ID: (none)
 
 ## Epic
 
 - Epic: [E17 True Self-Hosted Compilation](../epics/unplanned/E17-true-self-hosted-compilation.md)
-- Companion stories: S17-22, S17-38, S17-42
+- Companion stories: S17-22, S17-38, S17-41
 
 ## Summary
 
@@ -23,14 +23,14 @@ unification errors even though they are valid and covered by unit tests.
 - `stdlib/kestrel/dev/typecheck/typecheck.ks` handles `EIs(e, _)` as `inferExpr(e); Bool` without
   branch-specific type environment refinement.
 - To keep `./kestrel test` usable while this gap remains, the assertions in
-  `tests/unit/union_intersection.test.ks` are temporarily commented out and marked with `S17-44`.
+  `tests/unit/union_intersection.test.ks` are temporarily commented out and marked with `S17-43`.
 
 ## Relationship to other stories
 
 - **Depends on**: no additional parser/AST work; union/intersection AST + internal types already exist.
 - **Companion**: S17-38 covers codegen/runtime semantics of `EIs` (`INSTANCEOF`) and should remain
   aligned with this typechecker behavior.
-- **Must complete before**: S17-42 final no-Node E2E validation, so the re-enabled unit test is
+- **Must complete before**: S17-41 final no-Node E2E validation, so the re-enabled unit test is
   part of the final green gate.
 
 ## Goals
@@ -43,7 +43,7 @@ unification errors even though they are valid and covered by unit tests.
 
 ## Acceptance Criteria
 
-- [ ] `tests/unit/union_intersection.test.ks` is uncommented (remove the temporary `S17-44` skip
+- [ ] `tests/unit/union_intersection.test.ks` is uncommented (remove the temporary `S17-43` skip
       comments) and passes under `./kestrel test`.
 - [ ] A regression test verifies `fun takeU(x: Int | Bool): Int = if (x is Int) x else 0` typechecks.
 - [ ] `stdlib/kestrel/dev/typecheck/typecheck.ks` applies narrowing in `EIf` branches when the

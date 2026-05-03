@@ -1,6 +1,6 @@
 # Self-hosted codegen: emit diagnostic for unresolved identifiers
 
-## Sequence: S17-51
+## Sequence: S17-45
 ## Tier: 9
 ## Former ID: (none)
 
