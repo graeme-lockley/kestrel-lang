@@ -22,6 +22,7 @@ on demand.
 | [story-create](story-create/SKILL.md) | Create a single story (future or unplanned). | epic id + title |
 | [plan-story](plan-story/SKILL.md) | Promote a story from `unplanned/` to `planned/` with an implementation plan. | story id (`S##-##`) |
 | [build-story](build-story/SKILL.md) | Execute a planned story to `done/`. | story id (`S##-##`) |
+| [verify-story](verify-story/SKILL.md) | Audit a story's acceptance criteria against the codebase and test suites. Reports pass/fail; no edits or commits. | story id (`S##-##`) |
 | [build-epic](build-epic/SKILL.md) | Drive every story in an epic through plan + build. | epic id (`EXX`) |
 | [finish-epic](finish-epic/SKILL.md) | Verify and close a completed epic. | epic id (`EXX`) |
 | [kestrel-stdlib-doc](kestrel-stdlib-doc/SKILL.md) | Improve `.ks` module documentation. *(Standalone — not part of the kanban workflow.)* | module path |
