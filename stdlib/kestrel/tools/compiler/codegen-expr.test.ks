@@ -6,7 +6,7 @@ import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Ty from "kestrel:dev/typecheck/types"
-import { ELit, EIdent, EBinary, EUnary, EIf, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, EField, SVal, SVar, SAssign, SExpr } from "kestrel:dev/parser/ast"
+import { ELit, EIdent, EBinary, EUnary, EIf, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, EField, SVal, SVar, SAssign, SExpr, EList, ECons, EPipe, LElem } from "kestrel:dev/parser/ast"
 import * as Ast from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
@@ -474,5 +474,106 @@ export async fun run(s: Suite): Task<Unit> =
       // UTF-8 bytes for "set" = [115, 101, 116]
       isTrue(sg, "SAssign field: pool contains set utf8",
         containsSeq(BA.toList(bytes), [115, 101, 116]))
+    })
+
+    group(s1, "EList empty", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EList([]))
+      // GETSTATIC = 178 must be emitted for KNil.INSTANCE
+      eq(sg, "EList empty: opcode[0] is getstatic(178)", codeAt(t.mb, 0), 178)
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EList empty: bytes emitted", BA.length(bytes) > 0)
+      // UTF-8 bytes for "KNil" = [75, 78, 105, 108]
+      isTrue(sg, "EList empty: pool contains KNil utf8",
+        containsSeq(BA.toList(bytes), [75, 78, 105, 108]))
+    })
+
+    group(s1, "EList non-empty", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EList([LElem(ELit("int", "1")), LElem(ELit("int", "2"))]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EList non-empty: bytes emitted", BA.length(bytes) > 0)
+      // Must not start with aconstNull (opcode 1)
+      isTrue(sg, "EList non-empty: does not start with aconstNull", codeAt(t.mb, 0) != 1)
+      // NEW = 187 for KCons
+      isTrue(sg, "EList non-empty: contains NEW(187)", containsSeq(BA.toList(bytes), [187]))
+      // INVOKESPECIAL = 183 for KCons.<init>
+      isTrue(sg, "EList non-empty: contains INVOKESPECIAL(183)",
+        containsSeq(BA.toList(bytes), [183]))
+    })
+
+    group(s1, "ECons", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ECons(ELit("int", "1"), EList([])))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "ECons: bytes emitted", BA.length(bytes) > 0)
+      // Must not start with aconstNull (opcode 1)
+      isTrue(sg, "ECons: does not start with aconstNull", codeAt(t.mb, 0) != 1)
+      // INVOKESPECIAL = 183 for KCons.<init>
+      isTrue(sg, "ECons: contains INVOKESPECIAL(183)",
+        containsSeq(BA.toList(bytes), [183]))
+      // UTF-8 bytes for "KCons" = [75, 67, 111, 110, 115]
+      isTrue(sg, "ECons: pool contains KCons utf8",
+        containsSeq(BA.toList(bytes), [75, 67, 111, 110, 115]))
+    })
+
+    group(s1, "ETuple real", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ETuple([ELit("int", "10"), ELit("int", "20")]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "ETuple real: bytes emitted", BA.length(bytes) > 0)
+      // Must not start with aconstNull
+      isTrue(sg, "ETuple real: does not start with aconstNull", codeAt(t.mb, 0) != 1)
+      // NEW = 187 for KRecord
+      isTrue(sg, "ETuple real: contains NEW(187)", containsSeq(BA.toList(bytes), [187]))
+      // UTF-8 bytes for "0" (positional field key) = [48]
+      isTrue(sg, "ETuple real: pool contains field-key 0",
+        containsSeq(BA.toList(bytes), [48]))
+      // INVOKEVIRTUAL = 182 for KRecord.set
+      isTrue(sg, "ETuple real: contains INVOKEVIRTUAL(182)",
+        containsSeq(BA.toList(bytes), [182]))
+    })
+
+    group(s1, "ETemplate real", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ETemplate([TmplLit("x="), TmplExpr(ELit("int", "7"))]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "ETemplate real: bytes emitted", BA.length(bytes) > 0)
+      // Must not start with aconstNull
+      isTrue(sg, "ETemplate real: does not start with aconstNull", codeAt(t.mb, 0) != 1)
+      // NEW = 187 for StringBuilder
+      isTrue(sg, "ETemplate real: contains NEW(187)", containsSeq(BA.toList(bytes), [187]))
+      // UTF-8 bytes for "StringBuilder" = [83, 116, 114, 105, 110, 103, 66, 117, 105, 108, 100, 101, 114]
+      isTrue(sg, "ETemplate real: pool contains StringBuilder utf8",
+        containsSeq(BA.toList(bytes), [83, 116, 114, 105, 110, 103, 66, 117, 105, 108, 100, 101, 114]))
+      // INVOKEVIRTUAL = 182 for toString
+      isTrue(sg, "ETemplate real: contains INVOKEVIRTUAL(182)",
+        containsSeq(BA.toList(bytes), [182]))
+      // UTF-8 bytes for "toString" = [116, 111, 83, 116, 114, 105, 110, 103]
+      isTrue(sg, "ETemplate real: pool contains toString utf8",
+        containsSeq(BA.toList(bytes), [116, 111, 83, 116, 114, 105, 110, 103]))
+    })
+
+    group(s1, "EPipe forward", (sg: Suite) => {
+      val t = baseContext()
+      // Set up a module context that knows about fun "double" with arity 1
+      val cf2 = CF.newClassFile("test/CodegenExpr", "java/lang/Object", 0x0021)
+      val mb2 = CF.cfAddMethod(cf2, "emit", "()Ljava/lang/Object;", 0x0009)
+      val opts = CG.emptyJvmCodegenOptions()
+      val mctxWithFun = {
+        className = "test/CodegenExpr",
+        globalNames = Dict.emptyStringDict(),
+        globalVarNames = Dict.emptyStringDict(),
+        funArities = Dict.insert(Dict.emptyStringDict(), "double", 1),
+        adtClassByConstructor = Dict.emptyStringDict(),
+        adtConstructorArity = Dict.emptyStringDict(),
+        options = opts
+      }
+      val ctx2 = CG.newCodegenContext(cf2, mb2, mctxWithFun, CG.noTypeInfo)
+      CG.emitExpr(ctx2, EPipe("|>", ELit("int", "3"), EIdent("double")))
+      val bytes = finish(cf2, mb2)
+      isTrue(sg, "EPipe forward: bytes emitted", BA.length(bytes) > 0)
+      // Must not start with aconstNull
+      isTrue(sg, "EPipe forward: does not start with aconstNull", codeAt(mb2, 0) != 1)
     })
   })

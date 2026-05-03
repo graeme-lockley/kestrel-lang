@@ -946,6 +946,64 @@ fun emitTemplateParts(ctx: CodegenContext, parts: List<Ast.TmplPart>): Unit =
     }
   }
 
+// Build a KList from a reversed list of elements (right-to-left fold).
+// listTemp holds the accumulated list; elemTemp is a scratch slot.
+fun emitListBuild(ctx: CodegenContext, elems: List<Ast.ListElem>, listTemp: Int, elemTemp: Int): Unit =
+  match (elems) {
+    [] => ()
+    LElem(e) :: rest => {
+      emitExpr(ctx, e)
+      storeLocal(ctx, elemTemp)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KCONS))
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      loadLocalSlot(ctx, elemTemp)
+      loadLocalSlot(ctx, listTemp)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KLIST))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, KCONS, "<init>", "(Ljava/lang/Object;Lkestrel/runtime/KList;)V"))
+      storeLocal(ctx, listTemp)
+      emitListBuild(ctx, rest, listTemp, elemTemp)
+    }
+    LSpread(e) :: rest => {
+      emitExpr(ctx, e)
+      storeLocal(ctx, elemTemp)
+      loadLocalSlot(ctx, elemTemp)
+      loadLocalSlot(ctx, listTemp)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, CF.cfMethodref(ctx.cf, RUNTIME, "listPrependAll", "(Ljava/lang/Object;Ljava/lang/Object;)Lkestrel/runtime/KList;"))
+      storeLocal(ctx, listTemp)
+      emitListBuild(ctx, rest, listTemp, elemTemp)
+    }
+  }
+
+// Emit KRecord field-set instructions for tuple elements, starting at index i.
+fun emitTupleElems(ctx: CodegenContext, xs: List<Ast.Expr>, i: Int): Unit =
+  match (xs) {
+    [] => ()
+    x :: rest => {
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, Str.fromInt(i)))
+      emitExpr(ctx, x)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "set", "(Ljava/lang/String;Ljava/lang/Object;)V"))
+      emitTupleElems(ctx, rest, i + 1)
+    }
+  }
+
+// Emit StringBuilder append calls for each template part.
+fun emitTemplateBuild(ctx: CodegenContext, parts: List<Ast.TmplPart>): Unit =
+  match (parts) {
+    [] => ()
+    TmplLit(s) :: rest => {
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, s))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, STRING_BUILDER, "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;"))
+      emitTemplateBuild(ctx, rest)
+    }
+    TmplExpr(e) :: rest => {
+      emitExpr(ctx, e)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, CF.cfMethodref(ctx.cf, RUNTIME, "formatOne", "(Ljava/lang/Object;)Ljava/lang/String;"))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, STRING_BUILDER, "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;"))
+      emitTemplateBuild(ctx, rest)
+    }
+  }
+
 export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
   match (stmt) {
     SVal(name, _ann, e) => {
@@ -1350,8 +1408,33 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
     EAwait(e) => { emitExpr(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
     EUnary(op, e) => emitUnaryExpr(ctx, op, e)
     EBinary(op, l, r) => emitBinaryExpr(ctx, op, l, r)
-    ECons(h, t) => { emitExpr(ctx, h); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); emitExpr(ctx, t); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
-    EPipe(_op, l, r) => { emitExpr(ctx, l); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); emitExpr(ctx, r); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
+    ECons(h, t) => {
+      val headSlot = ctx.nextLocal
+      val tailSlot = ctx.nextLocal + 1
+      ctx.nextLocal := ctx.nextLocal + 2
+      emitExpr(ctx, h)
+      storeLocal(ctx, headSlot)
+      emitExpr(ctx, t)
+      storeLocal(ctx, tailSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KCONS))
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      loadLocalSlot(ctx, headSlot)
+      loadLocalSlot(ctx, tailSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KLIST))
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, KCONS, "<init>", "(Ljava/lang/Object;Lkestrel/runtime/KList;)V"))
+    }
+    EPipe(op, left, right) =>
+      if (op == "|>") {
+        match (right) {
+          ECall(fn, args) => emitExpr(ctx, ECall(fn, left :: args))
+          _ => emitExpr(ctx, ECall(right, [left]))
+        }
+      } else {
+        match (left) {
+          ECall(fn, args) => emitExpr(ctx, ECall(fn, Lst.append(args, [right])))
+          _ => emitExpr(ctx, ECall(left, [right]))
+        }
+      }
     EIf(c, t, eOpt) => {
       emitExpr(ctx, c)
       CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
@@ -1375,8 +1458,27 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       emitMatchArms(ctx, arms)
     }
     ELambda(_async, _tp, _params, _body) => pushNull(ctx)
-    ETemplate(parts) => { emitTemplateParts(ctx, parts); pushNull(ctx) }
-    EList(elems) => { emitListElems(ctx, elems); pushNull(ctx) }
+    ETemplate(parts) => {
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, STRING_BUILDER))
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, STRING_BUILDER, "<init>", "()V"))
+      emitTemplateBuild(ctx, parts)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, STRING_BUILDER, "toString", "()Ljava/lang/String;"))
+    }
+    EList(elems) =>
+      if (Lst.isEmpty(elems)) {
+        val nilRef = CF.cfFieldref(ctx.cf, KNIL, "INSTANCE", "Lkestrel/runtime/KNil;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, nilRef)
+      } else {
+        val listTemp = ctx.nextLocal
+        val elemTemp = ctx.nextLocal + 1
+        ctx.nextLocal := ctx.nextLocal + 2
+        val nilRef = CF.cfFieldref(ctx.cf, KNIL, "INSTANCE", "Lkestrel/runtime/KNil;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, nilRef)
+        storeLocal(ctx, listTemp)
+        emitListBuild(ctx, Lst.reverse(elems), listTemp, elemTemp)
+        loadLocalSlot(ctx, listTemp)
+      }
     ERecord(spreadOpt, fields) => {
       match (spreadOpt) {
         Some(sp) => {
@@ -1392,7 +1494,12 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       }
       emitRecordFields(ctx, fields)
     }
-    ETuple(xs) => { emitExprList(ctx, xs); if (!Lst.isEmpty(xs)) CF.mbEmit1(ctx.mb, Op.JvmOp.pop) else (); pushNull(ctx) }
+    ETuple(xs) => {
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KRECORD))
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, KRECORD, "<init>", "()V"))
+      emitTupleElems(ctx, xs, 0)
+    }
     EThrow(e) => { emitExpr(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
     ETry(block, _varOpt, cases) => {
       emitBlockStmts(ctx, block.stmts)
