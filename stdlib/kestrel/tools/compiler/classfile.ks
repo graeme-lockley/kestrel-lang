@@ -148,6 +148,14 @@ export fun paramOnlyFrame(paramCount: Int): StackMapFrameState = {
   { numLocals = paramCount, objectSlots = slots, stackDepth = 0, stackItemCpIdx = 0 }
 }
 
+/// Create a frame state for a JVM exception handler entry point.
+/// The caught exception occupies the single operand stack slot; all numLocals
+/// slots up to numLocals are considered live Object references.
+export fun exceptionHandlerFrame(numLocals: Int, catchTypeIdx: Int): StackMapFrameState = {
+  val slots = slotList(0, numLocals, [])
+  { numLocals = numLocals, objectSlots = slots, stackDepth = 1, stackItemCpIdx = catchTypeIdx }
+}
+
 fun slotList(i: Int, count: Int, acc: List<Int>): List<Int> =
   if (i >= count) Lst.reverse(acc) else slotList(i + 1, count, i :: acc)
 

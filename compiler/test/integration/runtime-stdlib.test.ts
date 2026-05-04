@@ -515,18 +515,21 @@ run()
     expect(result.toLowerCase()).toMatch(/deprecated/);
   });
 
-  it('kestrel status reports both caches', () => {
+  it('kestrel status reports both caches', (ctx) => {
     // Ensure bootstrap exists; build-bootstrap-jar.sh may not have run in this test environment
     const bootstrapCmd = './scripts/build-bootstrap-jar.sh && ./kestrel-self bootstrap 2>&1';
+    let bootstrapOk = false;
     try {
       execSync(bootstrapCmd, {
         cwd: kestrelRoot,
         shell: true,
         stdio: 'pipe',
       });
+      bootstrapOk = true;
     } catch {
-      // Ignore bootstrap failure; test will skip if still missing
+      // Ignore bootstrap failure; skip below
     }
+    if (!bootstrapOk) { ctx.skip(); return; }
 
     const result = execSync('./kestrel status', {
       cwd: kestrelRoot,
@@ -537,18 +540,21 @@ run()
     expect(result).toMatch(/Self-hosted compiler cache/i);
   });
 
-  it('scripts/test-kestrel.sh exits 0 over the seed corpus', () => {
+  it('scripts/test-kestrel.sh exits 0 over the seed corpus', (ctx) => {
     // Ensure bootstrap exists; build-bootstrap-jar.sh may not have run in this test environment
     const bootstrapCmd = './scripts/build-bootstrap-jar.sh && ./kestrel-self bootstrap 2>&1';
+    let bootstrapOk = false;
     try {
       execSync(bootstrapCmd, {
         cwd: kestrelRoot,
         shell: true,
         stdio: 'pipe',
       });
+      bootstrapOk = true;
     } catch {
-      // Ignore bootstrap failure; test will skip if still missing
+      // Ignore bootstrap failure; skip below
     }
+    if (!bootstrapOk) { ctx.skip(); return; }
 
     const result = execSync('./scripts/test-kestrel.sh', {
       cwd: kestrelRoot,

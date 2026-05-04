@@ -1,0 +1,443 @@
+state_machine_spec_version: "1.0"
+id: implement-kanban-stories
+description: Deterministic state-machine runner around Pi, with planning/build/verify, tests, lint, retries, and Kanban movement.
+terminals:
+  success: FINISHED
+  failure: FAILED
+
+constants:
+  silent_phases:
+    - PLAN_STORY
+    - BUILD_STORY
+    - VERIFY_STORY
+
+types:
+  phase:
+    - DISCOVER_STORIES
+    - START_STORY
+    - PLAN_STORY
+    - EVALUATE_PLAN
+    - VERIFY_PLAN
+    - COMMIT_PLAN
+    - BUILD_STORY
+    - EVALUATE_BUILD
+    - RUN_TESTS
+    - EVALUATE_TESTS
+    - RUN_LINT
+    - EVALUATE_LINT
+    - VERIFY_STORY
+    - EVALUATE_VERIFY
+    - MARK_DONE
+    - MARK_BLOCKED
+    - NEXT_STORY
+    - FINISHED
+    - FAILED
+  pi_status:
+    - success
+    - issue
+
+config:
+  defaults:
+    piCommand: pi
+    rootDir: ${cwd}
+    storyDir: ./docs/kanban/unplanned
+    doneDir: ./docs/kanban/done
+    blockedDir: ./docs/kanban/blocked
+    runDirBase: .pi/runs
+    sessionDir: .pi/story-sessions
+    planSkillPath: .github/skills/plan-story/SKILL.md
+    buildSkillPath: .github/skills/build-story/SKILL.md
+    verifySkillPath: .github/skills/verify-story/SKILL.md
+    limit: null
+    maxAttempts: 8
+    testCommand: ./scripts/test-all.sh
+    lintCommand: ./scripts/lint-all.sh
+    piTimeoutMs: 600000
+    testTimeoutMs: 600000
+    storyPattern: "\\.md$"
+    continueOnBlocked: false
+    dryRun: false
+    verbose: true
+    piModel: null
+    piProvider: null
+    piThinking: null
+  cli:
+    "--pi": piCommand
+    "--root": rootDir
+    "--story-dir": storyDir
+    "--done-dir": doneDir
+    "--blocked-dir": blockedDir
+    "--run-dir-base": runDirBase
+    "--session-dir": sessionDir
+    "--plan-skill": planSkillPath
+    "--build-skill": buildSkillPath
+    "--verify-skill": verifySkillPath
+    "--max-attempts": maxAttempts
+    "--pi-timeout": piTimeoutMs(seconds_to_ms)
+    "--test-timeout": testTimeoutMs(seconds_to_ms)
+    "--limit": limit
+    "--test": testCommand
+    "--lint": lintCommand
+    "--model": piModel
+    "--provider": piProvider
+    "--thinking": piThinking
+    "--continue-on-blocked": continueOnBlocked=true
+    "--dry-run": dryRun=true
+    "--quiet": verbose=false
+
+machine:
+  initial_phase: DISCOVER_STORIES
+  context:
+    runId: timestamp_for_path(now)
+    runDir: resolve(config.rootDir, config.runDirBase, runId)
+    stories: []
+    storyIndex: 0
+    current: null
+    failure: null
+
+startup:
+  - action: ensure_runtime_directories
+  - action: write_run_json
+
+loop:
+  while: "phase not in ['FINISHED','FAILED']"
+  on_each_iteration:
+    - action: journal_phase_entered
+    - action: log_phase_banner_unless_silent
+    - action: dispatch_phase_transition
+  on_exit:
+    - action: journal_run_completed
+    - if: phase == 'FAILED'
+      then:
+        - action: throw_failure
+
+states:
+  DISCOVER_STORIES:
+    run:
+      - action: discover_stories
+    transitions:
+      - when: len(stories) == 0
+        to: FINISHED
+      - else: START_STORY
+
+  START_STORY:
+    run:
+      - action: start_story
+    transitions:
+      - when: current == null
+        to: FINISHED
+      - else: PLAN_STORY
+
+  PLAN_STORY:
+    run:
+      - action: plan_story
+    transitions:
+      - to: EVALUATE_PLAN
+
+  EVALUATE_PLAN:
+    run:
+      - action: evaluate_plan
+    transitions:
+      - when: current.blockedReason != null
+        to: MARK_BLOCKED
+      - else: VERIFY_PLAN
+
+  VERIFY_PLAN:
+    run:
+      - action: verify_plan
+    transitions:
+      - when: phase_set_by_action
+        to: "${phase}"
+
+  COMMIT_PLAN:
+    run:
+      - action: commit_plan
+    transitions:
+      - when: current.blockedReason != null
+        to: MARK_BLOCKED
+      - else: BUILD_STORY
+
+  BUILD_STORY:
+    run:
+      - action: build_story
+    transitions:
+      - when: current.blockedReason != null
+        to: MARK_BLOCKED
+      - else: EVALUATE_BUILD
+
+  EVALUATE_BUILD:
+    run:
+      - action: evaluate_build
+    transitions:
+      - when: current.blockedReason != null
+        to: MARK_BLOCKED
+      - else: RUN_TESTS
+
+  RUN_TESTS:
+    run:
+      - action: run_tests
+    transitions:
+      - when: current.blockedReason != null
+        to: MARK_BLOCKED
+      - else: EVALUATE_TESTS
+
+  EVALUATE_TESTS:
+    run:
+      - action: evaluate_tests
+    transitions:
+      - when: phase_set_by_action
+        to: "${phase}"
+
+  RUN_LINT:
+    run:
+      - action: run_lint
+    transitions:
+      - when: current.blockedReason != null
+        to: MARK_BLOCKED
+      - else: EVALUATE_LINT
+
+  EVALUATE_LINT:
+    run:
+      - action: evaluate_lint
+    transitions:
+      - when: phase_set_by_action
+        to: "${phase}"
+
+  VERIFY_STORY:
+    run:
+      - action: verify_story
+    transitions:
+      - when: current.blockedReason != null
+        to: MARK_BLOCKED
+      - else: EVALUATE_VERIFY
+
+  EVALUATE_VERIFY:
+    run:
+      - action: evaluate_verify
+    transitions:
+      - when: phase_set_by_action
+        to: "${phase}"
+
+  MARK_DONE:
+    run:
+      - action: mark_done
+    transitions:
+      - to: NEXT_STORY
+
+  MARK_BLOCKED:
+    run:
+      - action: mark_blocked
+    transitions:
+      - when: config.continueOnBlocked == true
+        to: NEXT_STORY
+      - else: FAILED
+
+  NEXT_STORY:
+    run:
+      - action: next_story
+    transitions:
+      - when: storyIndex >= len(stories)
+        to: FINISHED
+      - else: START_STORY
+
+actions:
+  discover_stories:
+    steps:
+      - storyDirAbs = resolve_from_root(config.storyDir)
+      - entries = fs.readdir(storyDirAbs, withFileTypes=true)
+      - stories = entries.files.map(join(storyDirAbs,name)).filter(regex(config.storyPattern)).sort()
+      - "if config.limit != null: stories = stories[0:config.limit]"
+      - journal event stories.discovered
+
+  start_story:
+    steps:
+      - storyPath = stories[storyIndex] or null
+      - "if storyPath == null: current=null; return"
+      - storyId = safe_name(basename_without_ext(storyPath))
+      - storyRunDir = join(runDir, storyId)
+      - sessionPath = resolve(config.rootDir, config.sessionDir, storyId + '.jsonl')
+      - mkdir(storyRunDir, recursive=true)
+      - mkdir(dirname(sessionPath), recursive=true)
+      - current = StoryContext with attempt=1, planRepairAttempts=0, artifactSequence=0, issues=[]
+      - write_story_state
+
+  plan_story:
+    steps:
+      - prompt = build_plan_prompt(current)
+      - write(next_artifact('plan.prompt.md'), prompt)
+      - planRawPath = next_artifact('plan.raw.txt')
+      - result = invoke_pi(phase=PLAN, skill=config.planSkillPath, tools=[read,grep,find,ls,write,bash], files=[current.storyPath], message=prompt, outputPath=planRawPath)
+      - write_json(next_artifact('plan.invocation.json'), result)
+      - current.plan = coerce_plan_result(result.parsed)
+      - current.planJsonPath = next_artifact('plan.json')
+      - write_json(current.planJsonPath, current.plan)
+      - write_story_state
+
+  evaluate_plan:
+    steps:
+      - "if current.plan is null: current.blockedReason='Planning did not produce a valid result.'"
+      - "else if current.plan.status == 'issue': current.blockedReason = current.plan.reason or 'Planning reported an issue.'"
+
+  verify_plan:
+    steps:
+      - plannedStoryPath = resolve(config.rootDir, './docs/kanban/planned', basename(current.storyPath))
+      - "if config.dryRun: current.storyPath=plannedStoryPath; current.issues=[]; phase='COMMIT_PLAN'; return"
+      - oldStoryPath = abs(current.storyPath)
+      - plannedExists = file_exists(plannedStoryPath)
+      - oldStillExists = file_exists(oldStoryPath)
+      - gitStatus = run_shell('git status --porcelain', cwd=config.rootDir)
+      - reasons = []
+      - "if not plannedExists: reasons += planned missing"
+      - "if oldStillExists: reasons += old file still exists"
+      - "if gitStatus.exitCode != 0: reasons += git status failed"
+      - "if gitStatus.exitCode == 0: parse changed paths; allow only old and planned; require both paths present"
+      - write_json(next_artifact('plan-verify-${planRepairAttempts+1}.json'), verification)
+      - "if reasons empty: current.storyPath=plannedStoryPath; current.issues=[]; phase='COMMIT_PLAN'; return"
+      - current.planRepairAttempts += 1
+      - current.issues = deterministic verification failures + repair instruction
+      - phase = PLAN_STORY
+
+  commit_plan:
+    steps:
+      - "if config.dryRun: return"
+      - git add -A -- originalStoryRelative currentStoryRelative
+      - "if add fails: current.blockedReason='Failed to stage planned story during commit phase...'; return"
+      - git commit -m 'docs(kanban): move {storyId} to planned'
+      - "if commit fails: current.blockedReason='Failed to commit planned story during commit phase...'; return"
+
+  build_story:
+    steps:
+      - "if current.planJsonPath missing: current.blockedReason='Invariant violated: missing plan JSON artifact before build.'; return"
+      - issuesPath = next_artifact('issues-${attempt}.md')
+      - prompt = build_build_prompt(current)
+      - write(issuesPath, render_issues(current.issues))
+      - write(next_artifact('build-${attempt}.prompt.md'), prompt)
+      - buildRawPath = next_artifact('build-${attempt}.raw.txt')
+      - result = invoke_pi(phase=BUILD, skill=config.buildSkillPath, tools=[read,grep,find,ls,edit,write,bash], files=[storyPath,planJsonPath,issuesPath], message=prompt, outputPath=buildRawPath)
+      - write_json(next_artifact('build-${attempt}.invocation.json'), result)
+      - current.build = coerce_build_result(result.parsed)
+      - current.buildJsonPath = next_artifact('build-${attempt}.json')
+      - write_json(current.buildJsonPath, current.build)
+      - write_story_state
+
+  evaluate_build:
+    steps:
+      - "if current.build is null: current.blockedReason='Build attempt ${attempt} did not produce a valid result.'"
+      - "else if current.build.status == 'issue': current.blockedReason=current.build.reason or 'Build attempt ${attempt} reported an issue.'"
+
+  run_tests:
+    steps:
+      - "if current.build missing or not success: current.blockedReason='Invariant violated: RUN_TESTS reached before a successful build.'; return"
+      - current.testResult = config.dryRun ? dry_run_command(config.testCommand) : run_shell(config.testCommand, cwd=config.rootDir, streamOutput=true, timeout=config.testTimeoutMs)
+      - current.testJsonPath = next_artifact('test-${attempt}.json')
+      - write_json(current.testJsonPath, current.testResult)
+      - write(next_artifact('test-${attempt}.stdout.log'), current.testResult.stdout)
+      - write(next_artifact('test-${attempt}.stderr.log'), current.testResult.stderr)
+      - write_story_state
+
+  evaluate_tests:
+    steps:
+      - "if current.testResult missing: current.blockedReason='Test command did not produce a result.'; phase='MARK_BLOCKED'; return"
+      - "if exitCode != 0: current.issues = test failure packet; phase = next_attempt_or_blocked('Tests failed.'); return"
+      - phase = RUN_LINT
+
+  run_lint:
+    steps:
+      - "if current.build missing or not success: current.blockedReason='Invariant violated: RUN_LINT reached before a successful build.'; return"
+      - current.lintResult = config.dryRun ? dry_run_command(config.lintCommand) : run_shell(config.lintCommand, cwd=config.rootDir, streamOutput=true, timeout=config.testTimeoutMs)
+      - current.lintJsonPath = next_artifact('lint-${attempt}.json')
+      - write_json(current.lintJsonPath, current.lintResult)
+      - write(next_artifact('lint-${attempt}.stdout.log'), current.lintResult.stdout)
+      - write(next_artifact('lint-${attempt}.stderr.log'), current.lintResult.stderr)
+      - write_story_state
+
+  evaluate_lint:
+    steps:
+      - "if current.lintResult missing: current.blockedReason='Lint command did not produce a result.'; phase='MARK_BLOCKED'; return"
+      - "if exitCode != 0: current.issues = lint failure packet; phase = next_attempt_or_blocked('Lint failed.'); return"
+      - phase = VERIFY_STORY
+
+  verify_story:
+    steps:
+      - require plan/build/test/lint artifact paths; else blocked invariant
+      - prompt = build_verify_prompt(current)
+      - write(next_artifact('verify-${attempt}.prompt.md'), prompt)
+      - verifyRawPath = next_artifact('verify-${attempt}.raw.txt')
+      - result = invoke_pi(phase=VERIFY, skill=config.verifySkillPath, tools=[read,grep,find,ls], files=[storyPath,planPath,buildPath,testPath,lintPath], message=prompt, outputPath=verifyRawPath)
+      - write_json(next_artifact('verify-${attempt}.invocation.json'), result)
+      - current.verify = coerce_verify_result(result.parsed)
+      - current.verifyJsonPath = next_artifact('verify-${attempt}.json')
+      - write_json(current.verifyJsonPath, current.verify)
+      - write_story_state
+
+  evaluate_verify:
+    steps:
+      - "if current.verify missing: current.issues=['Verification attempt ${attempt} did not produce a valid result.']; phase=next_attempt_or_blocked('Verification produced invalid output.'); return"
+      - "if current.verify.status == success: phase='MARK_DONE'; return"
+      - current.issues = ['Verification failed on attempt ${attempt}.', verify.reason or verify.summary or fallback, ...verify.issues]
+      - phase = next_attempt_or_blocked('Verification failed.')
+
+  mark_done:
+    steps:
+      - targetPath = resolve(doneDir, basename(current.storyPath)); mkdir(doneDir, recursive=true)
+      - "if not dryRun: rename(current.storyPath, targetPath)"
+      - "if not dryRun: run_shell('git add -A && git commit -m \"docs(kanban): move {storyId} to done\"')"
+      - write(next_artifact('final-report.md'), render_final_report(outcome='done'))
+      - journal story.done
+
+  mark_blocked:
+    steps:
+      - targetPath = resolve(blockedDir, basename(current.storyPath)); mkdir(blockedDir, recursive=true)
+      - reason = current.blockedReason or join(current.issues, '\n') or default
+      - current.blockedReason = reason
+      - write(next_artifact('final-report.md'), render_final_report(outcome='blocked'))
+      - "if not dryRun: rename(current.storyPath, targetPath)"
+      - "if not dryRun: run_shell('git add -A && git commit -m \"docs(kanban): move {storyId} to blocked\"')"
+      - journal story.blocked
+      - "if not continueOnBlocked: failure='Blocked story: ...'; phase='FAILED'"
+
+  next_story:
+    steps:
+      - storyIndex += 1
+      - current = null
+
+helpers:
+  next_attempt_or_blocked:
+    input: blockedReason
+    logic:
+      - "if current.attempt >= config.maxAttempts:"
+      - "  current.blockedReason = blockedReason + ' Reached max attempts: {maxAttempts}.'"
+      - "  return 'MARK_BLOCKED'"
+      - current.attempt += 1
+      - "return 'BUILD_STORY'"
+
+  invoke_pi:
+    behavior:
+      - Build args: --print --session-dir <resolved> --session <story.sessionPath> --no-skills --skill <skillPath> --tools <csv> [provider/model/thinking] @<attached-files> <message>
+      - "If dryRun: synthesize phase-specific success JSON"
+      - "Else run command with stream output, heartbeat every 15s, timeout config.piTimeoutMs"
+      - "On timeout: hard fail run"
+      - "Write stdout to outputPath"
+      - "Extract JSON by: whole-object fast path, else last raw object in output, else last fenced object"
+      - "If process exitCode != 0: hard fail run"
+
+  parse_git_status_paths:
+    logic:
+      - "For porcelain lines, drop first 3 chars"
+      - "If rename format 'A -> B', emit both paths"
+      - "Else emit single path"
+
+  artifact_naming:
+    logic:
+      - "Increment current.artifactSequence by 1"
+      - "Prefix filename with zero-padded sequence (3 digits)"
+
+required_processor_capabilities:
+  - Expression evaluation for guards and assignments
+  - Filesystem: readdir/stat/mkdir/read/write/rename/access
+  - Process execution with stdout/stderr capture, streaming, timeout, SIGTERM then SIGKILL
+  - JSON parsing/coercion
+  - Regex filtering
+  - Path operations and normalization
+  - Git command execution
+  - NDJSON journaling

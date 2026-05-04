@@ -6,7 +6,7 @@ import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Ty from "kestrel:dev/typecheck/types"
-import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, PVar, PLit, PCon, PList, PCons, PTuple, EField, SVal, SVar, SAssign, SExpr, SBreak, SContinue, EList, ECons, EPipe, LElem } from "kestrel:dev/parser/ast"
+import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, PVar, PLit, PCon, PList, PCons, PTuple, EField, SVal, SVar, SAssign, SExpr, SBreak, SContinue, EList, ECons, EPipe, LElem, EThrow, ETry } from "kestrel:dev/parser/ast"
 import * as Ast from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
@@ -732,5 +732,60 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(sg, "EMatch PCons: emits GETFIELD(180)", containsSeq(code, [180]))
       val bytes = finish(t.cf, t.mb)
       isTrue(sg, "EMatch PCons: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "EThrow emits ATHROW", (sg: Suite) => {
+      // EThrow(ELit("int","1")) should emit NEW KException, DUP_X1, SWAP, INVOKESPECIAL, ATHROW.
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EThrow(ELit("int", "1")))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EThrow: emits NEW(187)", containsSeq(code, [187]))
+      isTrue(sg, "EThrow: emits DUP_X1(90)", containsSeq(code, [90]))
+      isTrue(sg, "EThrow: emits SWAP(95)", containsSeq(code, [95]))
+      isTrue(sg, "EThrow: emits INVOKESPECIAL(183)", containsSeq(code, [183]))
+      isTrue(sg, "EThrow: emits ATHROW(191)", containsSeq(code, [191]))
+    })
+
+    group(s1, "ETry no-throw path returns body value", (sg: Suite) => {
+      // try { 42 } catch (e) { _ => 0 }  — no-throw: GOTO jumps past handler; ATHROW at rethrow end.
+      val t = baseContext()
+      val catchArm = { pattern = PWild, body = ELit("int", "0") }
+      val tryBlock = { stmts = [], result = ELit("int", "42") }
+      CG.emitExpr(t.ctx, ETry(tryBlock, Some("e"), [catchArm]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "ETry no-throw: emits GOTO(167)", containsSeq(code, [167]))
+      isTrue(sg, "ETry no-throw: emits ATHROW(191)", containsSeq(code, [191]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "ETry no-throw: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "ETry catch arm dispatch — INVOKESTATIC normalizeCaught", (sg: Suite) => {
+      // try { 1 } catch { _ => 99 }  — handler always calls normalizeCaught (INVOKESTATIC).
+      val t = baseContext()
+      val catchArm = { pattern = PWild, body = ELit("int", "99") }
+      val tryBlock = { stmts = [], result = ELit("int", "1") }
+      CG.emitExpr(t.ctx, ETry(tryBlock, None, [catchArm]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "ETry catch dispatch: emits INVOKESTATIC(184)", containsSeq(code, [184]))
+      isTrue(sg, "ETry catch dispatch: emits CHECKCAST(192)", containsSeq(code, [192]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "ETry catch dispatch: class bytes produced", BA.length(bytes) > 0)
+    })
+
+    group(s1, "ETry nested — two rethrow ATHROW opcodes", (sg: Suite) => {
+      // Nested try: inner try as body of outer catch arm.
+      // Each ETry emits one rethrow ATHROW so two nested tries yield at least two ATHROW opcodes.
+      val t = baseContext()
+      val innerArm = { pattern = PWild, body = ELit("int", "0") }
+      val innerBlock = { stmts = [], result = ELit("int", "2") }
+      val innerTry = ETry(innerBlock, None, [innerArm])
+      val outerArm = { pattern = PWild, body = innerTry }
+      val outerBlock = { stmts = [], result = ELit("int", "1") }
+      CG.emitExpr(t.ctx, ETry(outerBlock, None, [outerArm]))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      val athrowCount = Lst.foldl(code, 0, (acc: Int, b: Int) => if (b == 191) acc + 1 else acc)
+      isTrue(sg, "ETry nested: at least two ATHROW(191) opcodes", athrowCount >= 2)
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "ETry nested: class bytes produced", BA.length(bytes) > 0)
     })
   })

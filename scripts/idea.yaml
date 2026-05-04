@@ -1,0 +1,47 @@
+machine:
+  stories: 
+    exec: javascript
+    expr: Files.load("./docs/kanban/unplanned").sort()
+  attempts: 0
+  max_attempts: 3
+
+states:
+  - name: OUTER_LOOP
+    on_enter:
+      - log: "Starting outer loop"
+    transitions:
+      - condition: "${machine.stories.length} == 0"
+        target: OUTER_LOOP_END
+      - condition: true
+        target: START_STORY
+
+  - name: START_STORY
+    on_enter:
+      - set_variable: { name: "story", value: "${machine.stories.shift()}" }
+      - log: "Starting story: ${story}"
+      - set_variable: { name: "attempts", value: 0 }
+    transitions:
+      - condition: "${attempts} < ${max_attempts}"
+        target: EXECUTE_STORY
+      - condition: true
+        target: STORY_FAILED
+
+  - name: LINT_PROJECT
+    on_enter:
+      - log: "Linting project for story: ${story}"
+      - exec: "./scripts/lint-all.sh"
+    transitions:
+      - condition: "${result.code} == 0"
+        target: EXECUTE_STORY
+      - condition: true
+        target: STORY_FAILED
+
+  - name: OUTER_LOOP_END
+    on_enter:
+      - log: "Finished processing all stories."  
+      - exit: 0
+
+  - name: STORY_FAILED
+    on_enter:
+      - log: "Failed to execute story: ${story} after ${attempts} attempts."
+      - exit: 1
