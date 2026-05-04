@@ -26,6 +26,38 @@ states:
       - condition: true
         target: STORY_FAILED
 
+  - name: PLAN_STORY
+    on_enter:
+      - log: "Executing story: ${story}, attempt ${attempts + 1}"
+      - llm: |
+          PHASE: PLAN
+
+          You are planning exactly one Kanban story using the plan-story skill.
+ 
+          Story: ${story}
+
+          Rules:
+          - Do not edit ANY files other than story itself.
+          - You must move the story from unplanned to planned.
+          - You must not change any file other than the story file move/content.
+          - Apply the skill plan-story skill as written, without deviation.
+
+          Return only strict JSON. No Markdown. No prose outside JSON.
+
+          Deterministic verification feedback from previous attempt (if any):
+          ${story.issues.length === 0 ? ["- None"] : story.issues.map((issue) => `- ${issue}`)}
+
+          Return JSON with this shape:
+            {
+              "status": "success" | "issue",
+              "summary": "string",
+              "reason": "string | null",
+              "acceptanceCriteria": ["string"],
+              "implementationPlan": ["string"],
+              "filesLikelyToChange": ["string"],
+              "risks": ["string"]
+            }
+
   - name: LINT_PROJECT
     on_enter:
       - log: "Linting project for story: ${story}"

@@ -67,17 +67,23 @@ TS reference:
 
 ## Acceptance Criteria
 
-- [ ] `throw MyError("msg")` causes the JVM to throw the exception at runtime.
-- [ ] `try { throw E("x") } catch (E(m)) { m }` evaluates to `"x"`.
-- [ ] A `try` block that does not throw returns its body value.
-- [ ] Nested `try` expressions work correctly.
-- [ ] New codegen unit tests cover throw, catch, and no-throw paths.
-- [ ] `cd compiler && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] `throw MyError("msg")` causes the JVM to throw the exception at runtime.
+- [x] `try { throw E("x") } catch (E(m)) { m }` evaluates to `"x"`.
+- [x] A `try` block that does not throw returns its body value.
+- [x] Nested `try` expressions work correctly.
+- [x] New codegen unit tests cover throw, catch, and no-throw paths.
+- [x] `cd compiler && npm test` passes (457 tests).
+- [x] `./scripts/kestrel test` passes (2188 tests).
 
 ## Spec References
 
-- `docs/specs/01-language.md` — throw and try expressions
+- `docs/specs/01-language.md` — throw and try expressions; confirmed §4 spec text matches new codegen behavior.
+
+## Build notes
+
+- 2026-05-04: Started implementation. Implemented `EThrow` with `NEW KException`, `DUP_X1`, `SWAP`, `INVOKESPECIAL`, `ATHROW`. Implemented `ETry` with exception table entry, `normalizeCaught` dispatch, catch arm pattern matching via `emitMatchArmsFull`, rethrow tail, and backpatching. Added `exceptionHandlerFrame` helper to `classfile.ks`.
+- 2026-05-04: Discovered TS compiler OOM during codegen.ks typechecking; the large `ETry` implementation in the `emitExpr` match body exceeded the TS compiler's analysis budget. Extracted `emitEThrow` and `emitETry` helpers to split the match expression into smaller independent functions, reducing each function's type complexity. Fixed syntax error: bare `match` arms with `:=` mutation require `{ }` braces. Bootstrap JAR now builds cleanly at 4 GB Node heap (vs. OOM at 16 GB with monolithic match arm).
+- 2026-05-04: All test suites pass: compiler (457 tests), kestrel (2188 tests). Bootstrap JAR builds successfully. Self-hosted bootstrap completed. All acceptance criteria satisfied.
 
 ## Risks / Notes
 
@@ -101,44 +107,18 @@ TS reference:
 
 ## Tasks
 
-- [ ] Add `val K_EXCEPTION = "kestrel/runtime/KException"` near other class-name constants in `stdlib/kestrel/tools/compiler/codegen.ks` (around line 44).
-- [ ] Add `export fun exceptionHandlerFrame(numLocals: Int, catchTypeIdx: Int): StackMapFrameState` to `stdlib/kestrel/tools/compiler/classfile.ks`. The helper constructs `{ numLocals = numLocals, objectSlots = slotList(0, numLocals, []), stackDepth = 1, stackItemCpIdx = catchTypeIdx }`.
-- [ ] Rewrite `EThrow` arm in `emitExpr` (`codegen.ks`): emit the exception value expression; then `NEW K_EXCEPTION`; `DUP_X1`; `SWAP`; `INVOKESPECIAL K_EXCEPTION "<init>" "(Ljava/lang/Object;)V"`; `ATHROW`. Return (no further value push since ATHROW transfers control).
-- [ ] Rewrite `ETry` arm in `emitExpr` (`codegen.ks`) — try body:
-  - Allocate `tryResultSlot = ctx.nextLocal; ctx.nextLocal += 1`.
-  - Record `tryStart = CF.mbLength(ctx.mb)`; register branch target via `CF.mbAddBranchTarget` with `Some(CF.paramOnlyFrame(ctx.nextLocal))`.
-  - Emit `emitBlockStmts(ctx, block.stmts)` then `emitExpr(ctx, block.result)`.
-  - `ASTORE tryResultSlot`; record `gotoAfterTry = CF.mbLength(ctx.mb)`; emit `GOTO 0` (placeholder).
-- [ ] Rewrite `ETry` arm — exception handler and table entry:
-  - Record `handlerStart = CF.mbLength(ctx.mb)`.
-  - Compute `tryBodyExtra = estimateBodyLocals(EBlock(block))`; compute `handlerNumLocals = max(ctx.nextLocal + tryBodyExtra, 70)`.
-  - Obtain `throwableClassIdx = CF.cfClassRef(ctx.cf, "java/lang/Throwable")`.
-  - Register handler branch target: `CF.mbAddBranchTarget(ctx.mb, handlerStart, Some(CF.exceptionHandlerFrame(handlerNumLocals, throwableClassIdx)))`.
-  - Register exception table entry: `CF.mbAddException(ctx.mb, tryStart, handlerStart, handlerStart, throwableClassIdx)`.
-- [ ] Rewrite `ETry` arm — normalizeCaught dispatch:
-  - `ASTORE EXN_SLOT (57)`; `ALOAD EXN_SLOT`; `CHECKCAST "java/lang/Throwable"`.
-  - Look up `ArithmeticOverflow`, `DivideByZero`, `Cancelled` from `ctx.mctx.adtClassByConstructor`; push each via `LDC_W` string or `ACONST_NULL`.
-  - `INVOKESTATIC KRuntime "normalizeCaught" "(Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;"`.
-  - `ASTORE PAYLOAD_SLOT (56)`.
-  - If `varOpt = Some(name)`, bind `name` → PAYLOAD_SLOT in `ctx.locals`.
-- [ ] Rewrite `ETry` arm — catch arm dispatch and rethrow:
-  - Compute `catchBaseState = CF.paramOnlyFrame(max(ctx.nextLocal, 58))`.
-  - Save `savedNextLocal = ctx.nextLocal`.
-  - Emit catch arms: `val catchEndLabels = emitMatchArmsFull(ctx, cases, 56, tryResultSlot, savedNextLocal, catchBaseState, CF.mbGetCode(ctx.mb))`.
-  - Emit rethrow tail: register branch target with `catchBaseState`; `ALOAD EXN_SLOT (57)`; `CHECKCAST "java/lang/Throwable"`; `ATHROW`.
-- [ ] Rewrite `ETry` arm — afterCatch backpatching and result:
-  - Record `afterCatch = CF.mbLength(ctx.mb)`; register branch target with `CF.paramOnlyFrame(ctx.nextLocal)`.
-  - Backpatch `gotoAfterTry` → afterCatch: `patchShort(code, gotoAfterTry + 1, afterCatch - gotoAfterTry)`.
-  - Backpatch all `catchEndLabels` → afterCatch via `backpatchBreakJumps`.
-  - Restore `varOpt` binding if set.
-  - `ALOAD tryResultSlot` (push expression result).
-- [ ] Remove or tombstone `emitMatchArmsStub` from `codegen.ks` — it was a placeholder for ETry and is no longer needed. Remove calls to it from ETry.
-- [ ] Add test group `"EThrow emits ATHROW"` to `codegen-expr.test.ks`: construct an `EThrow(ELit("int", "1"))` expression; verify the code buffer contains the `ATHROW` opcode (191) and `NEW` opcode (187).
-- [ ] Add test group `"ETry no-throw path returns body value"` to `codegen-expr.test.ks`: construct an `ETry` with a simple body and a wildcard catch arm; verify a non-empty class is produced (exception table present).
-- [ ] Add test group `"ETry catch arm pattern dispatch"` to `codegen-expr.test.ks`: verify that the generated code buffer contains `INSTANCEOF` (193), `IFEQ` (153), and `INVOKESTATIC` for `normalizeCaught`.
-- [ ] Add test group `"nested ETry"` to `codegen-expr.test.ks`: two nested `ETry` expressions; verify that two exception table entries are present in the resulting classfile bytes.
-- [ ] Run `cd compiler && npm test`.
-- [ ] Run `./scripts/kestrel test`.
+- [x] Add `val K_EXCEPTION = "kestrel/runtime/KException"` near other class-name constants in `stdlib/kestrel/tools/compiler/codegen.ks` (around line 44).
+- [x] Add `export fun exceptionHandlerFrame(numLocals: Int, catchTypeIdx: Int): StackMapFrameState` to `stdlib/kestrel/tools/compiler/classfile.ks`. The helper constructs `{ numLocals = numLocals, objectSlots = slotList(0, numLocals, []), stackDepth = 1, stackItemCpIdx = catchTypeIdx }`.
+- [x] Rewrite `EThrow` arm in `emitExpr` (`codegen.ks`): emit the exception value expression; then `NEW K_EXCEPTION`; `DUP_X1`; `SWAP`; `INVOKESPECIAL K_EXCEPTION "<init>" "(Ljava/lang/Object;)V"`; `ATHROW`. Return (no further value push since ATHROW transfers control).
+- [x] Rewrite `ETry` arm in `emitExpr` (`codegen.ks`) — try body, handler setup, normalizeCaught dispatch, catch arm dispatch, rethrow, backpatching, and result.
+- [x] Remove or tombstone `emitMatchArmsStub` from `codegen.ks` — it was a placeholder for ETry and is no longer needed. Remove calls to it from ETry.
+- [x] Extract `emitEThrow` and `emitETry` helpers to avoid typechecker OOM on large match body (refactored after initial implementation).
+- [x] Add test group `"EThrow emits ATHROW"` to `codegen-expr.test.ks`.
+- [x] Add test group `"ETry no-throw path returns body value"` to `codegen-expr.test.ks`.
+- [x] Add test group `"ETry catch arm pattern dispatch"` to `codegen-expr.test.ks`.
+- [x] Add test group `"nested ETry"` to `codegen-expr.test.ks`.
+- [x] Run `cd compiler && npm test` (457 tests pass).
+- [x] Run `./scripts/kestrel test` (2188 tests pass).
 
 ## Tests to add
 
@@ -153,4 +133,4 @@ TS reference:
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — review §4 (throw/try semantics) to confirm spec text matches the new codegen behaviour; no text changes are expected but verify.
+- [x] `docs/specs/01-language.md` — review §4 (throw/try semantics) to confirm spec text matches the new codegen behaviour; no text changes are expected but verify.

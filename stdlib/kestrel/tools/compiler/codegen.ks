@@ -1747,6 +1747,97 @@ fun emitMatchArmsFull(ctx: CodegenContext, arms: List<Ast.Case_>, scrutSlot: Int
 
 // emitMatchArmsStub was removed in S17-33 when ETry gained real JVM exception dispatch.
 
+// Helper extracted from emitExpr to avoid typechecker OOM on large match bodies.
+fun emitEThrow(ctx: CodegenContext, e: Ast.Expr): Unit = {
+  emitExpr(ctx, e)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, K_EXCEPTION))
+  CF.mbEmit1(ctx.mb, Op.JvmOp.dupX1)
+  CF.mbEmit1(ctx.mb, Op.JvmOp.swap)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, K_EXCEPTION, "<init>", "(Ljava/lang/Object;)V"))
+  CF.mbEmit1(ctx.mb, Op.JvmOp.athrow)
+}
+
+// Helper extracted from emitExpr to avoid typechecker OOM on large match bodies.
+fun emitETry(ctx: CodegenContext, block: Ast.Block_, varOpt: Option<String>, cases: List<Ast.Case_>): Unit = {
+  // Allocate the try-result slot.
+  val tryResultSlot = ctx.nextLocal
+  ctx.nextLocal := ctx.nextLocal + 1
+  // --- Try body ---
+  val tryStart = CF.mbLength(ctx.mb)
+  CF.mbAddBranchTarget(ctx.mb, tryStart, Some(CF.paramOnlyFrame(ctx.nextLocal)))
+  emitBlockStmts(ctx, block.stmts)
+  emitExpr(ctx, block.result)
+  storeLocal(ctx, tryResultSlot)
+  val gotoAfterTry = CF.mbLength(ctx.mb)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)   // placeholder — backpatched to afterCatch
+  // --- Handler setup ---
+  val handlerStart = CF.mbLength(ctx.mb)
+  val tryBodyExtra = estimateBodyLocals(EBlock(block))
+  val handlerNumLocals = if (ctx.nextLocal + tryBodyExtra > 70) ctx.nextLocal + tryBodyExtra else 70
+  val throwableClassIdx = CF.cfClassRef(ctx.cf, "java/lang/Throwable")
+  CF.mbAddBranchTarget(ctx.mb, handlerStart, Some(CF.exceptionHandlerFrame(handlerNumLocals, throwableClassIdx)))
+  CF.mbAddException(ctx.mb, tryStart, handlerStart, handlerStart, throwableClassIdx)
+  // --- normalizeCaught dispatch ---
+  val EXN_SLOT = 57
+  val PAYLOAD_SLOT = 56
+  storeLocal(ctx, EXN_SLOT)
+  loadLocalSlot(ctx, EXN_SLOT)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, throwableClassIdx)
+  // Push ArithmeticOverflow class string (or null).
+  match (Dict.get(ctx.mctx.adtClassByConstructor, "ArithmeticOverflow")) {
+    Some(c) => CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, c))
+    None => CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
+  }
+  // Push DivideByZero class string (or null).
+  match (Dict.get(ctx.mctx.adtClassByConstructor, "DivideByZero")) {
+    Some(c) => CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, c))
+    None => CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
+  }
+  // Push Cancelled class string (or null).
+  match (Dict.get(ctx.mctx.adtClassByConstructor, "Cancelled")) {
+    Some(c) => CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, c))
+    None => CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
+  }
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic,
+    CF.cfMethodref(ctx.cf, RUNTIME, "normalizeCaught",
+      "(Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;"))
+  storeLocal(ctx, PAYLOAD_SLOT)
+  // Bind varOpt name to PAYLOAD_SLOT if present.
+  val prevVarOpt = match (varOpt) {
+    Some(name) => {
+      val prev = Dict.get(ctx.locals, name)
+      ctx.locals := Dict.insert(ctx.locals, name, PAYLOAD_SLOT)
+      prev
+    }
+    None => None
+  }
+  // --- Catch arm dispatch ---
+  val catchBaseState = CF.paramOnlyFrame(if (ctx.nextLocal > 58) ctx.nextLocal else 58)
+  val savedNextLocal = ctx.nextLocal
+  val code = CF.mbGetCode(ctx.mb)
+  val catchEndLabels = emitMatchArmsFull(ctx, cases, PAYLOAD_SLOT, tryResultSlot, savedNextLocal, catchBaseState, code)
+  // --- Rethrow if no arm matched ---
+  val rethrowPos = CF.mbLength(ctx.mb)
+  CF.mbAddBranchTarget(ctx.mb, rethrowPos, Some(catchBaseState))
+  loadLocalSlot(ctx, EXN_SLOT)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, throwableClassIdx)
+  CF.mbEmit1(ctx.mb, Op.JvmOp.athrow)
+  // --- Backpatch and result ---
+  val afterCatch = CF.mbLength(ctx.mb)
+  CF.mbAddBranchTarget(ctx.mb, afterCatch, Some(CF.paramOnlyFrame(ctx.nextLocal)))
+  patchShort(code, gotoAfterTry + 1, afterCatch - gotoAfterTry)
+  backpatchBreakJumps(code, catchEndLabels, afterCatch)
+  // Restore varOpt binding.
+  match (varOpt) {
+    Some(name) => match (prevVarOpt) {
+      Some(prev) => { ctx.locals := Dict.insert(ctx.locals, name, prev) }
+      None => { ctx.locals := Dict.remove(ctx.locals, name) }
+    }
+    None => ()
+  }
+  loadLocalSlot(ctx, tryResultSlot)
+}
+
 // True if the then-arm of an if expression falls through with a value on the JVM stack.
 // False when the arm transfers control unconditionally (ENever, or block ending with break/continue),
 // which means emitting ASTORE/GOTO after it would produce unreachable bytecode the verifier rejects.
@@ -2214,93 +2305,8 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, KRECORD, "<init>", "()V"))
       emitTupleElems(ctx, xs, 0)
     }
-    EThrow(e) => {
-      emitExpr(ctx, e)
-      CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, K_EXCEPTION))
-      CF.mbEmit1(ctx.mb, Op.JvmOp.dupX1)
-      CF.mbEmit1(ctx.mb, Op.JvmOp.swap)
-      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, K_EXCEPTION, "<init>", "(Ljava/lang/Object;)V"))
-      CF.mbEmit1(ctx.mb, Op.JvmOp.athrow)
-    }
-    ETry(block, varOpt, cases) => {
-      // Allocate the try-result slot.
-      val tryResultSlot = ctx.nextLocal
-      ctx.nextLocal := ctx.nextLocal + 1
-      // --- Try body ---
-      val tryStart = CF.mbLength(ctx.mb)
-      CF.mbAddBranchTarget(ctx.mb, tryStart, Some(CF.paramOnlyFrame(ctx.nextLocal)))
-      emitBlockStmts(ctx, block.stmts)
-      emitExpr(ctx, block.result)
-      storeLocal(ctx, tryResultSlot)
-      val gotoAfterTry = CF.mbLength(ctx.mb)
-      CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)   // placeholder — backpatched to afterCatch
-      // --- Handler setup ---
-      val handlerStart = CF.mbLength(ctx.mb)
-      val tryBodyExtra = estimateBodyLocals(EBlock(block))
-      val handlerNumLocals = if (ctx.nextLocal + tryBodyExtra > 70) ctx.nextLocal + tryBodyExtra else 70
-      val throwableClassIdx = CF.cfClassRef(ctx.cf, "java/lang/Throwable")
-      CF.mbAddBranchTarget(ctx.mb, handlerStart, Some(CF.exceptionHandlerFrame(handlerNumLocals, throwableClassIdx)))
-      CF.mbAddException(ctx.mb, tryStart, handlerStart, handlerStart, throwableClassIdx)
-      // --- normalizeCaught dispatch ---
-      val EXN_SLOT = 57
-      val PAYLOAD_SLOT = 56
-      storeLocal(ctx, EXN_SLOT)
-      loadLocalSlot(ctx, EXN_SLOT)
-      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, throwableClassIdx)
-      // Push ArithmeticOverflow class string (or null).
-      match (Dict.get(ctx.mctx.adtClassByConstructor, "ArithmeticOverflow")) {
-        Some(c) => CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, c))
-        None => CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
-      }
-      // Push DivideByZero class string (or null).
-      match (Dict.get(ctx.mctx.adtClassByConstructor, "DivideByZero")) {
-        Some(c) => CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, c))
-        None => CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
-      }
-      // Push Cancelled class string (or null).
-      match (Dict.get(ctx.mctx.adtClassByConstructor, "Cancelled")) {
-        Some(c) => CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, c))
-        None => CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
-      }
-      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic,
-        CF.cfMethodref(ctx.cf, RUNTIME, "normalizeCaught",
-          "(Ljava/lang/Throwable;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/Object;"))
-      storeLocal(ctx, PAYLOAD_SLOT)
-      // Bind varOpt name to PAYLOAD_SLOT if present.
-      val prevVarOpt = match (varOpt) {
-        Some(name) => {
-          val prev = Dict.get(ctx.locals, name)
-          ctx.locals := Dict.insert(ctx.locals, name, PAYLOAD_SLOT)
-          prev
-        }
-        None => None
-      }
-      // --- Catch arm dispatch ---
-      val catchBaseState = CF.paramOnlyFrame(if (ctx.nextLocal > 58) ctx.nextLocal else 58)
-      val savedNextLocal = ctx.nextLocal
-      val code = CF.mbGetCode(ctx.mb)
-      val catchEndLabels = emitMatchArmsFull(ctx, cases, PAYLOAD_SLOT, tryResultSlot, savedNextLocal, catchBaseState, code)
-      // --- Rethrow if no arm matched ---
-      val rethrowPos = CF.mbLength(ctx.mb)
-      CF.mbAddBranchTarget(ctx.mb, rethrowPos, Some(catchBaseState))
-      loadLocalSlot(ctx, EXN_SLOT)
-      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, throwableClassIdx)
-      CF.mbEmit1(ctx.mb, Op.JvmOp.athrow)
-      // --- Backpatch and result ---
-      val afterCatch = CF.mbLength(ctx.mb)
-      CF.mbAddBranchTarget(ctx.mb, afterCatch, Some(CF.paramOnlyFrame(ctx.nextLocal)))
-      patchShort(code, gotoAfterTry + 1, afterCatch - gotoAfterTry)
-      backpatchBreakJumps(code, catchEndLabels, afterCatch)
-      // Restore varOpt binding.
-      match (varOpt) {
-        Some(name) => match (prevVarOpt) {
-          Some(prev) => ctx.locals := Dict.insert(ctx.locals, name, prev)
-          None => ctx.locals := Dict.remove(ctx.locals, name)
-        }
-        None => ()
-      }
-      loadLocalSlot(ctx, tryResultSlot)
-    }
+    EThrow(e) => emitEThrow(ctx, e)
+    ETry(block, varOpt, cases) => emitETry(ctx, block, varOpt, cases)
     EBlock(block) => {
       emitBlockStmts(ctx, block.stmts)
       emitExpr(ctx, block.result)

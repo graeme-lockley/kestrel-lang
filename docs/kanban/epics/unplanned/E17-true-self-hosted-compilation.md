@@ -308,10 +308,10 @@ markers, but those are considered tranche-local scaffolding, not the final state
     skip patches. Covers all pattern kinds: `PWild`, `PVar`, `PLit`, `PCon`, `PList`,
     `PCons`, `PTuple`.
 
-35. [S17-33 — Codegen: `ETry` / `EThrow` — real JVM exception handling](../../unplanned/S17-33-codegen-try-throw.md)
+35. [S17-33 — Codegen: `ETry` / `EThrow` — real JVM exception handling](../../done/S17-33-codegen-try-throw.md)
     — Emit `ATHROW` for throw, JVM exception-table entries for `try/catch` arms, and catch
     dispatch with `CHECKCAST` per exception type. **Completing this with S17-30/S17-32 is the
-    direct gate for restoring the runtime-negative throw/catch E2Es.**
+    direct gate for restoring the runtime-negative throw/catch E2Es.** ✓ DONE
 
 36. [S17-34 — Codegen: `EAwait` and async function scaffolding](../../unplanned/S17-34-codegen-await-async.md)
     — Emit `INVOKEVIRTUAL KTask.await` for await; emit async payload methods for `async fun`;
