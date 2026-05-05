@@ -38,6 +38,7 @@ export val STRING_BUILDER = "java/lang/StringBuilder"
 export val KFUNCTION = "kestrel/runtime/KFunction"
 export val INTEGER = "java/lang/Integer"
 export val KFUNCTION_REF = "kestrel/runtime/KFunctionRef"
+val KTASK = "kestrel/runtime/KTask"
 export val KNONE = "kestrel/runtime/KNone"
 export val KNIL = "kestrel/runtime/KNil"
 val K_EXCEPTION = "kestrel/runtime/KException"
@@ -329,15 +330,72 @@ fun emitMainStub(cf: CF.ClassFileBuilder): Unit = {
   CF.mbSetMaxs(mb, 0, 1)
 }
 
+// Returns a JVM method descriptor for a method that takes `arity` Object params and returns KTask.
+fun taskMethodDesc(arity: Int): String =
+  "(${objectArgs(arity)})Lkestrel/runtime/KTask;"
+
+// Returns the JVM method name for the private async payload method.
+fun asyncPayloadMethodName(name: String): String =
+  Str.append(Str.append("$", "async"), Str.append("$", name))
+
+// Recursively emits dup; ldc i; aload_i; aastore for each slot of the args array.
+fun emitAsyncArgsLoop(mb: CF.MethodBuilder, cf: CF.ClassFileBuilder, i: Int, arity: Int): Unit =
+  if (i >= arity) ()
+  else {
+    CF.mbEmit1(mb, Op.JvmOp.dup);
+    val iIdx = CF.cfConstantInt(cf, i)
+    CF.mbEmit1s(mb, Op.JvmOp.ldcW, iIdx);
+    if (i == 0) CF.mbEmit1(mb, Op.JvmOp.aload0)
+    else if (i == 1) CF.mbEmit1(mb, Op.JvmOp.aload1)
+    else if (i == 2) CF.mbEmit1(mb, Op.JvmOp.aload2)
+    else if (i == 3) CF.mbEmit1(mb, Op.JvmOp.aload3)
+    else CF.mbEmit1b(mb, Op.JvmOp.aload, i);
+    CF.mbEmit1(mb, Op.JvmOp.aastore);
+    emitAsyncArgsLoop(mb, cf, i + 1, arity)
+  }
+
+// Emits ldc arity; anewarray Object; then populates each slot via emitAsyncArgsLoop.
+fun emitAsyncArgsArray(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, arity: Int): Unit = {
+  val nIdx = CF.cfConstantInt(cf, arity)
+  CF.mbEmit1s(mb, Op.JvmOp.ldcW, nIdx);
+  val objRef = CF.cfClassRef(cf, "java/lang/Object")
+  CF.mbEmit1s(mb, Op.JvmOp.anewarray, objRef);
+  emitAsyncArgsLoop(mb, cf, 0, arity)
+}
+
 export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl, mctx: ModuleContext, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
-  val desc = objectMethodDesc(Lst.length(decl.params))
-  val mb = CF.cfAddMethod(cf, decl.name, desc, Op.Acc.public_ + Op.Acc.static_)
-  val ctx = newCodegenContext(cf, mb, mctx, getInferredType)
-  bindParams(ctx, decl.params)
-  emitTailLoopScaffold(mb)
-  emitExpr(ctx, decl.body)
-  CF.mbEmit1(mb, Op.JvmOp.areturn)
-  CF.mbSetMaxs(mb, 2, 32)
+  val arity = Lst.length(decl.params)
+  if (decl.async_) {
+    // Payload method: private static, Object return, contains the actual body.
+    val payloadName = asyncPayloadMethodName(decl.name)
+    val payloadMb = CF.cfAddMethod(cf, payloadName, objectMethodDesc(arity), Op.Acc.private_ + Op.Acc.static_)
+    val payloadCtx = newCodegenContext(cf, payloadMb, mctx, getInferredType)
+    bindParams(payloadCtx, decl.params)
+    emitTailLoopScaffold(payloadMb)
+    emitExpr(payloadCtx, decl.body)
+    CF.mbEmit1(payloadMb, Op.JvmOp.areturn)
+    val payloadLocals = if (arity + 8 > 70) arity + 8 else 70
+    CF.mbSetMaxs(payloadMb, 32, payloadLocals);
+    // Outer wrapper method: public static, returns KTask; submits payload to async executor.
+    val wrapperMb = CF.cfAddMethod(cf, decl.name, taskMethodDesc(arity), Op.Acc.public_ + Op.Acc.static_)
+    val wrapperCtx = newCodegenContext(cf, wrapperMb, mctx, getInferredType)
+    emitFunctionRef(wrapperCtx, mctx.className, payloadName, arity)
+    emitAsyncArgsArray(cf, wrapperMb, arity);
+    val submitRef = CF.cfMethodref(cf, RUNTIME, "submitAsync", "(Lkestrel/runtime/KFunction;[Ljava/lang/Object;)Lkestrel/runtime/KTask;")
+    CF.mbEmit1s(wrapperMb, Op.JvmOp.invokestatic, submitRef)
+    CF.mbEmit1(wrapperMb, Op.JvmOp.areturn)
+    val wrapperLocals = if (arity + 4 > 8) arity + 4 else 8
+    CF.mbSetMaxs(wrapperMb, 32, wrapperLocals)
+  } else {
+    val desc = objectMethodDesc(arity)
+    val mb = CF.cfAddMethod(cf, decl.name, desc, Op.Acc.public_ + Op.Acc.static_)
+    val ctx = newCodegenContext(cf, mb, mctx, getInferredType)
+    bindParams(ctx, decl.params)
+    emitTailLoopScaffold(mb)
+    emitExpr(ctx, decl.body)
+    CF.mbEmit1(mb, Op.JvmOp.areturn)
+    CF.mbSetMaxs(mb, 2, 32)
+  }
 }
 
 export fun emitExternFun(cf: CF.ClassFileBuilder, decl: Ast.ExternFunDecl): Unit = {
@@ -2247,7 +2305,11 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, field))
       CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "get", "(Ljava/lang/String;)Ljava/lang/Object;"))
     }
-    EAwait(e) => { emitExpr(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushNull(ctx) }
+    EAwait(e) => {
+      emitExpr(ctx, e);
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KTASK));
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KTASK, "get", "()Ljava/lang/Object;"))
+    }
     EUnary(op, e) => emitUnaryExpr(ctx, op, e)
     EBinary(op, l, r) => emitBinaryExpr(ctx, op, l, r)
     ECons(h, t) => {

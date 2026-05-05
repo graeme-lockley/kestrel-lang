@@ -6,7 +6,7 @@ import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Ty from "kestrel:dev/typecheck/types"
-import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, PVar, PLit, PCon, PList, PCons, PTuple, EField, SVal, SVar, SAssign, SExpr, SBreak, SContinue, EList, ECons, EPipe, LElem, EThrow, ETry } from "kestrel:dev/parser/ast"
+import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, PVar, PLit, PCon, PList, PCons, PTuple, EField, SVal, SVar, SAssign, SExpr, SBreak, SContinue, EList, ECons, EPipe, LElem, EThrow, ETry, EAwait } from "kestrel:dev/parser/ast"
 import * as Ast from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
@@ -787,5 +787,14 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(sg, "ETry nested: at least two ATHROW(191) opcodes", athrowCount >= 2)
       val bytes = finish(t.cf, t.mb)
       isTrue(sg, "ETry nested: class bytes produced", BA.length(bytes) > 0)
+    });
+
+    group(s1, "EAwait emits CHECKCAST and INVOKEVIRTUAL", (sg: Suite) => {
+      // EAwait(ELit("int","1")) should emit: load expr result, CHECKCAST KTask (192), INVOKEVIRTUAL KTask.get (182).
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EAwait(ELit("int", "1")))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EAwait: emits CHECKCAST(192)", containsSeq(code, [192]));
+      isTrue(sg, "EAwait: emits INVOKEVIRTUAL(182)", containsSeq(code, [182]))
     })
   })

@@ -114,5 +114,37 @@ export async fun run(s: Suite): Task<Unit> =
     group(s1, "global var declaration", (sg: Suite) => {
       val result = compileModule("test/DeclVar", "var y: Int = 2")
       isTrue(sg, "module class emitted", hasNonEmptyClass(result, "test/DeclVar"))
+    });
+
+    group(s1, "async function emits payload method", (sg: Suite) => {
+      // async fun f(): Task<Int> = 1 should produce a private $async$f method in the classfile.
+      // UTF-8 bytes for "$async$f" = [36, 97, 115, 121, 110, 99, 36, 102]
+      val src = "async fun f(): Task<Int> = 1"
+      val result = compileModule("test/DeclAsyncPayload", src)
+      isTrue(sg, "module class emitted", hasNonEmptyClass(result, "test/DeclAsyncPayload"));
+      match (Dict.get(result.classes, "test/DeclAsyncPayload")) {
+        None => isTrue(sg, "class bytes exist", False)
+        Some(bytes) => {
+          val bs = BA.toList(bytes)
+          isTrue(sg, "payload method name async-payload in classfile",
+            seqContains(bs, [36, 97, 115, 121, 110, 99, 36, 102]))
+        }
+      }
+    });
+
+    group(s1, "async function outer wrapper references submitAsync", (sg: Suite) => {
+      // The outer wrapper must call KRuntime.submitAsync.
+      // UTF-8 bytes for "submitAsync" = [115, 117, 98, 109, 105, 116, 65, 115, 121, 110, 99]
+      val src = "async fun f(): Task<Int> = 1"
+      val result = compileModule("test/DeclAsyncWrapper", src)
+      isTrue(sg, "module class emitted", hasNonEmptyClass(result, "test/DeclAsyncWrapper"));
+      match (Dict.get(result.classes, "test/DeclAsyncWrapper")) {
+        None => isTrue(sg, "class bytes exist", False)
+        Some(bytes) => {
+          val bs = BA.toList(bytes)
+          isTrue(sg, "outer wrapper has submitAsync in classfile",
+            seqContains(bs, [115, 117, 98, 109, 105, 116, 65, 115, 121, 110, 99]))
+        }
+      }
     })
   })

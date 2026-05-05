@@ -313,10 +313,10 @@ markers, but those are considered tranche-local scaffolding, not the final state
     dispatch with `CHECKCAST` per exception type. **Completing this with S17-30/S17-32 is the
     direct gate for restoring the runtime-negative throw/catch E2Es.** ✓ DONE
 
-36. [S17-34 — Codegen: `EAwait` and async function scaffolding](../../unplanned/S17-34-codegen-await-async.md)
+36. [S17-34 — Codegen: `EAwait` and async function scaffolding](../../done/S17-34-codegen-await-async.md)
     — Emit `INVOKEVIRTUAL KTask.await` for await; emit async payload methods for `async fun`;
     wrap results in `KTask`. **This is the main gate for re-enabling the first positive E2E slice
-    (core async/task/fs/process scenarios).**
+    (core async/task/fs/process scenarios).** ✓ DONE
 
 37. [S17-35 — Codegen: `ELambda` — closure class generation and free variable capture](../../unplanned/S17-35-codegen-lambda-closures.md)
     — Collect all lambdas and local funs, compute free variables, emit `OuterClass$lambda_N`
