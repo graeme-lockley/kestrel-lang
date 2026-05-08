@@ -27,10 +27,11 @@ Driven by `./scripts/test-kestrel.sh` (runtime tier).
 `./kestrel` (TypeScript compiler path). Once self-hosted codegen is functional,
 the tier will switch to `./kestrel-self`.
 
-## Baseline (S17-50, 2026-04-28)
+## Baseline (updated 2026-05-08)
 
-- Files: 0
-- Baseline source sweep evaluated `tests/conformance/runtime/valid/*.ks`
+- Files: 7
+- Coverage now includes while loops, async fun/await, async lambdas, block-local async fun,
+  indirect calls, and closure semantics (capture + local self/mutual recursion)
 - Golden format remains `// =>` when runtime files are promoted into this corpus
 
 See also: [../README.md](../README.md), [../../parse/README.md](../../parse/README.md).

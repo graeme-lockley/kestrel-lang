@@ -1,6 +1,8 @@
 //! JVM bytecode code generator for Kestrel AST.
 //!
 //! Emits classfiles, methods, and supporting metadata from parsed declarations.
+//! Lambda/local-fun codegen runs in collect + emit passes to build closure classes
+//! and capture environment arrays in a verifier-safe shape.
 //! This module is an internal compiler component used by
 //! [`kestrel:tools/compiler/driver`](/docs/kestrel:tools/compiler/driver).
 
