@@ -23,3 +23,11 @@ val factCase = {
   ()
 }
 // 120
+
+val mutualCase = {
+  fun even(n: Int): Bool = if (n == 0) True else odd(n - 1);
+  fun odd(n: Int): Bool = if (n == 0) False else even(n - 1);
+  println(even(10));
+  ()
+}
+// True

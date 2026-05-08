@@ -84,6 +84,8 @@ export type ModuleContext = {
 
 type LoopBreakLayer = { breakJumps: Array<Int>, loopHead: Int }
 
+type PendingFunEnvPatch = { envSlot: Int, index: Int, targetName: String }
+
 export type CodegenContext = {
   cf: CF.ClassFileBuilder,
   mb: CF.MethodBuilder,
@@ -92,6 +94,8 @@ export type CodegenContext = {
   nextLocal: mut Int,
   varLocals: mut Dict<String, Unit>,
   loopBreakStack: mut List<LoopBreakLayer>,
+  pendingFunEnvPatches: mut List<PendingFunEnvPatch>,
+  currentBlockFunSet: mut Dict<String, Unit>,
   freeVarToIndex: mut Option<Dict<String, Int>>,
   localFunNamesInEnv: mut Option<Dict<String, Unit>>,
   freeVarVars: mut Dict<String, Unit>,
@@ -136,6 +140,8 @@ export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, mctx
   mut nextLocal = 0,
   mut varLocals = Dict.emptyStringDict(),
   mut loopBreakStack = [],
+  mut pendingFunEnvPatches = [],
+  mut currentBlockFunSet = Dict.emptyStringDict(),
   mut freeVarToIndex = None,
   mut localFunNamesInEnv = None,
   mut freeVarVars = Dict.emptyStringDict(),
@@ -776,6 +782,48 @@ fun emitCaptureArrayEntriesWithSelf(ctx: CodegenContext, freeVars: List<String>,
       CF.mbEmit1(ctx.mb, Op.JvmOp.aastore)
       emitCaptureArrayEntriesWithSelf(ctx, rest, selfName, i + 1)
     }
+  }
+
+fun emitCaptureArrayEntriesWithPlaceholders(ctx: CodegenContext, freeVars: List<String>, placeholderNames: Dict<String, Unit>, i: Int): Unit =
+  match (freeVars) {
+    [] => ()
+    name :: rest => {
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, i))
+      if (Dict.member(placeholderNames, name)) CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
+      else emitCaptureValueByName(ctx, name)
+      CF.mbEmit1(ctx.mb, Op.JvmOp.aastore)
+      emitCaptureArrayEntriesWithPlaceholders(ctx, rest, placeholderNames, i + 1)
+    }
+  }
+
+fun addPendingPatch(ctx: CodegenContext, envSlot: Int, index: Int, targetName: String): Unit = {
+  val p = { envSlot = envSlot, index = index, targetName = targetName }
+  ctx.pendingFunEnvPatches := p :: ctx.pendingFunEnvPatches
+}
+
+fun patchPendingForName(ctx: CodegenContext, name: String, pending: List<PendingFunEnvPatch>, keep: List<PendingFunEnvPatch>): List<PendingFunEnvPatch> =
+  match (pending) {
+    [] => keep
+    p :: rest => {
+      if (p.targetName == name) {
+        loadLocalSlot(ctx, p.envSlot)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, p.index))
+        if (loadLocal(ctx, name)) () else CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
+        CF.mbEmit1(ctx.mb, Op.JvmOp.aastore)
+        patchPendingForName(ctx, name, rest, keep)
+      } else patchPendingForName(ctx, name, rest, p :: keep)
+    }
+  }
+
+fun collectBlockFunNames(stmts: List<Ast.Stmt>): List<String> =
+  match (stmts) {
+    [] => []
+    s :: rest =>
+      match (s) {
+        SFun(_async, name, _tp, _params, _rt, _body) => name :: collectBlockFunNames(rest)
+        _ => collectBlockFunNames(rest)
+      }
   }
 
 fun lambdaScope(ctx: CodegenContext): Dict<String, Unit> = {
@@ -1742,12 +1790,20 @@ export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
     }
     SFun(async_, name, _tp, params, _rt, body) => {
       val scope = lambdaScope(ctx)
-      val scopeWithSelf = Dict.insert(scope, name, ())
+      val scopeWithSelf = Dict.insert(Dict.union(scope, ctx.currentBlockFunSet), name, ())
       val paramScope = bindParamNames(Dict.emptyStringDict(), params)
       val freeVars = getFreeVars(body, paramScope, scopeWithSelf)
       val freeVarSet = namesToDict(freeVars)
       val selfRec = Dict.member(freeVarSet, name)
+      val localFunRefs = Lst.filter(freeVars, (n: String) => Dict.member(ctx.currentBlockFunSet, n))
       val capturing = !Lst.isEmpty(freeVars)
+      val needsPatch = selfRec | !Lst.isEmpty(localFunRefs)
+      val envSlot =
+        if (capturing & needsPatch) {
+          val slot = ctx.nextLocal
+          ctx.nextLocal := slot + 1
+          slot
+        } else -1
       val info = {
         body = body,
         async_ = async_,
@@ -1766,18 +1822,13 @@ export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
         putLambdaClass(ctx.mctx, payloadPair.0, payloadPair.1)
       } else ()
       if (capturing) {
-        val envSlot =
-          if (selfRec) {
-            val slot = ctx.nextLocal
-            ctx.nextLocal := slot + 1
-            slot
-          } else -1
         CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, Lst.length(freeVars)))
         CF.mbEmit1s(ctx.mb, Op.JvmOp.anewarray, CF.cfClassRef(ctx.cf, "java/lang/Object"))
-        if (selfRec) {
+        if (needsPatch) {
           CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
           storeLocal(ctx, envSlot)
-          emitCaptureArrayEntriesWithSelf(ctx, freeVars, name, 0)
+          val unresolvedRefs = Lst.filter(localFunRefs, (n: String) => !Dict.member(ctx.locals, n) | n == name)
+          emitCaptureArrayEntriesWithPlaceholders(ctx, freeVars, namesToDict(unresolvedRefs), 0)
         } else emitCaptureArrayEntries(ctx, freeVars, 0)
         CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, lambdaPair.0))
         CF.mbEmit1(ctx.mb, Op.JvmOp.dupX1)
@@ -1802,6 +1853,20 @@ export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
 
       val idx = bindLocal(ctx, name)
       storeLocal(ctx, idx)
+
+      val pending = ctx.pendingFunEnvPatches
+      ctx.pendingFunEnvPatches := patchPendingForName(ctx, name, pending, [])
+
+      if (capturing & needsPatch) {
+        val fvIndex = freeVarIndexMap(freeVars)
+        val unresolved = Lst.filter(localFunRefs, (n: String) => !Dict.member(ctx.locals, n))
+        Lst.forEach(unresolved, (n: String) =>
+          match (Dict.get(fvIndex, n)) {
+            Some(i) => addPendingPatch(ctx, envSlot, i, n)
+            None => ()
+          }
+        )
+      } else ()
     }
     SBreak => {
       match (ctx.loopBreakStack) {
@@ -1829,7 +1894,17 @@ export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
 fun emitBlockStmts(ctx: CodegenContext, stmts: List<Ast.Stmt>): Unit =
   match (stmts) {
     [] => ()
-    s :: rest => { emitBlockStmt(ctx, s); emitBlockStmts(ctx, rest) }
+    _ => {
+      val oldSet = ctx.currentBlockFunSet
+      ctx.currentBlockFunSet := namesToDict(collectBlockFunNames(stmts))
+      fun loop(xs: List<Ast.Stmt>): Unit =
+        match (xs) {
+          [] => ()
+          s :: rest => { emitBlockStmt(ctx, s); loop(rest) }
+        }
+      loop(stmts)
+      ctx.currentBlockFunSet := oldSet
+    }
   }
 
 // Emit pattern — replaced by per-arm inline logic in emitExpr; kept as no-op for compatibility.

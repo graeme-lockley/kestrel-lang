@@ -541,6 +541,32 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(sg, "SFun self-rec: class bytes produced", BA.length(bytes) > 0)
     })
 
+    group(s1, "SFun mutual recursion emits env patch stores", (sg: Suite) => {
+      val t = baseContext()
+      val evenBody = EIf(
+        EBinary("==", EIdent("n"), ELit("int", "0")),
+        ELit("true", "True"),
+        Some(ECall(EIdent("odd"), [EBinary("-", EIdent("n"), ELit("int", "1"))]))
+      )
+      val oddBody = EIf(
+        EBinary("==", EIdent("n"), ELit("int", "0")),
+        ELit("false", "False"),
+        Some(ECall(EIdent("even"), [EBinary("-", EIdent("n"), ELit("int", "1"))]))
+      )
+      CG.emitExpr(t.ctx, EBlock({
+        stmts = [
+          SFun(False, "even", [], [{ name = "n", type_ = None }], ATPrim("Bool"), evenBody),
+          SFun(False, "odd", [], [{ name = "n", type_ = None }], ATPrim("Bool"), oddBody)
+        ],
+        result = ELit("unit", "")
+      }))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      // AASTORE = 83 for deferred env slot patching of local-fun references
+      isTrue(sg, "SFun mutual: emits AASTORE(83)", containsSeq(code, [83]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "SFun mutual: class bytes produced", BA.length(bytes) > 0)
+    })
+
     group(s1, "EList empty", (sg: Suite) => {
       val t = baseContext()
       CG.emitExpr(t.ctx, EList([]))
