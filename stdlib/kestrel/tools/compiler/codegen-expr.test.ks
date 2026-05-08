@@ -524,6 +524,23 @@ export async fun run(s: Suite): Task<Unit> =
       isTrue(sg, "SFun capture: class bytes produced", BA.length(bytes) > 0)
     })
 
+    group(s1, "SFun self-recursive emits env self-cell update", (sg: Suite) => {
+      val t = baseContext()
+      val factBody = EIf(
+        EBinary("<=", EIdent("n"), ELit("int", "1")),
+        ELit("int", "1"),
+        Some(EBinary("*", EIdent("n"), ECall(EIdent("fact"), [EBinary("-", EIdent("n"), ELit("int", "1"))])))
+      )
+      CG.emitBlockStmt(t.ctx, SFun(False, "fact", [], [{ name = "n", type_ = None }], ATPrim("Int"), factBody))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      // ANEWARRAY = 189 for captured environment object[]
+      isTrue(sg, "SFun self-rec: emits ANEWARRAY(189)", containsSeq(code, [189]))
+      // AASTORE = 83 used to patch env[self] with the constructed lambda object
+      isTrue(sg, "SFun self-rec: emits AASTORE(83)", containsSeq(code, [83]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "SFun self-rec: class bytes produced", BA.length(bytes) > 0)
+    })
+
     group(s1, "EList empty", (sg: Suite) => {
       val t = baseContext()
       CG.emitExpr(t.ctx, EList([]))

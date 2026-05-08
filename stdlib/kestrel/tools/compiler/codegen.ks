@@ -765,6 +765,19 @@ fun emitCaptureArrayEntries(ctx: CodegenContext, freeVars: List<String>, i: Int)
     }
   }
 
+fun emitCaptureArrayEntriesWithSelf(ctx: CodegenContext, freeVars: List<String>, selfName: String, i: Int): Unit =
+  match (freeVars) {
+    [] => ()
+    name :: rest => {
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, i))
+      if (name == selfName) CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
+      else emitCaptureValueByName(ctx, name)
+      CF.mbEmit1(ctx.mb, Op.JvmOp.aastore)
+      emitCaptureArrayEntriesWithSelf(ctx, rest, selfName, i + 1)
+    }
+  }
+
 fun lambdaScope(ctx: CodegenContext): Dict<String, Unit> = {
   val localScope = keysetOf(ctx.locals)
   val globalScope = Dict.union(ctx.mctx.globalNames, keysetOf(ctx.mctx.funArities))
@@ -1729,8 +1742,11 @@ export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
     }
     SFun(async_, name, _tp, params, _rt, body) => {
       val scope = lambdaScope(ctx)
+      val scopeWithSelf = Dict.insert(scope, name, ())
       val paramScope = bindParamNames(Dict.emptyStringDict(), params)
-      val freeVars = getFreeVars(body, paramScope, scope)
+      val freeVars = getFreeVars(body, paramScope, scopeWithSelf)
+      val freeVarSet = namesToDict(freeVars)
+      val selfRec = Dict.member(freeVarSet, name)
       val capturing = !Lst.isEmpty(freeVars)
       val info = {
         body = body,
@@ -1750,13 +1766,34 @@ export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
         putLambdaClass(ctx.mctx, payloadPair.0, payloadPair.1)
       } else ()
       if (capturing) {
+        val envSlot =
+          if (selfRec) {
+            val slot = ctx.nextLocal
+            ctx.nextLocal := slot + 1
+            slot
+          } else -1
         CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, Lst.length(freeVars)))
         CF.mbEmit1s(ctx.mb, Op.JvmOp.anewarray, CF.cfClassRef(ctx.cf, "java/lang/Object"))
-        emitCaptureArrayEntries(ctx, freeVars, 0)
+        if (selfRec) {
+          CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+          storeLocal(ctx, envSlot)
+          emitCaptureArrayEntriesWithSelf(ctx, freeVars, name, 0)
+        } else emitCaptureArrayEntries(ctx, freeVars, 0)
         CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, lambdaPair.0))
         CF.mbEmit1(ctx.mb, Op.JvmOp.dupX1)
         CF.mbEmit1(ctx.mb, Op.JvmOp.swap)
         CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, lambdaPair.0, "<init>", "([Ljava/lang/Object;)V"))
+        if (selfRec) {
+          val selfIdx = Opt.getOrElse(Dict.get(freeVarIndexMap(freeVars), name), 0)
+          val tmpSlot = ctx.nextLocal
+          ctx.nextLocal := tmpSlot + 1
+          storeLocal(ctx, tmpSlot)
+          loadLocalSlot(ctx, envSlot)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, selfIdx))
+          loadLocalSlot(ctx, tmpSlot)
+          CF.mbEmit1(ctx.mb, Op.JvmOp.aastore)
+          loadLocalSlot(ctx, tmpSlot)
+        } else ()
       } else {
         CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, lambdaPair.0))
         CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
