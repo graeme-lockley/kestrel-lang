@@ -59,6 +59,16 @@ export type JvmCodegenOptions = {
   namespaceAdtConstructors: Dict<String, Dict<String, String>>
 }
 
+type LambdaInfo = {
+  body: Ast.Expr,
+  async_: Bool,
+  params: List<Ast.Param>,
+  freeVars: List<String>,
+  capturing: Bool,
+  localFunNames: Option<List<String>>,
+  freeVarVars: Dict<String, Unit>
+}
+
 export type ModuleContext = {
   className: String,
   globalNames: Dict<String, Unit>,
@@ -66,7 +76,10 @@ export type ModuleContext = {
   funArities: Dict<String, Int>,
   adtClassByConstructor: Dict<String, String>,
   adtConstructorArity: Dict<String, Int>,
-  options: JvmCodegenOptions
+  options: JvmCodegenOptions,
+  lambdas: mut List<LambdaInfo>,
+  lambdaIndex: mut Int,
+  lambdaClasses: mut Dict<String, ByteArray>
 }
 
 type LoopBreakLayer = { breakJumps: Array<Int>, loopHead: Int }
@@ -79,6 +92,9 @@ export type CodegenContext = {
   nextLocal: mut Int,
   varLocals: mut Dict<String, Unit>,
   loopBreakStack: mut List<LoopBreakLayer>,
+  freeVarToIndex: mut Option<Dict<String, Int>>,
+  localFunNamesInEnv: mut Option<Dict<String, Unit>>,
+  freeVarVars: mut Dict<String, Unit>,
   getInferredType: (Ast.Expr) -> Option<Ty.InternalType>
 }
 
@@ -104,7 +120,10 @@ export fun emptyModuleContext(className: String): ModuleContext = {
   funArities = Dict.emptyStringDict(),
   adtClassByConstructor = Dict.emptyStringDict(),
   adtConstructorArity = Dict.emptyStringDict(),
-  options = emptyJvmCodegenOptions()
+  options = emptyJvmCodegenOptions(),
+  mut lambdas = [],
+  mut lambdaIndex = 0,
+  mut lambdaClasses = Dict.emptyStringDict()
 }
 
 export val noTypeInfo: (Ast.Expr) -> Option<Ty.InternalType> = (_: Ast.Expr) => None
@@ -117,6 +136,9 @@ export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, mctx
   mut nextLocal = 0,
   mut varLocals = Dict.emptyStringDict(),
   mut loopBreakStack = [],
+  mut freeVarToIndex = None,
+  mut localFunNamesInEnv = None,
+  mut freeVarVars = Dict.emptyStringDict(),
   getInferredType = getInferredType
 }
 
@@ -363,6 +385,468 @@ fun emitAsyncArgsArray(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, arity: Int
   emitAsyncArgsLoop(mb, cf, 0, arity)
 }
 
+fun emitApplyArgLoads(mb: CF.MethodBuilder, cf: CF.ClassFileBuilder, i: Int, arity: Int): Unit =
+  if (i >= arity) ()
+  else {
+    CF.mbEmit1(mb, Op.JvmOp.aload1)
+    CF.mbEmit1s(mb, Op.JvmOp.ldcW, CF.cfConstantInt(cf, i))
+    CF.mbEmit1(mb, Op.JvmOp.aaload)
+    emitApplyArgLoads(mb, cf, i + 1, arity)
+  }
+
+fun namesToDict(names: List<String>): Dict<String, Unit> =
+  Lst.foldl(names, Dict.emptyStringDict(), (acc: Dict<String, Unit>, n: String) => Dict.insert(acc, n, ()))
+
+fun keysetOf<K, V>(d: Dict<K, V>): Dict<K, Unit> =
+  Lst.foldl(Dict.keys(d), Dict.empty(), (acc: Dict<K, Unit>, k: K) => Dict.insert(acc, k, ()))
+
+fun bindParamNames(scope: Dict<String, Unit>, params: List<Ast.Param>): Dict<String, Unit> =
+  match (params) {
+    [] => scope
+    p :: rest => bindParamNames(Dict.insert(scope, p.name, ()), rest)
+  }
+
+fun listAt<A>(xs: List<A>, idx: Int): Option<A> =
+  if (idx < 0) None
+  else
+    match (xs) {
+      [] => None
+      h :: t => if (idx == 0) Some(h) else listAt(t, idx - 1)
+    }
+
+fun collectPatternVars(pat: Ast.Pattern): List<String> =
+  match (pat) {
+    PVar(name) => [name]
+    PCons(h, t) => Lst.append(collectPatternVars(h), collectPatternVars(t))
+    PList(parts, restOpt) => {
+      val partVars = Lst.foldl(parts, [], (acc: List<String>, p: Ast.Pattern) => Lst.append(acc, collectPatternVars(p)))
+      match (restOpt) {
+        Some(rest) => Lst.append(partVars, [rest])
+        None => partVars
+      }
+    }
+    PCon(_name, fields) =>
+      Lst.foldl(fields, [], (acc: List<String>, f: Ast.ConField) =>
+        match (f.pattern) {
+          Some(p) => Lst.append(acc, collectPatternVars(p))
+          None => acc
+        })
+    PTuple(parts) =>
+      Lst.foldl(parts, [], (acc: List<String>, p: Ast.Pattern) => Lst.append(acc, collectPatternVars(p)))
+    _ => []
+  }
+
+fun unionManySets(sets: List<Dict<String, Unit>>): Dict<String, Unit> =
+  match (sets) {
+    [] => Dict.emptyStringDict()
+    s :: rest => Dict.union(s, unionManySets(rest))
+  }
+
+fun getFreeVarsStmt(stmt: Ast.Stmt, bound: Dict<String, Unit>, scope: Dict<String, Unit>): Dict<String, Unit> =
+  match (stmt) {
+    SVal(_name, _ann, v) => getFreeVarsSet(v, bound, scope)
+    SVar(_name, _ann, v) => getFreeVarsSet(v, bound, scope)
+    SFun(_async, name, _tp, params, _rt, body) => {
+      val b1 = Dict.insert(bound, name, ())
+      val b2 = bindParamNames(b1, params)
+      getFreeVarsSet(body, b2, scope)
+    }
+    SExpr(x) => getFreeVarsSet(x, bound, scope)
+    SAssign(tgt, rhs) => Dict.union(getFreeVarsSet(tgt, bound, scope), getFreeVarsSet(rhs, bound, scope))
+    _ => Dict.emptyStringDict()
+  }
+
+fun updateBoundFromStmt(stmt: Ast.Stmt, bound: Dict<String, Unit>): Dict<String, Unit> =
+  match (stmt) {
+    SVal(name, _ann, _v) => Dict.insert(bound, name, ())
+    SVar(name, _ann, _v) => Dict.insert(bound, name, ())
+    SFun(_async, name, _tp, _params, _rt, _body) => Dict.insert(bound, name, ())
+    _ => bound
+  }
+
+fun getFreeVarsStmts(stmts: List<Ast.Stmt>, bound: Dict<String, Unit>, scope: Dict<String, Unit>): Dict<String, Unit> =
+  match (stmts) {
+    [] => Dict.emptyStringDict()
+    s :: rest => {
+      val sSet = getFreeVarsStmt(s, bound, scope)
+      val b2 = updateBoundFromStmt(s, bound)
+      Dict.union(sSet, getFreeVarsStmts(rest, b2, scope))
+    }
+  }
+
+fun getFreeVarsSet(expr: Ast.Expr, bound: Dict<String, Unit>, scope: Dict<String, Unit>): Dict<String, Unit> =
+  match (expr) {
+    EIdent(name) =>
+      if (Dict.member(scope, name) & !Dict.member(bound, name)) Dict.insert(Dict.emptyStringDict(), name, ())
+      else Dict.emptyStringDict()
+    ELambda(_async, _tp, _params, _body) => Dict.emptyStringDict()
+    ECall(fn, args) => {
+      val argSets = Lst.foldl(args, [], (acc: List<Dict<String, Unit>>, a: Ast.Expr) => Lst.append(acc, [getFreeVarsSet(a, bound, scope)]))
+      Dict.union(getFreeVarsSet(fn, bound, scope), unionManySets(argSets))
+    }
+    EBinary(_op, l, r) => Dict.union(getFreeVarsSet(l, bound, scope), getFreeVarsSet(r, bound, scope))
+    EUnary(_op, x) => getFreeVarsSet(x, bound, scope)
+    EIf(c, t, eOpt) => {
+      val base = Dict.union(getFreeVarsSet(c, bound, scope), getFreeVarsSet(t, bound, scope))
+      match (eOpt) {
+        Some(e2) => Dict.union(base, getFreeVarsSet(e2, bound, scope))
+        None => base
+      }
+    }
+    EIs(x, _t) => getFreeVarsSet(x, bound, scope)
+    EWhile(c, b) => Dict.union(getFreeVarsSet(c, bound, scope), getFreeVarsSet(EBlock(b), bound, scope))
+    EMatch(scrut, arms) => {
+      val armSets = Lst.foldl(arms, [], (acc: List<Dict<String, Unit>>, arm: Ast.Case_) => {
+        val patBound = Lst.foldl(collectPatternVars(arm.pattern), bound, (bb: Dict<String, Unit>, n: String) => Dict.insert(bb, n, ()))
+        Lst.append(acc, [getFreeVarsSet(arm.body, patBound, scope)])
+      })
+      Dict.union(getFreeVarsSet(scrut, bound, scope), unionManySets(armSets))
+    }
+    EPipe(_op, l, r) => Dict.union(getFreeVarsSet(l, bound, scope), getFreeVarsSet(r, bound, scope))
+    ECons(h, t) => Dict.union(getFreeVarsSet(h, bound, scope), getFreeVarsSet(t, bound, scope))
+    EField(obj, _f) => getFreeVarsSet(obj, bound, scope)
+    ETemplate(parts) =>
+      Lst.foldl(parts, Dict.emptyStringDict(), (acc: Dict<String, Unit>, p: Ast.TmplPart) =>
+        match (p) {
+          TmplExpr(x) => Dict.union(acc, getFreeVarsSet(x, bound, scope))
+          _ => acc
+        })
+    EList(xs) =>
+      Lst.foldl(xs, Dict.emptyStringDict(), (acc: Dict<String, Unit>, x: Ast.ListElem) =>
+        match (x) {
+          LElem(v) => Dict.union(acc, getFreeVarsSet(v, bound, scope))
+          LSpread(v) => Dict.union(acc, getFreeVarsSet(v, bound, scope))
+        })
+    EThrow(v) => getFreeVarsSet(v, bound, scope)
+    EAwait(v) => getFreeVarsSet(v, bound, scope)
+    ETry(block, _varOpt, arms) => {
+      val armSets = Lst.foldl(arms, [], (acc: List<Dict<String, Unit>>, arm: Ast.Case_) => {
+        val patBound = Lst.foldl(collectPatternVars(arm.pattern), bound, (bb: Dict<String, Unit>, n: String) => Dict.insert(bb, n, ()))
+        Lst.append(acc, [getFreeVarsSet(arm.body, patBound, scope)])
+      })
+      Dict.union(getFreeVarsSet(EBlock(block), bound, scope), unionManySets(armSets))
+    }
+    ERecord(spreadOpt, fields) => {
+      val spreadSet =
+        match (spreadOpt) {
+          Some(sp) => getFreeVarsSet(sp, bound, scope)
+          None => Dict.emptyStringDict()
+        }
+      val fieldSet = Lst.foldl(fields, Dict.emptyStringDict(), (acc: Dict<String, Unit>, f: Ast.RecField) => Dict.union(acc, getFreeVarsSet(f.value, bound, scope)))
+      Dict.union(spreadSet, fieldSet)
+    }
+    ETuple(parts) => Lst.foldl(parts, Dict.emptyStringDict(), (acc: Dict<String, Unit>, x: Ast.Expr) => Dict.union(acc, getFreeVarsSet(x, bound, scope)))
+    EBlock(block) => {
+      val stmtSet = getFreeVarsStmts(block.stmts, bound, scope)
+      val b2 = Lst.foldl(block.stmts, bound, (b: Dict<String, Unit>, s: Ast.Stmt) => updateBoundFromStmt(s, b))
+      Dict.union(stmtSet, getFreeVarsSet(block.result, b2, scope))
+    }
+    _ => Dict.emptyStringDict()
+  }
+
+fun getFreeVars(expr: Ast.Expr, paramNames: Dict<String, Unit>, scope: Dict<String, Unit>): List<String> =
+  Dict.keys(getFreeVarsSet(expr, paramNames, scope))
+
+fun collectLambdas(_prog: Ast.Program, _globalNames: Dict<String, Unit>, _funArities: Dict<String, Int>): List<LambdaInfo> = []
+
+fun buildAsyncLambdaPayloadClass(outerClassName: String, lambdaId: Int, arity: Int, capturing: Bool): (String, ByteArray) = {
+  val lambdaTag = Str.append("$", "Lambda")
+  val payloadTag = Str.append("$", "Payload")
+  val innerName = Str.append(Str.append(outerClassName, lambdaTag), Str.append(Str.fromInt(lambdaId), payloadTag))
+  val cf = CF.newClassFile(innerName, "java/lang/Object", Op.Acc.public_ + Op.Acc.super_ + Op.Acc.final_)
+  CF.cfAddInterface(cf, KFUNCTION)
+  if (capturing) {
+    CF.cfAddField(cf, "env", "[Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.final_)
+    val ctor = CF.cfAddMethod(cf, "<init>", "([Ljava/lang/Object;)V", Op.Acc.public_)
+    CF.mbEmit1(ctor, Op.JvmOp.aload0)
+    CF.mbEmit1s(ctor, Op.JvmOp.invokespecial, CF.cfMethodref(cf, "java/lang/Object", "<init>", "()V"))
+    CF.mbEmit1(ctor, Op.JvmOp.aload0)
+    CF.mbEmit1(ctor, Op.JvmOp.aload1)
+    CF.mbEmit1s(ctor, Op.JvmOp.putfield, CF.cfFieldref(cf, innerName, "env", "[Ljava/lang/Object;"))
+    CF.mbEmit1(ctor, Op.JvmOp.return_)
+    CF.mbSetMaxs(ctor, 2, 2)
+  } else emitDefaultCtor(cf);
+
+  val applyMb = CF.cfAddMethod(cf, "apply", "([Ljava/lang/Object;)Ljava/lang/Object;", Op.Acc.public_)
+  if (capturing) {
+    CF.mbEmit1(applyMb, Op.JvmOp.aload0)
+    CF.mbEmit1s(applyMb, Op.JvmOp.getfield, CF.cfFieldref(cf, innerName, "env", "[Ljava/lang/Object;"))
+  } else ()
+  emitApplyArgLoads(applyMb, cf, 0, arity)
+  val payloadDesc =
+    if (capturing) "([Ljava/lang/Object;${objectArgs(arity)})Ljava/lang/Object;"
+    else objectMethodDesc(arity)
+  val payloadMethod = asyncPayloadMethodName(Str.append("lambda", Str.fromInt(lambdaId)))
+  CF.mbEmit1s(applyMb, Op.JvmOp.invokestatic, CF.cfMethodref(cf, outerClassName, payloadMethod, payloadDesc))
+  CF.mbEmit1(applyMb, Op.JvmOp.areturn)
+  CF.mbSetMaxs(applyMb, 16, 3)
+  val out = (innerName, CF.cfToBytes(cf))
+  out
+}
+
+fun buildLambdaClass(outerClassName: String, lambdaId: Int, arity: Int, capturing: Bool, async_: Bool): (String, ByteArray) = {
+  val lambdaTag = Str.append("$", "Lambda")
+  val payloadTag = Str.append("$", "Payload")
+  val innerName = Str.append(Str.append(outerClassName, lambdaTag), Str.fromInt(lambdaId))
+  val cf = CF.newClassFile(innerName, "java/lang/Object", Op.Acc.public_ + Op.Acc.super_ + Op.Acc.final_)
+  CF.cfAddInterface(cf, KFUNCTION)
+
+  if (capturing) {
+    CF.cfAddField(cf, "env", "[Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.final_)
+    val ctor = CF.cfAddMethod(cf, "<init>", "([Ljava/lang/Object;)V", Op.Acc.public_)
+    CF.mbEmit1(ctor, Op.JvmOp.aload0)
+    CF.mbEmit1s(ctor, Op.JvmOp.invokespecial, CF.cfMethodref(cf, "java/lang/Object", "<init>", "()V"))
+    CF.mbEmit1(ctor, Op.JvmOp.aload0)
+    CF.mbEmit1(ctor, Op.JvmOp.aload1)
+    CF.mbEmit1s(ctor, Op.JvmOp.putfield, CF.cfFieldref(cf, innerName, "env", "[Ljava/lang/Object;"))
+    CF.mbEmit1(ctor, Op.JvmOp.return_)
+    CF.mbSetMaxs(ctor, 2, 2)
+  } else emitDefaultCtor(cf);
+
+  val applyMb = CF.cfAddMethod(cf, "apply", "([Ljava/lang/Object;)Ljava/lang/Object;", Op.Acc.public_)
+  if (async_) {
+    if (capturing) {
+      CF.mbEmit1s(applyMb, Op.JvmOp.new_, CF.cfClassRef(cf, Str.append(innerName, payloadTag)))
+      CF.mbEmit1(applyMb, Op.JvmOp.dup)
+      CF.mbEmit1(applyMb, Op.JvmOp.aload0)
+      CF.mbEmit1s(applyMb, Op.JvmOp.getfield, CF.cfFieldref(cf, innerName, "env", "[Ljava/lang/Object;"))
+      CF.mbEmit1s(applyMb, Op.JvmOp.invokespecial, CF.cfMethodref(cf, Str.append(innerName, payloadTag), "<init>", "([Ljava/lang/Object;)V"))
+    } else {
+      CF.mbEmit1s(applyMb, Op.JvmOp.new_, CF.cfClassRef(cf, Str.append(innerName, payloadTag)))
+      CF.mbEmit1(applyMb, Op.JvmOp.dup)
+      CF.mbEmit1s(applyMb, Op.JvmOp.invokespecial, CF.cfMethodref(cf, Str.append(innerName, payloadTag), "<init>", "()V"))
+    }
+    CF.mbEmit1(applyMb, Op.JvmOp.aload1)
+    CF.mbEmit1s(applyMb, Op.JvmOp.invokestatic, CF.cfMethodref(cf, RUNTIME, "submitAsync", "(Lkestrel/runtime/KFunction;[Ljava/lang/Object;)Lkestrel/runtime/KTask;"))
+  } else {
+    if (capturing) {
+      CF.mbEmit1(applyMb, Op.JvmOp.aload0)
+      CF.mbEmit1s(applyMb, Op.JvmOp.getfield, CF.cfFieldref(cf, innerName, "env", "[Ljava/lang/Object;"))
+    } else ()
+    emitApplyArgLoads(applyMb, cf, 0, arity)
+    val payloadDesc =
+      if (capturing) "([Ljava/lang/Object;${objectArgs(arity)})Ljava/lang/Object;"
+      else objectMethodDesc(arity)
+    val lambdaMethod = jvmMangleName(Str.append(Str.append("$", "lambda"), Str.fromInt(lambdaId)))
+    CF.mbEmit1s(applyMb, Op.JvmOp.invokestatic, CF.cfMethodref(cf, outerClassName, lambdaMethod, payloadDesc))
+  }
+  CF.mbEmit1(applyMb, Op.JvmOp.areturn)
+  CF.mbSetMaxs(applyMb, 16, 3)
+  val out = (innerName, CF.cfToBytes(cf))
+  out
+}
+
+fun allocLambdaId(mctx: ModuleContext): Int = {
+  val id = mctx.lambdaIndex
+  mctx.lambdaIndex := id + 1
+  id
+}
+
+fun putLambdaClass(mctx: ModuleContext, className: String, bytes: ByteArray): Unit = {
+  mctx.lambdaClasses := Dict.insert(mctx.lambdaClasses, className, bytes)
+}
+
+fun freeVarIndexMap(names: List<String>): Dict<String, Int> = {
+  fun loop(xs: List<String>, i: Int, acc: Dict<String, Int>): Dict<String, Int> =
+    match (xs) {
+      [] => acc
+      n :: rest => loop(rest, i + 1, Dict.insert(acc, n, i))
+    }
+  loop(names, 0, Dict.emptyStringDict())
+}
+
+fun freeVarIndexMapFromOffset(names: List<String>, offset: Int): Dict<String, Int> = {
+  fun loop(xs: List<String>, i: Int, acc: Dict<String, Int>): Dict<String, Int> =
+    match (xs) {
+      [] => acc
+      n :: rest => loop(rest, i + 1, Dict.insert(acc, n, i))
+    }
+  loop(names, offset, Dict.emptyStringDict())
+}
+
+fun loadEnvArray(ctx: CodegenContext): Unit = {
+  if (loadLocal(ctx, "__env")) ()
+  else CF.mbEmit1(ctx.mb, Op.JvmOp.aload0)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, "[Ljava/lang/Object;"))
+}
+
+fun emitLoadFreeVarFromEnv(ctx: CodegenContext, idx: Int): Unit = {
+  loadEnvArray(ctx)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, idx))
+  CF.mbEmit1(ctx.mb, Op.JvmOp.aaload)
+}
+
+fun emitLoadLocalFunFromEnv(ctx: CodegenContext, name: String): Unit = {
+  emitLoadFreeVarFromEnv(ctx, 0)
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, name))
+  CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "get", "(Ljava/lang/String;)Ljava/lang/Object;"))
+}
+
+fun emitCaptureValueByName(ctx: CodegenContext, name: String): Unit = {
+  if (loadLocal(ctx, name)) ()
+  else {
+    val localFunHit =
+      match (ctx.localFunNamesInEnv) {
+        Some(funSet) =>
+          if (Dict.member(funSet, name)) {
+            emitLoadLocalFunFromEnv(ctx, name)
+            True
+          } else False
+        None => False
+      }
+    if (localFunHit) ()
+    else {
+      val freeHit =
+        match (ctx.freeVarToIndex) {
+          Some(fvMap) =>
+            match (Dict.get(fvMap, name)) {
+              Some(idx) => {
+                emitLoadFreeVarFromEnv(ctx, idx)
+                True
+              }
+              None => False
+            }
+          None => False
+        }
+      if (freeHit) ()
+      else {
+        val mctx = ctx.mctx
+        if (Dict.member(mctx.globalNames, name)) {
+          val fref = CF.cfFieldref(ctx.cf, mctx.className, name, "Ljava/lang/Object;")
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
+        }
+        else if (Dict.member(mctx.funArities, name)) {
+          val arity = Opt.getOrElse(Dict.get(mctx.funArities, name), 0)
+          emitFunctionRef(ctx, mctx.className, name, arity)
+        }
+        else {
+          val importedValClass = Dict.get(mctx.options.importedValVarToClass, name)
+          match (importedValClass) {
+            Some(valCls) => {
+              val origName = Opt.getOrElse(Dict.get(mctx.options.importedNameToOriginal, name), name)
+              emitInitCall(ctx, valCls)
+              val fref = CF.cfFieldref(ctx.cf, valCls, origName, "Ljava/lang/Object;")
+              CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
+            }
+            None => {
+              val importedFunClass = Dict.get(mctx.options.importedNameToClass, name)
+              match (importedFunClass) {
+                Some(funCls) => {
+                  val importedFunArity = Dict.get(mctx.options.importedFunArities, name)
+                  match (importedFunArity) {
+                    Some(funArity) => {
+                      val origName = Opt.getOrElse(Dict.get(mctx.options.importedNameToOriginal, name), name)
+                      emitInitCall(ctx, funCls)
+                      emitFunctionRef(ctx, funCls, origName, funArity)
+                    }
+                    None => emitIdentExpr(ctx, name)
+                  }
+                }
+                None => emitIdentExpr(ctx, name)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+fun emitCaptureArrayEntries(ctx: CodegenContext, freeVars: List<String>, i: Int): Unit =
+  match (freeVars) {
+    [] => ()
+    name :: rest => {
+      CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, i))
+      emitCaptureValueByName(ctx, name)
+      CF.mbEmit1(ctx.mb, Op.JvmOp.aastore)
+      emitCaptureArrayEntries(ctx, rest, i + 1)
+    }
+  }
+
+fun lambdaScope(ctx: CodegenContext): Dict<String, Unit> = {
+  val localScope = keysetOf(ctx.locals)
+  val globalScope = Dict.union(ctx.mctx.globalNames, keysetOf(ctx.mctx.funArities))
+  val importScope = Dict.union(keysetOf(ctx.mctx.options.importedValVarToClass), keysetOf(ctx.mctx.options.importedNameToClass))
+  Dict.union(localScope, Dict.union(globalScope, importScope))
+}
+
+fun captureVarNames(ctx: CodegenContext, freeVars: List<String>): Dict<String, Unit> =
+  Lst.foldl(freeVars, Dict.emptyStringDict(), (acc: Dict<String, Unit>, name: String) => {
+    if (Dict.member(ctx.varLocals, name) | Dict.member(ctx.mctx.globalVarNames, name) | Dict.member(ctx.mctx.options.importedVarNames, name)) Dict.insert(acc, name, ())
+    else acc
+  })
+
+fun emitLambdaBodyMethod(ctx: CodegenContext, lambdaId: Int, info: LambdaInfo): Unit = {
+  val arity = Lst.length(info.params)
+  val methodName =
+    if (info.async_) asyncPayloadMethodName(Str.append("lambda", Str.fromInt(lambdaId)))
+    else jvmMangleName(Str.append(Str.append("$", "lambda"), Str.fromInt(lambdaId)))
+  val desc =
+    if (info.capturing) "([Ljava/lang/Object;${objectArgs(arity)})Ljava/lang/Object;"
+    else objectMethodDesc(arity)
+  val flags = Op.Acc.private_ + Op.Acc.static_
+  val mb = CF.cfAddMethod(ctx.cf, methodName, desc, flags)
+  val bodyCtx = newCodegenContext(ctx.cf, mb, ctx.mctx, ctx.getInferredType)
+  if (info.capturing) {
+    bindLocal(bodyCtx, "__env")
+    val freeVarOffset =
+      match (info.localFunNames) {
+        Some(_) => 1
+        None => 0
+      }
+    bodyCtx.freeVarToIndex := Some(freeVarIndexMapFromOffset(info.freeVars, freeVarOffset))
+    bodyCtx.freeVarVars := info.freeVarVars
+    match (info.localFunNames) {
+      Some(names) => { bodyCtx.localFunNamesInEnv := Some(namesToDict(names)); () }
+      None => ()
+    }
+  } else ()
+  bindParams(bodyCtx, info.params)
+  emitExpr(bodyCtx, info.body)
+  CF.mbEmit1(mb, Op.JvmOp.areturn)
+  val maxLocals = if (bodyCtx.nextLocal + 8 > 24) bodyCtx.nextLocal + 8 else 24
+  CF.mbSetMaxs(mb, 32, maxLocals)
+}
+
+fun emitLambdaExpr(ctx: CodegenContext, async_: Bool, params: List<Ast.Param>, body: Ast.Expr): Unit = {
+  val scope = lambdaScope(ctx)
+  val paramScope = bindParamNames(Dict.emptyStringDict(), params)
+  val freeVars = getFreeVars(body, paramScope, scope)
+  val capturing = !Lst.isEmpty(freeVars)
+  val info = {
+    body = body,
+    async_ = async_,
+    params = params,
+    freeVars = freeVars,
+    capturing = capturing,
+    localFunNames = None,
+    freeVarVars = captureVarNames(ctx, freeVars)
+  }
+  val id = allocLambdaId(ctx.mctx)
+  emitLambdaBodyMethod(ctx, id, info)
+  val lambdaPair = buildLambdaClass(ctx.mctx.className, id, Lst.length(params), capturing, async_)
+  putLambdaClass(ctx.mctx, lambdaPair.0, lambdaPair.1)
+  if (async_) {
+    val payloadPair = buildAsyncLambdaPayloadClass(ctx.mctx.className, id, Lst.length(params), capturing)
+    putLambdaClass(ctx.mctx, payloadPair.0, payloadPair.1)
+  } else ()
+  if (capturing) {
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, Lst.length(freeVars)))
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.anewarray, CF.cfClassRef(ctx.cf, "java/lang/Object"))
+    emitCaptureArrayEntries(ctx, freeVars, 0)
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, lambdaPair.0))
+    CF.mbEmit1(ctx.mb, Op.JvmOp.dupX1)
+    CF.mbEmit1(ctx.mb, Op.JvmOp.swap)
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, lambdaPair.0, "<init>", "([Ljava/lang/Object;)V"))
+  } else {
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, lambdaPair.0))
+    CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+    CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, lambdaPair.0, "<init>", "()V"))
+  }
+}
+
 export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl, mctx: ModuleContext, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
   val arity = Lst.length(decl.params)
   if (decl.async_) {
@@ -543,8 +1027,9 @@ export fun jvmCodegen(mctx: ModuleContext, prog: Ast.Program, getInferredType: (
   CF.mbEmit1(initMb, Op.JvmOp.return_)
   CF.mbSetMaxs(initMb, 0, 0)
   val mainBytes = CF.cfToBytes(cf)
+  val withLambdas = Dict.union(extraClasses, mctx.lambdaClasses)
   {
-    classes = Dict.insert(extraClasses, moduleName, mainBytes)
+    classes = Dict.insert(withLambdas, moduleName, mainBytes)
   }
 }
 
@@ -557,7 +1042,10 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       funArities = Dict.insert(mctx.funArities, fd.name, Lst.length(fd.params)),
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
-      options = mctx.options
+      options = mctx.options,
+      mut lambdas = mctx.lambdas,
+      mut lambdaIndex = mctx.lambdaIndex,
+      mut lambdaClasses = mctx.lambdaClasses
     }
     TDExternFun(fd) => {
       className = mctx.className,
@@ -566,7 +1054,10 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       funArities = Dict.insert(mctx.funArities, fd.name, Lst.length(fd.params)),
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
-      options = mctx.options
+      options = mctx.options,
+      mut lambdas = mctx.lambdas,
+      mut lambdaIndex = mctx.lambdaIndex,
+      mut lambdaClasses = mctx.lambdaClasses
     }
     TDVal(name, _, _) => {
       className = mctx.className,
@@ -575,7 +1066,10 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       funArities = mctx.funArities,
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
-      options = mctx.options
+      options = mctx.options,
+      mut lambdas = mctx.lambdas,
+      mut lambdaIndex = mctx.lambdaIndex,
+      mut lambdaClasses = mctx.lambdaClasses
     }
     TDVar(name, _, _) => {
       className = mctx.className,
@@ -584,7 +1078,10 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       funArities = mctx.funArities,
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
-      options = mctx.options
+      options = mctx.options,
+      mut lambdas = mctx.lambdas,
+      mut lambdaIndex = mctx.lambdaIndex,
+      mut lambdaClasses = mctx.lambdaClasses
     }
     TDSVal(name, _, _) => {
       className = mctx.className,
@@ -593,7 +1090,10 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       funArities = mctx.funArities,
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
-      options = mctx.options
+      options = mctx.options,
+      mut lambdas = mctx.lambdas,
+      mut lambdaIndex = mctx.lambdaIndex,
+      mut lambdaClasses = mctx.lambdaClasses
     }
     TDSVar(name, _, _) => {
       className = mctx.className,
@@ -602,7 +1102,10 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       funArities = mctx.funArities,
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
-      options = mctx.options
+      options = mctx.options,
+      mut lambdas = mctx.lambdas,
+      mut lambdaIndex = mctx.lambdaIndex,
+      mut lambdaClasses = mctx.lambdaClasses
     }
     TDType(td) => {
       match (td.body) {
@@ -620,7 +1123,10 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
             funArities = mctx.funArities,
             adtClassByConstructor = newAbc,
             adtConstructorArity = newAca,
-            options = mctx.options
+            options = mctx.options,
+            mut lambdas = mctx.lambdas,
+            mut lambdaIndex = mctx.lambdaIndex,
+      mut lambdaClasses = mctx.lambdaClasses
           }
         }
         _ => mctx
@@ -639,7 +1145,10 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
         funArities = mctx.funArities,
         adtClassByConstructor = Dict.insert(mctx.adtClassByConstructor, exn.name, exnClass),
         adtConstructorArity = Dict.insert(mctx.adtConstructorArity, exn.name, exnArity),
-        options = mctx.options
+        options = mctx.options,
+        mut lambdas = mctx.lambdas,
+        mut lambdaIndex = mctx.lambdaIndex,
+      mut lambdaClasses = mctx.lambdaClasses
       }
     }
     TDExport(inner) => {
@@ -671,7 +1180,10 @@ export fun buildModuleContext(className: String, prog: Ast.Program, options: Jvm
     funArities = Dict.emptyStringDict(),
     adtClassByConstructor = Dict.emptyStringDict(),
     adtConstructorArity = Dict.emptyStringDict(),
-    options = options
+    options = options,
+    mut lambdas = [],
+    mut lambdaIndex = 0,
+    mut lambdaClasses = Dict.emptyStringDict()
   }
   val afterDecls = Lst.foldl(prog.body, base, (m: ModuleContext, d: Ast.TopDecl) =>
     accumDeclForModuleCtx(className, m, d)
@@ -685,7 +1197,10 @@ export fun buildModuleContext(className: String, prog: Ast.Program, options: Jvm
     funArities = afterDecls.funArities,
     adtClassByConstructor = adtMerge.0,
     adtConstructorArity = adtMerge.1,
-    options = afterDecls.options
+    options = afterDecls.options,
+    mut lambdas = afterDecls.lambdas,
+    mut lambdaIndex = afterDecls.lambdaIndex,
+    mut lambdaClasses = afterDecls.lambdaClasses
   }
 }
 
@@ -1212,7 +1727,45 @@ export fun emitBlockStmt(ctx: CodegenContext, stmt: Ast.Stmt): Unit =
       emitExpr(ctx, e)
       CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
     }
-    SFun(_async, _name, _tp, _params, _rt, _body) => ()
+    SFun(async_, name, _tp, params, _rt, body) => {
+      val scope = lambdaScope(ctx)
+      val paramScope = bindParamNames(Dict.emptyStringDict(), params)
+      val freeVars = getFreeVars(body, paramScope, scope)
+      val capturing = !Lst.isEmpty(freeVars)
+      val info = {
+        body = body,
+        async_ = async_,
+        params = params,
+        freeVars = freeVars,
+        capturing = capturing,
+        localFunNames = None,
+        freeVarVars = captureVarNames(ctx, freeVars)
+      }
+      val id = allocLambdaId(ctx.mctx)
+      emitLambdaBodyMethod(ctx, id, info)
+      val lambdaPair = buildLambdaClass(ctx.mctx.className, id, Lst.length(params), capturing, async_)
+      putLambdaClass(ctx.mctx, lambdaPair.0, lambdaPair.1)
+      if (async_) {
+        val payloadPair = buildAsyncLambdaPayloadClass(ctx.mctx.className, id, Lst.length(params), capturing)
+        putLambdaClass(ctx.mctx, payloadPair.0, payloadPair.1)
+      } else ()
+      if (capturing) {
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfConstantInt(ctx.cf, Lst.length(freeVars)))
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.anewarray, CF.cfClassRef(ctx.cf, "java/lang/Object"))
+        emitCaptureArrayEntries(ctx, freeVars, 0)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, lambdaPair.0))
+        CF.mbEmit1(ctx.mb, Op.JvmOp.dupX1)
+        CF.mbEmit1(ctx.mb, Op.JvmOp.swap)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, lambdaPair.0, "<init>", "([Ljava/lang/Object;)V"))
+      } else {
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, lambdaPair.0))
+        CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, lambdaPair.0, "<init>", "()V"))
+      }
+
+      val idx = bindLocal(ctx, name)
+      storeLocal(ctx, idx)
+    }
     SBreak => {
       match (ctx.loopBreakStack) {
         layer :: _ => {
@@ -1948,64 +2501,91 @@ fun emitLitExpr(ctx: CodegenContext, kind: String, raw: String): Unit = {
 
 // Helper extracted from emitExpr to reduce match body type complexity.
 fun emitIdentExpr(ctx: CodegenContext, name: String): Unit = {
-  if (loadLocal(ctx, name)) {
-    if (Dict.member(ctx.varLocals, name)) emitVarUnbox(ctx) else ()
-  }
-  else {
-    val mctx = ctx.mctx
-    if (Dict.member(mctx.globalNames, name)) {
-      val fref = CF.cfFieldref(ctx.cf, mctx.className, name, "Ljava/lang/Object;")
-      CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref);
-      if (Dict.member(mctx.globalVarNames, name)) emitVarUnbox(ctx) else ()
+  val freeHit =
+    match (ctx.freeVarToIndex) {
+      Some(fvMap) => {
+        match (Dict.get(fvMap, name)) {
+          Some(idx) => {
+            emitLoadFreeVarFromEnv(ctx, idx)
+            if (Dict.member(ctx.freeVarVars, name)) emitVarUnbox(ctx) else ()
+            True
+          }
+          None => False
+        }
+      }
+      None => False
     }
-    else if (Dict.member(mctx.funArities, name)) {
-      val arity = Opt.getOrElse(Dict.get(mctx.funArities, name), 0)
-      emitFunctionRef(ctx, mctx.className, name, arity)
+  if (freeHit) ()
+  else {
+    val localFunHit =
+      match (ctx.localFunNamesInEnv) {
+        Some(funSet) =>
+          if (Dict.member(funSet, name)) {
+            emitLoadLocalFunFromEnv(ctx, name)
+            True
+          } else False
+        None => False
+      }
+    if (localFunHit) ()
+    else if (loadLocal(ctx, name)) {
+      if (Dict.member(ctx.varLocals, name)) emitVarUnbox(ctx) else ()
     }
     else {
-      val importedValClass = Dict.get(mctx.options.importedValVarToClass, name)
-      match (importedValClass) {
-        Some(valCls) => {
-          val origName = Opt.getOrElse(Dict.get(mctx.options.importedNameToOriginal, name), name)
-          emitInitCall(ctx, valCls);
-          val fref = CF.cfFieldref(ctx.cf, valCls, origName, "Ljava/lang/Object;")
-          CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref);
-          if (Dict.member(mctx.options.importedVarNames, name)) emitVarUnbox(ctx) else ()
-        }
-        None => {
-          val importedFunClass = Dict.get(mctx.options.importedNameToClass, name)
-          match (importedFunClass) {
-            Some(funCls) => {
-              val importedFunArity = Dict.get(mctx.options.importedFunArities, name)
-              match (importedFunArity) {
-                Some(funArity) => {
-                  val origName = Opt.getOrElse(Dict.get(mctx.options.importedNameToOriginal, name), name)
-                  emitInitCall(ctx, funCls);
-                  emitFunctionRef(ctx, funCls, origName, funArity)
-                }
-                None => pushNull(ctx)
-              }
-            }
-            None => {
-              if (name == "None") {
-                val fref = CF.cfFieldref(ctx.cf, KNONE, "INSTANCE", "Lkestrel/runtime/KNone;")
-                CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
-              }
-              else if (name == "Nil" | name == "[]") {
-                val fref = CF.cfFieldref(ctx.cf, KNIL, "INSTANCE", "Lkestrel/runtime/KNil;")
-                CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
-              }
-              else {
-                val adtClassOpt = Dict.get(mctx.adtClassByConstructor, name)
-                match (adtClassOpt) {
-                  Some(adtCls) => {
-                    val adtArity = Opt.getOrElse(Dict.get(mctx.adtConstructorArity, name), 1)
-                    if (adtArity == 0) {
-                      val fref = CF.cfFieldref(ctx.cf, adtCls, "INSTANCE", "L${adtCls};")
-                      CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
-                    } else pushNull(ctx)
+      val mctx = ctx.mctx
+      if (Dict.member(mctx.globalNames, name)) {
+        val fref = CF.cfFieldref(ctx.cf, mctx.className, name, "Ljava/lang/Object;")
+        CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref);
+        if (Dict.member(mctx.globalVarNames, name)) emitVarUnbox(ctx) else ()
+      }
+      else if (Dict.member(mctx.funArities, name)) {
+        val arity = Opt.getOrElse(Dict.get(mctx.funArities, name), 0)
+        emitFunctionRef(ctx, mctx.className, name, arity)
+      }
+      else {
+        val importedValClass = Dict.get(mctx.options.importedValVarToClass, name)
+        match (importedValClass) {
+          Some(valCls) => {
+            val origName = Opt.getOrElse(Dict.get(mctx.options.importedNameToOriginal, name), name)
+            emitInitCall(ctx, valCls);
+            val fref = CF.cfFieldref(ctx.cf, valCls, origName, "Ljava/lang/Object;")
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref);
+            if (Dict.member(mctx.options.importedVarNames, name)) emitVarUnbox(ctx) else ()
+          }
+          None => {
+            val importedFunClass = Dict.get(mctx.options.importedNameToClass, name)
+            match (importedFunClass) {
+              Some(funCls) => {
+                val importedFunArity = Dict.get(mctx.options.importedFunArities, name)
+                match (importedFunArity) {
+                  Some(funArity) => {
+                    val origName = Opt.getOrElse(Dict.get(mctx.options.importedNameToOriginal, name), name)
+                    emitInitCall(ctx, funCls);
+                    emitFunctionRef(ctx, funCls, origName, funArity)
                   }
                   None => pushNull(ctx)
+                }
+              }
+              None => {
+                if (name == "None") {
+                  val fref = CF.cfFieldref(ctx.cf, KNONE, "INSTANCE", "Lkestrel/runtime/KNone;")
+                  CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
+                }
+                else if (name == "Nil" | name == "[]") {
+                  val fref = CF.cfFieldref(ctx.cf, KNIL, "INSTANCE", "Lkestrel/runtime/KNil;")
+                  CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
+                }
+                else {
+                  val adtClassOpt = Dict.get(mctx.adtClassByConstructor, name)
+                  match (adtClassOpt) {
+                    Some(adtCls) => {
+                      val adtArity = Opt.getOrElse(Dict.get(mctx.adtConstructorArity, name), 1)
+                      if (adtArity == 0) {
+                        val fref = CF.cfFieldref(ctx.cf, adtCls, "INSTANCE", "L${adtCls};")
+                        CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
+                      } else pushNull(ctx)
+                    }
+                    None => pushNull(ctx)
+                  }
                 }
               }
             }
@@ -2342,7 +2922,7 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
     EIf(c, t, eOpt) => emitIfExpr(ctx, c, t, eOpt)
     EWhile(c, b) => emitWhileExpr(ctx, c, b)
     EMatch(scrut, arms) => emitMatchExpr(ctx, scrut, arms)
-    ELambda(_async, _tp, _params, _body) => pushNull(ctx)
+    ELambda(async_, _tp, params, body) => emitLambdaExpr(ctx, async_, params, body)
     ETemplate(parts) => {
       CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, STRING_BUILDER))
       CF.mbEmit1(ctx.mb, Op.JvmOp.dup)

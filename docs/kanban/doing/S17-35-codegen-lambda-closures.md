@@ -19,8 +19,10 @@ framework) produces `null` at the lambda site.
 ## Current State
 
 ```kestrel
-ELambda(_async, _tp, _params, _body) => pushNull(ctx)
+ELambda(async_, _tp, params, body) => emitLambdaExpr(ctx, async_, params, body)
 ```
+
+`ELambda` now emits real lambda objects (including captured env arrays), and `SFun` now supports non-recursive free-var capture. Recursive/mutual local-fun wiring through a shared `KRecord` pre-pass is still pending due verifier-safety work.
 
 TS reference: lambdas are compiled in two passes:
 1. **Collection pass** (`collectLambdas`, ~200 lines): walks the AST, discovers all lambda
@@ -106,7 +108,7 @@ TS reference: lambdas are compiled in two passes:
 
 ## Tasks
 
-- [ ] **[codegen.ks — types]** Add `LambdaInfo` record type:
+- [x] **[codegen.ks — types]** Add `LambdaInfo` record type:
   ```
   type LambdaInfo = {
     body: Ast.Expr, async_: Bool, params: List<Ast.Param>,
@@ -114,22 +116,24 @@ TS reference: lambdas are compiled in two passes:
     localFunNames: Option<List<String>>, freeVarVars: List<String>
   }
   ```
-- [ ] **[codegen.ks — types]** Add two `mut` fields to `ModuleContext`: `lambdas: mut List<LambdaInfo>` and `lambdaIndex: mut Int`. Update `emptyModuleContext` to initialise both to `[]` / `0`.
-- [ ] **[codegen.ks — types]** Add three `mut` fields to `CodegenContext`: `freeVarToIndex: mut Option<Dict<String, Int>>`, `localFunNamesInEnv: mut Option<Dict<String, Unit>>`, `freeVarVars: mut Dict<String, Unit>`. Update `newCodegenContext` to initialise all three to `None` / `Dict.emptyStringDict()`.
-- [ ] **[codegen.ks — getFreeVars]** Implement `getFreeVars(body: Ast.Expr, paramNames: Dict<String, Unit>, scope: Dict<String, Unit>): List<String>`. Walks the body AST in DFS pre-order, collecting `EIdent` names that are in `scope` but not in `paramNames`, deduplicating. Must descend into all expression variants; must NOT descend into nested `ELambda` bodies (those are separate lambda ids) but MUST record their outer free-vars.
+- [x] **[codegen.ks — types]** Add two `mut` fields to `ModuleContext`: `lambdas: mut List<LambdaInfo>` and `lambdaIndex: mut Int`. Update `emptyModuleContext` to initialise both to `[]` / `0`.
+- [x] **[codegen.ks — types]** Add three `mut` fields to `CodegenContext`: `freeVarToIndex: mut Option<Dict<String, Int>>`, `localFunNamesInEnv: mut Option<Dict<String, Unit>>`, `freeVarVars: mut Dict<String, Unit>`. Update `newCodegenContext` to initialise all three to `None` / `Dict.emptyStringDict()`.
+- [x] **[codegen.ks — getFreeVars]** Implement `getFreeVars(body: Ast.Expr, paramNames: Dict<String, Unit>, scope: Dict<String, Unit>): List<String>`. Walks the body AST in DFS pre-order, collecting `EIdent` names that are in `scope` but not in `paramNames`, deduplicating. Must descend into all expression variants; must NOT descend into nested `ELambda` bodies (those are separate lambda ids) but MUST record their outer free-vars.
 - [ ] **[codegen.ks — collectLambdas]** Implement `collectLambdas(prog: Ast.Program, globalNames: Dict<String, Unit>, funArities: Dict<String, Int>): List<LambdaInfo>`. Walks program body in declaration order, then function bodies and value expressions recursively. For each `ELambda` encountered in DFS pre-order, computes `freeVars` and appends a `LambdaInfo` to the result; for each `SFun` in a block, does the same with the mutual-recursion `localFunNames` logic from the TS reference. Scope is threaded: starts with globalNames + funNames; each param, `val`, `var`, and `fun` binding adds to scope for the remainder of that block/function.
-- [ ] **[codegen.ks — buildLambdaClass]** Implement `buildLambdaClass(outerClassName: String, lambdaId: Int, arity: Int, capturing: Bool, async_: Bool, cf_outer: CF.ClassFileBuilder): (String, ByteArray)`. Mirrors TS `buildLambdaClass`. Generates inner class `OuterClass$LambdaId` implementing `kestrel/runtime/KFunction`. If non-capturing: `<init>()V`; `apply([Object)Object` calls `INVOKESTATIC OuterClass.$lambdaId(args)Object`. If capturing: `<init>([Object)V` storing env; `apply` passes env and args. For async lambdas: the outer lambda class wraps an async payload class (see next task).
-- [ ] **[codegen.ks — buildAsyncLambdaPayloadClass]** Implement `buildAsyncLambdaPayloadClass(outerClassName: String, lambdaId: Int, arity: Int, capturing: Bool, cf_outer: CF.ClassFileBuilder): (String, ByteArray)`. Mirrors TS `buildAsyncLambdaPayloadClass`. Generates inner class `OuterClass$LambdaId$Payload` implementing `KFunction` whose `apply` calls `INVOKESTATIC OuterClass.$async$lambdaId(...)Object`.
-- [ ] **[codegen.ks — emitIdentExpr]** Before checking locals, add a check: if `freeVarToIndex` is set (`Some(fvMap)`), look up `name` in `fvMap`; if found, emit `ALOAD 0; CHECKCAST [Object; LDC_W fvIdx; AALOAD`. Then add a check for `localFunNamesInEnv`: if set and `name` is in it, load from the KRecord stored in env[0] (or slot 0 if `freeVarToIndex` is None). After loading from env, apply `emitVarUnbox` if `name` is in `freeVarVars`.
+- [x] **[codegen.ks — buildLambdaClass]** Implement `buildLambdaClass(outerClassName: String, lambdaId: Int, arity: Int, capturing: Bool, async_: Bool, cf_outer: CF.ClassFileBuilder): (String, ByteArray)`. Mirrors TS `buildLambdaClass`. Generates inner class `OuterClass$LambdaId` implementing `kestrel/runtime/KFunction`. If non-capturing: `<init>()V`; `apply([Object)Object` calls `INVOKESTATIC OuterClass.$lambdaId(args)Object`. If capturing: `<init>([Object)V` storing env; `apply` passes env and args. For async lambdas: the outer lambda class wraps an async payload class (see next task).
+- [x] **[codegen.ks — buildAsyncLambdaPayloadClass]** Implement `buildAsyncLambdaPayloadClass(outerClassName: String, lambdaId: Int, arity: Int, capturing: Bool, cf_outer: CF.ClassFileBuilder): (String, ByteArray)`. Mirrors TS `buildAsyncLambdaPayloadClass`. Generates inner class `OuterClass$LambdaId$Payload` implementing `KFunction` whose `apply` calls `INVOKESTATIC OuterClass.$async$lambdaId(...)Object`.
+- [x] **[codegen.ks — emitIdentExpr]** Before checking locals, add a check: if `freeVarToIndex` is set (`Some(fvMap)`), look up `name` in `fvMap`; if found, emit `ALOAD 0; CHECKCAST [Object; LDC_W fvIdx; AALOAD`. Then add a check for `localFunNamesInEnv`: if set and `name` is in it, load from the KRecord stored in env[0] (or slot 0 if `freeVarToIndex` is None). After loading from env, apply `emitVarUnbox` if `name` is in `freeVarVars`.
 - [ ] **[codegen.ks — emitBlockStmts / mutual-recursion pre-pass]** Before iterating stmts, scan for `SFun` entries. If there are multiple `SFun` entries, or a single self-recursive `SFun`, allocate a KRecord slot and emit `NEW KRecord; DUP; INVOKESPECIAL <init>; ASTORE recordSlot`. Pass `recordSlot` (or -1) into the main stmt loop.
 - [ ] **[codegen.ks — emitBlockStmt SFun]** Replace the `SFun => ()` stub. Look up the lambda's `LambdaInfo` from `mctx.lambdas[mctx.lambdaIndex]`; increment `mctx.lambdaIndex`. If capturing, build the env array (with KRecord at slot 0 for mutual-recursion, then other free vars). Emit `NEW OuterClass$LambdaId; DUP[_X1]; [SWAP]; INVOKESPECIAL <init>; ASTORE slot`. If `recordSlot >= 0`, also emit a `KRecord.set(name, lambdaObj)` to register this function in the shared record. Bind `name -> slot` in `ctx.locals`.
 - [ ] **[codegen.ks — emitExpr ELambda]** Replace the `pushNull` stub. Look up `mctx.lambdas[mctx.lambdaIndex]`; increment `mctx.lambdaIndex`. If non-capturing: `NEW $LambdaId; DUP; INVOKESPECIAL <init>()`. If capturing: build env array from `freeVars` (each var loaded from locals, outer env, globals, or fun refs); `NEW $LambdaId; DUP_X1; SWAP; INVOKESPECIAL <init>([Object)`.
 - [ ] **[codegen.ks — emitLambdaBodies]** Add function `emitLambdaBodies(cf, mctx, lambdas, getInferredType): Dict<String, ByteArray>`. For each `LambdaInfo` at index `i`: (1) create a new `CodegenContext` for a new static method `$lambda_i` (or `$async$lambda_i`); bind `__env -> 0` if capturing, then params; set `freeVarToIndex` and `localFunNamesInEnv` on the context; emit the body; add `ARETURN`. (2) Call `buildLambdaClass` and accumulate its bytes. (3) If async, also call `buildAsyncLambdaPayloadClass`. Return accumulated inner-class bytes dict.
+- [x] **[codegen.ks — jvmCodegen]** Merge dynamically emitted lambda class bytes (`mctx.lambdaClasses`) into the returned class map alongside declaration-emitted classes.
 - [ ] **[codegen.ks — jvmCodegen]** After building `mctx`, call `collectLambdas(prog, mctx.globalNames, mctx.funArities)` and store the result in `mctx.lambdas`. Then after emitting top-level declarations, call `emitLambdaBodies(cf, mctx, mctx.lambdas, getInferredType)` and merge the returned inner-class bytes into `extraClasses`.
-- [ ] **[codegen-expr.test.ks]** Update the "lambda template call" test group: assert that emitting an `ELambda` now produces `new_` (opcode 0xBB) rather than `aconstNull` (opcode 0x01). Add a new group "non-capturing lambda emits NEW LambdaN" using a module-level `jvmCodegen` call on a minimal program. Add a group "capturing lambda env array" similarly.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
-- [ ] Run `./scripts/run-e2e.sh` (user-visible codegen behaviour change).
+- [ ] **[codegen.ks — capture semantics hardening]** Complete capturing `ELambda` env-array emission and verifier-safe support for nested captures/local-fun env wiring.
+- [x] **[codegen-expr.test.ks]** Update the "lambda template call" test group: assert that emitting an `ELambda` now produces `new_` (opcode 0xBB) rather than `aconstNull` (opcode 0x01). Add a new group "non-capturing lambda emits NEW LambdaN" using a module-level `jvmCodegen` call on a minimal program. Add a group "capturing lambda env array" similarly.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
+- [x] Run `./scripts/run-e2e.sh` (user-visible codegen behaviour change).
 
 ## Tests to add
 
@@ -144,3 +148,14 @@ TS reference: lambdas are compiled in two passes:
 
 - [ ] `docs/specs/01-language.md` §3.8 — No text changes required; implementation now matches spec. Verify phrasing still matches (env array, by-reference var capture) against the final implementation.
 - [ ] `stdlib/kestrel/tools/compiler/codegen.ks` module-level doc comment — update to mention lambda collection and emission passes once the implementation is complete.
+
+## Build notes
+
+- 2026-05-06: Started implementation.
+- 2026-05-07: Implemented verifier-safe non-capturing `ELambda` object emission (`NEW` lambda class + static payload method) and integrated dynamic lambda class byte accumulation into `jvmCodegen`.
+- 2026-05-07: Attempted full capturing `ELambda` env-path and then rolled back to non-capturing after self-hosted compiler verifier failures in `Codegen.emitLambdaExpr`; added explicit follow-up task to reintroduce capture semantics in smaller steps.
+- 2026-05-08: Reintroduced capturing `ELambda` emission (env array + captured ctor path) and validated with `codegen-expr` plus full `./scripts/kestrel test`.
+- 2026-05-08: Added focused unit coverage in `codegen-expr.test.ks` for capturing `ELambda` and capturing `SFun` bytecode shape (`ANEWARRAY` + ctor path).
+- 2026-05-08: Attempted recursive/mutual local-fun `KRecord` pre-pass wiring twice; both attempts triggered JVM verifier stackmap failures in self-hosted codegen methods. Rolled back to the last green incremental state (capturing `ELambda`, capturing non-recursive `SFun`) to keep the branch stable.
+- 2026-05-08: Added runtime conformance case `tests/conformance/runtime/valid/lambda_closures.ks` for currently-shipped closure behavior (list map lambda, capturing lambda, non-recursive local fun capture).
+- 2026-05-08: Re-ran verification after conformance addition: `./scripts/kestrel test`, `cd compiler && npm test` (458/458), and `./scripts/run-e2e.sh` all passing.

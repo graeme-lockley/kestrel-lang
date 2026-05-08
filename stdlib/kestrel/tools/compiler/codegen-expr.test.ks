@@ -6,7 +6,7 @@ import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Ty from "kestrel:dev/typecheck/types"
-import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, PVar, PLit, PCon, PList, PCons, PTuple, EField, SVal, SVar, SAssign, SExpr, SBreak, SContinue, EList, ECons, EPipe, LElem, EThrow, ETry, EAwait } from "kestrel:dev/parser/ast"
+import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, PVar, PLit, PCon, PList, PCons, PTuple, EField, SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue, EList, ECons, EPipe, LElem, EThrow, ETry, EAwait, ATPrim } from "kestrel:dev/parser/ast"
 import * as Ast from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
@@ -92,11 +92,27 @@ export async fun run(s: Suite): Task<Unit> =
       val tpl = ETemplate([TmplLit("a="), TmplExpr(ELit("int", "1"))])
       val call = ECall(lam, [ELit("int", "9")])
       CG.emitExpr(t.ctx, lam)
+      eq(sg, "lambda: opcode[0] is NEW", codeAt(t.mb, 0), 187)
+      isTrue(sg, "lambda: does not emit aconstNull at start", codeAt(t.mb, 0) != 1)
       CG.emitExpr(t.ctx, tpl)
       CG.emitExpr(t.ctx, call)
       val bytes = finish(t.cf, t.mb)
       isTrue(sg, "lambda/template/call emit", BA.length(bytes) > 0)
       eq(sg, "runtime const exported", CG.RUNTIME, "kestrel/runtime/KRuntime")
+    })
+
+    group(s1, "capturing lambda emits env array", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitBlockStmt(t.ctx, SVal("x", None, ELit("int", "7")))
+      val lam = ELambda(False, [], [{ name = "y", type_ = None }], EBinary("+", EIdent("x"), EIdent("y")))
+      CG.emitExpr(t.ctx, lam)
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      // ANEWARRAY = 189 for captured environment object[]
+      isTrue(sg, "capturing lambda: emits ANEWARRAY(189)", containsSeq(code, [189]))
+      // INVOKESPECIAL = 183 for captured ctor <init>([Object)
+      isTrue(sg, "capturing lambda: emits INVOKESPECIAL(183)", containsSeq(code, [183]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "capturing lambda: class bytes exist", BA.length(bytes) > 0)
     })
 
     group(s1, "float literal", (sg: Suite) => {
@@ -190,7 +206,10 @@ export async fun run(s: Suite): Task<Unit> =
         funArities = Dict.emptyStringDict(),
         adtClassByConstructor = Dict.emptyStringDict(),
         adtConstructorArity = Dict.emptyStringDict(),
-        options = opts
+        options = opts,
+        mut lambdas = [],
+        mut lambdaIndex = 0,
+        mut lambdaClasses = Dict.emptyStringDict()
       }
       val ctx2 = CG.newCodegenContext(cf2, mb2, mctxWithGlobal, CG.noTypeInfo)
       CG.emitExpr(ctx2, EIdent("myVal"))
@@ -208,7 +227,10 @@ export async fun run(s: Suite): Task<Unit> =
         funArities = Dict.insert(Dict.emptyStringDict(), "myFun", 2),
         adtClassByConstructor = Dict.emptyStringDict(),
         adtConstructorArity = Dict.emptyStringDict(),
-        options = opts
+        options = opts,
+        mut lambdas = [],
+        mut lambdaIndex = 0,
+        mut lambdaClasses = Dict.emptyStringDict()
       }
       val ctx3 = CG.newCodegenContext(cf3, mb3, mctxWithFun, CG.noTypeInfo)
       CG.emitExpr(ctx3, EIdent("myFun"))
@@ -333,7 +355,10 @@ export async fun run(s: Suite): Task<Unit> =
         funArities = Dict.insert(Dict.emptyStringDict(), "myFun", 2),
         adtClassByConstructor = Dict.emptyStringDict(),
         adtConstructorArity = Dict.emptyStringDict(),
-        options = CG.emptyJvmCodegenOptions()
+        options = CG.emptyJvmCodegenOptions(),
+        mut lambdas = [],
+        mut lambdaIndex = 0,
+        mut lambdaClasses = Dict.emptyStringDict()
       }
       val ctx = CG.newCodegenContext(cf, mb, mctx, CG.noTypeInfo)
       CG.emitExpr(ctx, ECall(EIdent("myFun"), [ELit("int", "1"), ELit("int", "2")]))
@@ -486,6 +511,19 @@ export async fun run(s: Suite): Task<Unit> =
         containsSeq(BA.toList(bytes), [115, 101, 116]))
     })
 
+    group(s1, "SFun capturing outer val emits env array", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitBlockStmt(t.ctx, SVal("x", None, ELit("int", "3")))
+      CG.emitBlockStmt(t.ctx, SFun(False, "f", [], [{ name = "y", type_ = None }], ATPrim("Int"), EBinary("+", EIdent("x"), EIdent("y"))))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      // ANEWARRAY = 189 for captured environment object[]
+      isTrue(sg, "SFun capture: emits ANEWARRAY(189)", containsSeq(code, [189]))
+      // INVOKESPECIAL = 183 for lambda ctor
+      isTrue(sg, "SFun capture: emits INVOKESPECIAL(183)", containsSeq(code, [183]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "SFun capture: class bytes produced", BA.length(bytes) > 0)
+    })
+
     group(s1, "EList empty", (sg: Suite) => {
       val t = baseContext()
       CG.emitExpr(t.ctx, EList([]))
@@ -577,7 +615,10 @@ export async fun run(s: Suite): Task<Unit> =
         funArities = Dict.insert(Dict.emptyStringDict(), "double", 1),
         adtClassByConstructor = Dict.emptyStringDict(),
         adtConstructorArity = Dict.emptyStringDict(),
-        options = opts
+        options = opts,
+        mut lambdas = [],
+        mut lambdaIndex = 0,
+        mut lambdaClasses = Dict.emptyStringDict()
       }
       val ctx2 = CG.newCodegenContext(cf2, mb2, mctxWithFun, CG.noTypeInfo)
       CG.emitExpr(ctx2, EPipe("|>", ELit("int", "3"), EIdent("double")))
