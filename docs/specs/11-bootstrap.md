@@ -88,6 +88,11 @@ Two separate cache directories exist under `~/.kestrel/`:
   files compiled by the self-hosted compiler for user programs run via `./kestrel-self`.
 
 **Contents of each cache:** Compiled `.class` files, `.class.deps` dependency lists, and `.kti` incremental metadata.
+- **KTI `codegenMeta` parity requirement:** Self-hosted and bootstrap compilers must preserve
+  `codegenMeta` fields on write/read (`funArities`, `asyncFunNames`, `varNames`,
+  `valOrVarNames`, `adtConstructors`, `exceptionDecls`) so cross-module JVM codegen can
+  reconstruct function arity, async status, val/var mutability, ADT constructor layouts, and
+  exception constructor arity without lossy round-trips.
 - **`.class.deps` format:** For each compiled module `<ClassName>`, a sidecar file `<ClassName>.class.deps` is written to `outDir`. The file contains the absolute source paths of all transitive source dependencies of that module (in DFS post-order), with the module's own path last. One absolute path per line, UTF-8 encoded, newline-terminated. Only written when a module is actually compiled (not when a fresh/incremental skip occurs).
 - **Gate artifact for self-hosted cache:** `Cli_entry.class` (nested under a path derived from the source file's absolute path).
 

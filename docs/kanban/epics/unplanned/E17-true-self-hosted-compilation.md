@@ -202,7 +202,7 @@ S17-41 (codegenMeta) is a prerequisite for S17-22 (cross-module ADT environment)
     incorrectly merge them. Fix: remap all imported type vars to negative IDs (mirroring the
     TS compiler's `freshenImportedTypeVars` with `importedTypeVarIdRef = { value: -1 }`).
 
-18. [S17-41 — Fix KTI `codegenMeta` extraction and serialisation](../../unplanned/S17-41-kti-codegenmeta-correctness.md)
+18. ✅ [S17-41 — Fix KTI `codegenMeta` extraction and serialisation](../../done/S17-41-kti-codegenmeta-correctness.md)
     — The self-hosted `extractCodegenMeta` is a stub: all arities are 0, and `asyncFunNames`,
     `varNames`, `adtConstructors`, and `exceptionDecls` are empty. `buildEntries` always writes
     `kind="function"` with `arity=0`. `buildTypeEntries` always writes `kind="alias"`, never

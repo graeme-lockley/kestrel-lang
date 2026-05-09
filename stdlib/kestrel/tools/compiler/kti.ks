@@ -11,7 +11,7 @@ import * as Opt from "kestrel:data/option"
 import * as Res from "kestrel:data/result"
 import * as Str from "kestrel:data/string"
 import * as Ast from "kestrel:dev/parser/ast"
-import { TDFun, TDVar, TDVal, TDSVal, TDSVar, TDType, TBAdt, TDExternFun, TDException, TDExport, EIDecl, IDNamed, IDNamespace } from "kestrel:dev/parser/ast"
+import { TDFun, TDVar, TDVal, TDSVal, TDSVar, TDType, TBAdt, TDExternFun, TDException, TDExport, EIDecl, IDNamed, IDNamespace, ATApp, ATIdent } from "kestrel:dev/parser/ast"
 import * as Fs from "kestrel:io/fs"
 import { NotFound, PermissionDenied, IoError } from "kestrel:io/fs"
 import * as Ty from "kestrel:dev/typecheck/types"
@@ -20,7 +20,10 @@ import * as Resolve from "kestrel:tools/compiler/resolve"
 import * as Crypto from "kestrel:io/crypto"
 
 export type KtiFunctionEntry = { kind: String, function_index: Int, arity: Int, type_: Json.Value }
-export type KtiExportEntry = KtiFunction(KtiFunctionEntry)
+export type KtiValEntry = { kind: String, function_index: Int, type_: Json.Value }
+export type KtiVarEntry = { kind: String, function_index: Int, setter_index: Int, type_: Json.Value }
+export type KtiConstructorEntry = { kind: String, adt_id: Int, ctor_index: Int, arity: Int, type_: Json.Value }
+export type KtiExportEntry = KtiFunction(KtiFunctionEntry) | KtiVal(KtiValEntry) | KtiVar(KtiVarEntry) | KtiConstructor(KtiConstructorEntry)
 export type KtiTypeEntry = { visibility: String, kind: String, type_: Option<Json.Value>, constructors: Option<List<(String, Int)>>, typeParams: List<String> }
 export type KtiAdtConstructorGroup = { typeName: String, constructors: List<(String, Int)> }
 export type KtiExceptionEntry = { name: String, arity: Int }
@@ -156,7 +159,29 @@ fun exportEntryToJson(entry: KtiExportEntry): Json.Value =
       ("arity", Int(fe.arity)),
       ("type", fe.type_)
     ])
+    KtiVal(ve) => Object([
+      ("kind", StrVal(ve.kind)),
+      ("function_index", Int(ve.function_index)),
+      ("type", ve.type_)
+    ])
+    KtiVar(ve) => Object([
+      ("kind", StrVal(ve.kind)),
+      ("function_index", Int(ve.function_index)),
+      ("setter_index", Int(ve.setter_index)),
+      ("type", ve.type_)
+    ])
+    KtiConstructor(ce) => Object([
+      ("kind", StrVal(ce.kind)),
+      ("adt_id", Int(ce.adt_id)),
+      ("ctor_index", Int(ce.ctor_index)),
+      ("arity", Int(ce.arity)),
+      ("type", ce.type_)
+    ])
   }
+
+fun repeatNulls(n: Int, acc: List<Json.Value>): List<Json.Value> =
+  if (n <= 0) Lst.reverse(acc)
+  else repeatNulls(n - 1, Null :: acc)
 
 fun typeEntryToJson(entry: KtiTypeEntry): Json.Value = {
   val base = [
@@ -172,7 +197,7 @@ fun typeEntryToJson(entry: KtiTypeEntry): Json.Value = {
     None => withType
     Some(ctors) => {
       val ctorJson = Array(Lst.map(ctors, (c: (String, Int)) =>
-        Object([("name", StrVal(c.0)), ("params", Array([]))])
+        Object([("name", StrVal(c.0)), ("params", Array(repeatNulls(c.1, [])))])
       ));
       Lst.append(withType, [("constructors", ctorJson)])
     }
@@ -338,13 +363,73 @@ fun parseFunctions(v: Json.Value): Dict<String, KtiExportEntry> =
       match (asObj(p.1)) {
         None => acc
         Some(eps) => {
+          val kind = Opt.getOrElse(Opt.andThen(objGet(eps, "kind"), asStr), "function")
           val arity = Opt.getOrElse(Opt.andThen(objGet(eps, "arity"), asInt), 0)
           val idx = Opt.getOrElse(Opt.andThen(objGet(eps, "function_index"), asInt), 0)
+          val setterIdx = Opt.getOrElse(Opt.andThen(objGet(eps, "setter_index"), asInt), 0)
+          val adtId = Opt.getOrElse(Opt.andThen(objGet(eps, "adt_id"), asInt), 0)
+          val ctorIdx = Opt.getOrElse(Opt.andThen(objGet(eps, "ctor_index"), asInt), 0)
           val t = Opt.getOrElse(objGet(eps, "type"), StrVal("Unit"))
-          Dict.insert(acc, p.0, KtiFunction({ kind = "function", function_index = idx, arity = arity, type_ = t }))
+          val entry =
+            if (kind == "val") KtiVal({ kind = "val", function_index = idx, type_ = t })
+            else if (kind == "var") KtiVar({ kind = "var", function_index = idx, setter_index = setterIdx, type_ = t })
+            else if (kind == "constructor") KtiConstructor({ kind = "constructor", adt_id = adtId, ctor_index = ctorIdx, arity = arity, type_ = t })
+            else KtiFunction({ kind = "function", function_index = idx, arity = arity, type_ = t })
+          Dict.insert(acc, p.0, entry)
         }
       }
     )
+  }
+
+fun parseCodegenAdtCtor(v: Json.Value): Option<(String, Int)> =
+  match (asObj(v)) {
+    None => None
+    Some(ps) =>
+      match (Opt.andThen(objGet(ps, "name"), asStr)) {
+        None => None
+        Some(name) => {
+          val params = Opt.getOrElse(Opt.andThen(objGet(ps, "params"), asInt), 0)
+          Some((name, params))
+        }
+      }
+  }
+
+fun parseCodegenAdtGroup(v: Json.Value): Option<KtiAdtConstructorGroup> =
+  match (asObj(v)) {
+    None => None
+    Some(ps) =>
+      match (Opt.andThen(objGet(ps, "typeName"), asStr)) {
+        None => None
+        Some(typeName) => {
+          val ctors = match (objGet(ps, "constructors")) {
+            Some(Array(items)) => Lst.filterMap(items, parseCodegenAdtCtor)
+            _ => []
+          }
+          Some({ typeName = typeName, constructors = ctors })
+        }
+      }
+  }
+
+fun parseCodegenException(v: Json.Value): Option<KtiExceptionEntry> =
+  match (asObj(v)) {
+    None => None
+    Some(ps) =>
+      match (Opt.andThen(objGet(ps, "name"), asStr)) {
+        None => None
+        Some(name) => Some({ name = name, arity = Opt.getOrElse(Opt.andThen(objGet(ps, "arity"), asInt), 0) })
+      }
+  }
+
+fun parseCodegenAdtGroups(v: Option<Json.Value>): List<KtiAdtConstructorGroup> =
+  match (v) {
+    Some(Array(items)) => Lst.filterMap(items, parseCodegenAdtGroup)
+    _ => []
+  }
+
+fun parseCodegenExceptions(v: Option<Json.Value>): List<KtiExceptionEntry> =
+  match (v) {
+    Some(Array(items)) => Lst.filterMap(items, parseCodegenException)
+    _ => []
   }
 
 fun parseConstructorsField(v: Json.Value): Option<List<(String, Int)>> =
@@ -435,13 +520,134 @@ fun parseCodegenMeta(v: Json.Value): KtiCodegenMeta =
   match (asObj(v)) {
     None => { funArities = Dict.emptyStringDict(), asyncFunNames = [], varNames = [], valOrVarNames = [], adtConstructors = [], exceptionDecls = [] }
     Some(ps) => {
-      funArities = parseIntMap(Opt.getOrElse(objGet(ps, "funArities"), Object([]))),
-      asyncFunNames = parseStringList(Opt.getOrElse(objGet(ps, "asyncFunNames"), Array([]))),
-      varNames = parseStringList(Opt.getOrElse(objGet(ps, "varNames"), Array([]))),
-      valOrVarNames = parseStringList(Opt.getOrElse(objGet(ps, "valOrVarNames"), Array([]))),
-      adtConstructors = [],
-      exceptionDecls = []
+      val funArities = parseIntMap(Opt.getOrElse(objGet(ps, "funArities"), Object([])))
+      val asyncFunNames = parseStringList(Opt.getOrElse(objGet(ps, "asyncFunNames"), Array([])))
+      val varNames = parseStringList(Opt.getOrElse(objGet(ps, "varNames"), Array([])))
+      val valOrVarNames = parseStringList(Opt.getOrElse(objGet(ps, "valOrVarNames"), Array([])))
+      val adtConstructors = parseCodegenAdtGroups(objGet(ps, "adtConstructors"))
+      val exceptionDecls = parseCodegenExceptions(objGet(ps, "exceptionDecls"))
+      {
+        funArities = funArities,
+        asyncFunNames = asyncFunNames,
+        varNames = varNames,
+        valOrVarNames = valOrVarNames,
+        adtConstructors = adtConstructors,
+        exceptionDecls = exceptionDecls
+      }
     }
+  }
+
+fun isTaskReturnType(retType: Ast.AstType): Bool =
+  match (retType) {
+    ATApp(name, _) => name == "Task"
+    ATIdent(name) => name == "Task"
+    _ => False
+  }
+
+fun collectExportedDeclCodegen(decl: Ast.TopDecl, exportedNames: Dict<String, Bool>, exportedTypeVisibility: Dict<String, String>, meta: KtiCodegenMeta): KtiCodegenMeta =
+  match (decl) {
+    TDFun(fd) => {
+      if (!Dict.member(exportedNames, fd.name)) meta
+      else {
+        val newAsync = if (fd.async_) fd.name :: meta.asyncFunNames else meta.asyncFunNames
+        {
+          funArities = Dict.insert(meta.funArities, fd.name, Lst.length(fd.params)),
+          asyncFunNames = newAsync,
+          varNames = meta.varNames,
+          valOrVarNames = meta.valOrVarNames,
+          adtConstructors = meta.adtConstructors,
+          exceptionDecls = meta.exceptionDecls
+        }
+      }
+    }
+    TDExternFun(efd) => {
+      if (!Dict.member(exportedNames, efd.name)) meta
+      else {
+        val newAsync = if (isTaskReturnType(efd.retType)) efd.name :: meta.asyncFunNames else meta.asyncFunNames
+        {
+          funArities = Dict.insert(meta.funArities, efd.name, Lst.length(efd.params)),
+          asyncFunNames = newAsync,
+          varNames = meta.varNames,
+          valOrVarNames = meta.valOrVarNames,
+          adtConstructors = meta.adtConstructors,
+          exceptionDecls = meta.exceptionDecls
+        }
+      }
+    }
+    TDVar(name, _, _) => {
+      if (!Dict.member(exportedNames, name)) meta
+      else {
+        {
+          funArities = meta.funArities,
+          asyncFunNames = meta.asyncFunNames,
+          varNames = name :: meta.varNames,
+          valOrVarNames = name :: meta.valOrVarNames,
+          adtConstructors = meta.adtConstructors,
+          exceptionDecls = meta.exceptionDecls
+        }
+      }
+    }
+    TDVal(name, _, _) => {
+      if (!Dict.member(exportedNames, name)) meta
+      else {
+        {
+          funArities = meta.funArities,
+          asyncFunNames = meta.asyncFunNames,
+          varNames = meta.varNames,
+          valOrVarNames = name :: meta.valOrVarNames,
+          adtConstructors = meta.adtConstructors,
+          exceptionDecls = meta.exceptionDecls
+        }
+      }
+    }
+    TDType(td) => {
+      if (!Dict.member(exportedNames, td.name)) meta
+      else {
+        val vis = Opt.getOrElse(Dict.get(exportedTypeVisibility, td.name), td.visibility)
+        if (vis == "opaque") meta
+        else match (td.body) {
+          TBAdt(ctors) => {
+            val group = {
+              typeName = td.name,
+              constructors = Lst.map(ctors, (c: Ast.CtorDef) => (c.name, Lst.length(c.params)))
+            }
+            {
+              funArities = meta.funArities,
+              asyncFunNames = meta.asyncFunNames,
+              varNames = meta.varNames,
+              valOrVarNames = meta.valOrVarNames,
+              adtConstructors = Lst.append(meta.adtConstructors, [group]),
+              exceptionDecls = meta.exceptionDecls
+            }
+          }
+          _ => meta
+        }
+      }
+    }
+    TDException(exn) => {
+      if (!exn.exported) meta
+      else {
+        val arity = match (exn.fields) {
+          Some(fs) => Lst.length(fs)
+          None => 0
+        }
+        {
+          funArities = meta.funArities,
+          asyncFunNames = meta.asyncFunNames,
+          varNames = meta.varNames,
+          valOrVarNames = meta.valOrVarNames,
+          adtConstructors = meta.adtConstructors,
+          exceptionDecls = Lst.append(meta.exceptionDecls, [{ name = exn.name, arity = arity }])
+        }
+      }
+    }
+    TDExport(inner) => {
+      match (inner) {
+        EIDecl(d) => collectExportedDeclCodegen(d, exportedNames, exportedTypeVisibility, meta)
+        _ => meta
+      }
+    }
+    _ => meta
   }
 
 fun parseKti(v: Json.Value): Result<KtiV4, String> =
@@ -461,112 +667,9 @@ fun parseKti(v: Json.Value): Result<KtiV4, String> =
     }
   }
 
-fun extractDeclCodegen(decl: Ast.TopDecl, meta: KtiCodegenMeta): KtiCodegenMeta =
-  match (decl) {
-    TDFun(fd) => {
-      val newAsync = if (fd.async_) fd.name :: meta.asyncFunNames else meta.asyncFunNames
-      {
-        funArities = Dict.insert(meta.funArities, fd.name, Lst.length(fd.params)),
-        asyncFunNames = newAsync,
-        varNames = meta.varNames,
-        valOrVarNames = meta.valOrVarNames,
-        adtConstructors = meta.adtConstructors,
-        exceptionDecls = meta.exceptionDecls
-      }
-    }
-    TDExternFun(efd) => {
-      {
-        funArities = Dict.insert(meta.funArities, efd.name, Lst.length(efd.params)),
-        asyncFunNames = meta.asyncFunNames,
-        varNames = meta.varNames,
-        valOrVarNames = meta.valOrVarNames,
-        adtConstructors = meta.adtConstructors,
-        exceptionDecls = meta.exceptionDecls
-      }
-    }
-    TDVar(name, _, _) => {
-      {
-        funArities = meta.funArities,
-        asyncFunNames = meta.asyncFunNames,
-        varNames = name :: meta.varNames,
-        valOrVarNames = name :: meta.valOrVarNames,
-        adtConstructors = meta.adtConstructors,
-        exceptionDecls = meta.exceptionDecls
-      }
-    }
-    TDSVar(name, _, _) => {
-      {
-        funArities = meta.funArities,
-        asyncFunNames = meta.asyncFunNames,
-        varNames = name :: meta.varNames,
-        valOrVarNames = name :: meta.valOrVarNames,
-        adtConstructors = meta.adtConstructors,
-        exceptionDecls = meta.exceptionDecls
-      }
-    }
-    TDVal(name, _, _) => {
-      {
-        funArities = meta.funArities,
-        asyncFunNames = meta.asyncFunNames,
-        varNames = meta.varNames,
-        valOrVarNames = name :: meta.valOrVarNames,
-        adtConstructors = meta.adtConstructors,
-        exceptionDecls = meta.exceptionDecls
-      }
-    }
-    TDSVal(name, _, _) => {
-      {
-        funArities = meta.funArities,
-        asyncFunNames = meta.asyncFunNames,
-        varNames = meta.varNames,
-        valOrVarNames = name :: meta.valOrVarNames,
-        adtConstructors = meta.adtConstructors,
-        exceptionDecls = meta.exceptionDecls
-      }
-    }
-    TDType(td) => {
-      match (td.body) {
-        TBAdt(ctors) => {
-          val group = {
-            typeName = td.name,
-            constructors = Lst.map(ctors, (c: Ast.CtorDef) => (c.name, Lst.length(c.params)))
-          }
-          {
-            funArities = meta.funArities,
-            asyncFunNames = meta.asyncFunNames,
-            varNames = meta.varNames,
-            valOrVarNames = meta.valOrVarNames,
-            adtConstructors = group :: meta.adtConstructors,
-            exceptionDecls = meta.exceptionDecls
-          }
-        }
-        _ => meta
-      }
-    }
-    TDException(exn) => {
-      val arity = match (exn.fields) {
-        Some(fs) => Lst.length(fs)
-        None => 0
-      }
-      {
-        funArities = meta.funArities,
-        asyncFunNames = meta.asyncFunNames,
-        varNames = meta.varNames,
-        valOrVarNames = meta.valOrVarNames,
-        adtConstructors = meta.adtConstructors,
-        exceptionDecls = { name = exn.name, arity = arity } :: meta.exceptionDecls
-      }
-    }
-    TDExport(inner) => {
-      match (inner) {
-        EIDecl(d) => extractDeclCodegen(d, meta)
-        _ => meta
-      }
-    }
-    _ => meta
-  }
-
-export fun extractCodegenMeta(prog: Ast.Program, _exports: Dict<String, Ty.InternalType>): KtiCodegenMeta =
+export fun extractCodegenMeta(prog: Ast.Program, exports: Dict<String, Ty.InternalType>, exportedTypeAliases: Dict<String, Ty.InternalType>, exportedTypeVisibility: Dict<String, String>): KtiCodegenMeta = {
+  val valueNames = Lst.foldl(Dict.keys(exports), Dict.emptyStringDict(), (acc: Dict<String, Bool>, n: String) => Dict.insert(acc, n, True))
+  val exportedNames = Lst.foldl(Dict.keys(exportedTypeAliases), valueNames, (acc: Dict<String, Bool>, n: String) => Dict.insert(acc, n, True))
   Lst.foldl(prog.body, {
     funArities = Dict.emptyStringDict(),
     asyncFunNames = [],
@@ -574,28 +677,140 @@ export fun extractCodegenMeta(prog: Ast.Program, _exports: Dict<String, Ty.Inter
     valOrVarNames = [],
     adtConstructors = [],
     exceptionDecls = []
-  }, (meta: KtiCodegenMeta, d: Ast.TopDecl) => extractDeclCodegen(d, meta))
+  }, (meta: KtiCodegenMeta, d: Ast.TopDecl) => collectExportedDeclCodegen(d, exportedNames, exportedTypeVisibility, meta))
+}
 
-fun buildEntries(names: List<String>, exports: Dict<String, Ty.InternalType>, idx: Int, acc: Dict<String, KtiExportEntry>): Dict<String, KtiExportEntry> =
-  match (names) {
-    [] => acc
-    n :: rest => buildEntries(rest, exports, idx + 1, Dict.insert(acc, n, KtiFunction({ kind = "function", function_index = idx, arity = 0, type_ = serializeType(Opt.getOrElse(Dict.get(exports, n), Ty.tUnit)) })))
+fun collectEntryInfoFromDecl(decl: Ast.TopDecl, exportedTypeVisibility: Dict<String, String>, state: (Dict<String, String>, Dict<String, Int>, Dict<String, (Int, Int, Int)>, Dict<String, (Int, Int)>, Int)): (Dict<String, String>, Dict<String, Int>, Dict<String, (Int, Int, Int)>, Dict<String, (Int, Int)>, Int) =
+  match (decl) {
+    TDFun(fd) =>
+      (Dict.insert(state.0, fd.name, "function"), Dict.insert(state.1, fd.name, Lst.length(fd.params)), state.2, state.3, state.4)
+    TDExternFun(fd) =>
+      (Dict.insert(state.0, fd.name, "function"), Dict.insert(state.1, fd.name, Lst.length(fd.params)), state.2, state.3, state.4)
+    TDVal(name, _, _) =>
+      (Dict.insert(state.0, name, "val"), state.1, state.2, state.3, state.4)
+    TDVar(name, _, _) =>
+      (Dict.insert(state.0, name, "var"), state.1, state.2, state.3, state.4)
+    TDType(td) => {
+      val vis = Opt.getOrElse(Dict.get(exportedTypeVisibility, td.name), td.visibility)
+      if (vis == "opaque") state
+      else match (td.body) {
+        TBAdt(ctors) => {
+          val adtId = state.4
+          val ctorMeta = Lst.foldl(ctors, state.2, (acc: Dict<String, (Int, Int, Int)>, c: Ast.CtorDef) =>
+            Dict.insert(acc, c.name, (adtId, Lst.length(c.params), 0))
+          );
+          val ctorMetaIndexed = Lst.foldl(ctors, (ctorMeta, 0), (acc: (Dict<String, (Int, Int, Int)>, Int), c: Ast.CtorDef) => {
+            val nextTuple = match (Dict.get(acc.0, c.name)) {
+              Some(prior) => (prior.0, prior.1, acc.1)
+              None => (adtId, Lst.length(c.params), acc.1)
+            };
+            (Dict.insert(acc.0, c.name, nextTuple), acc.1 + 1)
+          }).0;
+          (state.0, state.1, ctorMetaIndexed, state.3, adtId + 1)
+        }
+        _ => state
+      }
+    }
+    TDException(exn) => {
+      if (!exn.exported) state
+      else {
+        val arity = match (exn.fields) {
+          Some(fs) => Lst.length(fs)
+          None => 0
+        }
+        (
+          Dict.insert(state.0, exn.name, "exception"),
+          state.1,
+          state.2,
+          Dict.insert(state.3, exn.name, (state.4, arity)),
+          state.4 + 1
+        )
+      }
+    }
+    TDExport(inner) => {
+      match (inner) {
+        EIDecl(d) => collectEntryInfoFromDecl(d, exportedTypeVisibility, state)
+        _ => state
+      }
+    }
+    _ => state
   }
 
-fun buildTypeEntries(names: List<String>, exportedTypeAliases: Dict<String, Ty.InternalType>, exportedTypeVisibility: Dict<String, String>, adtCtorGroups: Dict<String, List<String>>, acc: Dict<String, KtiTypeEntry>): Dict<String, KtiTypeEntry> =
+fun buildEntries(names: List<String>, exports: Dict<String, Ty.InternalType>, declKinds: Dict<String, String>, funArities: Dict<String, Int>, ctorMeta: Dict<String, (Int, Int, Int)>, exceptionMeta: Dict<String, (Int, Int)>, idx: Int, acc: Dict<String, KtiExportEntry>): Dict<String, KtiExportEntry> =
+  match (names) {
+    [] => acc
+    n :: rest => {
+      val ty = serializeType(Opt.getOrElse(Dict.get(exports, n), Ty.tUnit))
+      val next = match (Dict.get(ctorMeta, n)) {
+        Some(meta) => KtiConstructor({ kind = "constructor", adt_id = meta.0, ctor_index = meta.2, arity = meta.1, type_ = ty })
+        None =>
+          match (Dict.get(declKinds, n)) {
+            Some(k) =>
+              if (k == "function") KtiFunction({ kind = "function", function_index = idx, arity = Opt.getOrElse(Dict.get(funArities, n), 0), type_ = ty })
+              else if (k == "var") KtiVar({ kind = "var", function_index = idx, setter_index = idx, type_ = ty })
+              else if (k == "exception") {
+                val exMeta = Opt.getOrElse(Dict.get(exceptionMeta, n), (0, 0))
+                KtiConstructor({ kind = "constructor", adt_id = exMeta.0, ctor_index = 0, arity = exMeta.1, type_ = ty })
+              }
+              else KtiVal({ kind = "val", function_index = idx, type_ = ty })
+            None => KtiVal({ kind = "val", function_index = idx, type_ = ty })
+          }
+      }
+      buildEntries(rest, exports, declKinds, funArities, ctorMeta, exceptionMeta, idx + 1, Dict.insert(acc, n, next))
+    }
+  }
+
+fun findTypeDeclInfo(decls: List<Ast.TopDecl>, name: String): Option<(String, List<(String, Int)>, List<String>)> =
+  match (decls) {
+    [] => None
+    d :: rest =>
+      match (d) {
+        TDType(td) => {
+          if (td.name == name) {
+            match (td.body) {
+              TBAdt(ctors) => Some(("adt", Lst.map(ctors, (c: Ast.CtorDef) => (c.name, Lst.length(c.params))), td.typeParams))
+              _ => Some(("alias", [], td.typeParams))
+            }
+          } else findTypeDeclInfo(rest, name)
+        }
+        TDExport(inner) => {
+          match (inner) {
+            EIDecl(TDType(td)) => {
+              if (td.name == name) {
+                match (td.body) {
+                  TBAdt(ctors) => Some(("adt", Lst.map(ctors, (c: Ast.CtorDef) => (c.name, Lst.length(c.params))), td.typeParams))
+                  _ => Some(("alias", [], td.typeParams))
+                }
+              } else findTypeDeclInfo(rest, name)
+            }
+            _ => findTypeDeclInfo(rest, name)
+          }
+        }
+        _ => findTypeDeclInfo(rest, name)
+      }
+  }
+
+fun buildTypeEntries(decls: List<Ast.TopDecl>, names: List<String>, exportedTypeAliases: Dict<String, Ty.InternalType>, exportedTypeVisibility: Dict<String, String>, acc: Dict<String, KtiTypeEntry>): Dict<String, KtiTypeEntry> =
   match (names) {
     [] => acc
     n :: rest => {
       val vis = Opt.getOrElse(Dict.get(exportedTypeVisibility, n), "export")
       val ty = Opt.getOrElse(Dict.get(exportedTypeAliases, n), Ty.TApp(n, []))
       val typeOpt = if (vis == "opaque") None else Some(serializeType(ty))
-      val ctors = match (Dict.get(adtCtorGroups, n)) {
-        None => None
-        Some(ctorNames) => Some(Lst.map(ctorNames, (c: String) => (c, 0)))
+      val info = findTypeDeclInfo(decls, n)
+      val ctors =
+        if (vis == "opaque") None
+        else match (info) {
+          Some(i) => if (i.0 == "adt") Some(i.1) else None
+          None => None
+        }
+      val typeParams = match (info) {
+        Some(i) => i.2
+        None => []
       }
       val entryKind = if (ctors == None) "alias" else "adt"
-      val entry = { visibility = vis, kind = entryKind, type_ = typeOpt, constructors = ctors, typeParams = [] }
-      buildTypeEntries(rest, exportedTypeAliases, exportedTypeVisibility, adtCtorGroups, Dict.insert(acc, n, entry))
+      val entry = { visibility = vis, kind = entryKind, type_ = typeOpt, constructors = ctors, typeParams = typeParams }
+      buildTypeEntries(decls, rest, exportedTypeAliases, exportedTypeVisibility, Dict.insert(acc, n, entry))
     }
   }
 
@@ -619,14 +834,14 @@ fun computeAdtCtorGroups(decls: List<Ast.TopDecl>, exportedTypeVisibility: Dict<
 
 export fun buildKtiV4(prog: Ast.Program, exports: Dict<String, Ty.InternalType>, exportedTypeAliases: Dict<String, Ty.InternalType>, exportedConstructors: Dict<String, Ty.InternalType>, exportedTypeVisibility: Dict<String, String>, source: String, depHashes: Dict<String, String>): KtiV4 = {
   val allFunctions = Dict.union(exports, exportedConstructors)
-  val adtCtorGroups = computeAdtCtorGroups(prog.body, exportedTypeVisibility, Dict.emptyStringDict())
+  val entryInfo = Lst.foldl(prog.body, (Dict.emptyStringDict(), Dict.emptyStringDict(), Dict.emptyStringDict(), Dict.emptyStringDict(), 0), (acc: (Dict<String, String>, Dict<String, Int>, Dict<String, (Int, Int, Int)>, Dict<String, (Int, Int)>, Int), d: Ast.TopDecl) => collectEntryInfoFromDecl(d, exportedTypeVisibility, acc))
   {
     version = 4,
-    functions = buildEntries(Dict.keys(allFunctions), allFunctions, 0, Dict.emptyStringDict()),
-    types = buildTypeEntries(Dict.keys(exportedTypeAliases), exportedTypeAliases, exportedTypeVisibility, adtCtorGroups, Dict.emptyStringDict()),
+    functions = buildEntries(Dict.keys(allFunctions), allFunctions, entryInfo.0, entryInfo.1, entryInfo.2, entryInfo.3, 0, Dict.emptyStringDict()),
+    types = buildTypeEntries(prog.body, Dict.keys(exportedTypeAliases), exportedTypeAliases, exportedTypeVisibility, Dict.emptyStringDict()),
     sourceHash = sourceHash(source),
     depHashes = depHashes,
-    codegenMeta = extractCodegenMeta(prog, allFunctions)
+    codegenMeta = extractCodegenMeta(prog, allFunctions, exportedTypeAliases, exportedTypeVisibility)
   }
 }
 
@@ -650,6 +865,9 @@ export fun deserializeExports(kti: KtiV4): Dict<String, Ty.InternalType> =
   Lst.foldl(Dict.toList(kti.functions), Dict.emptyStringDict(), (acc: Dict<String, Ty.InternalType>, p: (String, KtiExportEntry)) =>
     match (p.1) {
       KtiFunction(fe) => Dict.insert(acc, p.0, deserializeType(fe.type_))
+      KtiVal(fe) => Dict.insert(acc, p.0, deserializeType(fe.type_))
+      KtiVar(fe) => Dict.insert(acc, p.0, deserializeType(fe.type_))
+      KtiConstructor(fe) => Dict.insert(acc, p.0, deserializeType(fe.type_))
     }
   )
 
@@ -684,6 +902,9 @@ export fun deserializeCtorMaps(kti: KtiV4): (Dict<String, Ty.InternalType>, Dict
           match (Dict.get(kti.functions, c.0)) {
             None => env
             Some(KtiFunction(fe)) => Dict.insert(env, c.0, deserializeType(fe.type_))
+            Some(KtiVal(fe)) => Dict.insert(env, c.0, deserializeType(fe.type_))
+            Some(KtiVar(fe)) => Dict.insert(env, c.0, deserializeType(fe.type_))
+            Some(KtiConstructor(fe)) => Dict.insert(env, c.0, deserializeType(fe.type_))
           }
         )
         val adtCtors = Dict.insert(acc.1, typeName, ctorNames)
