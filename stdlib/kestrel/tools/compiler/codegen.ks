@@ -86,6 +86,12 @@ export type ModuleContext = {
 
 type LoopBreakLayer = { breakJumps: Array<Int>, loopHead: Int }
 
+type TailContext = {
+  funcName: String,
+  paramSlots: List<Int>,
+  loopHead: Int
+}
+
 type PendingFunEnvPatch = { envSlot: Int, index: Int, targetName: String }
 
 export type CodegenContext = {
@@ -101,6 +107,7 @@ export type CodegenContext = {
   freeVarToIndex: mut Option<Dict<String, Int>>,
   localFunNamesInEnv: mut Option<Dict<String, Unit>>,
   freeVarVars: mut Dict<String, Unit>,
+  tailCtx: mut Option<TailContext>,
   getInferredType: (Ast.Expr) -> Option<Ty.InternalType>
 }
 
@@ -147,8 +154,31 @@ export fun newCodegenContext(cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, mctx
   mut freeVarToIndex = None,
   mut localFunNamesInEnv = None,
   mut freeVarVars = Dict.emptyStringDict(),
+  mut tailCtx = None,
   getInferredType = getInferredType
 }
+
+fun emitExprNonTail(ctx: CodegenContext, expr: Ast.Expr): Unit = {
+  val prev = ctx.tailCtx
+  ctx.tailCtx := None
+  emitExpr(ctx, expr)
+  ctx.tailCtx := prev
+}
+
+fun selfTailMatches(tc: TailContext, name: String, arity: Int): Bool =
+  name == tc.funcName & arity == Lst.length(tc.paramSlots)
+
+fun storeTailArgsToParams(ctx: CodegenContext, slotsRev: List<Int>): Unit =
+  match (slotsRev) {
+    [] => ()
+    s :: rest => {
+      storeLocal(ctx, s)
+      storeTailArgsToParams(ctx, rest)
+    }
+  }
+
+fun paramSlotsForArity(i: Int, arity: Int): List<Int> =
+  if (i >= arity) [] else i :: paramSlotsForArity(i + 1, arity)
 
 fun pushNull(ctx: CodegenContext): Unit = CF.mbEmit1(ctx.mb, Op.JvmOp.aconstNull)
 
@@ -347,10 +377,11 @@ fun emitDefaultCtor(cf: CF.ClassFileBuilder): Unit = {
   CF.mbSetMaxs(mb, 1, 1)
 }
 
-fun emitTailLoopScaffold(mb: CF.MethodBuilder): Unit = {
+fun emitTailLoopScaffold(mb: CF.MethodBuilder): Int = {
   // Reserve a branch target so later stories can patch direct tail calls to this loop head.
   val loopHead = CF.mbLength(mb)
   CF.mbAddBranchTarget(mb, loopHead, None)
+  loopHead
 }
 
 fun emitMainStub(cf: CF.ClassFileBuilder): Unit = {
@@ -912,13 +943,15 @@ fun emitLambdaExpr(ctx: CodegenContext, async_: Bool, params: List<Ast.Param>, b
 
 export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl, mctx: ModuleContext, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
   val arity = Lst.length(decl.params)
+  val paramSlots = paramSlotsForArity(0, arity)
   if (decl.async_) {
     // Payload method: private static, Object return, contains the actual body.
     val payloadName = asyncPayloadMethodName(decl.name)
     val payloadMb = CF.cfAddMethod(cf, payloadName, objectMethodDesc(arity), Op.Acc.private_ + Op.Acc.static_)
     val payloadCtx = newCodegenContext(cf, payloadMb, mctx, getInferredType)
     bindParams(payloadCtx, decl.params)
-    emitTailLoopScaffold(payloadMb)
+    val loopHead = emitTailLoopScaffold(payloadMb)
+    payloadCtx.tailCtx := Some({ funcName = decl.name, paramSlots = paramSlots, loopHead = loopHead })
     emitExpr(payloadCtx, decl.body)
     CF.mbEmit1(payloadMb, Op.JvmOp.areturn)
     val payloadLocals = if (arity + 8 > 70) arity + 8 else 70
@@ -938,7 +971,8 @@ export fun emitFunDecl(cf: CF.ClassFileBuilder, decl: Ast.FunDecl, mctx: ModuleC
     val mb = CF.cfAddMethod(cf, decl.name, desc, Op.Acc.public_ + Op.Acc.static_)
     val ctx = newCodegenContext(cf, mb, mctx, getInferredType)
     bindParams(ctx, decl.params)
-    emitTailLoopScaffold(mb)
+    val loopHead = emitTailLoopScaffold(mb)
+    ctx.tailCtx := Some({ funcName = decl.name, paramSlots = paramSlots, loopHead = loopHead })
     emitExpr(ctx, decl.body)
     CF.mbEmit1(mb, Op.JvmOp.areturn)
     CF.mbSetMaxs(mb, 2, 32)
@@ -1569,7 +1603,7 @@ fun loadLocalSlot(ctx: CodegenContext, idx: Int): Unit =
 fun emitCallArgs(ctx: CodegenContext, xs: List<Ast.Expr>): Unit =
   match (xs) {
     [] => ()
-    x :: rest => { emitExpr(ctx, x); emitCallArgs(ctx, rest) }
+    x :: rest => { emitExprNonTail(ctx, x); emitCallArgs(ctx, rest) }
   }
 
 // Store n stack values (top = arg_{n-1}) right-to-left so slot (base+i) = arg_i.
@@ -1595,7 +1629,7 @@ fun emitCallIndirect(ctx: CodegenContext, callee: Ast.Expr, args: List<Ast.Expr>
   val calleeSlot = ctx.nextLocal
   val argBase = calleeSlot + 1
   ctx.nextLocal := argBase + n
-  emitExpr(ctx, callee)
+  emitExprNonTail(ctx, callee)
   storeLocal(ctx, calleeSlot)
   emitCallArgs(ctx, args)
   storeArgsRtoL(ctx, argBase, n - 1)
@@ -2204,9 +2238,12 @@ fun emitTuplePatternElems(ctx: CodegenContext, scrutSlot: Int, pats: List<Ast.Pa
 // Emit the body of a conditional arm (one with IFEQ guards).
 // Backpatches all `ifeqs` to the miss target (position after the GOTO).
 // Returns a list of GOTO-to-matchEnd positions to backpatch later.
-fun emitArmBodyConditional(ctx: CodegenContext, body: Ast.Expr, ifeqs: List<Int>, matchResultSlot: Int, matchBaseState: CF.StackMapFrameState, code: Array<Int>): List<Int> = {
-  val pushes = thenArmPushesValue(body)
+fun emitArmBodyConditional(ctx: CodegenContext, body: Ast.Expr, ifeqs: List<Int>, matchResultSlot: Int, matchBaseState: CF.StackMapFrameState, code: Array<Int>, armTailCtx: Option<TailContext>): List<Int> = {
+  val pushes = thenArmPushesValue(body, armTailCtx)
+  val prevTail = ctx.tailCtx
+  ctx.tailCtx := armTailCtx
   emitExpr(ctx, body)
+  ctx.tailCtx := prevTail
   val gotoOpt =
     if (pushes) {
       storeLocal(ctx, matchResultSlot)
@@ -2226,9 +2263,12 @@ fun emitArmBodyConditional(ctx: CodegenContext, body: Ast.Expr, ifeqs: List<Int>
 
 // Emit the body of an unconditional arm (PWild, PVar — no IFEQ guard).
 // Returns a list of GOTO-to-matchEnd positions.
-fun emitArmBodyUnconditional(ctx: CodegenContext, body: Ast.Expr, matchResultSlot: Int): List<Int> = {
-  val pushes = thenArmPushesValue(body)
+fun emitArmBodyUnconditional(ctx: CodegenContext, body: Ast.Expr, matchResultSlot: Int, armTailCtx: Option<TailContext>): List<Int> = {
+  val pushes = thenArmPushesValue(body, armTailCtx)
+  val prevTail = ctx.tailCtx
+  ctx.tailCtx := armTailCtx
   emitExpr(ctx, body)
+  ctx.tailCtx := prevTail
   if (pushes) {
     storeLocal(ctx, matchResultSlot)
     val gotoPos = CF.mbLength(ctx.mb)
@@ -2300,10 +2340,10 @@ fun secondFieldPat(fields: List<Ast.ConField>): Option<Ast.Pattern> =
 // ---------------------------------------------------------------------------
 
 // Emit one match arm (test + bindings + body + GOTO). Returns GOTO-to-matchEnd positions.
-fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultSlot: Int, matchBaseState: CF.StackMapFrameState, code: Array<Int>): List<Int> =
+fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultSlot: Int, matchBaseState: CF.StackMapFrameState, code: Array<Int>, armTailCtx: Option<TailContext>): List<Int> =
   match (arm.pattern) {
     PWild =>
-      emitArmBodyUnconditional(ctx, arm.body, matchResultSlot)
+      emitArmBodyUnconditional(ctx, arm.body, matchResultSlot, armTailCtx)
 
     PVar(name) => {
       val slot = ctx.nextLocal
@@ -2311,7 +2351,7 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
       ctx.locals := Dict.insert(ctx.locals, name, slot)
       loadLocalSlot(ctx, scrutSlot)
       storeLocal(ctx, slot)
-      emitArmBodyUnconditional(ctx, arm.body, matchResultSlot)
+      emitArmBodyUnconditional(ctx, arm.body, matchResultSlot, armTailCtx)
     }
 
     PLit(kind, raw) => {
@@ -2333,7 +2373,7 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
           iq
         }
       CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
-      emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+      emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code, armTailCtx)
     }
 
     PCon(ctorName, fields) => {
@@ -2343,7 +2383,7 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
         val ifeq = CF.mbLength(ctx.mb)
         CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
         CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
-        emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+        emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code, armTailCtx)
       } else if (ctorName == "Some") {
         loadLocalSlot(ctx, scrutSlot)
         CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KSOME))
@@ -2352,14 +2392,14 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
         CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
         val fieldPat = firstFieldPat(fields)
         val subIfeqs = emitSingleFieldBinding(ctx, scrutSlot, KSOME, "value", "Ljava/lang/Object;", fieldPat)
-        emitArmBodyConditional(ctx, arm.body, ifeq :: subIfeqs, matchResultSlot, matchBaseState, code)
+        emitArmBodyConditional(ctx, arm.body, ifeq :: subIfeqs, matchResultSlot, matchBaseState, code, armTailCtx)
       } else if (ctorName == "Nil") {
         loadLocalSlot(ctx, scrutSlot)
         CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KNIL))
         val ifeq = CF.mbLength(ctx.mb)
         CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
         CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
-        emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+        emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code, armTailCtx)
       } else if (ctorName == "Cons") {
         loadLocalSlot(ctx, scrutSlot)
         CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KCONS))
@@ -2370,7 +2410,7 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
         val tailPat = secondFieldPat(fields)
         val headIfeqs = emitSingleFieldBinding(ctx, scrutSlot, KCONS, "head", "Ljava/lang/Object;", headPat)
         val tailIfeqs = emitSingleFieldBinding(ctx, scrutSlot, KCONS, "tail", "Lkestrel/runtime/KList;", tailPat)
-        emitArmBodyConditional(ctx, arm.body, Lst.append(ifeq :: headIfeqs, tailIfeqs), matchResultSlot, matchBaseState, code)
+        emitArmBodyConditional(ctx, arm.body, Lst.append(ifeq :: headIfeqs, tailIfeqs), matchResultSlot, matchBaseState, code, armTailCtx)
       } else if (ctorName == "Ok" | ctorName == "Err") {
         val ctorClass = if (ctorName == "Ok") KOK else KERR
         loadLocalSlot(ctx, scrutSlot)
@@ -2380,7 +2420,7 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
         CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
         val fieldPat = firstFieldPat(fields)
         val subIfeqs = emitSingleFieldBinding(ctx, scrutSlot, ctorClass, "value", "Ljava/lang/Object;", fieldPat)
-        emitArmBodyConditional(ctx, arm.body, ifeq :: subIfeqs, matchResultSlot, matchBaseState, code)
+        emitArmBodyConditional(ctx, arm.body, ifeq :: subIfeqs, matchResultSlot, matchBaseState, code, armTailCtx)
       } else if (ctorName == "True" | ctorName == "False") {
         val boolField = if (ctorName == "True") "TRUE" else "FALSE"
         loadLocalSlot(ctx, scrutSlot)
@@ -2390,7 +2430,7 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
         val ifeq = CF.mbLength(ctx.mb)
         CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
         CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
-        emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+        emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code, armTailCtx)
       } else {
         // User-defined ADT constructor
         match (Dict.get(ctx.mctx.adtClassByConstructor, ctorName)) {
@@ -2401,11 +2441,11 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
             CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
             CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
             val fieldIfeqs = emitSubPatConFields(ctx, scrutSlot, adtClass, fields)
-            emitArmBodyConditional(ctx, arm.body, ifeq :: fieldIfeqs, matchResultSlot, matchBaseState, code)
+            emitArmBodyConditional(ctx, arm.body, ifeq :: fieldIfeqs, matchResultSlot, matchBaseState, code, armTailCtx)
           }
           None =>
             // Unknown constructor — fall through unconditionally
-            emitArmBodyUnconditional(ctx, arm.body, matchResultSlot)
+            emitArmBodyUnconditional(ctx, arm.body, matchResultSlot, armTailCtx)
         }
       }
     }
@@ -2421,24 +2461,24 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
               val ifeq = CF.mbLength(ctx.mb)
               CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
               CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), Some(matchBaseState))
-              emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code)
+              emitArmBodyConditional(ctx, arm.body, [ifeq], matchResultSlot, matchBaseState, code, armTailCtx)
             }
             Some(restName) => {
               // [...rest] — matches any list, bind it unconditionally
               ctx.locals := Dict.insert(ctx.locals, restName, scrutSlot)
-              emitArmBodyUnconditional(ctx, arm.body, matchResultSlot)
+              emitArmBodyUnconditional(ctx, arm.body, matchResultSlot, armTailCtx)
             }
           }
         _ => {
           // [p1, p2, ...] non-empty element list
           val ifeqs = emitListPatternElems(ctx, scrutSlot, elems, restOpt, matchBaseState, [])
-          emitArmBodyConditional(ctx, arm.body, ifeqs, matchResultSlot, matchBaseState, code)
+          emitArmBodyConditional(ctx, arm.body, ifeqs, matchResultSlot, matchBaseState, code, armTailCtx)
         }
       }
 
     PCons(headPat, tailPat) => {
       val ifeqs = emitConsSpine(ctx, scrutSlot, PCons(headPat, tailPat), matchBaseState, True, [])
-      emitArmBodyConditional(ctx, arm.body, ifeqs, matchResultSlot, matchBaseState, code)
+      emitArmBodyConditional(ctx, arm.body, ifeqs, matchResultSlot, matchBaseState, code, armTailCtx)
     }
 
     PTuple(pats) => {
@@ -2448,7 +2488,7 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
       val ifNotTuple = CF.mbLength(ctx.mb)
       CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
       val elemMissIfeqs = emitTuplePatternElems(ctx, scrutSlot, pats, 0, [])
-      emitArmBodyConditional(ctx, arm.body, ifNotTuple :: elemMissIfeqs, matchResultSlot, matchBaseState, code)
+      emitArmBodyConditional(ctx, arm.body, ifNotTuple :: elemMissIfeqs, matchResultSlot, matchBaseState, code, armTailCtx)
     }
   }
 
@@ -2458,15 +2498,15 @@ fun emitOneArm(ctx: CodegenContext, arm: Ast.Case_, scrutSlot: Int, matchResultS
 
 // Emit all match arms with real JVM branching.
 // Returns the list of GOTO positions that need to be backpatched to matchEnd.
-fun emitMatchArmsFull(ctx: CodegenContext, arms: List<Ast.Case_>, scrutSlot: Int, matchResultSlot: Int, savedNextLocal: Int, matchBaseState: CF.StackMapFrameState, code: Array<Int>): List<Int> =
+fun emitMatchArmsFull(ctx: CodegenContext, arms: List<Ast.Case_>, scrutSlot: Int, matchResultSlot: Int, savedNextLocal: Int, matchBaseState: CF.StackMapFrameState, code: Array<Int>, armTailCtx: Option<TailContext>): List<Int> =
   match (arms) {
     [] => []
     arm :: rest => {
       ctx.nextLocal := savedNextLocal
       val savedLocals = ctx.locals
-      val armEndLabels = emitOneArm(ctx, arm, scrutSlot, matchResultSlot, matchBaseState, code)
+      val armEndLabels = emitOneArm(ctx, arm, scrutSlot, matchResultSlot, matchBaseState, code, armTailCtx)
       ctx.locals := savedLocals
-      Lst.append(armEndLabels, emitMatchArmsFull(ctx, rest, scrutSlot, matchResultSlot, savedNextLocal, matchBaseState, code))
+      Lst.append(armEndLabels, emitMatchArmsFull(ctx, rest, scrutSlot, matchResultSlot, savedNextLocal, matchBaseState, code, armTailCtx))
     }
   }
 
@@ -2474,7 +2514,7 @@ fun emitMatchArmsFull(ctx: CodegenContext, arms: List<Ast.Case_>, scrutSlot: Int
 
 // Helper extracted from emitExpr to avoid typechecker OOM on large match bodies.
 fun emitEThrow(ctx: CodegenContext, e: Ast.Expr): Unit = {
-  emitExpr(ctx, e)
+  emitExprNonTail(ctx, e)
   CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, K_EXCEPTION))
   CF.mbEmit1(ctx.mb, Op.JvmOp.dupX1)
   CF.mbEmit1(ctx.mb, Op.JvmOp.swap)
@@ -2484,14 +2524,19 @@ fun emitEThrow(ctx: CodegenContext, e: Ast.Expr): Unit = {
 
 // Helper extracted from emitExpr to avoid typechecker OOM on large match bodies.
 fun emitETry(ctx: CodegenContext, block: Ast.Block_, varOpt: Option<String>, cases: List<Ast.Case_>): Unit = {
+  val tryTailCtx = ctx.tailCtx
   // Allocate the try-result slot.
   val tryResultSlot = ctx.nextLocal
   ctx.nextLocal := ctx.nextLocal + 1
   // --- Try body ---
   val tryStart = CF.mbLength(ctx.mb)
   CF.mbAddBranchTarget(ctx.mb, tryStart, Some(CF.paramOnlyFrame(ctx.nextLocal)))
+  val prevTail = ctx.tailCtx
+  ctx.tailCtx := None
   emitBlockStmts(ctx, block.stmts)
+  ctx.tailCtx := tryTailCtx
   emitExpr(ctx, block.result)
+  ctx.tailCtx := prevTail
   storeLocal(ctx, tryResultSlot)
   val gotoAfterTry = CF.mbLength(ctx.mb)
   CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)   // placeholder — backpatched to afterCatch
@@ -2540,7 +2585,7 @@ fun emitETry(ctx: CodegenContext, block: Ast.Block_, varOpt: Option<String>, cas
   val catchBaseState = CF.paramOnlyFrame(if (ctx.nextLocal > 58) ctx.nextLocal else 58)
   val savedNextLocal = ctx.nextLocal
   val code = CF.mbGetCode(ctx.mb)
-  val catchEndLabels = emitMatchArmsFull(ctx, cases, PAYLOAD_SLOT, tryResultSlot, savedNextLocal, catchBaseState, code)
+  val catchEndLabels = emitMatchArmsFull(ctx, cases, PAYLOAD_SLOT, tryResultSlot, savedNextLocal, catchBaseState, code, None)
   // --- Rethrow if no arm matched ---
   val rethrowPos = CF.mbLength(ctx.mb)
   CF.mbAddBranchTarget(ctx.mb, rethrowPos, Some(catchBaseState))
@@ -2566,14 +2611,19 @@ fun emitETry(ctx: CodegenContext, block: Ast.Block_, varOpt: Option<String>, cas
 // True if the then-arm of an if expression falls through with a value on the JVM stack.
 // False when the arm transfers control unconditionally (ENever, or block ending with break/continue),
 // which means emitting ASTORE/GOTO after it would produce unreachable bytecode the verifier rejects.
-fun thenArmPushesValue(expr: Ast.Expr): Bool =
+fun thenArmPushesValue(expr: Ast.Expr, tailCtx: Option<TailContext>): Bool =
   match (expr) {
     ENever => False
+    ECall(EIdent(name), args) =>
+      match (tailCtx) {
+        Some(tc) => !selfTailMatches(tc, name, Lst.length(args))
+        None => True
+      }
     EBlock(block) =>
       match (Lst.last(block.stmts)) {
         Some(SBreak) => False
         Some(SContinue) => False
-        None => thenArmPushesValue(block.result)
+        None => thenArmPushesValue(block.result, tailCtx)
         _ => True
       }
     _ => True
@@ -2720,7 +2770,7 @@ fun emitCallExpr(ctx: CodegenContext, fn: Ast.Expr, args: List<Ast.Expr>): Unit 
           a :: [] => {
             CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KSOME))
             CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
-            emitExpr(ctx, a)
+            emitExprNonTail(ctx, a)
             val mref = CF.cfMethodref(ctx.cf, KSOME, "<init>", "(Ljava/lang/Object;)V")
             CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, mref)
           }
@@ -2732,9 +2782,9 @@ fun emitCallExpr(ctx: CodegenContext, fn: Ast.Expr, args: List<Ast.Expr>): Unit 
             val headSlot = ctx.nextLocal
             val tailSlot = headSlot + 1
             ctx.nextLocal := tailSlot + 1
-            emitExpr(ctx, h)
+            emitExprNonTail(ctx, h)
             storeLocal(ctx, headSlot)
-            emitExpr(ctx, t)
+            emitExprNonTail(ctx, t)
             storeLocal(ctx, tailSlot)
             CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KCONS))
             CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
@@ -2750,7 +2800,7 @@ fun emitCallExpr(ctx: CodegenContext, fn: Ast.Expr, args: List<Ast.Expr>): Unit 
           a :: [] => {
             CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KERR))
             CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
-            emitExpr(ctx, a)
+            emitExprNonTail(ctx, a)
             val mref = CF.cfMethodref(ctx.cf, KERR, "<init>", "(Ljava/lang/Object;)V")
             CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, mref)
           }
@@ -2761,7 +2811,7 @@ fun emitCallExpr(ctx: CodegenContext, fn: Ast.Expr, args: List<Ast.Expr>): Unit 
           a :: [] => {
             CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KOK))
             CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
-            emitExpr(ctx, a)
+            emitExprNonTail(ctx, a)
             val mref = CF.cfMethodref(ctx.cf, KOK, "<init>", "(Ljava/lang/Object;)V")
             CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, mref)
           }
@@ -2802,7 +2852,7 @@ fun emitCallExpr(ctx: CodegenContext, fn: Ast.Expr, args: List<Ast.Expr>): Unit 
             } else if (name == "exit") {
               match (args) {
                 a :: [] => {
-                  emitExpr(ctx, a)
+                  emitExprNonTail(ctx, a)
                   val mref = CF.cfMethodref(ctx.cf, RUNTIME, "exit", "(Ljava/lang/Object;)V")
                   CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
                   val kunitRef = CF.cfFieldref(ctx.cf, KUNIT, "INSTANCE", "Lkestrel/runtime/KUnit;")
@@ -2813,8 +2863,8 @@ fun emitCallExpr(ctx: CodegenContext, fn: Ast.Expr, args: List<Ast.Expr>): Unit 
             } else if (name == "concat") {
               match (args) {
                 a :: b :: [] => {
-                  emitExpr(ctx, a)
-                  emitExpr(ctx, b)
+                  emitExprNonTail(ctx, a)
+                  emitExprNonTail(ctx, b)
                   val mref = CF.cfMethodref(ctx.cf, RUNTIME, "concat", "(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/String;")
                   CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
                 }
@@ -2822,10 +2872,29 @@ fun emitCallExpr(ctx: CodegenContext, fn: Ast.Expr, args: List<Ast.Expr>): Unit 
               }
             } else if (Dict.member(mctx.funArities, name)) {
               val arity = Opt.getOrElse(Dict.get(mctx.funArities, name), 0)
-              emitCallArgs(ctx, args)
-              val desc = objectMethodDesc(arity)
-              val mref = CF.cfMethodref(ctx.cf, mctx.className, jvmMangleName(name), desc)
-              CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+              val selfTail =
+                match (ctx.tailCtx) {
+                  Some(tc) => selfTailMatches(tc, name, Lst.length(args))
+                  None => False
+                }
+              if (selfTail) {
+                emitCallArgs(ctx, args)
+                match (ctx.tailCtx) {
+                  Some(tc) => {
+                    storeTailArgsToParams(ctx, Lst.reverse(tc.paramSlots))
+                    val code = CF.mbGetCode(ctx.mb)
+                    val gotoPos = CF.mbLength(ctx.mb)
+                    CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)
+                    patchShort(code, gotoPos + 1, tc.loopHead - gotoPos)
+                  }
+                  None => ()
+                }
+              } else {
+                emitCallArgs(ctx, args)
+                val desc = objectMethodDesc(arity)
+                val mref = CF.cfMethodref(ctx.cf, mctx.className, jvmMangleName(name), desc)
+                CF.mbEmit1s(ctx.mb, Op.JvmOp.invokestatic, mref)
+              }
             } else {
               val importedClassOpt = Dict.get(mctx.options.importedNameToClass, name)
               match (importedClassOpt) {
@@ -2890,8 +2959,9 @@ fun emitCallExpr(ctx: CodegenContext, fn: Ast.Expr, args: List<Ast.Expr>): Unit 
 // Helper extracted from emitExpr to reduce match body type complexity.
 fun emitIfExpr(ctx: CodegenContext, c: Ast.Expr, t: Ast.Expr, eOpt: Option<Ast.Expr>): Unit = {
   val ifResultSlot = 53
+  val branchTailCtx = ctx.tailCtx
   // Evaluate condition and unbox to JVM int.
-  emitExpr(ctx, c)
+  emitExprNonTail(ctx, c)
   val boolClassRef = CF.cfClassRef(ctx.cf, BOOLEAN)
   CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, boolClassRef)
   val bvMref = CF.cfMethodref(ctx.cf, BOOLEAN, "booleanValue", "()Z")
@@ -2901,8 +2971,11 @@ fun emitIfExpr(ctx: CodegenContext, c: Ast.Expr, t: Ast.Expr, eOpt: Option<Ast.E
   CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)                              // placeholder
   CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), None)            // stackmap: then-arm entry
   // Emit then-arm.
+  val prevTail = ctx.tailCtx
+  ctx.tailCtx := branchTailCtx
   emitExpr(ctx, t)
-  val thenPushes = thenArmPushesValue(t)
+  ctx.tailCtx := prevTail
+  val thenPushes = thenArmPushesValue(t, branchTailCtx)
   val gotoPos =
     if (thenPushes) {
       storeLocal(ctx, ifResultSlot)
@@ -2917,7 +2990,12 @@ fun emitIfExpr(ctx: CodegenContext, c: Ast.Expr, t: Ast.Expr, eOpt: Option<Ast.E
   patchShort(code, ifeqPos + 1, elseStart - ifeqPos)
   // Emit else-arm (or KUnit if no else clause).
   match (eOpt) {
-    Some(e) => emitExpr(ctx, e)
+    Some(e) => {
+      val prevElseTail = ctx.tailCtx
+      ctx.tailCtx := branchTailCtx
+      emitExpr(ctx, e)
+      ctx.tailCtx := prevElseTail
+    }
     None => {
       val kunitRef = CF.cfFieldref(ctx.cf, KUNIT, "INSTANCE", "Lkestrel/runtime/KUnit;")
       CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, kunitRef)
@@ -2971,7 +3049,8 @@ fun emitWhileExpr(ctx: CodegenContext, c: Ast.Expr, b: Ast.Block_): Unit = {
 
 // Helper extracted from emitExpr to reduce match body type complexity.
 fun emitMatchExpr(ctx: CodegenContext, scrut: Ast.Expr, arms: List<Ast.Case_>): Unit = {
-  emitExpr(ctx, scrut)
+  val armTailCtx = ctx.tailCtx
+  emitExprNonTail(ctx, scrut)
   val scrutSlot = 55
   val matchResultSlot = 54
   storeLocal(ctx, scrutSlot)
@@ -2981,7 +3060,7 @@ fun emitMatchExpr(ctx: CodegenContext, scrut: Ast.Expr, arms: List<Ast.Case_>): 
   val matchBaseState = CF.paramOnlyFrame(numLocals)
   val savedNextLocal = ctx.nextLocal
   val code = CF.mbGetCode(ctx.mb)
-  val endLabels = emitMatchArmsFull(ctx, arms, scrutSlot, matchResultSlot, savedNextLocal, matchBaseState, code)
+  val endLabels = emitMatchArmsFull(ctx, arms, scrutSlot, matchResultSlot, savedNextLocal, matchBaseState, code, armTailCtx)
   val endPos = CF.mbLength(ctx.mb)
   CF.mbAddBranchTarget(ctx.mb, endPos, Some(matchBaseState))
   backpatchBreakJumps(code, endLabels, endPos)
@@ -2994,25 +3073,35 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
     EIdent(name) => emitIdentExpr(ctx, name)
     ECall(fn, args) => emitCallExpr(ctx, fn, args)
     EField(obj, field) => {
-      emitExpr(ctx, obj)
+      emitExprNonTail(ctx, obj)
       CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
       CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, field))
       CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "get", "(Ljava/lang/String;)Ljava/lang/Object;"))
     }
     EAwait(e) => {
-      emitExpr(ctx, e);
+      emitExprNonTail(ctx, e);
       CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KTASK));
       CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KTASK, "get", "()Ljava/lang/Object;"))
     }
-    EUnary(op, e) => emitUnaryExpr(ctx, op, e)
-    EBinary(op, l, r) => emitBinaryExpr(ctx, op, l, r)
+    EUnary(op, e) => {
+      val prevTail = ctx.tailCtx
+      ctx.tailCtx := None
+      emitUnaryExpr(ctx, op, e)
+      ctx.tailCtx := prevTail
+    }
+    EBinary(op, l, r) => {
+      val prevTail = ctx.tailCtx
+      ctx.tailCtx := None
+      emitBinaryExpr(ctx, op, l, r)
+      ctx.tailCtx := prevTail
+    }
     ECons(h, t) => {
       val headSlot = ctx.nextLocal
       val tailSlot = ctx.nextLocal + 1
       ctx.nextLocal := ctx.nextLocal + 2
-      emitExpr(ctx, h)
+      emitExprNonTail(ctx, h)
       storeLocal(ctx, headSlot)
-      emitExpr(ctx, t)
+      emitExprNonTail(ctx, t)
       storeLocal(ctx, tailSlot)
       CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KCONS))
       CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
@@ -3034,17 +3123,32 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
         }
       }
     EIf(c, t, eOpt) => emitIfExpr(ctx, c, t, eOpt)
-    EWhile(c, b) => emitWhileExpr(ctx, c, b)
+    EWhile(c, b) => {
+      val prevTail = ctx.tailCtx
+      ctx.tailCtx := None
+      emitWhileExpr(ctx, c, b)
+      ctx.tailCtx := prevTail
+    }
     EMatch(scrut, arms) => emitMatchExpr(ctx, scrut, arms)
-    ELambda(async_, _tp, params, body) => emitLambdaExpr(ctx, async_, params, body)
+    ELambda(async_, _tp, params, body) => {
+      val prevTail = ctx.tailCtx
+      ctx.tailCtx := None
+      emitLambdaExpr(ctx, async_, params, body)
+      ctx.tailCtx := prevTail
+    }
     ETemplate(parts) => {
+      val prevTail = ctx.tailCtx
+      ctx.tailCtx := None
       CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, STRING_BUILDER))
       CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
       CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, STRING_BUILDER, "<init>", "()V"))
       emitTemplateBuild(ctx, parts)
       CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, STRING_BUILDER, "toString", "()Ljava/lang/String;"))
+      ctx.tailCtx := prevTail
     }
-    EList(elems) =>
+    EList(elems) => {
+      val prevTail = ctx.tailCtx
+      ctx.tailCtx := None
       if (Lst.isEmpty(elems)) {
         val nilRef = CF.cfFieldref(ctx.cf, KNIL, "INSTANCE", "Lkestrel/runtime/KNil;")
         CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, nilRef)
@@ -3058,7 +3162,11 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
         emitListBuild(ctx, Lst.reverse(elems), listTemp, elemTemp)
         loadLocalSlot(ctx, listTemp)
       }
+      ctx.tailCtx := prevTail
+    }
     ERecord(spreadOpt, fields) => {
+      val prevTail = ctx.tailCtx
+      ctx.tailCtx := None
       match (spreadOpt) {
         Some(sp) => {
           emitExpr(ctx, sp)
@@ -3072,19 +3180,28 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
         }
       }
       emitRecordFields(ctx, fields)
+      ctx.tailCtx := prevTail
     }
     ETuple(xs) => {
+      val prevTail = ctx.tailCtx
+      ctx.tailCtx := None
       CF.mbEmit1s(ctx.mb, Op.JvmOp.new_, CF.cfClassRef(ctx.cf, KRECORD))
       CF.mbEmit1(ctx.mb, Op.JvmOp.dup)
       CF.mbEmit1s(ctx.mb, Op.JvmOp.invokespecial, CF.cfMethodref(ctx.cf, KRECORD, "<init>", "()V"))
       emitTupleElems(ctx, xs, 0)
+      ctx.tailCtx := prevTail
     }
     EThrow(e) => emitEThrow(ctx, e)
     ETry(block, varOpt, cases) => emitETry(ctx, block, varOpt, cases)
     EBlock(block) => {
+      val resultTailCtx = ctx.tailCtx
+      val prevTail = ctx.tailCtx
+      ctx.tailCtx := None
       emitBlockStmts(ctx, block.stmts)
+      ctx.tailCtx := resultTailCtx
       emitExpr(ctx, block.result)
+      ctx.tailCtx := prevTail
     }
-    EIs(e, _t) => { emitExpr(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushBoolBoxed(ctx, True) }
+    EIs(e, _t) => { emitExprNonTail(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushBoolBoxed(ctx, True) }
     ENever => pushNull(ctx)
   }

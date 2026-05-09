@@ -323,7 +323,7 @@ markers, but those are considered tranche-local scaffolding, not the final state
     JVM classes with `invoke(Object[])Object` methods and env capture. **Treat as later parity work
     after the first execution and runtime-negative/positive E2E tranche is already honest.**
 
-38. [S17-36 — Codegen: tail-call optimisation (loop-back GOTO)](../../unplanned/S17-36-codegen-tail-call-optimisation.md)
+38. ✅ [S17-36 — Codegen: tail-call optimisation (loop-back GOTO)](../../done/S17-36-codegen-tail-call-optimisation.md)
     — Detect self-tail calls in tail position; emit `ASTORE` of each argument + `GOTO loopHead`
     instead of `INVOKESTATIC` + `ARETURN`. **Recommended after the initial runtime-restoration
     tranche unless a restored scenario proves it is still blocking.**

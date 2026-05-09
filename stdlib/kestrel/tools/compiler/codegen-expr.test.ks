@@ -374,6 +374,81 @@ export async fun run(s: Suite): Task<Unit> =
         containsSeq(BA.toList(bytes), [109, 121, 70, 117, 110]))
     })
 
+    group(s1, "self tail call lowers to loop GOTO", (sg: Suite) => {
+      val cf = CF.newClassFile("test/TailSelf", "java/lang/Object", 0x0021)
+      val mb = CF.cfAddMethod(cf, "emit", "()Ljava/lang/Object;", 0x0009)
+      val mctx = {
+        className = "test/TailSelf",
+        globalNames = Dict.emptyStringDict(),
+        globalVarNames = Dict.emptyStringDict(),
+        funArities = Dict.insert(Dict.emptyStringDict(), "sum", 2),
+        adtClassByConstructor = Dict.emptyStringDict(),
+        adtConstructorArity = Dict.emptyStringDict(),
+        options = CG.emptyJvmCodegenOptions(),
+        mut lambdas = [],
+        mut lambdaIndex = 0,
+        mut lambdaClasses = Dict.emptyStringDict()
+      }
+      val ctx = CG.newCodegenContext(cf, mb, mctx, CG.noTypeInfo)
+      ctx.tailCtx := Some({ funcName = "sum", paramSlots = [0, 1], loopHead = 0 })
+      CG.emitExpr(ctx, ECall(EIdent("sum"), [ELit("int", "4"), ELit("int", "5")]))
+      val code = Arr.toList(CF.mbGetCode(mb))
+      val bytes = finish(cf, mb)
+      isTrue(sg, "self-tail: emits GOTO(167)", containsSeq(code, [167]))
+      isTrue(sg, "self-tail: emits ASTORE0(75)", containsSeq(code, [75]))
+      isTrue(sg, "self-tail: emits ASTORE1(76)", containsSeq(code, [76]))
+      // UTF-8 bytes for "sum" = [115, 117, 109]; direct tail lowering should avoid a methodref to sum.
+      isTrue(sg, "self-tail: no direct sum method symbol in pool", !containsSeq(BA.toList(bytes), [115, 117, 109]))
+    })
+
+    group(s1, "mutual recursion call stays INVOKESTATIC", (sg: Suite) => {
+      val cf = CF.newClassFile("test/TailMutual", "java/lang/Object", 0x0021)
+      val mb = CF.cfAddMethod(cf, "emit", "()Ljava/lang/Object;", 0x0009)
+      val mctx = {
+        className = "test/TailMutual",
+        globalNames = Dict.emptyStringDict(),
+        globalVarNames = Dict.emptyStringDict(),
+        funArities = Dict.insert(Dict.insert(Dict.emptyStringDict(), "even", 1), "odd", 1),
+        adtClassByConstructor = Dict.emptyStringDict(),
+        adtConstructorArity = Dict.emptyStringDict(),
+        options = CG.emptyJvmCodegenOptions(),
+        mut lambdas = [],
+        mut lambdaIndex = 0,
+        mut lambdaClasses = Dict.emptyStringDict()
+      }
+      val ctx = CG.newCodegenContext(cf, mb, mctx, CG.noTypeInfo)
+      ctx.tailCtx := Some({ funcName = "even", paramSlots = [0], loopHead = 0 })
+      CG.emitExpr(ctx, ECall(EIdent("odd"), [ELit("int", "9")]))
+      val code = Arr.toList(CF.mbGetCode(mb))
+      isTrue(sg, "mutual-tail fallback: emits INVOKESTATIC(184)", containsSeq(code, [184]))
+    })
+
+    group(s1, "if tail then-arm remains verifier-safe", (sg: Suite) => {
+      val cf = CF.newClassFile("test/TailIf", "java/lang/Object", 0x0021)
+      val mb = CF.cfAddMethod(cf, "emit", "()Ljava/lang/Object;", 0x0009)
+      val mctx = {
+        className = "test/TailIf",
+        globalNames = Dict.emptyStringDict(),
+        globalVarNames = Dict.emptyStringDict(),
+        funArities = Dict.insert(Dict.emptyStringDict(), "sum", 2),
+        adtClassByConstructor = Dict.emptyStringDict(),
+        adtConstructorArity = Dict.emptyStringDict(),
+        options = CG.emptyJvmCodegenOptions(),
+        mut lambdas = [],
+        mut lambdaIndex = 0,
+        mut lambdaClasses = Dict.emptyStringDict()
+      }
+      val ctx = CG.newCodegenContext(cf, mb, mctx, CG.noTypeInfo)
+      ctx.tailCtx := Some({ funcName = "sum", paramSlots = [0, 1], loopHead = 0 })
+      val tailThen = ECall(EIdent("sum"), [ELit("int", "1"), ELit("int", "2")])
+      CG.emitExpr(ctx, EIf(ELit("true", "True"), tailThen, Some(ELit("int", "0"))))
+      val code = Arr.toList(CF.mbGetCode(mb))
+      isTrue(sg, "if-tail: emits IFEQ(153)", containsSeq(code, [153]))
+      isTrue(sg, "if-tail: emits GOTO(167)", containsSeq(code, [167]))
+      val bytes = finish(cf, mb)
+      isTrue(sg, "if-tail: class bytes produced", BA.length(bytes) > 0)
+    })
+
     group(s1, "ADT ctor call - Some", (sg: Suite) => {
       val t = baseContext()
       CG.emitExpr(t.ctx, ECall(EIdent("Some"), [ELit("int", "42")]))

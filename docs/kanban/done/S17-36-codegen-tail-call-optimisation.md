@@ -59,12 +59,12 @@ TS reference:
 
 ## Acceptance Criteria
 
-- [ ] A recursive `fun sum(n, acc)` compiles without stack overflow for `n = 100_000`.
-- [ ] A mutually recursive function pair that is NOT self-tail still uses `INVOKESTATIC`
+- [x] A recursive `fun sum(n, acc)` compiles without stack overflow for `n = 100_000`.
+- [x] A mutually recursive function pair that is NOT self-tail still uses `INVOKESTATIC`
       (mutual tail-call optimisation is out of scope for this story).
-- [ ] New conformance tests cover deep self-recursion that would overflow without TCO.
-- [ ] `cd compiler && npm test` passes.
-- [ ] `./scripts/kestrel test` passes.
+- [x] New conformance tests cover deep self-recursion that would overflow without TCO.
+- [x] `cd compiler && npm test` passes.
+- [x] `./scripts/kestrel test` passes.
 
 ## Spec References
 
@@ -97,18 +97,18 @@ TS reference:
 
 ## Tasks
 
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`, add a tail-context representation (for current function name + parameter slots + loop head target) and thread it through `emitExpr` plus helper entry points that currently recurse (`emitIfExpr`, `emitMatchExpr`, `emitETry`, `emitBlockStmts` / `EBlock`, and any shared helper that re-invokes `emitExpr`).
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks` `emitFunDecl`, initialize tail context for the function body (both sync body and async payload body) using the scaffold label created by `emitTailLoopScaffold` and the function's parameter slot mapping.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`, encode tail-position propagation rules: final expression of `EBlock` is tail, both `EIf` arms are tail when parent is tail, each `EMatch` arm body is tail when parent is tail, `ETry` body remains tail while handlers are non-tail unless proven equivalent, and `EWhile` never propagates tail context.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks` `emitCallExpr`, add direct self-tail fast path: when callee resolves to current function in active tail context and arity matches, emit argument evaluation, right-to-left stores to parameter slots, and `GOTO` loop head; otherwise keep existing `INVOKESTATIC` / indirect call behavior.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen.ks`, update `thenArmPushesValue` (and any call sites in if-lowering) so then-arms ending in a tail-lowered jump are treated as non-value-pushing, avoiding unreachable `ASTORE`/join-bytecode patterns.
-- [ ] In `stdlib/kestrel/tools/compiler/codegen-expr.test.ks`, add/extend opcode-level tests that assert: (1) self-tail call lowering emits `GOTO` back-edge and parameter stores rather than `INVOKESTATIC`; (2) mutual recursion path still emits `INVOKESTATIC` (out-of-scope for this story); (3) `if` then-arm bookkeeping remains verifier-safe when tail-lowered.
-- [ ] Add `tests/kconformance/runtime/valid/tail_self_recursion.ks` (or equivalent name) to validate deep self-tail recursion (`n >= 100000`) executes successfully with stable expected output and does not stack overflow.
-- [ ] Add `tests/kconformance/runtime/valid/tail_mutual_fallback.ks` (or equivalent name) to validate mutually recursive behavior remains semantically correct without introducing accidental mutual-TCO lowering in this story.
-- [ ] Run `./scripts/test-kestrel.sh` to validate the self-hosted `k*` corpora after adding new `tests/kconformance` cases.
-- [ ] Run `cd compiler && npm run build && npm test`.
-- [ ] Run `./scripts/kestrel test`.
-- [ ] Run `./scripts/run-e2e.sh` (user-visible codegen behavior change).
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`, add a tail-context representation (for current function name + parameter slots + loop head target) and thread it through `emitExpr` plus helper entry points that currently recurse (`emitIfExpr`, `emitMatchExpr`, `emitETry`, `emitBlockStmts` / `EBlock`, and any shared helper that re-invokes `emitExpr`).
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks` `emitFunDecl`, initialize tail context for the function body (both sync body and async payload body) using the scaffold label created by `emitTailLoopScaffold` and the function's parameter slot mapping.
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`, encode tail-position propagation rules: final expression of `EBlock` is tail, both `EIf` arms are tail when parent is tail, each `EMatch` arm body is tail when parent is tail, `ETry` body remains tail while handlers are non-tail unless proven equivalent, and `EWhile` never propagates tail context.
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks` `emitCallExpr`, add direct self-tail fast path: when callee resolves to current function in active tail context and arity matches, emit argument evaluation, right-to-left stores to parameter slots, and `GOTO` loop head; otherwise keep existing `INVOKESTATIC` / indirect call behavior.
+- [x] In `stdlib/kestrel/tools/compiler/codegen.ks`, update `thenArmPushesValue` (and any call sites in if-lowering) so then-arms ending in a tail-lowered jump are treated as non-value-pushing, avoiding unreachable `ASTORE`/join-bytecode patterns.
+- [x] In `stdlib/kestrel/tools/compiler/codegen-expr.test.ks`, add/extend opcode-level tests that assert: (1) self-tail call lowering emits `GOTO` back-edge and parameter stores rather than `INVOKESTATIC`; (2) mutual recursion path still emits `INVOKESTATIC` (out-of-scope for this story); (3) `if` then-arm bookkeeping remains verifier-safe when tail-lowered.
+- [x] Add `tests/kconformance/runtime/valid/tail_self_recursion.ks` (or equivalent name) to validate deep self-tail recursion (`n >= 100000`) executes successfully with stable expected output and does not stack overflow.
+- [x] Add `tests/kconformance/runtime/valid/tail_mutual_fallback.ks` (or equivalent name) to validate mutually recursive behavior remains semantically correct without introducing accidental mutual-TCO lowering in this story.
+- [x] Run `./scripts/test-kestrel.sh` to validate the self-hosted `k*` corpora after adding new `tests/kconformance` cases.
+- [x] Run `cd compiler && npm run build && npm test`.
+- [x] Run `./scripts/kestrel test`.
+- [x] Run `./scripts/run-e2e.sh` (user-visible codegen behavior change).
 
 ## Tests to add
 
@@ -120,4 +120,11 @@ TS reference:
 
 ## Documentation and specs to update
 
-- [ ] `docs/specs/01-language.md` — review tail-position/top-level tail-call wording and update only if clarification is needed to match implemented self-tail behavior and explicit non-goal for mutual TCO in this story.
+- [x] `docs/specs/01-language.md` — review tail-position/top-level tail-call wording and update only if clarification is needed to match implemented self-tail behavior and explicit non-goal for mutual TCO in this story.
+
+## Build notes
+
+- 2026-05-09: Started implementation.
+- 2026-05-09: Threaded tail-context as mutable `CodegenContext` state with scoped `withTailContext` resets, which keeps existing helper signatures mostly stable while still enforcing tail/non-tail propagation rules.
+- 2026-05-09: Stabilized self-tail opcode assertion to avoid false negatives from unrelated `INVOKESTATIC` instructions (`Long.valueOf` etc.) by checking that optimized self-tail lowering does not retain a direct method symbol reference for the recursive target.
+- 2026-05-09: Verification passed across required gates: `./scripts/test-kestrel.sh`, `cd compiler && npm run build && npm test`, `./scripts/kestrel test` (2215 passed), and `./scripts/run-e2e.sh` (negative 12/12, positive 24/24).
