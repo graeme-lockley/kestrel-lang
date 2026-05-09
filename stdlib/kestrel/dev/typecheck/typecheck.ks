@@ -30,7 +30,7 @@ import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as FA from "kestrel:dev/typecheck/from-ast"
 import * as Rep from "kestrel:dev/typecheck/reporter"
 import * as Ty from "kestrel:dev/typecheck/types"
-import { TArrow, TApp, TRecord, TTuple, TNamespace } from "kestrel:dev/typecheck/types"
+import { TArrow, TApp, TRecord, TTuple, TNamespace, TUnion } from "kestrel:dev/typecheck/types"
 
 /// Map of in-scope value bindings to internal types.
 export type TypeEnv = { items: Dict<String, Ty.InternalType> }
@@ -91,15 +91,19 @@ type TcState = {
   subst: mut Dict<Int, Ty.InternalType>,
   adtConstructors: Dict<String, List<String>>,
   ctorOwners: Dict<String, String>,
+  opaqueTypes: List<String>,
   sourceFile: String,
   asyncDepth: mut Int,
   inferredItems: mut List<InferredEntry>,
+  isNarrowings: mut List<NarrowingEntry>,
   fwdConstructors: mut Dict<String, Ty.InternalType>,
   fwdTypeVisibility: mut Dict<String, String>,
   depSnapshots: Dict<String, DependencyExportSnapshot>
 }
 
 type InferredEntry = { node: Ast.Expr, type_: Ty.InternalType }
+
+type NarrowingEntry = { node: Ast.Expr, bindingName: String, narrowed: Ty.InternalType }
 
 type TypeRegistry = {
   typeAliases: Dict<String, Ty.InternalType>,
@@ -164,6 +168,9 @@ fun apply(state: TcState, t: Ty.InternalType): Ty.InternalType = Ty.applySubstFu
 fun setInferredLoop(entries: List<InferredEntry>, node: Ast.Expr, t: Ty.InternalType): List<InferredEntry> =
   { node = node, type_ = t } :: entries
 
+fun setNarrowingLoop(entries: List<NarrowingEntry>, node: Ast.Expr, bindingName: String, narrowed: Ty.InternalType): List<NarrowingEntry> =
+  { node = node, bindingName = bindingName, narrowed = narrowed } :: entries
+
 fun putInferredType(state: TcState, node: Ast.Expr, t: Ty.InternalType): Unit = {
   state.inferredItems := setInferredLoop(state.inferredItems, node, t);
   ()
@@ -175,8 +182,22 @@ fun getInferredLoop(entries: List<InferredEntry>, node: Ast.Expr): Option<Ty.Int
     h :: rest => if (h.node == node) Some(h.type_) else getInferredLoop(rest, node)
   }
 
+fun getNarrowingLoop(entries: List<NarrowingEntry>, node: Ast.Expr): Option<(String, Ty.InternalType)> =
+  match (entries) {
+    [] => None
+    h :: rest => if (h.node == node) Some((h.bindingName, h.narrowed)) else getNarrowingLoop(rest, node)
+  }
+
 fun setInferredType(state: TcState, node: Ast.Expr, t: Ty.InternalType): Unit =
   putInferredType(state, node, t)
+
+fun putIsNarrowing(state: TcState, node: Ast.Expr, bindingName: String, narrowed: Ty.InternalType): Unit = {
+  state.isNarrowings := setNarrowingLoop(state.isNarrowings, node, bindingName, narrowed);
+  ()
+}
+
+fun getIsNarrowing(state: TcState, node: Ast.Expr): Option<(String, Ty.InternalType)> =
+  getNarrowingLoop(state.isNarrowings, node)
 
 fun unifyEq(state: TcState, left: Ty.InternalType, right: Ty.InternalType): Bool =
   match (Ty.unify(state.subst, left, right)) {
@@ -189,6 +210,104 @@ fun unifyEq(state: TcState, left: Ty.InternalType, right: Ty.InternalType): Bool
       False
     }
   }
+
+fun isOpaqueTypeName(state: TcState, name: String): Bool =
+  Lst.any(state.opaqueTypes, (n: String) => n == name)
+
+fun isRhsTypeName(rhsAst: Ast.AstType): Option<String> = {
+  val tag = Ast.astTypeTag(rhsAst)
+  if (tag == "ident")
+    Ast.astTypeIdentName(rhsAst)
+  else if (tag == "qualified") {
+    val q = Opt.getOrElse(Ast.astTypeQualifiedParts(rhsAst), ("", ""))
+    Some(q.1)
+  } else if (tag == "app") {
+    val ap = Opt.getOrElse(Ast.astTypeAppParts(rhsAst), ("", []))
+    Some(ap.0)
+  } else
+    None
+}
+
+fun checkOpaqueIsRule(state: TcState, scrutApplied: Ty.InternalType, rhsAst: Ast.AstType): Unit =
+  match (scrutApplied) {
+    TApp(name, _) => {
+      if (isOpaqueTypeName(state, name)) {
+        val rhsName = isRhsTypeName(rhsAst)
+        if (rhsName == None | Opt.getOrElse(rhsName, "") != name) {
+          addDiag(
+            state,
+            Diag.CODES.type_.narrowOpaque,
+            "Cannot narrow imported opaque ADT ${name} except to the type name itself"
+          )
+        }
+      } else ()
+    }
+    _ => ()
+  }
+
+fun resolveTypeForIsRhs(env: TypeEnv, typeAliases: Dict<String, Ty.InternalType>, rhsAst: Ast.AstType): Ty.InternalType = {
+  val tag = Ast.astTypeTag(rhsAst)
+  if (tag == "ident") {
+    val name = Opt.getOrElse(Ast.astTypeIdentName(rhsAst), "")
+    val found = envGet(env, name)
+    if (found == None)
+      FA.astTypeToInternalWithScope(rhsAst, typeAliases, [])
+    else {
+      val bound = Ty.instantiate(Opt.getOrElse(found, Ty.freshVar()))
+      match (bound) {
+        TApp(_, _) => bound
+        TArrow(params, ret) => if (Lst.length(params) >= 0) ret else bound
+        _ => FA.astTypeToInternalWithScope(rhsAst, typeAliases, [])
+      }
+    }
+  } else
+    FA.astTypeToInternalWithScope(rhsAst, typeAliases, [])
+}
+
+fun tryRecordSubsetMeet(state: TcState, scrutinee: Ty.InternalType, target: Ty.InternalType): Option<Ty.InternalType> = {
+  val trial = state.subst
+  val s = apply(state, scrutinee)
+  val t = apply(state, target)
+  match (Ty.unifySubtype(trial, s, t)) {
+    Ok(s2) => Some(Ty.applySubstFull(s2, s))
+    Err(_) => None
+  }
+}
+
+fun tryMeetArm(state: TcState, arm: Ty.InternalType, target: Ty.InternalType): Option<Ty.InternalType> = {
+  val trial = state.subst
+  val a = apply(state, arm)
+  val t = apply(state, target)
+  match (Ty.unify(trial, a, t)) {
+    Ok(s2) => Some(Ty.applySubstFull(s2, t))
+    Err(_) => None
+  }
+}
+
+fun refinementMeetScrutTarget(state: TcState, scrutinee: Ty.InternalType, target: Ty.InternalType): Option<Ty.InternalType> = {
+  val trial = state.subst
+  val s = apply(state, scrutinee)
+  val t = apply(state, target)
+  match (Ty.unify(trial, s, t)) {
+    Ok(s2) => Some(Ty.applySubstFull(s2, t))
+    Err(_) => {
+      val rec = tryRecordSubsetMeet(state, s, t)
+      if (rec != None)
+        rec
+      else
+        match (s) {
+          TUnion(left, right) => {
+            val m1 = tryMeetArm(state, left, t)
+            val m2 = tryMeetArm(state, right, t)
+            if (m1 != None & m2 == None) m1
+            else if (m1 == None & m2 != None) m2
+            else None
+          }
+          _ => None
+        }
+    }
+  }
+}
 
 fun inferLiteral(kind: String): Ty.InternalType =
   if (kind == "int") Ty.tInt
@@ -842,7 +961,12 @@ fun inferExpr(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.Interna
       EIf(cond, thenExpr, elseOpt) => {
         val condT = inferExpr(state, env, typeAliases, cond)
         unifyEq(state, condT, Ty.tBool);
-        val thenT = inferExpr(state, env, typeAliases, thenExpr)
+        val thenEnv =
+          match (getIsNarrowing(state, cond)) {
+            Some(nar) => envInsert(env, nar.0, nar.1)
+            None => env
+          }
+        val thenT = inferExpr(state, thenEnv, typeAliases, thenExpr)
         match (elseOpt) {
           Some(elseExpr) => {
             val elseT = inferExpr(state, env, typeAliases, elseExpr)
@@ -855,7 +979,12 @@ fun inferExpr(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.Interna
       EWhile(cond, block) => {
         val condT = inferExpr(state, env, typeAliases, cond)
         unifyEq(state, condT, Ty.tBool);
-        inferExpr(state, env, typeAliases, EBlock(block));
+        val bodyEnv =
+          match (getIsNarrowing(state, cond)) {
+            Some(nar) => envInsert(env, nar.0, nar.1)
+            None => env
+          }
+        inferExpr(state, bodyEnv, typeAliases, EBlock(block));
         Ty.tUnit
       }
       ELambda(async_, typeParams, params, body) => {
@@ -888,7 +1017,25 @@ fun inferExpr(state: TcState, env: TypeEnv, typeAliases: Dict<String, Ty.Interna
       ECons(head, tail) => inferCons(state, env, typeAliases, head, tail)
       EPipe(op, left, right) => inferPipe(state, env, typeAliases, op, left, right)
       ETemplate(parts) => { inferTemplateParts(state, env, typeAliases, parts); Ty.tString }
-      EIs(e, _) => { inferExpr(state, env, typeAliases, e); Ty.tBool }
+      EIs(e, rhsTypeAst) => {
+        val scrutT = inferExpr(state, env, typeAliases, e)
+        val rhsT = resolveTypeForIsRhs(env, typeAliases, rhsTypeAst)
+        checkOpaqueIsRule(state, apply(state, scrutT), rhsTypeAst)
+        val narrowed = refinementMeetScrutTarget(state, scrutT, rhsT)
+        if (narrowed == None) {
+          addDiag(
+            state,
+            Diag.CODES.type_.narrowImpossible,
+            "Cannot narrow: scrutinee type does not overlap `is` target (${Ty.typeToString(apply(state, scrutT))} vs ${Ty.typeToString(apply(state, rhsT))})"
+          )
+        } else {
+          match (e) {
+            EIdent(name) => putIsNarrowing(state, expr, name, Opt.getOrElse(narrowed, rhsT))
+            _ => ()
+          }
+        };
+        Ty.tBool
+      }
       ENever => Ty.freshVar()
       _ => {
         addDiag(state, Diag.CODES.type_.check, "Unsupported expression form in self-hosted checker MVP");
@@ -1275,6 +1422,12 @@ fun resolvedImportCtorOwners(opts: TypecheckOptions): Dict<String, String> =
     None => Dict.emptyStringDict()
   }
 
+fun resolvedImportOpaqueTypes(opts: TypecheckOptions): List<String> =
+  match (opts.importOpaqueTypes) {
+    Some(xs) => xs
+    None => []
+  }
+
 fun emptyTypeRegistry(opts: TypecheckOptions): TypeRegistry = {
   typeAliases = resolvedTypeAliasBindings(opts),
   ctorEnv = resolvedImportCtorEnv(opts),
@@ -1284,14 +1437,22 @@ fun emptyTypeRegistry(opts: TypecheckOptions): TypeRegistry = {
   exportedTypeVisibility = Dict.emptyStringDict()
 }
 
-fun makeTcState(reporter: Rep.Reporter, reg: TypeRegistry, sourceFile: String, depSnapshots: Dict<String, DependencyExportSnapshot>): TcState = {
+fun makeTcState(
+  reporter: Rep.Reporter,
+  reg: TypeRegistry,
+  sourceFile: String,
+  depSnapshots: Dict<String, DependencyExportSnapshot>,
+  opaqueTypes: List<String>
+): TcState = {
   reporter = reporter,
   mut subst = Dict.emptyIntDict(),
   adtConstructors = reg.adtConstructors,
   ctorOwners = reg.ctorOwners,
+  opaqueTypes = opaqueTypes,
   sourceFile = sourceFile,
   mut asyncDepth = 0,
   mut inferredItems = [],
+  mut isNarrowings = [],
   mut fwdConstructors = Dict.emptyStringDict(),
   mut fwdTypeVisibility = Dict.emptyStringDict(),
   depSnapshots = depSnapshots
@@ -1346,7 +1507,7 @@ export fun typecheck(prog: Ast.Program, opts: TypecheckOptions): TypecheckResult
     Some(d) => d
     None => Dict.emptyStringDict()
   }
-  val state = makeTcState(reporter, reg, opts.sourceFile, depSnapshots)
+  val state = makeTcState(reporter, reg, opts.sourceFile, depSnapshots, resolvedImportOpaqueTypes(opts))
   val builtinEnv = builtinTypeEnv()
   val importEnv = resolvedImportEnv(opts)
   val env0 = envUnion(rawToEnv(reg.ctorEnv), envUnion(importEnv, builtinEnv))

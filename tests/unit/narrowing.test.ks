@@ -15,12 +15,17 @@ fun fruitTag(f: Fruit): Int =
 
 val narrowRec = { x = 1, y = 2 }
 
+fun takeU(x: Int | Bool): Int =
+  if (x is Int) { x + 1 } else { 0 }
+
 export async fun run(s: Suite): Task<Unit> =
   group(s, "kestrel:lang/narrowing", (sg: Suite) => {
     eq(sg, "None branch", optLen(None), 0)
     eq(sg, "Some branch", optLen(Some(5)), 5)
     eq(sg, "ADT Apple", fruitTag(Apple), 1)
     eq(sg, "ADT Orange", fruitTag(Orange), 2)
+    eq(sg, "union narrowing if Int", takeU(7), 8)
+    eq(sg, "union narrowing if Bool", takeU(False), 0)
     isTrue(sg, "prim is Int", (42 is Int))
     isTrue(sg, "record subset field", (narrowRec is { x: Int }))
     isTrue(sg, "record full shape", (narrowRec is { x: Int, y: Int }))

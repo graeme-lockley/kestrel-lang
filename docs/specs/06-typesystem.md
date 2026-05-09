@@ -137,6 +137,8 @@ The expression **`e is T`** is defined in [01-language.md](01-language.md) §3.2
 - In **`if (x is T) { then } [else { else }] `**, the type of **`x`** in **`then`** is **`original_type & T`**. In **`else`**, **`x`** keeps the **unrefined** **`original_type`** (the implementation does **not** exclude **`T`** from a union in the else branch).
 - In **`while (x is T) { body }`**, the type of **`x`** in **`body`** is **`original_type & T`** (same refinement as **`if`**’s then-branch).
 
+For example, with `x : Int | Bool`, the condition `x is Int` refines `x` to `Int` inside the `if` then-branch and `while` body only; `x` remains `Int | Bool` in the `else` branch and after the construct.
+
 **Validity:** The type checker must reject **`e is T`** when there is **no structural overlap** between the type of **`e`** and **`T`** (after the usual rules for unions, records, ADTs, and primitives). Report **`type:narrow_impossible`** (10 §4). For **imported opaque ADTs**, **`T`** may only be the **exported type name** itself, analogously to pattern matching — **`type:narrow_opaque`** when violated (§5.3, 07 §5.3).
 
 On the JVM backend, primitive runtime checks for `is` align with boxed representations (`Int` -> `java/lang/Long`, `Float` -> `java/lang/Double`, `Bool` -> `java/lang/Boolean`, `String` -> `java/lang/String`) while preserving the same static narrowing rules above.
