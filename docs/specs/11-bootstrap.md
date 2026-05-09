@@ -335,9 +335,57 @@ The CI pipeline (`ci.yml`) enforces the bootstrap flow:
 
 ---
 
-## 8. Relation to Other Specs
+## 8. Module Class Layout and Lazy Initialization
+
+### 8.1 Global Value and Variable Initialization
+
+Each Kestrel module compiles to a single JVM class containing:
+
+- **Static fields** for top-level `val` and `var` declarations
+- **Initialization methods** for lazy evaluation of global initializer expressions
+- **An `$init()` method** that idempotently initializes all module globals
+- **An `$initialized` guard field** to prevent redundant re-initialization
+
+### 8.2 Lazy Initialization Pattern
+
+The generated class layout follows this pattern:
+
+```java
+class ModuleName {
+  private static boolean $initialized = false;
+  public static Object x;      // val x
+  public static Object y;      // var y
+
+  public static void $init() {
+    if ($initialized) return;
+    $initialized = true;
+    x = init$x();
+    y = init$y();
+  }
+
+  private static Object init$x() {
+    // compiled initializer expression for x
+  }
+
+  private static Object init$y() {
+    // compiled initializer expression for y
+  }
+}
+```
+
+### 8.3 Initialization Semantics
+
+- **Thread-safety:** The `$initialized` boolean guard is checked and set atomically (from Kestrel's single-threaded perspective); the JVM memory model ensures correct visibility across threads.
+- **Idempotency:** Multiple calls to `$init()` are safe; only the first call executes initialization; subsequent calls return immediately.
+- **Import prerequisite:** When a module imports a global `val` or `var` from another module, it must call `INVOKESTATIC <ImportedModule>.$init()V` before accessing the field via `GETSTATIC`. This ensures transitive initialization of all imported module globals.
+- **Startup:** The `main(String[])` method (if present, for runnable programs) calls `$init()` before executing user code, ensuring all module-level globals are initialized.
+
+---
+
+## 9. Relation to Other Specs
 
 - [01-language.md](01-language.md) – Source language compiled during bootstrap
 - [06-typesystem.md](06-typesystem.md) – Type system; mentions self-hosting interoperability for compiler types
+- [07-modules.md](07-modules.md) – Module system and import/export semantics
 - [09-tools.md](09-tools.md) – CLI commands that depend on bootstrap state
 - [10-compile-diagnostics.md](10-compile-diagnostics.md) – Diagnostic format used during bootstrap compilation
