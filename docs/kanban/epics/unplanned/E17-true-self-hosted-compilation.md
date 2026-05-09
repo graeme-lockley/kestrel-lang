@@ -334,7 +334,7 @@ markers, but those are considered tranche-local scaffolding, not the final state
     use the same tranche to remove the temporary startup shim and the temporary runtime-negative
     E2E skips.**
 
-40. [S17-38 — Codegen: `EIs` type narrowing, `ENever`, and `JvmCodegenOptions`](../../unplanned/S17-38-codegen-is-never-options.md)
+40. ✅ [S17-38 — Codegen: `EIs` type narrowing, `ENever`, and `JvmCodegenOptions`](../../done/S17-38-codegen-is-never-options.md)
     — Emit real `INSTANCEOF` for `EIs`; extend `jvmCodegen` with an options parameter carrying
     cross-module import maps (class names, arities, var sets) built from KTI `codegenMeta`.
     Depends on S17-41 for correct `codegenMeta` data. **The `JvmCodegenOptions` plumbing is needed

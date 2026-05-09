@@ -313,6 +313,7 @@ These operators are defined for numeric types and, where the implementation spec
 - **Typing:** The expression has type **Bool** (06 §8). The type checker must ensure **`T`** can **narrow** the type of **`e`** (structural overlap with **`e`**’s type); otherwise it is a compile-time error (06 §4, 10 §4 `type:narrow_impossible`). **Opaque** ADT rules from importing modules apply as for pattern matching (06 §5.3, 07 §5.3; `type:narrow_opaque` when violated).
 - **Narrowing:** When `e` is a **simple identifier** `x`, the type of `x` is refined in **`if`**’s **then**-branch and **`while`**’s **body** to **`original_type & T`** (06 §4). The **`else`** branch (if any) keeps **`x`** at the **unrefined** type. Standalone **`x is T`** does not change the binding’s type outside the boolean result.
 - **Runtime truth (summary):** **`T`** is checked **structurally** against the value of **`e`**: primitives and heap **kind** (e.g. Int vs String); **ADT** variants by constructor **tag** (and payload where needed); **records** by presence and type of required fields. The JVM backend must correctly implement these checks for all well-typed programs.
+- **JVM backend note:** primitive `is` checks are performed against boxed runtime classes (`Int` -> `java/lang/Long`, `Float` -> `java/lang/Double`, `Bool` -> `java/lang/Boolean`, `String` -> `java/lang/String`), with the branch result materialized as a boxed `Boolean`.
 
 ```
 Expr           ::= IfExpr

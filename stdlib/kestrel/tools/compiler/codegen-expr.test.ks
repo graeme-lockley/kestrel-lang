@@ -6,7 +6,7 @@ import * as Arr from "kestrel:data/array"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Ty from "kestrel:dev/typecheck/types"
-import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, PVar, PLit, PCon, PList, PCons, PTuple, EField, SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue, EList, ECons, EPipe, LElem, EThrow, ETry, EAwait, ATPrim } from "kestrel:dev/parser/ast"
+import { ELit, EIdent, EBinary, EUnary, EIf, EWhile, ERecord, ETuple, EMatch, ELambda, ECall, EBlock, ETemplate, TmplLit, TmplExpr, PWild, PVar, PLit, PCon, PList, PCons, PTuple, EField, SVal, SVar, SAssign, SExpr, SFun, SBreak, SContinue, EList, ECons, EPipe, LElem, EThrow, ETry, EAwait, EIs, ENever, ATPrim } from "kestrel:dev/parser/ast"
 import * as Ast from "kestrel:dev/parser/ast"
 
 type TestCtx = { cf: CF.ClassFileBuilder, mb: CF.MethodBuilder, ctx: CG.CodegenContext }
@@ -947,6 +947,57 @@ export async fun run(s: Suite): Task<Unit> =
       val bytes = finish(t.cf, t.mb)
       isTrue(sg, "ETry nested: class bytes produced", BA.length(bytes) > 0)
     });
+
+    group(s1, "EIs Int emits instanceof + boolean branch", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EIs(ELit("int", "7"), ATPrim("Int")))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EIs Int: emits INSTANCEOF(193)", containsSeq(code, [193]))
+      isTrue(sg, "EIs Int: emits IFEQ(153)", containsSeq(code, [153]))
+      isTrue(sg, "EIs Int: emits GOTO(167)", containsSeq(code, [167]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EIs Int: pool contains Long utf8", containsSeq(BA.toList(bytes), [76, 111, 110, 103]))
+      isTrue(sg, "EIs Int: pool contains TRUE utf8", containsSeq(BA.toList(bytes), [84, 82, 85, 69]))
+      isTrue(sg, "EIs Int: pool contains FALSE utf8", containsSeq(BA.toList(bytes), [70, 65, 76, 83, 69]))
+    })
+
+    group(s1, "EIs Float emits instanceof Double", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EIs(ELit("float", "3.14"), ATPrim("Float")))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EIs Float: emits INSTANCEOF(193)", containsSeq(code, [193]))
+      isTrue(sg, "EIs Float: emits IFEQ(153)", containsSeq(code, [153]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EIs Float: pool contains Double utf8", containsSeq(BA.toList(bytes), [68, 111, 117, 98, 108, 101]))
+    })
+
+    group(s1, "EIs Bool emits instanceof Boolean", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EIs(ELit("true", "True"), ATPrim("Bool")))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EIs Bool: emits INSTANCEOF(193)", containsSeq(code, [193]))
+      isTrue(sg, "EIs Bool: emits IFEQ(153)", containsSeq(code, [153]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EIs Bool: pool contains Boolean utf8", containsSeq(BA.toList(bytes), [66, 111, 111, 108, 101, 97, 110]))
+    })
+
+    group(s1, "EIs String emits instanceof String", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, EIs(ELit("string", "hello"), ATPrim("String")))
+      val code = Arr.toList(CF.mbGetCode(t.mb))
+      isTrue(sg, "EIs String: emits INSTANCEOF(193)", containsSeq(code, [193]))
+      isTrue(sg, "EIs String: emits IFEQ(153)", containsSeq(code, [153]))
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "EIs String: pool contains String utf8", containsSeq(BA.toList(bytes), [83, 116, 114, 105, 110, 103]))
+    })
+
+    group(s1, "ENever stays aconstNull placeholder", (sg: Suite) => {
+      val t = baseContext()
+      CG.emitExpr(t.ctx, ENever)
+      eq(sg, "ENever: opcode[0] is aconstNull(1)", codeAt(t.mb, 0), 1)
+      val bytes = finish(t.cf, t.mb)
+      isTrue(sg, "ENever: class bytes produced", BA.length(bytes) > 0)
+    })
 
     group(s1, "EAwait emits CHECKCAST and INVOKEVIRTUAL", (sg: Suite) => {
       // EAwait(ELit("int","1")) should emit: load expr result, CHECKCAST KTask (192), INVOKEVIRTUAL KTask.get (182).

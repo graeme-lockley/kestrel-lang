@@ -1453,6 +1453,31 @@ fun jvmMangleName(op: String): String = {
   else op
 }
 
+fun isTypeToJvmClass(ctx: CodegenContext, testedType: Ast.AstType): Option<String> =
+  match (testedType) {
+    ATPrim(name) =>
+      if (name == "Int") Some(LONG)
+      else if (name == "Float") Some(DOUBLE)
+      else if (name == "Bool") Some(BOOLEAN)
+      else if (name == "String") Some("java/lang/String")
+      else if (name == "Char" | name == "Rune") Some(INTEGER)
+      else if (name == "Unit") Some(KUNIT)
+      else if (name == "None") Some(KNONE)
+      else if (name == "Nil") Some(KNIL)
+      else if (name == "Some") Some(KSOME)
+      else if (name == "Ok") Some(KOK)
+      else if (name == "Err") Some(KERR)
+      else if (name == "Cons") Some(KCONS)
+      else Dict.get(ctx.mctx.adtClassByConstructor, name)
+    ATApp(name, _args) =>
+      if (name == "Some") Some(KSOME)
+      else if (name == "Ok") Some(KOK)
+      else if (name == "Err") Some(KERR)
+      else if (name == "Cons") Some(KCONS)
+      else Dict.get(ctx.mctx.adtClassByConstructor, name)
+    _ => None
+  }
+
 fun primNameFromType(t: Option<Ty.InternalType>): String =
   match (t) {
     Some(typ) =>
@@ -3266,6 +3291,33 @@ export fun emitExpr(ctx: CodegenContext, expr: Ast.Expr): Unit =
       emitExpr(ctx, block.result)
       ctx.tailCtx := prevTail
     }
-    EIs(e, _t) => { emitExprNonTail(ctx, e); CF.mbEmit1(ctx.mb, Op.JvmOp.pop); pushBoolBoxed(ctx, True) }
+    EIs(e, testedType) => {
+      emitExprNonTail(ctx, e)
+      match (isTypeToJvmClass(ctx, testedType)) {
+        Some(className) => {
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, className))
+          val code = CF.mbGetCode(ctx.mb)
+          val ifeqStart = CF.mbLength(ctx.mb)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+          CF.mbAddBranchTarget(ctx.mb, CF.mbLength(ctx.mb), None)
+          pushBoolBoxed(ctx, True)
+          val gotoEnd = CF.mbLength(ctx.mb)
+          CF.mbEmit1s(ctx.mb, Op.JvmOp.goto_, 0)
+          val falseLabel = CF.mbLength(ctx.mb)
+          CF.mbAddBranchTarget(ctx.mb, falseLabel, None)
+          pushBoolBoxed(ctx, False)
+          val endLabel = CF.mbLength(ctx.mb)
+          CF.mbAddBranchTarget(ctx.mb, endLabel, None)
+          patchShort(code, ifeqStart + 1, falseLabel - ifeqStart)
+          patchShort(code, gotoEnd + 1, endLabel - gotoEnd)
+        }
+        None => {
+          CF.mbEmit1(ctx.mb, Op.JvmOp.pop)
+          pushBoolBoxed(ctx, False)
+        }
+      }
+    }
+    // ENever is unreachable in well-typed programs; keep null sentinel for now.
+    // TODO: emit ATHROW AssertionError in debug builds to surface miscompilation.
     ENever => pushNull(ctx)
   }
