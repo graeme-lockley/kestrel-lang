@@ -28,6 +28,19 @@ import { double } from "./leaf.ks"
 val result = double(5)
 `;
 
+const polyDepSrc = `
+export fun id(x: T): T = x
+`;
+
+const polyEntrySrc = `
+import { id as idA } from "./dep-a.ks"
+import { id as idB } from "./dep-b.ks"
+
+val n = idA(41)
+val s = idB("ok")
+val t = idA("again")
+`;
+
 // ---------------------------------------------------------------------------
 // Setup helpers
 // ---------------------------------------------------------------------------
@@ -162,5 +175,22 @@ describe('kti incremental compilation', () => {
       getClassOutputDir: () => tmpDir,
     });
     expect(out2.ok).toBe(true);
+  });
+
+  it('typechecks when same symbol is imported from two deps', () => {
+    mkdirSync(tmpDir, { recursive: true });
+    const depAPath = join(tmpDir, 'dep-a.ks');
+    const depBPath = join(tmpDir, 'dep-b.ks');
+    const entryPath = join(tmpDir, 'entry.ks');
+    writeFileSync(depAPath, polyDepSrc.trim());
+    writeFileSync(depBPath, polyDepSrc.trim());
+    writeFileSync(entryPath, polyEntrySrc.trim());
+
+    const out = compileFileJvm(entryPath, {
+      projectRoot: kestrelRoot,
+      stdlibDir,
+      getClassOutputDir: () => tmpDir,
+    });
+    expect(out.ok, out.ok ? '' : out.diagnostics.map((d) => d.message).join('; ')).toBe(true);
   });
 });

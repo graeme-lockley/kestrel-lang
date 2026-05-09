@@ -167,6 +167,12 @@ compatibility, but string forms are not the canonical on-disk encoding for v4 `.
 
 `id` is the numeric type variable identifier. Only meaningful in the context of an enclosing `scheme`.
 
+When `.kti` files are consumed for dependency loading, compilers must treat these ids as
+module-local serialization ids, not globally unique unification ids. Implementations must
+freshen imported `var` ids before merging dependency bindings into the current typecheck
+state (the TS and self-hosted compilers reserve negative ids for this imported space), so
+raw on-disk ids from different dependencies cannot collide.
+
 ### 4.3 Arrow (function type)
 
 ```json

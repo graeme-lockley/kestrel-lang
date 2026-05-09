@@ -195,7 +195,7 @@ S17-41 (codegenMeta) is a prerequisite for S17-22 (cross-module ADT environment)
     Fix: emit structured JSON objects matching the TS `{k:"scheme"|"arrow"|"app"|...}` format
     already handled by `deserializeTypeFromObj`.
 
-17. [S17-40 — Add `freshenImportedTypeVars` to KTI `loadDepBindings`](../../unplanned/S17-40-kti-freshen-imported-type-vars.md)
+17. ✅ [S17-40 — Add `freshenImportedTypeVars` to KTI `loadDepBindings`](../../done/S17-40-kti-freshen-imported-type-vars.md)
     — Deserialized `TVar` nodes carry their raw integer IDs from the KTI file. Since the
     self-hosted typechecker's fresh-var counter is always positive (starting at 0), imported
     type vars from different modules can share the same ID, causing the unifier to

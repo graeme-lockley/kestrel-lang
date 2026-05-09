@@ -247,6 +247,13 @@ fun asBool(v: Json.Value): Option<Bool> =
     _ => None
   }
 
+val importedDeserializeOffset = { mut value = 0 }
+
+fun setImportedDeserializeOffset(offset: Int): Unit = {
+  importedDeserializeOffset.value := offset;
+  ()
+}
+
 fun deserializeTypeList(v: Json.Value): List<Ty.InternalType> =
   match (v) {
     Array(xs) => Lst.map(xs, deserializeType)
@@ -274,7 +281,11 @@ fun deserializeTypeFromObj(ps: List<(String, Json.Value)>): Ty.InternalType =
       if (k == "prim") {
         Ty.TPrim(Opt.getOrElse(Opt.andThen(objGet(ps, "n"), asStr), "Unit"))
       } else if (k == "var") {
-        Ty.TVar(Opt.getOrElse(Opt.andThen(objGet(ps, "id"), asInt), 0))
+        val rawId = Opt.getOrElse(Opt.andThen(objGet(ps, "id"), asInt), 0)
+        if (importedDeserializeOffset.value < 0)
+          Ty.TVar(importedDeserializeOffset.value - rawId)
+        else
+          Ty.TVar(rawId)
       } else if (k == "arrow") {
         val paramsV = Opt.getOrElse(objGet(ps, "ps"), Array([]))
         val retV = Opt.getOrElse(objGet(ps, "r"), StrVal("Unit"))
@@ -688,6 +699,14 @@ export fun deserializeCtorMaps(kti: KtiV4): (Dict<String, Ty.InternalType>, Dict
 export fun makeNamespaceType(exports: Dict<String, Ty.InternalType>): Ty.InternalType =
   Ty.TNamespace(exports)
 
+val importedTypeVarOffsetCounter = { mut nextOffset = -1 }
+
+fun reserveImportedTypeVarOffset(): Int = {
+  val out = importedTypeVarOffsetCounter.nextOffset
+  importedTypeVarOffsetCounter.nextOffset := importedTypeVarOffsetCounter.nextOffset - 1000000;
+  out
+}
+
 /// Build import bindings for a named import: add each requested name from dep exports to bindings.
 export fun addNamedImportBindings(specs: List<Ast.ImportSpec>, depExports: Dict<String, Ty.InternalType>, bindings: Dict<String, Ty.InternalType>): Dict<String, Ty.InternalType> =
   match (specs) {
@@ -922,11 +941,14 @@ export async fun loadDepBindings(deps: List<(String, String, String)>, imports: 
         Err(_) => DepLoadErr("dependency not compiled yet: ${dep.0} (missing ${dep.1})")
         Ok(depKti) => {
           val depClassName = dep.2;
+          val depOffset = reserveImportedTypeVarOffset()
+          setImportedDeserializeOffset(depOffset)
           val depExports = deserializeExports(depKti);
           val depTypeAliases = deserializeTypeAliases(depKti);
           val depTypeVisibility = deserializeTypeVisibility(depKti);
           val depCtorMaps = deserializeCtorMaps(depKti);
           val depCtorEnv = depCtorMaps.0;
+          setImportedDeserializeOffset(0)
           val depAdtCtors = depCtorMaps.1;
           val depCtorOwners = depCtorMaps.2;
           val next: Task<DepLoadResult> = loadDepBindings(rest, imports)

@@ -8,14 +8,22 @@ import * as Fs from "kestrel:io/fs"
 import * as Kti from "kestrel:tools/compiler/kti"
 import { KtiFunction, DepLoadOk, DepLoadErr } from "kestrel:tools/compiler/kti"
 import * as Ty from "kestrel:dev/typecheck/types"
+import { TVar, TArrow, TScheme } from "kestrel:dev/typecheck/types"
 
 fun assertRoundTrip(s: Suite, name: String, ty: Ty.InternalType): Unit =
   eq(s, name, Kti.deserializeType(Kti.serializeType(ty)), ty)
 
+fun hasNegativeVarId(t: Ty.InternalType): Bool =
+  Str.indexOf(Json.stringify(Kti.serializeType(t)), "\"id\":-") >= 0
+
 export async fun run(s: Suite): Task<Unit> = {
   val idTy = Ty.TScheme([0], Ty.TArrow([Ty.TVar(0)], Ty.TVar(0)))
   val ktiPath = "/tmp/kestrel_kti_serialize_acceptance.kti"
+  val depAPath = "/tmp/kestrel_kti_serialize_dep_a.kti"
+  val depBPath = "/tmp/kestrel_kti_serialize_dep_b.kti"
   val _cleanupBefore = await Fs.deleteFile(ktiPath)
+  val _cleanupDepABefore = await Fs.deleteFile(depAPath)
+  val _cleanupDepBBefore = await Fs.deleteFile(depBPath)
   val kti: Kti.KtiV4 = {
     version = 4,
     functions = Dict.singletonStringDict(
@@ -49,7 +57,45 @@ export async fun run(s: Suite): Task<Unit> = {
     DepLoadOk(bundle) => Dict.get(bundle.importBindings, "id")
     DepLoadErr(_) => None
   }
+  val depWriteAOk = match (await Kti.writeKtiFile(depAPath, kti)) {
+    Ok(_) => True
+    Err(_) => False
+  }
+  val depWriteBOk = match (await Kti.writeKtiFile(depBPath, kti)) {
+    Ok(_) => True
+    Err(_) => False
+  }
+  val loadedPair = match (await Kti.loadDepBindings(
+    [("depA", depAPath, "DepA"), ("depB", depBPath, "DepB")],
+    [
+      IDNamed("depA", [{ external = "id", local = "idA" }]),
+      IDNamed("depB", [{ external = "id", local = "idB" }])
+    ]
+  )) {
+    DepLoadOk(bundle) => {
+      val a = Dict.get(bundle.importBindings, "idA")
+      val b = Dict.get(bundle.importBindings, "idB")
+      match (a) {
+        None => None
+        Some(ta) =>
+          match (b) {
+            None => None
+            Some(tb) => Some((ta, tb))
+          }
+      }
+    }
+    DepLoadErr(_) => None
+  }
+
+  Ty.resetVarId()
+  val freshVarIsPositive = match (Ty.freshVar()) {
+    TVar(v) => v >= 0
+    _ => False
+  }
+
   val _cleanupAfter = await Fs.deleteFile(ktiPath)
+  val _cleanupDepAAfter = await Fs.deleteFile(depAPath)
+  val _cleanupDepBAfter = await Fs.deleteFile(depBPath)
 
   group(s, "kestrel:tools/compiler/kti", (s1: Suite) => {
     group(s1, "round-trip", (sg: Suite) => {
@@ -101,7 +147,26 @@ export async fun run(s: Suite): Task<Unit> = {
       isTrue(sg, "writeKtiFile succeeds", writeOk)
       isTrue(sg, "scheme stored as object kind", Str.indexOf(ktiText, "\"k\":\"scheme\"") >= 0)
       isTrue(sg, "legacy forall string not written", Str.indexOf(ktiText, "forall") < 0)
-      eq(sg, "loadDepBindings preserves scheme", loadedIdType, Some(idTy))
+      isTrue(sg, "single dep write A succeeds", depWriteAOk)
+      isTrue(sg, "single dep write B succeeds", depWriteBOk)
+      eq(sg, "loadDepBindings preserves scheme shape", loadedIdType == None, False)
+
+      val singleIdIsNegative = match (loadedIdType) {
+        None => False
+        Some(t) => hasNegativeVarId(t)
+      }
+      isTrue(sg, "single import freshens scheme var to negative id", singleIdIsNegative)
+
+      val pairFreshenedAndDistinct = match (loadedPair) {
+        None => False
+        Some(pair) => {
+          val aJson = Json.stringify(Kti.serializeType(pair.0))
+          val bJson = Json.stringify(Kti.serializeType(pair.1))
+          hasNegativeVarId(pair.0) & hasNegativeVarId(pair.1) & aJson != bJson
+        }
+      }
+      isTrue(sg, "two imported schemes use distinct negative ids", pairFreshenedAndDistinct)
+      isTrue(sg, "freshVar remains non-negative", freshVarIsPositive)
     })
 
     group(s1, "namespace fallback", (sg: Suite) => {
