@@ -172,7 +172,7 @@ via `./kestrel-self`. Acceptance for all subsequent stories is measured via
     — **Placeholder only.** Unify `./kestrel` and `./kestrel-self` into a single entry point with
     a `--compiler` flag once S17-44 (no-Node final validation) is complete. Not built now.
 
-22. [S17-43 — Codegen: emit diagnostic for unresolved identifiers](../../unplanned/S17-43-codegen-unresolved-ident-diagnostic.md)
+22. ✅ [S17-43 — Codegen: emit diagnostic for unresolved identifiers](../../done/S17-43-codegen-unresolved-ident-diagnostic.md)
     — Replace the silent `pushNull` fallback at the end of the `EIdent` resolution chain with a
     proper `Diagnostic` record. Wire accumulated codegen diagnostics through `jvmCodegen`'s
     return value and `driver.ks` so the CLI reports the error. Completes the PARTIAL acceptance
