@@ -10,8 +10,6 @@ while [ -L "$SOURCE" ]; do
   [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
 done
 ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"; export KESTREL_ROOT="$ROOT"
-COMPILER="$ROOT/compiler"; COMPILER_CLI="$COMPILER/dist/cli.js"
-TS_CACHE="${KESTREL_TS_CACHE:-$HOME/.kestrel/ts}"
 JVM_CACHE="${KESTREL_SELF_CACHE:-$HOME/.kestrel/self}"
 MAVEN="${KESTREL_MAVEN_CACHE:-$HOME/.kestrel/maven}"
 MAVEN_RUNTIME_JAR="$MAVEN/lang/kestrel/runtime/1.0/runtime-1.0.jar"
@@ -37,17 +35,13 @@ if [ "${1:-}" = "test" ]; then
 fi
 
 # All other commands: delegate to the self-hosted Kestrel CLI
-# Look for Cli.class in SELF_CACHE (self-hosted), then fall back to TS_CACHE.
-CLI_CLASS=$(find "$JVM_CACHE" "$TS_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null \
+# Strict mode: resolve Cli.class from SELF_CACHE only.
+CLI_CLASS=$(find "$JVM_CACHE" -name "Cli.class" -path "*/kestrel/tools/Cli.class" 2>/dev/null \
   | head -1) || true
 if [ -n "${CLI_CLASS:-}" ]; then
-  if [[ "$CLI_CLASS" == "$JVM_CACHE"* ]]; then
-    CLI_CLASS_NAME=$(echo "$CLI_CLASS" | sed "s|$JVM_CACHE/||;s|\.class\$||" | tr '/' '.')
-  else
-    CLI_CLASS_NAME=$(echo "$CLI_CLASS" | sed "s|$TS_CACHE/||;s|\.class\$||" | tr '/' '.')
-  fi
+  CLI_CLASS_NAME=$(echo "$CLI_CLASS" | sed "s|$JVM_CACHE/||;s|\.class$||" | tr '/' '.')
   exec java -Xss8m -Dkestrel.exitWait=false \
-    -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE:$TS_CACHE" \
+    -cp "$MAVEN_RUNTIME_JAR:$JVM_CACHE" \
     "$CLI_CLASS_NAME" "$@"
 fi
 echo "kestrel-self: self-hosted compiler artifacts are required for this command" >&2

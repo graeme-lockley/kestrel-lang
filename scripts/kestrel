@@ -71,6 +71,13 @@ if [ "${1:-}" = "test" ]; then
     exit 1
   fi
   shift
+  if [ -f "$COMPILER_CLI" ]; then
+    "$0" run "$ROOT/stdlib/kestrel/tools/test.ks" --generate "$@" || exit $?
+    exec "$0" run "$ROOT/.kestrel_test_runner.ks"
+  fi
+
+  # No-node fallback: when compiler/dist/cli.js is unavailable (for example after
+  # temporarily renaming compiler/), route test generation/execution through self-hosted path.
   "$ROOT/scripts/kestrel-self" run "$ROOT/stdlib/kestrel/tools/test.ks" --generate "$@" || exit $?
   exec "$ROOT/scripts/kestrel-self" run "$ROOT/.kestrel_test_runner.ks"
 fi
