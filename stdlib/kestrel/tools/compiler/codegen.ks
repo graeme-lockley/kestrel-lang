@@ -384,11 +384,14 @@ fun emitTailLoopScaffold(mb: CF.MethodBuilder): Int = {
   loopHead
 }
 
-fun emitMainStub(cf: CF.ClassFileBuilder): Unit = {
-  // Temporary shim so runInProcess can invoke compiled modules while full main emission lands.
+fun emitMainStub(cf: CF.ClassFileBuilder, moduleName: String): Unit = {
+  // Real startup path: call $init() to initialize module globals, then return
   val mb = CF.cfAddMethod(cf, "main", "([Ljava/lang/String;)V", Op.Acc.public_ + Op.Acc.static_)
+  val initMethodName = Str.append("$", "init")
+  val initRef = CF.cfMethodref(cf, moduleName, initMethodName, "()V")
+  CF.mbEmit1s(mb, Op.JvmOp.invokestatic, initRef)
   CF.mbEmit1(mb, Op.JvmOp.return_)
-  CF.mbSetMaxs(mb, 0, 1)
+  CF.mbSetMaxs(mb, 1, 1)
 }
 
 // Returns a JVM method descriptor for a method that takes `arity` Object params and returns KTask.
@@ -1022,7 +1025,7 @@ fun emitExternImportOverrides(cf: CF.ClassFileBuilder, overrides: List<Ast.Exter
     ov :: rest => { emitExternOverride(cf, ov); emitExternImportOverrides(cf, rest) }
   }
 
-export fun emitVal(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr): Unit = {
+export fun emitVal(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr, _mctx: ModuleContext, _getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
   CF.cfAddField(cf, name, "Ljava/lang/Object;", Op.Acc.public_ + Op.Acc.static_ + Op.Acc.final_)
   val mb = CF.cfAddMethod(cf, "init$${name}", "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
   CF.mbEmit1(mb, Op.JvmOp.aconstNull)
@@ -1030,7 +1033,7 @@ export fun emitVal(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr): Unit
   CF.mbSetMaxs(mb, 1, 0)
 }
 
-export fun emitVar(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr): Unit = {
+export fun emitVar(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr, _mctx: ModuleContext, _getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
   CF.cfAddField(cf, name, "Ljava/lang/Object;", Op.Acc.public_ + Op.Acc.static_)
   val mb = CF.cfAddMethod(cf, "init$${name}", "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
   CF.mbEmit1(mb, Op.JvmOp.aconstNull)
@@ -1100,10 +1103,10 @@ fun emitDecl(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, d
         _ => classes
       }
     }
-    TDVal(name, _ann, expr) => { emitVal(cf, name, expr); classes }
-    TDVar(name, _ann, expr) => { emitVar(cf, name, expr); classes }
-    TDSVal(name, _ann, expr) => { emitVal(cf, name, expr); classes }
-    TDSVar(name, _ann, expr) => { emitVar(cf, name, expr); classes }
+    TDVal(name, _ann, expr) => { emitVal(cf, name, expr, mctx, getInferredType); classes }
+    TDVar(name, _ann, expr) => { emitVar(cf, name, expr, mctx, getInferredType); classes }
+    TDSVal(name, _ann, expr) => { emitVal(cf, name, expr, mctx, getInferredType); classes }
+    TDSVar(name, _ann, expr) => { emitVar(cf, name, expr, mctx, getInferredType); classes }
     _ => classes
   }
 
@@ -1113,16 +1116,73 @@ fun emitDecls(moduleName: String, cf: CF.ClassFileBuilder, mctx: ModuleContext, 
     d :: rest => emitDecls(moduleName, cf, mctx, rest, emitDecl(moduleName, cf, mctx, d, classes, getInferredType), getInferredType)
   }
 
+fun collectGlobalValVarNames(decls: List<Ast.TopDecl>): List<String> =
+  match (decls) {
+    [] => []
+    d :: rest => {
+      val restNames = collectGlobalValVarNames(rest)
+      match (d) {
+        TDVal(name, _, _) => name :: restNames
+        TDVar(name, _, _) => name :: restNames
+        TDSVal(name, _, _) => name :: restNames
+        TDSVar(name, _, _) => name :: restNames
+        _ => restNames
+      }
+    }
+  }
+
+fun emitInitializedField(cf: CF.ClassFileBuilder): Unit = {
+  val fieldName = Str.append("$", "initialized")
+  CF.cfAddField(cf, fieldName, "Z", Op.Acc.private_ + Op.Acc.static_)
+}
+
+fun emitInitMethod(cf: CF.ClassFileBuilder, moduleName: String, globalNames: List<String>): Unit = {
+  val initMethodName = Str.append("$", "init")
+  val mb = CF.cfAddMethod(cf, initMethodName, "()V", Op.Acc.public_ + Op.Acc.static_)
+  
+  // Get the $initialized field reference
+  val fieldName = Str.append("$", "initialized")
+  val initializedFieldRef = CF.cfFieldref(cf, moduleName, fieldName, "Z")
+  
+  // Load $initialized, if true return early
+  CF.mbEmit1s(mb, Op.JvmOp.getstatic, initializedFieldRef)
+  CF.mbEmit1b(mb, Op.JvmOp.ifne, 8) // Skip the initialization code if already initialized
+  
+  // Set $initialized = true
+  CF.mbEmit1(mb, Op.JvmOp.iconst1)
+  CF.mbEmit1s(mb, Op.JvmOp.putstatic, initializedFieldRef)
+  
+  // Call init$<name>() and store result for each global val/var
+  fun emitGlobalInitCall(names: List<String>): Unit =
+    match (names) {
+      [] => ()
+      name :: rest => {
+        val initFieldMethodName = Str.append("init$", name)
+        val initMethodRef = CF.cfMethodref(cf, moduleName, initFieldMethodName, "()Ljava/lang/Object;")
+        CF.mbEmit1s(mb, Op.JvmOp.invokestatic, initMethodRef)
+        val fieldRef = CF.cfFieldref(cf, moduleName, name, "Ljava/lang/Object;")
+        CF.mbEmit1s(mb, Op.JvmOp.putstatic, fieldRef)
+        emitGlobalInitCall(rest)
+      }
+    }
+  
+  emitGlobalInitCall(globalNames)
+  
+  // Return
+  CF.mbEmit1(mb, Op.JvmOp.return_)
+  
+  CF.mbSetMaxs(mb, 1, 0)
+}
+
 export fun jvmCodegen(mctx: ModuleContext, prog: Ast.Program, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): JvmCodegenResult = {
   val moduleName = mctx.className
   val cf = CF.newClassFile(moduleName, "java/lang/Object", Op.Acc.public_ + Op.Acc.super_)
   emitDefaultCtor(cf)
   val extraClasses = emitDecls(moduleName, cf, mctx, prog.body, Dict.emptyStringDict(), getInferredType)
-  emitMainStub(cf)
-  val initMethodName = Str.append("$", "init")
-  val initMb = CF.cfAddMethod(cf, initMethodName, "()V", Op.Acc.public_ + Op.Acc.static_)
-  CF.mbEmit1(initMb, Op.JvmOp.return_)
-  CF.mbSetMaxs(initMb, 0, 0)
+  emitInitializedField(cf)
+  emitMainStub(cf, moduleName)
+  val globalNames = collectGlobalValVarNames(prog.body)
+  emitInitMethod(cf, moduleName, globalNames)
   val mainBytes = CF.cfToBytes(cf)
   val withLambdas = Dict.union(extraClasses, mctx.lambdaClasses)
   {
