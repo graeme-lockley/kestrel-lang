@@ -1025,20 +1025,24 @@ fun emitExternImportOverrides(cf: CF.ClassFileBuilder, overrides: List<Ast.Exter
     ov :: rest => { emitExternOverride(cf, ov); emitExternImportOverrides(cf, rest) }
   }
 
-export fun emitVal(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr, _mctx: ModuleContext, _getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
+export fun emitVal(cf: CF.ClassFileBuilder, name: String, expr: Ast.Expr, mctx: ModuleContext, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
   CF.cfAddField(cf, name, "Ljava/lang/Object;", Op.Acc.public_ + Op.Acc.static_ + Op.Acc.final_)
-  val mb = CF.cfAddMethod(cf, "init$${name}", "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
-  CF.mbEmit1(mb, Op.JvmOp.aconstNull)
+  val initFieldMethodName = Str.append("init$", name)
+  val mb = CF.cfAddMethod(cf, initFieldMethodName, "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
+  val ctx = newCodegenContext(cf, mb, mctx, getInferredType)
+  emitExpr(ctx, expr)
   CF.mbEmit1(mb, Op.JvmOp.areturn)
-  CF.mbSetMaxs(mb, 1, 0)
+  CF.mbSetMaxs(mb, 8, 0)
 }
 
-export fun emitVar(cf: CF.ClassFileBuilder, name: String, _expr: Ast.Expr, _mctx: ModuleContext, _getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
+export fun emitVar(cf: CF.ClassFileBuilder, name: String, expr: Ast.Expr, mctx: ModuleContext, getInferredType: (Ast.Expr) -> Option<Ty.InternalType>): Unit = {
   CF.cfAddField(cf, name, "Ljava/lang/Object;", Op.Acc.public_ + Op.Acc.static_)
-  val mb = CF.cfAddMethod(cf, "init$${name}", "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
-  CF.mbEmit1(mb, Op.JvmOp.aconstNull)
+  val initFieldMethodName = Str.append("init$", name)
+  val mb = CF.cfAddMethod(cf, initFieldMethodName, "()Ljava/lang/Object;", Op.Acc.private_ + Op.Acc.static_)
+  val ctx = newCodegenContext(cf, mb, mctx, getInferredType)
+  emitExpr(ctx, expr)
   CF.mbEmit1(mb, Op.JvmOp.areturn)
-  CF.mbSetMaxs(mb, 1, 0)
+  CF.mbSetMaxs(mb, 8, 0)
 }
 
 fun emitCtorClass(moduleName: String, ctor: Ast.CtorDef): (String, ByteArray) = {
