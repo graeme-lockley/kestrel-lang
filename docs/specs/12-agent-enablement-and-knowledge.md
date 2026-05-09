@@ -71,9 +71,13 @@ The baseline user-agent experience must support:
 - Running Kestrel CLI commands after installation with Java present.
 - Network retrieval of signed or checksummed artifacts.
 
+Normal command execution must not require Node.js once bootstrap artifacts are installed. Node may remain a maintainer/bootstrap-build dependency (for building bootstrap compiler artifacts), but it is outside the runtime baseline.
+
 Intended minimal dependency target:
 - Java runtime
 - curl-compatible HTTP client
+
+Runtime excludes Node.js; dependency regressions are guarded by the no-Node validation gate (`./scripts/test-no-node.sh`) in CI.
 
 ### 5.2 Artifact Strategy
 

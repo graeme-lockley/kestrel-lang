@@ -85,20 +85,17 @@ async fun anyDepNewer(deps: List<String>, classMtime: Int): Task<Bool> =
     dep :: rest => {
       val trimmed = Str.trim(dep)
       if (Str.isEmpty(trimmed)) {
-        val next: Task<Bool> = anyDepNewer(rest, classMtime)
-        await next
+        await anyDepNewer(rest, classMtime)
       } else {
         val statR = await Fs.stat(trimmed)
         match (statR) {
           Err(_) => {
-            val next: Task<Bool> = anyDepNewer(rest, classMtime)
-            await next
+            await anyDepNewer(rest, classMtime)
           }
           Ok(s) => {
             if (s.mtimeMs >= classMtime) True
             else {
-              val next: Task<Bool> = anyDepNewer(rest, classMtime)
-              await next
+              await anyDepNewer(rest, classMtime)
             }
           }
         }
@@ -141,8 +138,7 @@ async fun deleteFiles(files: List<String>): Task<Unit> =
     [] => ()
     f :: rest => {
       val _ = await Fs.deleteFile(f)
-      val next: Task<Unit> = deleteFiles(rest)
-      await next
+      await deleteFiles(rest)
     }
   }
 

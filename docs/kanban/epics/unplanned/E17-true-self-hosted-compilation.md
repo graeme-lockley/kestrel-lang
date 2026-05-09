@@ -347,7 +347,7 @@ markers, but those are considered tranche-local scaffolding, not the final state
     re-enable `tests/unit/union_intersection.test.ks`, and keep the scenario green under
     `./kestrel test` before final no-Node validation.
 
-42. [S17-44 — End-to-end validation without Node; CI gate and spec update](../../unplanned/S17-44-e2e-validation-no-node.md)
+42. ✅ [S17-44 — End-to-end validation without Node; CI gate and spec update](../../done/S17-44-e2e-validation-no-node.md)
     — Rename `compiler/` to verify the full test suite passes with Node unreachable. Add a
     CI step that runs `mv compiler compiler_DISABLED && ./kestrel test` and must exit 0.
     Restore `compiler/`. Update `docs/specs/11-bootstrap.md` and

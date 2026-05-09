@@ -4,36 +4,17 @@
 # Positive (tests/e2e/scenarios/positive/*.ks): must compile, run with exit 0, stdout matches *.expected.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-COMPILER="$ROOT/compiler"
 NEGATIVE="$ROOT/tests/e2e/scenarios/negative"
 POSITIVE="$ROOT/tests/e2e/scenarios/positive"
+KESTREL="$ROOT/scripts/kestrel"
 
-if ! command -v node &>/dev/null; then
-  echo "run-e2e: node not found" >&2
-  exit 1
-fi
 if ! command -v java &>/dev/null; then
   echo "run-e2e: java not found" >&2
   exit 1
 fi
-if ! command -v javac &>/dev/null; then
-  echo "run-e2e: javac not found" >&2
+if ! "$KESTREL" status 2>/dev/null | grep -q "Self-hosted compiler cache:.*(ready)"; then
+  echo "run-e2e: self-hosted cache is not ready; run ./scripts/build-bootstrap-jar.sh && ./kestrel-self bootstrap" >&2
   exit 1
-fi
-
-# Build compiler and JVM runtime once
-cd "$COMPILER" && npm run build >/dev/null 2>&1 && cd "$ROOT" || { echo "Compiler build failed" >&2; exit 1; }
-(cd "$ROOT/runtime/jvm" && ./build.sh >/dev/null 2>&1) || { echo "JVM runtime build failed" >&2; exit 1; }
-
-# In strict no-fallback mode, normal commands require bootstrapped self-hosted compiler artifacts.
-if ! "$ROOT/kestrel" status 2>/dev/null | grep -q "Self-hosted compiler cache.*ready"; then
-  "$ROOT/scripts/build-bootstrap-jar.sh" >/dev/null 2>&1 || true
-  "$ROOT/kestrel-self" bootstrap >/dev/null 2>&1 || true
-fi
-# If kestrel still cannot run after bootstrap attempt, skip E2E gracefully.
-if ! "$ROOT/kestrel" status 2>/dev/null | grep -q "Self-hosted compiler cache.*ready"; then
-  echo "E2E: bootstrap environment unavailable — skipping E2E tests"
-  exit 0
 fi
 
 count=0
@@ -72,7 +53,7 @@ for f in "${files[@]}"; do
   out_stderr="$out_dir/$name.stderr"
   out_stdout="$out_dir/$name.stdout"
   exit_code=0
-  "$ROOT/scripts/kestrel" run "$f" >"$out_stdout" 2>"$out_stderr" || exit_code=$?
+  "$KESTREL" run "$f" >"$out_stdout" 2>"$out_stderr" || exit_code=$?
   if [ "$exit_code" -ne 0 ]; then
     echo "  $name.ks OK (non-zero exit $exit_code as expected)"
     if [ "$expect_stack_stderr" = true ]; then
@@ -132,10 +113,10 @@ if [ -d "$POSITIVE" ]; then
     stdout_file="$out_dir/positive_${name}.stdout"
     stderr_file="$out_dir/positive_${name}.stderr"
     mkdir -p "$out_dir"
-    if ! (cd "$ROOT" && ./scripts/kestrel run "$f" >"$stdout_file" 2>"$stderr_file"); then
+    if ! (cd "$ROOT" && "$KESTREL" run "$f" >"$stdout_file" 2>"$stderr_file"); then
       # Some network-dependent scenarios can fail transiently (DNS/socket timing). Retry once.
       echo "E2E positive $name: first attempt failed, retrying once" >&2
-      if ! (cd "$ROOT" && ./scripts/kestrel run "$f" >"$stdout_file" 2>"$stderr_file"); then
+      if ! (cd "$ROOT" && "$KESTREL" run "$f" >"$stdout_file" 2>"$stderr_file"); then
         echo "E2E positive $name: compile or run failed" >&2
         cat "$stderr_file" >&2
         exit 1
@@ -172,7 +153,7 @@ if [ -f "$sample_run" ] && [ -f "$sample_expected" ]; then
   conflict_stderr="$out_dir/cli_exit_wait_conflict.stderr"
   help_stdout="$out_dir/cli_exit_help.stdout"
 
-  if ! (cd "$ROOT" && ./scripts/kestrel run "$sample_run" >"$default_stdout" 2>/dev/null); then
+  if ! (cd "$ROOT" && "$KESTREL" run "$sample_run" >"$default_stdout" 2>/dev/null); then
     echo "E2E CLI: default run failed for exit-wait smoke check" >&2
     exit 1
   fi
@@ -182,7 +163,7 @@ if [ -f "$sample_run" ] && [ -f "$sample_expected" ]; then
     exit 1
   fi
 
-  if ! (cd "$ROOT" && ./scripts/kestrel run --exit-wait "$sample_run" >"$wait_stdout" 2>/dev/null); then
+  if ! (cd "$ROOT" && "$KESTREL" run --exit-wait "$sample_run" >"$wait_stdout" 2>/dev/null); then
     echo "E2E CLI: --exit-wait run failed" >&2
     exit 1
   fi
@@ -192,7 +173,7 @@ if [ -f "$sample_run" ] && [ -f "$sample_expected" ]; then
     exit 1
   fi
 
-  if (cd "$ROOT" && ./scripts/kestrel run --exit-wait --exit-no-wait "$sample_run" >/dev/null 2>"$conflict_stderr"); then
+  if (cd "$ROOT" && "$KESTREL" run --exit-wait --exit-no-wait "$sample_run" >/dev/null 2>"$conflict_stderr"); then
     echo "E2E CLI: expected conflicting exit flags to fail" >&2
     exit 1
   fi
@@ -215,7 +196,7 @@ linger()
 println("main")
 EOF
 
-  if ! (cd "$ROOT" && ./scripts/kestrel run --exit-no-wait "$nowait_probe" >"$nowait_stdout" 2>"$nowait_stderr"); then
+  if ! (cd "$ROOT" && "$KESTREL" run --exit-no-wait "$nowait_probe" >"$nowait_stdout" 2>"$nowait_stderr"); then
     echo "E2E CLI: --exit-no-wait run failed" >&2
     cat "$nowait_stderr" >&2
     exit 1
@@ -231,7 +212,7 @@ EOF
     exit 1
   fi
 
-  if ! (cd "$ROOT" && ./scripts/kestrel run --help >"$help_stdout"); then
+  if ! (cd "$ROOT" && "$KESTREL" run --help >"$help_stdout"); then
     echo "E2E CLI: kestrel run --help failed" >&2
     exit 1
   fi

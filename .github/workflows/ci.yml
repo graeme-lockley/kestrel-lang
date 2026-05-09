@@ -54,6 +54,9 @@ jobs:
       - name: Kestrel unit tests
         run: ./scripts/kestrel test
 
+      - name: No-Node validation gate
+        run: ./scripts/test-no-node.sh
+
       # - name: Compiler bootstrap chain (self-hosted smoke)
       #   run: ./scripts/test-compiler-bootstrap --summary
 

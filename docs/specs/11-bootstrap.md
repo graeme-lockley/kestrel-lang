@@ -14,6 +14,8 @@ Kestrel is a self-hosted language: the compiler is written in Kestrel and compil
 
 **Current invariant:** `kestrel bootstrap` installs classes from the bootstrap JAR and does not invoke the TypeScript compiler directly. After bootstrap, the Bash shim delegates normal commands to `kestrel/tools/Cli.class`, and the Kestrel CLI orchestrates command execution.
 
+**Runtime dependency boundary:** Node.js is a bootstrap-build-time dependency only. Normal command execution (`./kestrel` and `./kestrel-self` run/build/test/dis/fmt/doc/status) is JVM-only once bootstrap artifacts are present.
+
 ### 1.1 Architecture Stages
 
 ```
@@ -142,6 +144,19 @@ Two separate cache directories exist under `~/.kestrel/`:
 **Artifacts:** Bootstrap JAR and SHA1 sidecar in the Maven cache layout. No intermediate files remain.
 
 **Policy:** The bootstrap JAR is a build-time-only artifact. It is not used by normal `kestrel run/build/test` command execution.
+
+### 3.5 `scripts/test-no-node.sh` — Runtime No-Node Validation Gate
+
+**Usage:** `./scripts/test-no-node.sh`
+
+**Purpose:** Prove normal runtime command execution does not depend on the TypeScript compiler source tree or Node availability by temporarily removing `compiler/` from the workspace and running `./scripts/kestrel test`.
+
+**Contract:**
+1. Rename `compiler/` to `compiler_DISABLED/`.
+2. Run `./scripts/kestrel test` and require exit 0.
+3. Always restore `compiler/` on success, failure, or interruption.
+
+If the gate fails, treat it as a runtime dependency regression (for example an accidental Node fallback in normal command paths).
 
 ### 3.2 Bootstrap Command
 
@@ -318,6 +333,7 @@ The CI pipeline (`ci.yml`) enforces the bootstrap flow:
    ./kestrel status  # asserts self-hosted mode
    ```
 5. **E2E scenarios** — `./scripts/run-e2e.sh`
+6. **No-Node validation gate** — `./scripts/test-no-node.sh`
 6. **Kestrel unit tests** — `./kestrel test`
 7. **Bootstrap chain verification** — `./scripts/test-compiler-bootstrap --summary`
 8. **Bootstrap handoff gate:**
