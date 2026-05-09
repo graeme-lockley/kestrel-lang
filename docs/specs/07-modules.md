@@ -296,30 +296,72 @@ These maps are passed to `TypecheckOptions` and used by `emptyTypeRegistry` to s
 
 ---
 
-## 10. Async Exports and Cross-Module Async Calling
+## 10. Global Initialization (Lazy Loading of Module Globals)
+
+Each module compiles to a JVM class that may contain module-level `val` and `var` declarations. To enable lazy evaluation of global initializer expressions and prevent null reference errors from uninitialized static fields, the generated class emits:
+
+- **`$initialized` guard field:** A private static boolean field initialized to `false`. This field prevents redundant re-initialization.
+- **`$init()` method:** A public static method that idempotently initializes all module globals:
+  - Checks if `$initialized` is true; if so, returns immediately
+  - Sets `$initialized = true`
+  - Calls `init$<name>()` for each global `val` or `var` and stores the result in the corresponding static field
+  - Returns
+- **`init$<name>()` methods:** A private static method for each global `val` or `var`, returning `Object`. These methods compile the initializer expression and return its value.
+
+### 10.1 Importing globals from other modules
+
+When a module **imports** a global `val` or `var` from another module (e.g., `import { x } from "other"`), accessing that imported global must be preceded by a call to the exporting module's `$init()` method:
+
+```
+INVOKESTATIC OtherModule.$init()V
+GETSTATIC OtherModule.x
+```
+
+This ensures transitive initialization: if `x` depends on other globals in its initializer, those globals will be initialized as well (via their own calls to `$init()`). The type checker does not enforce this; it is the code generator's responsibility to emit the prerequisite `$init()` call.
+
+### 10.2 Startup initialization
+
+When a module contains a top-level `main(String[])` method (for runnable programs), the method must call `$init()` at its start:
+
+```
+INVOKESTATIC <ModuleName>.$init()V
+// ... rest of main body
+```
+
+This ensures all module-level globals are initialized before user code begins execution.
+
+### 10.3 Semantics and guarantees
+
+- **Idempotency:** Multiple calls to `$init()` are safe and have no effect after the first call (the guard check ensures this).
+- **Thread-safety:** In Kestrel's single-threaded execution model, the boolean flag is sufficient. At the JVM level, the memory model ensures correct visibility across threads.
+- **Determinism:** All global initializer expressions are deterministic (Kestrel has no IO, randomness, or concurrency at the top level). Therefore, `$init()` has no observable side effects across multiple calls within a single run.
+
+---
+
+## 11. Async Exports and Cross-Module Async Calling
 
 This section specifies how `async fun` declarations interact with the module system.
 
-### 10.1 Async functions at export sites
+### 11.1 Async functions at export sites
 
 - An `export async fun f(params): Task<T>` is exported with the same type signature as `export fun f(params): Task<T>` — namely the function type `(params) -> Task<T>`. The `async` keyword is **not** part of the type; it is a codegen directive that instructs the compiler to emit the function as a virtual-thread payload.
 - Importing modules cannot distinguish an async export from a non-async export that returns `Task<T>`. Both have type `(params) -> Task<T>` at import sites.
 - There is no way to require a caller to pass an "actually async" function at the type level. Higher-order functions that accept `(A) -> Task<B>` work equally for `async fun` and for ordinary functions returning `Task<B>`.
 
-### 10.2 Importing and calling async functions from other modules
+### 11.2 Importing and calling async functions from other modules
 
 - When module B imports `f` from module A where `f` is declared `async fun f(x: A): Task<B>`, B may call `f(arg)` to receive a `Task<B>`. The call site does not use the `async` keyword; it simply calls the function. The returned `Task<B>` may be awaited inside any `async` context in B: `val result = await f(arg)`.
 - At the codegen level, the JVM backend emits a call to the imported function using the `KTask`-returning descriptor for async exports (so that the foreign class's `submitAsync` wrapper is invoked). The caller in B does not need to know that `f` was declared `async`; it uses only the type `(A) -> Task<B>` to determine how to call it.
 - `await` on the result of a cross-module async call has the same semantics as `await` on a same-module async call: it blocks the current virtual thread until the task completes and returns `B` (or re-throws if the task failed).
 
-### 10.3 Top-level await restriction at module boundaries
+### 11.3 Top-level await restriction at module boundaries
 
 - `await` is prohibited outside an `async` context (01 §5, 06 §6). This applies equally within a module and at module boundaries. A module's top-level body (the module initializer) is **not** an async context, so `await` cannot appear at the top level of any module, even if it is importing and calling async functions from another module.
 - Modules that need to produce async effects at the top level must do so by defining an `async fun run()` (or equivalent) and calling it at the top level; the returned `Task<Unit>` is submitted to the async runtime, which then awaits quiescence before the program exits (see `kestrel.exitWait` system property in the JVM runtime).
 
 ---
 
-## 11. Implementor Checklist
+## 12. Implementor Checklist
 
 1. **Parse** all ImportDecl and ExportDecl per 01 §3.1; extract the STRING value (specifier) for each.
 2. **Distinct specifiers:** Build the set of distinct specifiers (string equality) from all import **and** re-export declarations (§2.1).
@@ -331,9 +373,7 @@ This section specifies how `async fun` declarations interact with the module sys
 8. **Types file:** Emit a types file (07 §5) for this package with exported declarations and **offsets** (function index, constant index, etc.) and, for **version** ≥ 3, **`constructor`** entries (§5.1) so referring packages can typecheck **`M.Ctor(…)`** and emit correct bytecode without parsing this package’s source when only `.kti` (and `.kbc`) are fresh.
 9. **Code generation:** When generating code for cross-module calls or references, use the **resolved** module’s **types file** (export offsets) so that the emitted bytecode uses static indices (e.g. function index, constant index). No name lookup at load or runtime. Emit the **imported function table** (03 §6.6): for each call to an imported function, add an entry (import_index, function_index from that dependency’s types file); assign such entries consecutive indices starting at function_count so that CALL fn_id with fn_id ≥ function_count resolves via that table. The import table (03 §6.5) records dependency specifiers; the imported function table (03 §6.6) maps CALL indices to (import, function_index). For **namespace-qualified ADT construction** `M.Ctor(args)`, emit **CONSTRUCT_IMPORT** (04 §1.7) with the dependency’s `adt_id` / `ctor` / `arity` and this module’s **import_index** for `M`’s specifier so the runtime-built ADT value matches identity for values constructed inside the dependency (05 §2 ADT).
 
----
-
-## 12. Relation to Other Specs
+## 13. Relation to Other Specs
 
 | Spec | Relation |
 |------|----------|
@@ -341,7 +381,7 @@ This section specifies how `async fun` declarations interact with the module sys
 | **02** | Standard library module names (including `kestrel:data/string`, `kestrel:data/char`, `kestrel:data/list`, `kestrel:dev/stack`, `kestrel:io/http`, `kestrel:data/json`, `kestrel:io/fs`, `kestrel:web`, `kestrel:socket`) must resolve to modules that satisfy 02. No other spec may use those names for a different contract. |
 | **03** | One .kbc (binary) per module; references in bytecode are by offset/index only (03 §0). Import table (§6.5): `import_count` and one u32 (string table index) per distinct import specifier; the string is the **exact source specifier**. Exported names and their offsets appear in the package’s types file (07 §5); function table (§6.1), exported type declarations (§6.4), and ADT table (§10) hold the definitions in the binary. || **06** | Structural async typing (06 §6): `async fun f(x: A): Task<B>` has the same type `(A) -> Task<B>` as a plain `fun f(x: A): Task<B>`. The `async` keyword is invisible at module boundaries. `await` prohibition at module scope enforced by the type checker (06 §6). |
 
-## 13. Documentation Browser Links
+## 14. Documentation Browser Links
 
 The `kestrel doc` browser may render hyperlinks for declaration references that appear in signatures. Link resolution is documentation-only metadata (it does not affect compile-time module resolution in §§2–4) and follows deterministic lookup over the indexed export set:
 
