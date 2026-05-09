@@ -147,6 +147,10 @@ A type alias or opaque type exported from the package. Also used for exception d
 
 `SerType` is the JSON serialization of `InternalType` from `compiler/src/types/internal.ts`. All `SerType` objects have a `k` field (the kind discriminator). Each variant:
 
+Both the TypeScript bootstrap compiler and the self-hosted compiler write these structured
+object forms. Readers may still accept legacy string-valued type payloads for backward
+compatibility, but string forms are not the canonical on-disk encoding for v4 `.kti` files.
+
 ### 4.1 Primitive
 
 ```json
@@ -229,7 +233,11 @@ Used as the `type` field value for opaque type aliases/exports to explicitly ind
 
 ### 4.11 Namespace (scope-only, not exported)
 
-`{ "k": "namespace", ... }` is an internal inference type that is **never written** to a `.kti` file. Compiler readers may safely assume this kind never appears in a `.kti`.
+`{ "k": "namespace", ... }` is an internal inference type and is not a legal `.kti`
+payload for exported types. The TypeScript compiler rejects namespace serialization. The
+self-hosted serializer defensively degrades it to the reserved placeholder
+`{ "k": "app", "n": "__namespace__", "as": [] }` if invoked on a namespace value, but
+real `.kti` exports must not rely on that fallback.
 
 ---
 

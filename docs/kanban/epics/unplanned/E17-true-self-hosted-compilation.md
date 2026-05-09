@@ -186,7 +186,7 @@ precede the typechecker and codegen gap closures because several later stories d
 S17-41 (codegenMeta) is a prerequisite for S17-22 (cross-module ADT environment) and S17-38
 (JvmCodegenOptions), and S17-39 (serializeType) is a prerequisite for S17-41.
 
-16. [S17-39 — Fix KTI `serializeType` to write JSON object format](../../unplanned/S17-39-kti-serialize-type-json-format.md)
+16. ✅ [S17-39 — Fix KTI `serializeType` to write JSON object format](../../done/S17-39-kti-serialize-type-json-format.md)
     — The self-hosted `serializeType` currently writes types as human-readable strings via
     `typeToString`. The string-parsing fallback in `deserializeType` only recognises
     primitives and simple arrows; every other type form (schemes, ADT apps, records, tuples,
