@@ -355,6 +355,11 @@ markers, but those are considered tranche-local scaffolding, not the final state
     **This now explicitly comes after re-enabling runtime-negative E2Es, re-enabling positive E2Es
     in slices, and restoring strict `scripts/test-all.sh` gating.**
 
+43. [S17-51 — Self-hosted corpus expansion after codegen/KTI closure](../../unplanned/S17-51-self-hosted-corpus-expansion-post-codegen-kti.md)
+    — Roadmap story to capture phased corpus growth (runtime, parse/typecheck, kunit,
+    kfixtures) once S17-36..S17-41 are complete, so expansion validates the real self-hosted
+    execution path instead of the temporary TS runtime fallback.
+
 ## Dependencies
 
 - **E14** (Self-Hosting Compiler, done) — provides all individual compiler pieces:

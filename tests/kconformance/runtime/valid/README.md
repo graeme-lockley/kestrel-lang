@@ -29,9 +29,10 @@ the tier will switch to `./kestrel-self`.
 
 ## Baseline (updated 2026-05-08)
 
-- Files: 7
+- Files: 13
 - Coverage now includes while loops, async fun/await, async lambdas, block-local async fun,
-  indirect calls, and closure semantics (capture + local self/mutual recursion)
+  indirect calls, closure semantics (capture + local self/mutual recursion), exception
+  flow, if-branch execution, and match-heavy ADT/Option/tuple runtime dispatch
 - Golden format remains `// =>` when runtime files are promoted into this corpus
 
 See also: [../README.md](../README.md), [../../parse/README.md](../../parse/README.md).
