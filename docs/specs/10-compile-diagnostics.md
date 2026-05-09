@@ -10,7 +10,7 @@ This document specifies how the Kestrel compiler reports compile-time errors and
 
 ## 1. Purpose and Scope
 
-- **Scope:** Diagnostics emitted by the parser, module resolver, typechecker, and package (multi-file) compilation. Lexer and codegen may emit diagnostics in the future; they must follow this spec.
+- **Scope:** Diagnostics emitted by the parser, module resolver, typechecker, codegen, and package (multi-file) compilation. Lexer diagnostics may be added; they must follow this spec.
 - **Output:** Human-readable output (source snippet and caret) and optional machine-readable output (JSON/JSONL) for IDEs and CI.
 - **API:** The compiler’s public API returns structured diagnostics on failure; the CLI renders them per §6 and §7.
 - **Self-hosting parity:** The Kestrel-side modules `kestrel:compiler/diagnostics` and `kestrel:compiler/reporter` must preserve the same diagnostic field names and stable `code` strings as the TypeScript bootstrap compiler during transition.
@@ -59,6 +59,7 @@ Implementations must set at least `file`, `line`, and `column`. The reporter may
 - For parser errors: location is the token or span where the error was detected (line/column from the parser).
 - For typecheck errors: location is the AST node span (expression or declaration) that caused the error. The typechecker receives a **sourceFile** (path) and attaches it to every diagnostic.
 - For resolution errors: location is the file that contains the failing import and, when available, the span of the import declaration (or the specifier).
+- For codegen errors: location is the expression/declaration being emitted when span information is available; if only module-level context is known, a file-level location is acceptable.
 - For package errors (cannot read file, circular import, module does not export X): file is the relevant source file; line/column when an import is involved come from the import declaration span.
 
 ---
@@ -107,9 +108,10 @@ The compiler only needs to emit the code and the message.
 | Parser     | Yes (multiple)     | Token span; file from caller             |
 | Resolver   | Yes (caller builds)| Caller provides file + import decl span  |
 | Typecheck  | Yes (multiple)     | AST node span + sourceFile from options  |
+| Codegen    | Yes (multiple)     | Emitted AST node span, or module/file fallback |
 | Compile-file | Yes              | filePath; for import/export, import span |
 
-The parser may collect multiple diagnostics (e.g. with error recovery for missing semicolons or unmatched braces) and return them; it may also throw a single error (converted to one Diagnostic by the caller). The typechecker collects multiple diagnostics where possible. Resolver returns success/failure; the caller (e.g. compile-file) builds Diagnostic(s) with file and import span.
+The parser may collect multiple diagnostics (e.g. with error recovery for missing semicolons or unmatched braces) and return them; it may also throw a single error (converted to one Diagnostic by the caller). The typechecker collects multiple diagnostics where possible. Codegen diagnostics (for example unresolved identifiers that leak past earlier phases) are accumulated and returned through compile-file failure results using the same `Diagnostic` shape. Resolver returns success/failure; the caller (e.g. compile-file) builds Diagnostic(s) with file and import span.
 
 ---
 

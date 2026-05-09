@@ -9,6 +9,7 @@ import * as Driver from "kestrel:tools/compiler/driver"
 import * as Kti from "kestrel:tools/compiler/kti"
 import * as Crypto from "kestrel:io/crypto"
 import * as Ty from "kestrel:dev/typecheck/types"
+import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as Fs from "kestrel:io/fs"
 import * as Resolve from "kestrel:tools/compiler/resolve"
 import * as Json from "kestrel:data/json"
@@ -148,6 +149,26 @@ export async fun run(s: Suite): Task<Unit> = {
           val result = await Driver.compileFile(srcPath, defaultOpts(outDir))
           isTrue(sg, "type error ok=False", !result.ok)
           isTrue(sg, "type error has diagnostics", Lst.length(result.diagnostics) > 0)
+        }
+      }
+    })
+
+    await asyncGroup(s1, "compileFile - unknown identifier surfaces diagnostic", async (sg: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_unknown_ident_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_unknown_ident_out"
+      val srcPath = "${srcDir}/unknown_ident.ks"
+      val src = "export fun bad(): Int = missingName"
+      val setup =
+        label("mkdirAll src failed", Fs.mkdirAll(srcDir))
+        |> andThenAsync((_: Unit) => label("mkdirAll out failed", Fs.mkdirAll(outDir)))
+        |> andThenAsync((_: Unit) => label("writeText failed", Fs.writeText(srcPath, src)))
+      match (await setup) {
+        Err(msg) => isTrue(sg, msg, False)
+        Ok(()) => {
+          val result = await Driver.compileFile(srcPath, defaultOpts(outDir))
+          isTrue(sg, "unknown identifier rejected", !result.ok)
+          isTrue(sg, "unknown identifier diagnostic present",
+            Lst.any(result.diagnostics, (d: Diag.Diagnostic) => d.code == Diag.CODES.type_.unknownVariable))
         }
       }
     })

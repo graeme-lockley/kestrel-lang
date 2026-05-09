@@ -25,6 +25,7 @@ import {
 } from "kestrel:dev/parser/ast"
 import * as Arr from "kestrel:data/array"
 import * as Ty from "kestrel:dev/typecheck/types"
+import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as CF from "kestrel:tools/compiler/classfile"
 import * as Op from "kestrel:tools/compiler/opcodes"
 
@@ -79,6 +80,7 @@ export type ModuleContext = {
   adtClassByConstructor: Dict<String, String>,
   adtConstructorArity: Dict<String, Int>,
   options: JvmCodegenOptions,
+  diagnostics: mut List<Diag.Diagnostic>,
   lambdas: mut List<LambdaInfo>,
   lambdaIndex: mut Int,
   lambdaClasses: mut Dict<String, ByteArray>
@@ -112,7 +114,8 @@ export type CodegenContext = {
 }
 
 export type JvmCodegenResult = {
-  classes: Dict<String, ByteArray>
+  classes: Dict<String, ByteArray>,
+  diagnostics: List<Diag.Diagnostic>
 }
 
 export fun emptyJvmCodegenOptions(): JvmCodegenOptions = {
@@ -134,9 +137,32 @@ export fun emptyModuleContext(className: String): ModuleContext = {
   adtClassByConstructor = Dict.emptyStringDict(),
   adtConstructorArity = Dict.emptyStringDict(),
   options = emptyJvmCodegenOptions(),
+  mut diagnostics = [],
   mut lambdas = [],
   mut lambdaIndex = 0,
   mut lambdaClasses = Dict.emptyStringDict()
+}
+
+fun emitUnknownIdentifierDiagnostic(ctx: CodegenContext, name: String): Unit = {
+  val shouldReport =
+    if (Str.length(name) == 1) {
+      val first = Str.left(name, 1)
+      first != Str.toLower(first)
+    } else True
+  if (shouldReport) {
+    val d: Diag.Diagnostic = {
+      severity = Diag.Error,
+      code = Diag.CODES.type_.unknownVariable,
+      message = "Unknown identifier: ${name}",
+      location = Diag.locationFileOnly(ctx.mctx.className),
+      sourceLine = None,
+      related = [],
+      suggestion = None,
+      hint = None
+    }
+    ctx.mctx.diagnostics := Lst.append(ctx.mctx.diagnostics, [d])
+  } else ()
+  pushNull(ctx)
 }
 
 export val noTypeInfo: (Ast.Expr) -> Option<Ty.InternalType> = (_: Ast.Expr) => None
@@ -1190,7 +1216,8 @@ export fun jvmCodegen(mctx: ModuleContext, prog: Ast.Program, getInferredType: (
   val mainBytes = CF.cfToBytes(cf)
   val withLambdas = Dict.union(extraClasses, mctx.lambdaClasses)
   {
-    classes = Dict.insert(withLambdas, moduleName, mainBytes)
+    classes = Dict.insert(withLambdas, moduleName, mainBytes),
+    diagnostics = mctx.diagnostics
   }
 }
 
@@ -1204,6 +1231,7 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
       options = mctx.options,
+      mut diagnostics = mctx.diagnostics,
       mut lambdas = mctx.lambdas,
       mut lambdaIndex = mctx.lambdaIndex,
       mut lambdaClasses = mctx.lambdaClasses
@@ -1216,6 +1244,7 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
       options = mctx.options,
+      mut diagnostics = mctx.diagnostics,
       mut lambdas = mctx.lambdas,
       mut lambdaIndex = mctx.lambdaIndex,
       mut lambdaClasses = mctx.lambdaClasses
@@ -1228,6 +1257,7 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
       options = mctx.options,
+      mut diagnostics = mctx.diagnostics,
       mut lambdas = mctx.lambdas,
       mut lambdaIndex = mctx.lambdaIndex,
       mut lambdaClasses = mctx.lambdaClasses
@@ -1240,6 +1270,7 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
       options = mctx.options,
+      mut diagnostics = mctx.diagnostics,
       mut lambdas = mctx.lambdas,
       mut lambdaIndex = mctx.lambdaIndex,
       mut lambdaClasses = mctx.lambdaClasses
@@ -1252,6 +1283,7 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
       options = mctx.options,
+      mut diagnostics = mctx.diagnostics,
       mut lambdas = mctx.lambdas,
       mut lambdaIndex = mctx.lambdaIndex,
       mut lambdaClasses = mctx.lambdaClasses
@@ -1264,6 +1296,7 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
       adtClassByConstructor = mctx.adtClassByConstructor,
       adtConstructorArity = mctx.adtConstructorArity,
       options = mctx.options,
+      mut diagnostics = mctx.diagnostics,
       mut lambdas = mctx.lambdas,
       mut lambdaIndex = mctx.lambdaIndex,
       mut lambdaClasses = mctx.lambdaClasses
@@ -1285,6 +1318,7 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
             adtClassByConstructor = newAbc,
             adtConstructorArity = newAca,
             options = mctx.options,
+            mut diagnostics = mctx.diagnostics,
             mut lambdas = mctx.lambdas,
             mut lambdaIndex = mctx.lambdaIndex,
       mut lambdaClasses = mctx.lambdaClasses
@@ -1307,6 +1341,7 @@ fun accumDeclForModuleCtx(className: String, mctx: ModuleContext, decl: Ast.TopD
         adtClassByConstructor = Dict.insert(mctx.adtClassByConstructor, exn.name, exnClass),
         adtConstructorArity = Dict.insert(mctx.adtConstructorArity, exn.name, exnArity),
         options = mctx.options,
+        mut diagnostics = mctx.diagnostics,
         mut lambdas = mctx.lambdas,
         mut lambdaIndex = mctx.lambdaIndex,
       mut lambdaClasses = mctx.lambdaClasses
@@ -1342,6 +1377,7 @@ export fun buildModuleContext(className: String, prog: Ast.Program, options: Jvm
     adtClassByConstructor = Dict.emptyStringDict(),
     adtConstructorArity = Dict.emptyStringDict(),
     options = options,
+    mut diagnostics = [],
     mut lambdas = [],
     mut lambdaIndex = 0,
     mut lambdaClasses = Dict.emptyStringDict()
@@ -1359,6 +1395,7 @@ export fun buildModuleContext(className: String, prog: Ast.Program, options: Jvm
     adtClassByConstructor = adtMerge.0,
     adtConstructorArity = adtMerge.1,
     options = afterDecls.options,
+    mut diagnostics = afterDecls.diagnostics,
     mut lambdas = afterDecls.lambdas,
     mut lambdaIndex = afterDecls.lambdaIndex,
     mut lambdaClasses = afterDecls.lambdaClasses
@@ -2056,6 +2093,14 @@ fun emitSubPatternBindings(ctx: CodegenContext, valueSlot: Int, pat: Ast.Pattern
         }
         None => []
       }
+    PTuple(parts) => {
+      loadLocalSlot(ctx, valueSlot)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.instanceof_, CF.cfClassRef(ctx.cf, KRECORD))
+      val ifNotTuple = CF.mbLength(ctx.mb)
+      CF.mbEmit1s(ctx.mb, Op.JvmOp.ifeq, 0)
+      val elemMissIfeqs = emitTuplePatternElems(ctx, valueSlot, parts, 0, [])
+      ifNotTuple :: elemMissIfeqs
+    }
     _ => []
   }
 
@@ -2314,7 +2359,16 @@ fun emitTuplePatternElems(ctx: CodegenContext, scrutSlot: Int, pats: List<Ast.Pa
               }
             [ifeq]
           }
-          _ => []
+          nestedPat => {
+            loadLocalSlot(ctx, scrutSlot)
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.checkcast, CF.cfClassRef(ctx.cf, KRECORD))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.ldcW, CF.cfString(ctx.cf, "${idx}"))
+            CF.mbEmit1s(ctx.mb, Op.JvmOp.invokevirtual, CF.cfMethodref(ctx.cf, KRECORD, "get", "(Ljava/lang/String;)Ljava/lang/Object;"))
+            val innerSlot = ctx.nextLocal
+            ctx.nextLocal := innerSlot + 1
+            storeLocal(ctx, innerSlot)
+            emitSubPatternBindings(ctx, innerSlot, nestedPat)
+          }
         }
       emitTuplePatternElems(ctx, scrutSlot, rest, idx + 1, Lst.append(missIfeqs, thisMiss))
     }
@@ -2837,7 +2891,7 @@ fun emitIdentExpr(ctx: CodegenContext, name: String): Unit = {
                         CF.mbEmit1s(ctx.mb, Op.JvmOp.getstatic, fref)
                       } else pushNull(ctx)
                     }
-                    None => pushNull(ctx)
+                    None => emitUnknownIdentifierDiagnostic(ctx, name)
                   }
                 }
               }

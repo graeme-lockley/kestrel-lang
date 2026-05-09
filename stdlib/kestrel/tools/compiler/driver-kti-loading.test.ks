@@ -1,7 +1,9 @@
 import { Suite, asyncGroup, isTrue } from "kestrel:dev/test"
+import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Str from "kestrel:data/string"
 import * as Driver from "kestrel:tools/compiler/driver"
+import * as Kti from "kestrel:tools/compiler/kti"
 import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as Fs from "kestrel:io/fs"
 
@@ -157,6 +159,70 @@ export async fun run(s: Suite): Task<Unit> = {
                       isTrue(s1, "incomplete match rejected", !badResult.ok);
                       isTrue(s1, "has nonExhaustiveMatch diag",
                         Lst.any(badResult.diagnostics, (d: Diag.Diagnostic) => d.code == Diag.CODES.type_.nonExhaustiveMatch))
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    await asyncGroup(sg, "compileFile - missing import codegen meta surfaces unknown identifier diagnostic", async (s1: Suite) => {
+      val srcDir = "/tmp/kestrel_driver_test_s17_codegen_diag_src"
+      val outDir = "/tmp/kestrel_driver_test_s17_codegen_diag_out"
+      val depPath = "${srcDir}/dep.ks"
+      val mainPath = "${srcDir}/main.ks"
+      val depSrc = "export fun answer(): Int = 42"
+      val mainSrc = "import { answer } from \"./dep\"\nexport fun main(): Int = answer()"
+      val opts = ktiOpts(outDir)
+      match (await Fs.mkdirAll(srcDir)) {
+        Err(_) => isTrue(s1, "mkdirAll src failed", False)
+        Ok(()) => {
+          match (await Fs.mkdirAll(outDir)) {
+            Err(_) => isTrue(s1, "mkdirAll out failed", False)
+            Ok(()) => {
+              match (await Fs.writeText(depPath, depSrc)) {
+                Err(_) => isTrue(s1, "writeText dep failed", False)
+                Ok(()) => {
+                  val depResult = await Driver.compileFile(depPath, opts)
+                  isTrue(s1, "dep compile ok", depResult.ok)
+                  val depClass = Driver.classNameForPath(depPath)
+                  val depKtiPath = "${outDir}/${depClass}.kti"
+                  match (await Kti.readKtiFile(depKtiPath)) {
+                    Err(_) => isTrue(s1, "read dep kti failed", False)
+                    Ok(depKti) => {
+                      val strippedMeta: Kti.KtiCodegenMeta = {
+                        funArities = Dict.emptyStringDict(),
+                        asyncFunNames = [],
+                        varNames = [],
+                        valOrVarNames = [],
+                        adtConstructors = [],
+                        exceptionDecls = []
+                      }
+                      val strippedKti: Kti.KtiV4 = {
+                        version = depKti.version,
+                        functions = depKti.functions,
+                        types = depKti.types,
+                        sourceHash = depKti.sourceHash,
+                        depHashes = depKti.depHashes,
+                        codegenMeta = strippedMeta
+                      }
+                      match (await Kti.writeKtiFile(depKtiPath, strippedKti)) {
+                        Err(_) => isTrue(s1, "write stripped dep kti failed", False)
+                        Ok(()) => {
+                          match (await Fs.writeText(mainPath, mainSrc)) {
+                            Err(_) => isTrue(s1, "writeText main failed", False)
+                            Ok(()) => {
+                              val result = await Driver.compileFile(mainPath, opts)
+                              isTrue(s1, "main compile fails", !result.ok)
+                              isTrue(s1, "reports unknown_variable codegen diagnostic",
+                                Lst.any(result.diagnostics, (d: Diag.Diagnostic) => d.code == Diag.CODES.type_.unknownVariable))
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }

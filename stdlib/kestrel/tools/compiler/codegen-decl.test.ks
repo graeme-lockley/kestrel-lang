@@ -3,6 +3,7 @@ import * as BA from "kestrel:data/bytearray"
 import * as Dict from "kestrel:data/dict"
 import * as Lst from "kestrel:data/list"
 import * as Lex from "kestrel:dev/parser/lexer"
+import * as Diag from "kestrel:dev/typecheck/diagnostics"
 import * as CG from "kestrel:tools/compiler/codegen"
 import { parseFromList } from "kestrel:dev/parser/parser"
 
@@ -114,6 +115,13 @@ export async fun run(s: Suite): Task<Unit> =
     group(s1, "global var declaration", (sg: Suite) => {
       val result = compileModule("test/DeclVar", "var y: Int = 2")
       isTrue(sg, "module class emitted", hasNonEmptyClass(result, "test/DeclVar"))
+    });
+
+    group(s1, "unresolved identifier reports diagnostic", (sg: Suite) => {
+      val result = compileModule("test/DeclUnknownIdent", "fun bad(): Int = missingName")
+      isTrue(sg, "codegen reports diagnostics", !Lst.isEmpty(result.diagnostics))
+      isTrue(sg, "includes unknown_variable diagnostic",
+        Lst.any(result.diagnostics, (d: Diag.Diagnostic) => d.code == Diag.CODES.type_.unknownVariable))
     });
 
     group(s1, "async function emits payload method", (sg: Suite) => {

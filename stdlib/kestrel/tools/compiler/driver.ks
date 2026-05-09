@@ -223,6 +223,9 @@ async fun writeKtiIfNeeded(opts: CompileOptions, ktiPath: String, prog: Program,
 /// Codegen and write class files + KTI (extracted to reduce async locals).
 async fun doCodegenAndWrite(mctx: Codegen.ModuleContext, prog: Program, tcResult: TC.TypecheckResult, entryPath: String, opts: CompileOptions, ktiPath: String, source: String, depHashes: Dict<String, String>): Task<CompileResult> = {
   val codegenResult = Codegen.jvmCodegen(mctx, prog, tcResult.getInferredType);
+  if (!Lst.isEmpty(codegenResult.diagnostics)) {
+    failWithDiags(codegenResult.diagnostics)
+  } else
   match (await Fs.mkdirAll(opts.outDir)) {
     Err(_) =>
       failResult(entryPath, Diag.CODES.file.readError,
