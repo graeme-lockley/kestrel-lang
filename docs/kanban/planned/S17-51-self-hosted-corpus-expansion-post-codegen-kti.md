@@ -39,6 +39,7 @@ the temporary TypeScript runtime fallback.
   - `S17-37` (global lazy init)
   - `S17-38` (is/never/options codegen)
   - `S17-39`, `S17-40`, `S17-41` (KTI correctness trilogy)
+  - **`S17-52`** (fix self-hosted codegen StackMapTable generation — runtime execution blocker)
 - Should execute before or alongside final validation in `S17-44` so no-Node confidence includes
   stronger self-hosted corpora.
 - Follows foundational corpus scaffolding and baseline stories `S17-48` and `S17-50`.
